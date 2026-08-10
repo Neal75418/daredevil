@@ -23,6 +23,14 @@ class IndustryRankingService {
     RankingWindow window = RankingWindow.d20,
     Map<String, double>? volumeBySymbol,
     double? marketReturnPct,
+
+    /// 取前 N 名;null = 全部。
+    ///
+    /// 🚨 [rankRotation] **必須傳 null**(2026-08-11 實機):它要比較兩個
+    /// 窗口的名次,若兩邊都先砍成前 12,交集只剩 1 個族群——實測 20日 前 12
+    /// 全是傳產、5日 前 12 全是電子,幾乎不重疊。單元測試抓不到,因為測試
+    /// 資料只有 2~3 個族群、永遠碰不到上限。
+    int? topN = SectorParams.rankingTopN,
   }) {
     final retOf = switch (window) {
       RankingWindow.d20 => PriceCalculator.ret20d,
@@ -122,6 +130,134 @@ class IndustryRankingService {
       if (byMomentum != 0) return byMomentum;
       return a.industry.compareTo(b.industry);
     });
-    return rankings.take(SectorParams.rankingTopN).toList();
+    return topN == null ? rankings : rankings.take(topN).toList();
+  }
+
+  /// 族群「轉向」——比較 20 日與 5 日的**排名**,而非水準值。
+  ///
+  /// **為什麼需要**(2026-08-11):既有 [rank] 只給單一窗口的水準值,而資金
+  /// 轉向是變化率。2026-08-10 實測:半導體 20日排第 34(−13.6%)、5日排第 1
+  /// (+7.2%)——單看任一窗口都看不出它正在變成主流,躍升 +33 名才是訊號。
+  ///
+  /// **為什麼要分類**:排名躍升在崩跌後會系統性地把「跌最深」的族群排到最
+  /// 前面(它們反彈也最猛)。半導體是**跌深反彈**不是**持續強勢**,兩者對應
+  /// v3.4 的結構 A 與結構 B,進場邏輯完全不同。見 [RotationCategory]。
+  ///
+  /// 刻意重用 [rank]:它是純函數,同一份已載入的 priceHistories 跑兩次幾乎
+  /// 零成本,而且保證兩個窗口與既有排行**同口徑**(中位數、成員數門檻、
+  /// ETF 排除),不會出現「轉向說第一、切到 5日 卻不是第一」的矛盾。
+  List<IndustryRotation> rankRotation({
+    required Map<String, List<DailyPriceEntry>> priceHistories,
+    required Map<String, String?> industries,
+    required Map<String, String> names,
+    Map<String, List<DailyInstitutionalEntry>> institutionalHistories =
+        const {},
+  }) {
+    // topN: null —— 必須拿**完整**排名。兩邊都砍成前 12 的話,20日 前 12
+    // 全是傳產、5日 前 12 全是電子,交集只剩 1 個族群(2026-08-11 實機)。
+    List<IndustryRanking> of(RankingWindow w) => rank(
+      priceHistories: priceHistories,
+      industries: industries,
+      names: names,
+      institutionalHistories: institutionalHistories,
+      window: w,
+      topN: null,
+    );
+
+    final r20 = of(RankingWindow.d20);
+    final r5 = of(RankingWindow.d5);
+    if (r20.isEmpty || r5.isEmpty) return const [];
+
+    // rank() 已依動能由大到小排序,索引即名次
+    final pos20 = <String, int>{
+      for (var i = 0; i < r20.length; i++) r20[i].industry: i + 1,
+    };
+    final pos5 = <String, int>{
+      for (var i = 0; i < r5.length; i++) r5[i].industry: i + 1,
+    };
+    final ret20 = {for (final e in r20) e.industry: e.momentumPct};
+    final ret5 = {for (final e in r5) e.industry: e.momentumPct};
+    final counts = {for (final e in r20) e.industry: e.memberCount};
+
+    // 分位而非固定名次:族群數會隨資料完整度變動(實測 34~39),寫死
+    // 「前 10 名」在族群變少時會把一半都算成強
+    final n = pos20.length;
+    final tier = (n * SectorParams.rotationTierFraction).ceil().clamp(1, n);
+
+    final strongByIndustry = _countStrongList(priceHistories, industries);
+
+    final out = <IndustryRotation>[];
+    for (final industry in pos20.keys) {
+      final a5 = pos5[industry];
+      final a20 = pos20[industry];
+      if (a5 == null || a20 == null) continue;
+      final strong5 = a5 <= tier;
+      final weak5 = a5 > n - tier;
+      final strong20 = a20 <= tier;
+      final weak20 = a20 > n - tier;
+      final category = switch (null) {
+        _ when strong5 && strong20 => RotationCategory.sustained,
+        _ when strong5 && weak20 => RotationCategory.reboundFromDeep,
+        _ when strong20 && weak5 => RotationCategory.cooling,
+        _ => RotationCategory.neutral,
+      };
+      out.add(
+        IndustryRotation(
+          industry: industry,
+          memberCount: counts[industry] ?? 0,
+          rankJump: a20 - a5,
+          rank5d: a5,
+          rank20d: a20,
+          ret5dPct: ret5[industry] ?? 0,
+          ret20dPct: ret20[industry] ?? 0,
+          category: category,
+          strongListCount: strongByIndustry[industry] ?? 0,
+        ),
+      );
+    }
+    out.sort((a, b) {
+      final byJump = b.rankJump.compareTo(a.rankJump);
+      return byJump != 0 ? byJump : a.industry.compareTo(b.industry);
+    });
+    return out;
+  }
+
+  /// 各產業中通過 v3.4 強者榜「月漲 >15% ＋ 日均量 >3,000 張」的成員數。
+  ///
+  /// UI 用它決定卡片要不要淡化——0 檔代表點進去也沒東西可買。**不在此處
+  /// 過濾掉 0 檔的族群**:躍升本身仍是市場資訊(2026-08-10 化學工業躍升
+  /// +24 名但強者榜 0 檔,那個「空」正是使用者需要知道的事)。
+  Map<String, int> _countStrongList(
+    Map<String, List<DailyPriceEntry>> priceHistories,
+    Map<String, String?> industries,
+  ) {
+    final out = <String, int>{};
+    for (final entry in priceHistories.entries) {
+      final industry = industries[entry.key];
+      if (industry == null || industry.isEmpty) continue;
+      if (industry.contains('ETF')) continue;
+      final ret = PriceCalculator.ret20d(entry.value);
+      if (ret == null || ret <= SectorParams.rotationStrongListRet20Pct) {
+        continue;
+      }
+      final recent = entry.value.reversed.take(20).toList();
+      if (recent.length < 20) continue;
+      var sum = 0.0;
+      var complete = true;
+      for (final p in recent) {
+        final v = p.volume;
+        if (v == null) {
+          complete = false;
+          break;
+        }
+        sum += v;
+      }
+      if (!complete) continue;
+      if (sum / 20 <= SectorParams.rotationStrongListDailyVolumeShares) {
+        continue;
+      }
+      out[industry] = (out[industry] ?? 0) + 1;
+    }
+    return out;
   }
 }

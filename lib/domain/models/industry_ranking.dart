@@ -7,6 +7,67 @@ library;
 /// 進不了前八——5日視窗讓「20日弱但正在翻強」的轉折族群被看到。
 enum RankingWindow { d20, d5 }
 
+/// 「轉向」的分類——**排名躍升本身不足以判斷該不該進場**。
+///
+/// 2026-08-10 實測:半導體 20日排第 34(−13.6%)、5日排第 1(+7.2%),
+/// 躍升 +33 名居冠。但那是**跌深反彈**,不是新的主流——它的成員多半過不了
+/// v3.4 強者榜的「月漲 >+15%」(那是 20 日尺度)。
+///
+/// 兩者對應 v3.4 的兩個結構,進場邏輯完全不同:
+/// - [reboundFromDeep] → 結構 A(崩後超跌股,要三件套確認)
+/// - [sustained]       → 結構 B(強勢回測,可直接套強者榜)
+///
+/// 混為一談會讓使用者拿結構 B 的規則去買結構 A 的標的。
+enum RotationCategory {
+  /// 兩個窗口都排前段——真正的主流
+  sustained,
+
+  /// 5日前段但 20日後段——跌深反彈
+  reboundFromDeep,
+
+  /// 20日前段但 5日後段——退燒
+  cooling,
+
+  /// 其餘
+  neutral,
+}
+
+/// 單一產業的轉向資料
+class IndustryRotation {
+  const IndustryRotation({
+    required this.industry,
+    required this.memberCount,
+    required this.rankJump,
+    required this.rank5d,
+    required this.rank20d,
+    required this.ret5dPct,
+    required this.ret20dPct,
+    required this.category,
+    required this.strongListCount,
+  });
+
+  final String industry;
+  final int memberCount;
+
+  /// 20日名次 − 5日名次。正 = 正在往上竄,負 = 正在退場。
+  final int rankJump;
+
+  final int rank5d;
+  final int rank20d;
+
+  /// 各窗口的成員報酬中位數(%),與 [IndustryRanking.momentumPct] 同口徑
+  final double ret5dPct;
+  final double ret20dPct;
+
+  final RotationCategory category;
+
+  /// 成員中通過 v3.4 強者榜「月漲 >+15% ＋ 日均量 >3,000 張」的檔數。
+  ///
+  /// UI 用它決定卡片要不要淡化:**0 檔代表點進去也沒東西可買**,
+  /// 躍升再多都是死路。刻意不在服務層過濾掉——躍升本身仍是市場資訊。
+  final int strongListCount;
+}
+
 /// 產業內的領漲成員
 class IndustryMember {
   const IndustryMember({
