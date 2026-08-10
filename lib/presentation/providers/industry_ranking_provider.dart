@@ -79,6 +79,45 @@ final industryRankingProvider =
       );
     });
 
+/// 族群「轉向」——比較 20 日與 5 日的名次,而非水準值。
+///
+/// 與 [industryRankingProvider] 共用同一份 DB 讀取邏輯,但**不傳法人**:
+/// 轉向卡片刻意不顯示法人佔比(版面已有躍升、兩窗口報酬、強者榜檔數,
+/// 再加會爆炸),法人留在點進去的 sheet 裡。少查一次 DB。
+///
+/// 註:`rankRotation` 內部會對同一份 priceHistories 跑兩次 `rank()`,
+/// 那是純函數運算,無額外 DB 往返。
+final industryRotationProvider = FutureProvider<List<IndustryRotation>>((
+  ref,
+) async {
+  ref.watch(dataUpdateEpochProvider);
+
+  final db = ref.read(databaseProvider);
+  final marketRepo = ref.read(marketDataRepositoryProvider);
+
+  final latestDate = await marketRepo.getLatestDataDate();
+  if (latestDate == null) return const [];
+  final analysisDate = DateContext.normalize(latestDate);
+
+  try {
+    final priceHistories = await db.getAllPricesInRange(
+      startDate: analysisDate.subtract(
+        const Duration(days: SectorParams.rankingHistoryCalendarDays),
+      ),
+      endDate: analysisDate,
+    );
+    final stocks = await db.getAllActiveStocks();
+    return IndustryRankingService().rankRotation(
+      priceHistories: priceHistories,
+      industries: {for (final s in stocks) s.symbol: s.industry},
+      names: {for (final s in stocks) s.symbol: s.name},
+    );
+  } catch (e, st) {
+    AppLogger.error('IndustryRotation', '族群轉向計算失敗', e, st);
+    return const [];
+  }
+});
+
 /// 大盤（加權指數）在**與族群同一視窗**的報酬（%），供超額報酬使用。
 ///
 /// 口徑必須與 `PriceCalculator.ret20d` / `ret5d` 一致：取最新收盤與第

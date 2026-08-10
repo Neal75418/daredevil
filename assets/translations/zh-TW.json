@@ -77,6 +77,16 @@
     "industryTopMembers": "{} 領漲成員（{}）",
     "industryWindow20d": "20日",
     "industryWindow5d": "5日",
+    "industryRotation": "轉向",
+    "rotationSustained": "🚀 持續強勢",
+    "rotationRebound": "🔄 跌深反彈",
+    "rotationCooling": "🔻 退燒",
+    "rotationJump": "{} 名",
+    "rotationWindows": "5日#{}  20日#{}",
+    "rotationStrongList": "強者榜 {} 檔",
+    "rotationMembers": "{} — 成員(依月漲排序,★ 為過強者榜)",
+    "rotationNoSustained": "🚀 持續強勢:目前無",
+    "rotationNoSustainedHint": "尚無族群在 5 日與 20 日同時排前段",
     "watchlistMaBreak": "⚠ 自選 {count} 檔跌破均線:{names}"
   },
   "news": {

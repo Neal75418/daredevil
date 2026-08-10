@@ -202,6 +202,36 @@ void main() {
     expect(result.length, n, reason: '$n 個族群全部都要在,不可被 rank() 的前 12 名上限截斷');
   });
 
+  test('🚨 成員清單依 20 日報酬排序,並標出過強者榜的', () {
+    // 用 20 日而非 5 日:使用者點進來是要找**可買的**標的,而強者榜的
+    // 「月漲 >+15%」是 20 日尺度。用 5 日排序會把「昨天剛彈起來但月線仍弱」
+    // 的排在最前面——那正是規則不會放行的。
+    final result = service.rankRotation(
+      priceHistories: {
+        // 20日最強但 5日最弱
+        'S1': history('S1', ret20: 30, ret5: -1),
+        // 5日最強但 20日弱(不該排第一)
+        'S2': history('S2', ret20: 2, ret5: 9),
+        'S3': history('S3', ret20: 20, ret5: 1),
+        'S4': history('S4', ret20: 5, ret5: 1),
+        'S5': history('S5', ret20: 1, ret5: 1),
+      },
+      industries: {for (var i = 1; i <= 5; i++) 'S$i': '甲'},
+      names: const {},
+    );
+    final r = result.single;
+    expect(
+      r.topMembers.first.symbol,
+      'S1',
+      reason: '20日 +30% 應排第一,而非 5日最強的 S2',
+    );
+    expect(r.strongListSymbols, {
+      'S1',
+      'S3',
+    }, reason: '只有月漲 >15% 且量足的才算(S1 30%、S3 20%)');
+    expect(r.strongListCount, r.strongListSymbols.length);
+  });
+
   test('成員數不足門檻的族群不列入(與 rank() 同口徑)', () {
     final result = service.rankRotation(
       priceHistories: {'A1': history('A1', ret20: 20, ret5: 5)},

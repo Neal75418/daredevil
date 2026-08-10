@@ -77,6 +77,16 @@
     "industryTopMembers": "{} Top Movers ({})",
     "industryWindow20d": "20D",
     "industryWindow5d": "5D",
+    "industryRotation": "Rotation",
+    "rotationSustained": "🚀 Sustained",
+    "rotationRebound": "🔄 Rebound",
+    "rotationCooling": "🔻 Cooling",
+    "rotationJump": "{} places",
+    "rotationWindows": "5d#{}  20d#{}",
+    "rotationStrongList": "{} on strong list",
+    "rotationMembers": "{} — members (by 20d return, ★ = on strong list)",
+    "rotationNoSustained": "🚀 Sustained: none",
+    "rotationNoSustainedHint": "No sector ranks top-tier in both 5d and 20d",
     "watchlistMaBreak": "⚠ {count} watchlist stocks broke below MA: {names}"
   },
   "news": {

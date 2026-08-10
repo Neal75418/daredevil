@@ -184,7 +184,9 @@ class IndustryRankingService {
     final n = pos20.length;
     final tier = (n * SectorParams.rotationTierFraction).ceil().clamp(1, n);
 
-    final strongByIndustry = _countStrongList(priceHistories, industries);
+    final strongByIndustry = _strongListSymbols(priceHistories, industries);
+    // 成員清單取自 20 日排行(見 IndustryRotation.topMembers 的理由)
+    final membersByIndustry = {for (final e in r20) e.industry: e.topMembers};
 
     final out = <IndustryRotation>[];
     for (final industry in pos20.keys) {
@@ -211,7 +213,9 @@ class IndustryRankingService {
           ret5dPct: ret5[industry] ?? 0,
           ret20dPct: ret20[industry] ?? 0,
           category: category,
-          strongListCount: strongByIndustry[industry] ?? 0,
+          strongListCount: strongByIndustry[industry]?.length ?? 0,
+          topMembers: membersByIndustry[industry] ?? const [],
+          strongListSymbols: strongByIndustry[industry] ?? const {},
         ),
       );
     }
@@ -227,11 +231,11 @@ class IndustryRankingService {
   /// UI 用它決定卡片要不要淡化——0 檔代表點進去也沒東西可買。**不在此處
   /// 過濾掉 0 檔的族群**:躍升本身仍是市場資訊(2026-08-10 化學工業躍升
   /// +24 名但強者榜 0 檔,那個「空」正是使用者需要知道的事)。
-  Map<String, int> _countStrongList(
+  Map<String, Set<String>> _strongListSymbols(
     Map<String, List<DailyPriceEntry>> priceHistories,
     Map<String, String?> industries,
   ) {
-    final out = <String, int>{};
+    final out = <String, Set<String>>{};
     for (final entry in priceHistories.entries) {
       final industry = industries[entry.key];
       if (industry == null || industry.isEmpty) continue;
@@ -256,7 +260,7 @@ class IndustryRankingService {
       if (sum / 20 <= SectorParams.rotationStrongListDailyVolumeShares) {
         continue;
       }
-      out[industry] = (out[industry] ?? 0) + 1;
+      (out[industry] ??= <String>{}).add(entry.key);
     }
     return out;
   }

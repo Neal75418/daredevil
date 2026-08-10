@@ -44,6 +44,8 @@ class IndustryRotation {
     required this.ret20dPct,
     required this.category,
     required this.strongListCount,
+    required this.topMembers,
+    required this.strongListSymbols,
   });
 
   final String industry;
@@ -66,6 +68,16 @@ class IndustryRotation {
   /// UI 用它決定卡片要不要淡化:**0 檔代表點進去也沒東西可買**,
   /// 躍升再多都是死路。刻意不在服務層過濾掉——躍升本身仍是市場資訊。
   final int strongListCount;
+
+  /// 領先成員,依 **20 日報酬** DESC(不是 5 日)。
+  ///
+  /// 刻意用 20 日:使用者點進來是要**找可買的標的**,而 v3.4 強者榜的
+  /// 「月漲 >+15%」是 20 日尺度。用 5 日排序會把「昨天剛彈起來但月線仍弱」
+  /// 的排在前面,那正是規則不會放行的。
+  final List<IndustryMember> topMembers;
+
+  /// [topMembers] 中通過強者榜四條件的代號,供 UI 標記。
+  final Set<String> strongListSymbols;
 }
 
 /// 產業內的領漲成員
