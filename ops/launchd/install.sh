@@ -55,6 +55,26 @@ for target in intraday_alert_check daily_update; do
   rm -rf "$CLI_DIR/$target"
   cp -R "build/cli/$target/bundle" "$CLI_DIR/$target"
   [ -x "$CLI_DIR/$target/bin/$target" ] || { echo "❌ $target 產物不可執行" >&2; exit 1; }
+
+  # 用穩定身分簽章(2026-08-10 實機):`dart build cli` 的產物是 **ad-hoc**
+  # 簽章,TCC 對它是按 cdhash 記授權——**每次重新編譯 cdhash 就變**,
+  # macOS 會當成新程式再問一次「想要取用其他 App 的資料」。用開發者憑證
+  # 簽過之後,TCC 認的是簽章身分,重編也不會重問。
+  #
+  # 找不到憑證就跳過(仍可運作,只是每次重編要重按一次允許),不讓它
+  # 變成安裝失敗的理由。
+  IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+    | sed -n 's/.*"\(Apple Development: [^"]*\)".*/\1/p' | head -1)"
+  if [ -n "$IDENTITY" ]; then
+    if codesign --force --sign "$IDENTITY" --timestamp=none \
+         "$CLI_DIR/$target/bin/$target" >/dev/null 2>&1; then
+      echo "     已簽章($IDENTITY)"
+    else
+      echo "     ⚠️ 簽章失敗,沿用 ad-hoc(重編後需重新授權一次)" >&2
+    fi
+  else
+    echo "     ⚠️ 找不到開發者憑證,沿用 ad-hoc(重編後需重新授權一次)" >&2
+  fi
   echo "  ✅ $CLI_DIR/$target/bin/$target"
 done
 UID_NUM="$(id -u)"
