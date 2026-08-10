@@ -8,7 +8,23 @@
 # 用法:ops/launchd/install.sh   (從任何位置皆可)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+# 🚨 必須解析到**原生執行檔**,不能用 PATH 上的 dart(2026-08-10 實機):
+# `/opt/homebrew/bin/dart` → symlink → `.../flutter/bin/dart`(一支 **bash 腳本**)
+# → `.../cache/dart-sdk/bin/dart`(真正的 Mach-O)。中間隔著腳本會讓
+# macOS 的 TCC 責任鏈變成 launchd→zsh→bash→dart,請求者身分不穩定,於是
+# 「想要取用其他 App 的資料」的授權對話框**每 5 分鐘重複跳一次**,盤中
+# 洗版。直接指向原生檔,身分才固定、授權才記得住。
 DART="$(command -v dart || echo /opt/homebrew/bin/dart)"
+# 沿著 symlink 與 flutter 的 bash wrapper 解到底
+_resolved="$(python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "$DART" 2>/dev/null || echo "$DART")"
+case "$(file -b "$_resolved" 2>/dev/null)" in
+  *"shell script"*|*"Bourne"*)
+    _sdk="$(dirname "$_resolved")/cache/dart-sdk/bin/dart"
+    [ -x "$_sdk" ] && _resolved="$_sdk"
+    ;;
+esac
+DART="$_resolved"
+echo "dart 執行檔:$DART"
 UID_NUM="$(id -u)"
 
 # 路徑含空白或 shell 特殊字元會產生「plutil 過但 job 永遠死」的假成功
