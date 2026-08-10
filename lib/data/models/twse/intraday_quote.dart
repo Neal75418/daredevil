@@ -51,8 +51,20 @@ class IntradayQuote {
       final prevClose = _num(row['y']);
       if (prevClose == null || prevClose <= 0) continue;
 
+      // 🚨 **不可退回開盤價**(2026-08-10 實機):MIS 在沒有成交時 z='-',
+      // 而這是**常態不是例外**——盤中 12:26 的一次乾淨請求裡,金像電、
+      // 台積電、鴻海的 z 全是 '-'。舊版退回 `o`(開盤價),於是金像電被
+      // 讀成 985,而市場實際在 917,**差 7.4%**;整份自選最大誤差 ±8.9%。
+      //
+      // 後果是提醒的比價基準整天停在開盤價:該觸發的不觸發、不該觸發的
+      // 觸發。當時使用者有 7 筆盤中提醒正在監控。
+      //
+      // 正解是用**買賣五檔的中價**——那才是「現在的市場」。真的連五檔都
+      // 沒有(盤前、暫停交易)就視為無報價,不要猜:漏一輪(5 分鐘後
+      // 再查)遠比觸發錯誤安全。
       final price =
-          _num(row['z']) ?? _num(row['pz']) ?? _num(row['o']) ?? prevClose;
+          _num(row['z']) ?? _num(row['pz']) ?? _midOrSide(row['b'], row['a']);
+      if (price == null) continue;
 
       result[symbol] = IntradayQuote(
         symbol: symbol,
@@ -67,6 +79,23 @@ class IntradayQuote {
       );
     }
     return result;
+  }
+
+  /// 買賣五檔取中價;只有單邊就用那一邊,兩邊皆無回 null。
+  ///
+  /// 欄位格式是 `價1_價2_價3_價4_價5_`(底線分隔、結尾也有底線),
+  /// 第一格就是最佳檔位。⚠️ 這些欄位在無報價時可能是 `0.0000_...`,
+  /// 所以一律經 [_num] 過濾非正數。
+  static double? _midOrSide(Object? bidField, Object? askField) {
+    double? best(Object? f) {
+      final parts = (f?.toString() ?? '').split('_');
+      return parts.isEmpty ? null : _num(parts.first);
+    }
+
+    final bid = best(bidField);
+    final ask = best(askField);
+    if (bid != null && ask != null) return (bid + ask) / 2;
+    return bid ?? ask;
   }
 
   /// MIS 用 `'-'` 表示「無此值」,parse 失敗與非正數一律當缺值

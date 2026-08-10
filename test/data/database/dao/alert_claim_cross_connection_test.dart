@@ -71,7 +71,13 @@ void main() {
       await b.close();
     });
 
-    final t1 = DateTime(2026, 8, 10, 10, 30);
+    // ⚠️ 時戳必須相對於 `now` 產生,**不可寫死日期**(2026-08-10 實機):
+    // 第一版用 `DateTime(2026, 8, 10, 10, 30)`,寫的當下那是未來時間所以
+    // 綠;等真的到了 8/10 12:30,那個時戳變成兩小時前,於是連線開啟時的
+    // `reclaimStaleAlertClaims`(15 分鐘租約)把它回收掉,B 就搶得到了
+    // ——測試紅,但被測的機制其實是對的。同一天我已經在心跳測試與時區
+    // 測試上犯過兩次同樣的日期依賴。
+    final t1 = DateTime.now();
     expect(await a.claimAlertTrigger(id, now: t1), isTrue);
     expect(await b.claimAlertTrigger(id), isFalse, reason: 'A 持有期間 B 搶不到');
 
@@ -79,7 +85,7 @@ void main() {
     expect(await a.releaseAlertClaim(id, stamp: t1), isTrue);
 
     // B 重新搶到
-    final t2 = DateTime(2026, 8, 10, 10, 35);
+    final t2 = t1.add(const Duration(minutes: 5));
     expect(await b.claimAlertTrigger(id, now: t2), isTrue);
 
     // A 的「遲來的釋放」帶著舊 stamp,不可抹掉 B 的認領
