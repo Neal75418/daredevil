@@ -10,7 +10,7 @@
 	<array>
 		<string>/bin/zsh</string>
 		<string>-c</string>
-		<string>source ~/.zshrc 2>/dev/null; cd /Users/nealchen/IdeaProjects/daredevil &amp;&amp; /opt/homebrew/bin/dart run tool/daily_update.dart</string>
+		<string>source ~/.zshrc 2&gt;/dev/null; __CLI__/daily_update/bin/daily_update</string>
 	</array>
 	<key>RunAtLoad</key>
 	<false/>

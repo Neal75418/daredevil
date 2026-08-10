@@ -25,6 +25,38 @@ case "$(file -b "$_resolved" 2>/dev/null)" in
 esac
 DART="$_resolved"
 echo "dart 執行檔:$DART"
+
+# ── 預先編譯 CLI ────────────────────────────────────────────────────────
+# 🚨 launchd **不可**跑 `dart run`(2026-08-10 實機事故):`dart run` 每次
+# 都會執行 build hooks,而 `package:sqlite3` 的 hook 會去 github.com 抓
+# 預編譯二進位檔。開盤當下機器剛喚醒、Wi-Fi 未接上 → DNS 失敗 → process
+# 在 main() 之前就死掉,**連心跳都發不出來**。當天 09:00–09:30 共 7 輪
+# 完全沒有檢查任何提醒,而那是波動最大的時段。
+#
+# 編譯後執行期沒有 build hook,也就不依賴網路才能啟動;實測啟動時間
+# 3.46s → 0.45s。
+#
+# 裝到 Application Support 而非 repo 的 build/:後者會被 `flutter clean`
+# 清掉,那樣 job 會**靜默失效**(binary 不見了,launchd 只記一個非零
+# 退出碼,沒有人會看)。
+# ⚠️ 路徑**不可含空格**(2026-08-10 實機):第一版用
+# `~/Library/Application Support/Daredevil/cli`,而 plist 的 ProgramArguments
+# 是丟給 `zsh -c` 的字串、沒有引號 → 在空格處被切斷,job 當場壞掉。
+# 用無空格路徑比在 XML 裡疊引號可靠。
+CLI_DIR="$HOME/.daredevil/cli"
+echo "編譯 CLI(執行期不再需要網路)..."
+mkdir -p "$CLI_DIR"
+for target in intraday_alert_check daily_update; do
+  "$DART" build cli --target="bin/$target.dart" -o "build/cli/$target" >/dev/null 2>&1 || {
+    echo "❌ 編譯 $target 失敗——請手動跑一次看錯誤:" >&2
+    echo "   $DART build cli --target=bin/$target.dart -o build/cli/$target" >&2
+    exit 1
+  }
+  rm -rf "$CLI_DIR/$target"
+  cp -R "build/cli/$target/bundle" "$CLI_DIR/$target"
+  [ -x "$CLI_DIR/$target/bin/$target" ] || { echo "❌ $target 產物不可執行" >&2; exit 1; }
+  echo "  ✅ $CLI_DIR/$target/bin/$target"
+done
 UID_NUM="$(id -u)"
 
 # 路徑含空白或 shell 特殊字元會產生「plutil 過但 job 永遠死」的假成功
@@ -50,6 +82,7 @@ for job in daily intraday; do
   # 三類硬編碼路徑都要換:repo、dart、以及 $HOME 底下的日誌路徑
   # (只換前兩者的話,換機/換使用者時日誌會寫到別人的家目錄)
   sed -e "s|/Users/nealchen/IdeaProjects/daredevil|$REPO|g" \
+      -e "s|__CLI__|$CLI_DIR|g" \
       -e "s|/opt/homebrew/bin/dart|$DART|g" \
       -e "s|/Users/nealchen/Library|$HOME/Library|g" "$src" > "$tmp"
   # 先驗證再落地:直接寫 dst 會在驗證失敗時留下半殘的 plist

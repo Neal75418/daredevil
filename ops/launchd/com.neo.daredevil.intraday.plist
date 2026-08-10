@@ -10,7 +10,7 @@
 	<array>
 		<string>/bin/zsh</string>
 		<string>-c</string>
-		<string>{ cd /Users/nealchen/IdeaProjects/daredevil &amp;&amp; /opt/homebrew/bin/dart run tool/intraday_alert_check.dart; } &gt;&gt; ~/Library/Logs/daredevil-intraday.log 2&gt;&amp;1</string>
+		<string>{ __CLI__/intraday_alert_check/bin/intraday_alert_check; } &gt;&gt; ~/Library/Logs/daredevil-intraday.log 2&gt;&amp;1</string>
 	</array>
 	<key>StandardErrorPath</key>
 	<string>/Users/nealchen/Library/Logs/daredevil-intraday.launchd.log</string>
