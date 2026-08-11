@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import 'package:daredevil/core/utils/desktop_scroll_behavior.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -296,6 +298,12 @@ class _DaredevilAppState extends ConsumerState<DaredevilApp>
       supportedLocales: context.supportedLocales,
       localizationsDelegates: context.localizationDelegates,
       routerConfig: router,
+      // 🚨 桌面的預設 dragDevices **不含 mouse**,橫向卡列在 macOS 上完全
+      // 拖不動(2026-08-11 實機:族群排行「轉向」的卡片超出寬度但滑不到)。
+      // 全專案有 8 處 `scrollDirection: Axis.horizontal`,而先前只有
+      // `upcoming_events_section` 自己包了一層 ScrollConfiguration ——
+      // 修一處等於留七個同樣的坑。設在這裡一次涵蓋全部。
+      scrollBehavior: const DesktopDragScrollBehavior(),
       debugShowCheckedModeBanner: false,
     );
   }
