@@ -28,9 +28,12 @@ class IndustryRankingSection extends ConsumerStatefulWidget {
 
 class _IndustryRankingSectionState
     extends ConsumerState<IndustryRankingSection> {
-  _RankMode _mode = _RankMode.d20;
+  // 預設「今日」(2026-08-13 使用者定案):原「產業表現」是常駐可見區塊,
+  // 合併後若預設 20日,今日視角要多點一下——無縫接續舊習慣。
+  _RankMode _mode = _RankMode.d1;
 
-  /// 20日/5日 是**水準值**,轉向是**變化率**——語意不同但共用一組按鈕,
+  /// 今日/20日/5日 是**水準值**(今日=預設,接續原「產業表現」的常駐視角),
+  /// 轉向是**變化率**——語意不同但共用一組按鈕,
   /// 因為使用者的心智模型是「換一種看法」,不是「換一個資料來源」。
   RankingWindow get _window => switch (_mode) {
     _RankMode.d1 => RankingWindow.d1,

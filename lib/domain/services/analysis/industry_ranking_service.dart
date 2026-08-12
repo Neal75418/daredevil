@@ -14,7 +14,7 @@ class IndustryRankingService {
   /// [industries] 為 null／空字串或含「ETF」字樣（`ETF`＋`上櫃ETF` 兩種標記
   /// 並存）的股票不進排行；歷史不足視窗需求（21／6／2 筆）的成員不計入。
   /// 成員數少於 [SectorParams.rankingMinMembers] 的產業整組略過。
-  /// [window]：d20＝輪動主視角（預設）、d5＝轉折視角、d1＝今日快照。
+  /// [window]：d1＝今日快照（UI 預設）、d20＝輪動主視角、d5＝轉折視角。
   List<IndustryRanking> rank({
     required Map<String, List<DailyPriceEntry>> priceHistories,
     required Map<String, String?> industries,

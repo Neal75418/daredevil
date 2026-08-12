@@ -67,11 +67,11 @@ void main() {
   );
 
   group('IndustryRankingSection', () {
-    testWidgets('顯示產業卡：名稱、動能百分比、名次（預設 20日）', (tester) async {
+    testWidgets('顯示產業卡：名稱、動能百分比、名次（預設 今日）', (tester) async {
       widenViewport(tester);
       await tester.pumpWidget(
         buildSection(const {
-          RankingWindow.d20: [semis, textiles],
+          RankingWindow.d1: [semis, textiles],
         }),
       );
       await tester.pumpAndSettle(); // SectionHeader 動畫跑完（避免 pending timer）
@@ -84,19 +84,21 @@ void main() {
       expect(find.text('2'), findsOneWidget);
     });
 
-    testWidgets('切到 5日 → 換成 5日視窗的排行', (tester) async {
+    testWidgets('🚨 預設分頁=今日(2026-08-13 定案),切 5日 → 換視窗資料', (tester) async {
       widenViewport(tester);
       await tester.pumpWidget(
         buildSection(const {
-          RankingWindow.d20: [financials],
+          RankingWindow.d1: [financials],
           RankingWindow.d5: [semis],
+          RankingWindow.d20: [textiles],
         }),
       );
       await tester.pumpAndSettle();
 
-      // 預設 20日：金融在榜、半導體不在
+      // 未點任何 tab:顯示的是 d1 的資料——這就是「預設今日」的守門
       expect(find.text('金融保險'), findsOneWidget);
       expect(find.text('半導體業'), findsNothing);
+      expect(find.text('紡織業'), findsNothing, reason: '20日資料不得出現,否則預設仍是 d20');
 
       await tester.tap(find.text('today.industryWindow5d'));
       await tester.pumpAndSettle();
@@ -119,7 +121,7 @@ void main() {
       widenViewport(tester);
       await tester.pumpWidget(
         buildSection(const {
-          RankingWindow.d20: [semis],
+          RankingWindow.d1: [semis],
         }),
       );
       await tester.pumpAndSettle();

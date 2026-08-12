@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
-import 'package:daredevil/core/constants/ui_constants.dart';
 import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/advance_decline_gauge.dart';
@@ -528,12 +527,10 @@ class _MarketDashboardState extends State<MarketDashboard> {
   /// 確保對應 section 水平對齊，避免左右高度差異導致後續 section 錯位。
   Widget _buildParallelView(ThemeData theme) {
     // 市場情緒（TWSE + TPEx 對稱計算，兩側各自資料是否足夠獨立判定）。
-    //
-    // 不透過下方 sectionBuilders／_buildPairedRow 迴圈：SentimentGaugeSection
-    // 內部（漸層 bar 三角形定位）使用 LayoutBuilder，與 _buildPairedRow 的
-    // IntrinsicHeight 不相容，會丟出「LayoutBuilder does not support
-    // returning intrinsic dimensions」。改用一般 Row 並排，僅犧牲兩欄等高
-    // 對齊（其餘 section 仍對齊），不影響資料正確性。
+    // 2026-08-13 起與其他 section 一樣走 _buildPairedRow:原本因
+    // SentimentGaugeSection 內部有 LayoutBuilder 而與 IntrinsicHeight 不相容,
+    // 只能用固定 222px 分隔線(收摺實測 172,白吃 50px)——LayoutBuilder 已
+    // 全數移除(_GradientBar→Align、_SubScoresGrid→Row+Expanded)。
     final twseSentiment = _buildSentimentSection(MarketCode.twse);
     final tpexSentiment = _buildSentimentSection(MarketCode.tpex);
 
@@ -561,25 +558,7 @@ class _MarketDashboardState extends State<MarketDashboard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (twseSentiment != null || tpexSentiment != null) ...[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: twseSentiment ?? const SizedBox.shrink()),
-              // 固定高度：此 Row 無 IntrinsicHeight 可撐開 unbounded 高度
-              // 環境下 0 尺寸子孫的高度（見 UiConstants.sentimentDividerHeight 註解）。
-              SizedBox(
-                height: UiConstants.sentimentDividerHeight,
-                child: VerticalDivider(
-                  width: 32,
-                  thickness: 1,
-                  color: theme.colorScheme.outlineVariant.withValues(
-                    alpha: 0.2,
-                  ),
-                ),
-              ),
-              Expanded(child: tpexSentiment ?? const SizedBox.shrink()),
-            ],
-          ),
+          _buildPairedRow(theme, twseSentiment, tpexSentiment),
           const SizedBox(height: DesignTokens.spacing14),
           Divider(
             height: 1,
@@ -610,6 +589,13 @@ class _MarketDashboardState extends State<MarketDashboard> {
   }
 
   /// 建構配對的跨欄 Row（左右等高）
+  /// ⚠️ IntrinsicHeight 子樹的不變量(2026-08-13 展開細項實炸後定案):
+  /// 不是「不得有 LayoutBuilder」,而是「LayoutBuilder 必須被 **tight 高度**
+  /// 短路」——RenderConstrainedBox 對 tight 約束直接回傳、不下探 intrinsic
+  /// (例:institutional_flow_chart 的 LayoutBuilder 安全,因為包在
+  /// SizedBox(height: 4) 裡)。裸露的 LayoutBuilder 會在量 intrinsic 時
+  /// 丟例外,而且**收摺路徑測不到**——守門:market_dashboard_test 的
+  /// 展開探針。
   Widget _buildPairedRow(ThemeData theme, Widget? left, Widget? right) {
     return IntrinsicHeight(
       child: Row(

@@ -143,6 +143,73 @@ void main() {
       expect(find.byIcon(Icons.show_chart), findsOneWidget);
     });
 
+    testWidgets('🚨 IntrinsicHeight 配對列:展開細項不得炸 intrinsic,列高要隨內容成長', (
+      tester,
+    ) async {
+      // 守門對象:展開路徑不得重新引入 intrinsic-unsafe 的 widget(裸
+      // LayoutBuilder 之類)。歷史:_SubScoresGrid 原用 LayoutBuilder 算
+      // 三欄寬,收摺(預設)不 build 它——炸點只在展開路徑,收摺測試給過
+      // 假安心(2026-08-13 實炸,每次展開丟 9 個例外)。
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(MarketDashboard(state: parallelSentimentState())),
+      );
+      await tester.pumpAndSettle();
+
+      final collapsedH = tester
+          .getSize(find.byType(VerticalDivider).first)
+          .height;
+
+      await tester.tap(find.byIcon(Icons.expand_more).first);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: '展開不得拋 intrinsic/layout 例外',
+      );
+      // 「分隔線=列高」在 stretch 下是套套邏輯(審查 3),改斷言成長:
+      // 展開後列高必須大於收摺——分隔線跟著內容,不是跟著固定常數
+      final expandedH = tester
+          .getSize(find.byType(VerticalDivider).first)
+          .height;
+      expect(
+        expandedH,
+        greaterThan(collapsedH + 10),
+        reason: '展開子指標後配對列要長高;不長=有人又釘死了高度',
+      );
+    });
+
+    testWidgets('🚨 情緒配對列:分隔線高度=卡片實際高度,收摺不再殘留 50px(2026-08-13)', (
+      tester,
+    ) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(MarketDashboard(state: parallelSentimentState())),
+      );
+      await tester.pumpAndSettle();
+
+      final gaugeHeights = tester
+          .widgetList(find.byType(SentimentGaugeSection))
+          .map((w) => tester.getSize(find.byWidget(w)).height)
+          .toList();
+      expect(gaugeHeights, isNotEmpty, reason: '前提:並排情緒卡有渲染');
+
+      final dividerH = tester
+          .getSize(find.byType(VerticalDivider).first)
+          .height;
+      final maxCard = gaugeHeights.reduce((a, b) => a > b ? a : b);
+
+      expect(
+        dividerH,
+        closeTo(maxCard, 1.0),
+        reason:
+            '分隔線應隨 IntrinsicHeight 貼齊卡片;'
+            '原固定 222px 在收摺(預設,實測 172px)時每次白吃 50px 垂直空間',
+      );
+      expect(dividerH, lessThan(200), reason: '收摺狀態的配對列不得回到 222px 時代');
+    });
+
     testWidgets('指數平盤 + 廣度明顯偏向下跌時，市場欄位頂部顯示綜合判讀 weightSupport', (tester) async {
       widenViewport(tester);
       final state = MarketOverviewState(

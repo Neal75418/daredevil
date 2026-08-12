@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/market_codes.dart';
-import 'package:daredevil/core/constants/ui_constants.dart';
 import 'package:daredevil/domain/services/market_sentiment_service.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/sentiment_gauge_section.dart';
 
@@ -75,8 +74,10 @@ void main() {
   });
 
   group('SentimentGaugeSection 渲染高度（回歸：情緒配對列殘留高度）', () {
-    // 移除趨勢 sparkline 前的 UiConstants.sentimentDividerHeight 舊值（見該
-    // 常數的變更前註解）。兩測試皆須遠低於此值，證明「殘留高度」迴歸已修正。
+    // 2026-08-13:sentimentDividerHeight 常數已刪——配對列改 IntrinsicHeight,
+    // 分隔線隨內容伸縮,不再固定 222px(收摺實測 172,白吃 50px)。此組改守
+    // 「內容高度不暴漲」:若未來加回 sparkline 之類的東西,IntrinsicHeight
+    // 會忠實變高,這裡要有人發現。260 = sparkline 時代的歷史高點。
     const oldSentimentDividerHeight = 260.0;
 
     /// 量測「內容實際需要的高度」，非填滿可用空間的高度。
@@ -110,9 +111,8 @@ void main() {
       final height = await measureHeight(tester, createSentiment());
 
       expect(height, lessThan(oldSentimentDividerHeight));
-      // 不得超過現行 sentimentDividerHeight，否則分隔線會明顯短於卡片本身
-      // （見 UiConstants.sentimentDividerHeight 註解）。
-      expect(height, lessThanOrEqualTo(UiConstants.sentimentDividerHeight));
+      // 收摺是預設狀態,高度帶寬鬆守著(實測 172;超過代表有人加了內容)
+      expect(height, lessThanOrEqualTo(190));
     });
 
     testWidgets('子指標展開（5 項全部命中，最高狀態）：高度遠小於舊值，且不超過分隔線常數', (tester) async {
@@ -125,7 +125,7 @@ void main() {
       final height = tester.getSize(find.byType(SentimentGaugeSection)).height;
 
       expect(height, lessThan(oldSentimentDividerHeight));
-      expect(height, lessThanOrEqualTo(UiConstants.sentimentDividerHeight));
+      expect(height, lessThanOrEqualTo(235));
     });
   });
 

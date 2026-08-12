@@ -123,6 +123,9 @@ class _SentimentGaugeSectionState extends State<SentimentGaugeSection> {
                   expanded: _expanded,
                   onTap: () => setState(() => _expanded = !_expanded),
                 ),
+                // ⚠️ 並排(IntrinsicHeight)視圖下,容器高度由 intrinsic 一步
+                // 到位(取目標尺寸),只有內容在 180ms 內長出——「動畫不順」
+                // 是機制不是 bug,別試圖在這裡修(2026-08-13 審查 5 實測)
                 AnimatedSize(
                   duration: const Duration(milliseconds: 180),
                   alignment: Alignment.topCenter,
@@ -238,27 +241,21 @@ class _GradientBar extends StatelessWidget {
 
     return Column(
       children: [
-        // 指標三角形
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final position = constraints.maxWidth * (score / 100);
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                SizedBox(height: 8, width: constraints.maxWidth),
-                Positioned(
-                  left: position - 5,
-                  bottom: 0,
-                  child: CustomPaint(
-                    size: const Size(10, 6),
-                    painter: _TrianglePainter(
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+        // 指標三角形。Align 而非 LayoutBuilder(2026-08-13):Alignment.x 把
+        // score 0–100 映射到 −1..+1,位置語意等價(差異 ≤ 半個三角形寬,且
+        // 端點不再掛半顆出畫面)。拔掉 LayoutBuilder 後,情緒配對列才能用
+        // IntrinsicHeight 撐開分隔線——原本的固定高度 hack(222px)在子指標
+        // 收摺(預設)時白吃 50px 垂直空間。
+        SizedBox(
+          height: 8,
+          width: double.infinity,
+          child: Align(
+            alignment: Alignment(score / 50 - 1, 1),
+            child: CustomPaint(
+              size: const Size(10, 6),
+              painter: _TrianglePainter(color: theme.colorScheme.onSurface),
+            ),
+          ),
         ),
         // 漸層條
         ClipRRect(
@@ -347,60 +344,70 @@ class _SubScoresGrid extends StatelessWidget {
         .where((ind) => subScores.containsKey(ind.$1))
         .toList();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // 每列 3 個 item，扣除 2 個 spacing
-        const columns = 3;
-        const spacing = 8.0;
-        final itemWidth =
-            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+    // Row+Expanded 而非 LayoutBuilder+Wrap(2026-08-13):配對列改用
+    // IntrinsicHeight 後,子樹裡任何 LayoutBuilder 在展開細項時都會丟
+    // 「LayoutBuilder does not support returning intrinsic dimensions」
+    // ——收摺(預設)不 build 本 widget,炸點藏在展開路徑,由
+    // market_dashboard_test 的展開探針守。三等分語意不變:每列 3 格,
+    // 尾列不足補空 Expanded 佔位。
+    const columns = 3;
+    const spacing = 8.0;
 
-        return Wrap(
-          spacing: spacing,
-          runSpacing: DesignTokens.spacing6,
-          children: items.map((ind) {
-            final score = subScores[ind.$1]!;
-            final color = _scoreColor(score, theme.brightness);
-            return SizedBox(
-              width: itemWidth,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 4,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: DesignTokens.spacing4),
-                  Flexible(
-                    child: Text(
-                      ind.$2.tr(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: DesignTokens.fontSizeXs,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: DesignTokens.spacing4),
-                  Text(
-                    score.toStringAsFixed(0),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w700,
-                      fontSize: DesignTokens.fontSizeXs,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+    Widget item((String, String) ind) {
+      final score = subScores[ind.$1]!;
+      final color = _scoreColor(score, theme.brightness);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: DesignTokens.spacing4),
+          Flexible(
+            child: Text(
+              ind.$2.tr(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: DesignTokens.fontSizeXs,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: DesignTokens.spacing4),
+          Text(
+            score.toStringAsFixed(0),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: DesignTokens.fontSizeXs,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        for (var i = 0; i < items.length; i += columns)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : DesignTokens.spacing6),
+            child: Row(
+              children: [
+                for (var j = i; j < i + columns; j++) ...[
+                  if (j > i) const SizedBox(width: spacing),
+                  Expanded(
+                    child: j < items.length
+                        ? item(items[j])
+                        : const SizedBox.shrink(),
                   ),
                 ],
-              ),
-            );
-          }).toList(),
-        );
-      },
+              ],
+            ),
+          ),
+      ],
     );
   }
 
