@@ -166,6 +166,133 @@ void main() {
     );
   }
 
+  ModeRecommendation rec(String symbol, {String? trend}) => ModeRecommendation(
+    symbol: symbol,
+    rank: 1,
+    modeScoreShort: 20,
+    modeScoreLong: 20,
+    reasons: const [],
+    stockName: '測試$symbol',
+    latestClose: 100,
+    priceChange: 1.0,
+    trendState: trend,
+  );
+
+  group('起漲候選趨勢分艙(2026-08-12)', () {
+    Widget appWith(List<ModeRecommendation> momentum) => buildTestWidget(
+      todayState: const TodayState(),
+      modeRecommendations: (ref, mode) => SynchronousFuture(
+        mode == ScoringMode.momentumEntry ? momentum : const [],
+      ),
+    );
+
+    testWidgets('🚨 DOWN 卡預設收合:清單只見 UP/RANGE,收合列帶數量', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        appWith([
+          rec('2376', trend: 'RANGE'),
+          rec('1314', trend: 'DOWN'),
+          rec('2201', trend: 'DOWN'),
+        ]),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('2376'), findsOneWidget);
+      expect(find.text('1314'), findsNothing, reason: 'DOWN 卡預設不可見');
+      expect(find.text('2201'), findsNothing);
+      // 測試環境 .tr() 渲染原始 key(不做參數替換)
+      expect(
+        find.textContaining('today.trendGateCollapsed'),
+        findsOneWidget,
+        reason: '必須有收合列讓使用者知道有東西被收起來,不可無聲吞掉',
+      );
+    });
+
+    testWidgets('🚨 點收合列展開:DOWN 卡出現且被淡化', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        appWith([rec('2376', trend: 'RANGE'), rec('1314', trend: 'DOWN')]),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.textContaining('today.trendGateCollapsed'));
+      // Use multiple pumps to handle flutter_animate timers(檔內既有慣例)
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('1314'), findsOneWidget, reason: '展開後資料要在——分艙不是過濾');
+      final dimmed = tester
+          .widgetList<Opacity>(
+            find.ancestor(
+              of: find.text('1314'),
+              matching: find.byType(Opacity),
+            ),
+          )
+          .any((o) => o.opacity < 0.6);
+      expect(dimmed, isTrue, reason: '後艙卡片必須淡化,與前艙有視覺區隔');
+      // 鏡像斷言(2026-08-13 審查變異實測:全部淡化時整套照樣綠)——
+      // 「視覺區隔」是雙邊性質,單邊斷言守不住它
+      final qualifiedDimmed = tester
+          .widgetList<Opacity>(
+            find.ancestor(
+              of: find.text('2376'),
+              matching: find.byType(Opacity),
+            ),
+          )
+          .any((o) => o.opacity < 0.6);
+      expect(qualifiedDimmed, isFalse, reason: '前艙卡片不可淡化——區隔就在這');
+    });
+
+    testWidgets('🚨 全 DOWN 日自動展開:不可只剩一條收合列的空畫面', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        appWith([rec('1314', trend: 'DOWN'), rec('2201', trend: 'DOWN')]),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('1314'), findsOneWidget, reason: '前艙全空時強制展開');
+      expect(find.text('2201'), findsOneWidget);
+      expect(
+        find.byIcon(Icons.expand_less),
+        findsNothing,
+        reason: '鎖定狀態不顯示收合箭頭——收起來就什麼都沒有',
+      );
+    });
+
+    testWidgets('全部過門檻時不顯示收合列', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(appWith([rec('2376', trend: 'UP')]));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.textContaining('today.trendGateCollapsed'), findsNothing);
+    });
+
+    testWidgets('🚨 強勢觀察 tab 不分艙(DOWN 卡直接可見)', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          modeRecommendations: (ref, mode) => SynchronousFuture(
+            mode == ScoringMode.strengthObserve
+                ? [rec('1314', trend: 'DOWN')]
+                : const [],
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      // 切到強勢觀察 tab
+      await tester.tap(find.text('scoringMode.strengthObserve'));
+      // Use multiple pumps to handle flutter_animate timers(檔內既有慣例)
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('1314'), findsOneWidget, reason: 'B/C tab 的語意不同,不套趨勢門檻');
+      expect(find.textContaining('today.trendGateCollapsed'), findsNothing);
+    });
+  });
+
   group('TodayScreen', () {
     testWidgets('shows shimmer loading state', (tester) async {
       widenViewport(tester);

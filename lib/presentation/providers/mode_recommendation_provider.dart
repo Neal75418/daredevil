@@ -18,6 +18,25 @@ import 'package:daredevil/presentation/providers/providers.dart';
 /// - 雙 score（modeScoreShort / modeScoreLong）vs 單 score
 /// - reasons 已 filter 到該 mode 內的 rule
 /// - score 是該 mode 內 rule 加總（不是全 rule 加總）
+/// momentumEntry 顯示層分艙(2026-08-12):上升趨勢已確認(UP/RANGE)在前,
+/// 未確認(DOWN 或無分析資料)收合淡化。
+///
+/// **刻意不動評分**:8/12 實況 11 檔裡 8 檔 trendState=DOWN、value 標籤
+/// 主導,tab 承諾的「上升趨勢中」名不符實(scoring_mode.dart 自認的已知
+/// 張力)。分艙只改呈現——資料保留、可展開;hard-gate 與否留給 calibration
+/// 數據決定。null 歸後艙:「未確認」不能當「已確認」。
+({List<ModeRecommendation> qualified, List<ModeRecommendation> gated})
+splitByTrendGate(List<ModeRecommendation> recs) {
+  final qualified = <ModeRecommendation>[];
+  final gated = <ModeRecommendation>[];
+  for (final r in recs) {
+    final t = r.trendState;
+    (t == TrendState.up.code || t == TrendState.range.code ? qualified : gated)
+        .add(r);
+  }
+  return (qualified: qualified, gated: gated);
+}
+
 class ModeRecommendation {
   ModeRecommendation({
     required this.symbol,

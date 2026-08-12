@@ -51,6 +51,10 @@ class TodayScreen extends ConsumerStatefulWidget {
 }
 
 class _TodayScreenState extends ConsumerState<TodayScreen> {
+  /// 起漲候選「未確認上升趨勢」艙是否展開(預設收合;切 mode 不重置,
+  /// 使用者的展開偏好在同一次瀏覽內保留)
+  bool _showTrendGated = false;
+
   @override
   void initState() {
     super.initState();
@@ -109,12 +113,144 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     BuildContext context,
     List<ModeRecommendation> recommendations,
     Set<String> watchlistSymbols,
-    bool showLimitMarkers,
-  ) {
+    bool showLimitMarkers, {
+    required ScoringMode mode,
+  }) {
+    // 起漲候選分艙(2026-08-12,顯示層):tab 承諾「上升趨勢中」,但實況
+    // 11 檔裡 8 檔 trendState=DOWN——未確認上升趨勢的收合淡化,不動評分。
+    // 只有 momentumEntry 分艙:強勢觀察本來就強、回檔觀察本來就在回。
+    if (mode == ScoringMode.momentumEntry) {
+      final split = splitByTrendGate(recommendations);
+      if (split.gated.isNotEmpty) {
+        // 前艙全空(全 DOWN 日)強制展開:否則畫面只剩一條收合列,像壞掉
+        // ——8/12 實況 11 檔裡 8 檔 DOWN,全 DOWN 日並不遙遠(2026-08-13
+        // 審查 3,實測空畫面)。此時收合列不可再點(收起來就什麼都沒有)。
+        final locked = split.qualified.isEmpty;
+        final expanded = _showTrendGated || locked;
+        // 瀏覽脈絡=「當下可見的集合」:收合時滑 3 檔、展開時滑全部——
+        // 若脈絡只給渲染子清單,展開後從前艙滑到艙界會無聲斷頭(審查 4)
+        final browsingContext = expanded
+            ? [...split.qualified, ...split.gated]
+            : split.qualified;
+        return SliverMainAxisGroup(
+          slivers: [
+            _buildCardsSliver(
+              context,
+              split.qualified,
+              watchlistSymbols,
+              showLimitMarkers,
+              browsingContext: browsingContext,
+            ),
+            _buildTrendGateHeader(
+              context,
+              split.gated.length,
+              expanded: expanded,
+              locked: locked,
+            ),
+            if (expanded)
+              _buildCardsSliver(
+                context,
+                split.gated,
+                watchlistSymbols,
+                showLimitMarkers,
+                dimmed: true,
+                browsingContext: browsingContext,
+              ),
+          ],
+        );
+      }
+    }
+    return _buildCardsSliver(
+      context,
+      recommendations,
+      watchlistSymbols,
+      showLimitMarkers,
+    );
+  }
+
+  /// 「未確認上升趨勢」收合列(點擊展開/收合;[locked] 時不可收合)
+  Widget _buildTrendGateHeader(
+    BuildContext context,
+    int count, {
+    required bool expanded,
+    required bool locked,
+  }) {
+    final theme = Theme.of(context);
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: context.responsiveHorizontalPadding,
+          vertical: DesignTokens.spacing8,
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusSm),
+          onTap: locked
+              ? null
+              : () => setState(() => _showTrendGated = !_showTrendGated),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: DesignTokens.spacing8,
+              horizontal: DesignTokens.spacing8,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.trending_flat,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: DesignTokens.spacing8),
+                Expanded(
+                  child: Text(
+                    'today.trendGateCollapsed'.tr(
+                      namedArgs: {'count': '$count'},
+                    ),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                if (!locked)
+                  Icon(
+                    expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardsSliver(
+    BuildContext context,
+    List<ModeRecommendation> recommendations,
+    Set<String> watchlistSymbols,
+    bool showLimitMarkers, {
+    bool dimmed = false,
+    List<ModeRecommendation>? browsingContext,
+  }) {
     final columns = context.responsiveGridColumns;
     final useGrid = columns > 1;
     final padding = context.responsiveHorizontalPadding;
     final spacing = context.responsiveCardSpacing;
+    // 詳情頁左右滑的脈絡:預設=本清單;分艙時由呼叫端給「可見集合」
+    final ctx = browsingContext ?? recommendations;
+
+    Widget item(BuildContext context, int index) {
+      final card = _buildRecommendationCard(
+        context,
+        recommendations,
+        watchlistSymbols,
+        index,
+        showLimitMarkers,
+        browsingContext: ctx,
+      );
+      // 淡化與族群轉向的 0 檔卡同語彙(同 0.45):掃過去自然跳過,點開仍可互動
+      return dimmed ? Opacity(opacity: 0.45, child: card) : card;
+    }
 
     if (useGrid) {
       return SliverPadding(
@@ -127,38 +263,28 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             mainAxisExtent: DesignTokens.stockCardHeight,
           ),
           itemCount: recommendations.length,
-          itemBuilder: (context, index) => _buildRecommendationCard(
-            context,
-            recommendations,
-            watchlistSymbols,
-            index,
-            showLimitMarkers,
-          ),
+          itemBuilder: item,
         ),
       );
     }
 
     return SliverList.builder(
       itemCount: recommendations.length,
-      itemBuilder: (context, index) => _buildRecommendationCard(
-        context,
-        recommendations,
-        watchlistSymbols,
-        index,
-        showLimitMarkers,
-      ),
+      itemBuilder: item,
     );
   }
 
-  /// 建立推薦卡片
+  /// 建立推薦卡片([browsingContext] = 詳情頁左右滑的清單,預設同渲染清單)
   Widget _buildRecommendationCard(
     BuildContext context,
     List<ModeRecommendation> recommendations,
     Set<String> watchlistSymbols,
     int index,
-    bool showLimitMarkers,
-  ) {
+    bool showLimitMarkers, {
+    List<ModeRecommendation>? browsingContext,
+  }) {
     final rec = recommendations[index];
+    final navContext = browsingContext ?? recommendations;
     final isInWatchlist = watchlistSymbols.contains(rec.symbol);
     final columns = context.responsiveGridColumns;
 
@@ -191,7 +317,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           onPinToggle: () => _togglePin(rec.symbol),
           onTap: () {
             HapticFeedback.lightImpact();
-            _openStockDetail(recommendations, rec.symbol);
+            _openStockDetail(navContext, rec.symbol);
           },
           onLongPress: () {
             showStockPreviewSheet(
@@ -206,8 +332,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 reasons: rec.reasonTypes,
                 isInWatchlist: isInWatchlist,
               ),
-              onViewDetails: () =>
-                  _openStockDetail(recommendations, rec.symbol),
+              onViewDetails: () => _openStockDetail(navContext, rec.symbol),
               onToggleWatchlist: () =>
                   _toggleWatchlist(rec.symbol, isInWatchlist),
             );
@@ -744,6 +869,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   recommendations,
                   watchlistSymbols,
                   showLimitMarkers,
+                  mode: mode,
                 );
               },
               loading: () => const SliverFillRemaining(
