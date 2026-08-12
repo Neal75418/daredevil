@@ -35,11 +35,69 @@ mixin UserDaoMixin on $AppDatabase {
   }
 
   /// 加入自選股
-  Future<void> addToWatchlist(String symbol) {
-    return into(watchlist).insert(
-      WatchlistCompanion.insert(symbol: symbol),
-      mode: InsertMode.insertOrIgnore,
-    );
+  ///
+  /// [groupId] 用 `Value` 三態：
+  /// - `Value.absent()`（預設）→ 落入預設分組（無預設分組則未分組）
+  /// - `Value(id)` → 指定分組（復原場景）；**分組已不存在時落回未分組**，
+  ///   「移除 → 刪組 → 復原」的競態不炸 FK
+  /// - `Value(null)` → 明確未分組（復原「本來就未分組」的股票——若走
+  ///   absent 會被預設分組收編，這正是 2026-08-12 修的 bug）
+  Future<void> addToWatchlist(
+    String symbol, {
+    Value<int?> groupId = const Value.absent(),
+  }) {
+    // transaction:讀分組與 insert 之間若分組被刪,INSERT OR IGNORE **不會**
+    // 吞 FK violation(實測 SqliteException 787)——包進交易讓讀寫看同一份快照
+    return transaction(() async {
+      final int? resolved;
+      if (groupId.present) {
+        resolved = await _existingWatchlistGroupId(groupId.value);
+      } else {
+        resolved = (await getDefaultWatchlistGroup())?.id;
+      }
+      await into(watchlist).insert(
+        WatchlistCompanion.insert(symbol: symbol, groupId: Value(resolved)),
+        mode: InsertMode.insertOrIgnore,
+      );
+    });
+  }
+
+  /// [id] 仍存在於 watchlist_groups 時回傳原值，否則 null（FK 防禦）
+  Future<int?> _existingWatchlistGroupId(int? id) async {
+    if (id == null) return null;
+    final row = await (select(
+      watchlistGroups,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row?.id;
+  }
+
+  /// 設定預設分組（[id] 為 null 代表清除預設）
+  ///
+  /// 交易內先全清再設，維持「全表最多一列 isDefault」的不變量——
+  /// 同時兩個預設會讓「新加入落到哪」變成未定義行為。
+  Future<void> setDefaultWatchlistGroup(int? id) {
+    return transaction(() async {
+      await (update(watchlistGroups)..where((t) => t.isDefault.equals(true)))
+          .write(const WatchlistGroupsCompanion(isDefault: Value(false)));
+      if (id != null) {
+        await (update(watchlistGroups)..where((t) => t.id.equals(id))).write(
+          const WatchlistGroupsCompanion(isDefault: Value(true)),
+        );
+      }
+    });
+  }
+
+  /// 取得預設分組（未設定則 null）
+  ///
+  /// `limit(1)`：不變量由 [setDefaultWatchlistGroup] 維持，但此 DB 也被
+  /// 外部工具直接寫過——多列時取一列，不炸 `getSingleOrNull`。
+  Future<WatchlistGroupEntry?> getDefaultWatchlistGroup() {
+    return (select(watchlistGroups)
+          ..where((t) => t.isDefault.equals(true))
+          // 多列時取 id 最小——外部工具寫壞不變量時 fallback 至少是穩定的
+          ..orderBy([(t) => OrderingTerm.asc(t.id)])
+          ..limit(1))
+        .getSingleOrNull();
   }
 
   /// 從自選股移除

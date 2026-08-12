@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -584,6 +585,19 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
     }
   }
 
+  /// 設定/清除預設分組（[id] 為 null 代表清除）
+  ///
+  /// 新加入的自選會自動落入預設分組（見 DAO `addToWatchlist`）。
+  Future<void> setDefaultGroup(int? id) async {
+    try {
+      await _db.setDefaultWatchlistGroup(id);
+      await _reloadGroups();
+    } catch (e) {
+      AppLogger.warning('WatchlistNotifier', '設定預設分組失敗: $id', e);
+      state = state.copyWith(error: ErrorDisplay.message(e));
+    }
+  }
+
   /// 指定股票到分組（[groupId] 為 null 代表移出分組）
   Future<void> assignGroup(String symbol, int? groupId) async {
     try {
@@ -711,6 +725,21 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
     );
 
     try {
+      // 刪列前先從 DB 暫存分組（分組資訊隨列消失），供 restoreStock 還原。
+      // 讀 DB 而非 state：state 可能被篩選/過期，DB 才是權威。
+      // 自己的 try：暫存是 best-effort，讀失敗不該擋下主要的移除動作
+      try {
+        final entry = await _db.getWatchlistEntry(symbol);
+        if (entry != null) {
+          _removedGroupIds[symbol] = entry.groupId;
+          // 沒有 undo 的移除（如 scan 頁）會讓暫存累積——設上限防洩漏
+          if (_removedGroupIds.length > 32) {
+            _removedGroupIds.remove(_removedGroupIds.keys.first);
+          }
+        }
+      } catch (e) {
+        AppLogger.warning('WatchlistNotifier', '暫存分組失敗（復原將落預設組）: $symbol', e);
+      }
       await _db.removeFromWatchlist(symbol);
       return true;
     } catch (e) {
@@ -721,10 +750,22 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
     }
   }
 
-  /// 還原已移除的股票
+  /// [removeStock] 暫存的原分組，key 為 symbol（2026-08-12）
+  ///
+  /// 修前：復原走 `addToWatchlist(symbol)`，股票「移除→復原」一輪就從
+  /// 原分組被靜默搬進預設分組/未分組。
+  final Map<String, int?> _removedGroupIds = {};
+
+  /// 還原已移除的股票（回到移除前的分組）
   Future<void> restoreStock(String symbol) async {
     try {
-      await _db.addToWatchlist(symbol);
+      // Value(null) 與 absent 語意不同：前者是「本來就未分組」，
+      // absent 才交給 DAO 的預設分組解析
+      final groupId = _removedGroupIds.containsKey(symbol)
+          ? Value<int?>(_removedGroupIds[symbol])
+          : const Value<int?>.absent();
+      await _db.addToWatchlist(symbol, groupId: groupId);
+      _removedGroupIds.remove(symbol); // 成功才清，失敗保留供重試
 
       // 從資料庫讀取實際的 createdAt，確保與 loadData 一致
       final watchlistEntry = await _db.getWatchlistEntry(symbol);

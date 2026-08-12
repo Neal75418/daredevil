@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
@@ -59,6 +60,11 @@ WatchlistItemData createItem({
 // ==========================================
 
 void main() {
+  setUpAll(() {
+    // any(named: 'groupId') 需要 Value<int?> 的 fallback
+    registerFallbackValue(const Value<int?>.absent());
+  });
+
   late MockAppDatabase mockDb;
   late MockCachedDatabaseAccessor mockCachedDb;
   late MockWarningRepository mockWarningRepo;
@@ -288,12 +294,14 @@ void main() {
         name: 'A(舊)',
         sortOrder: 0,
         createdAt: DateTime(2026, 7, 30),
+        isDefault: false,
       );
       final groupB = WatchlistGroupEntry(
         id: 2,
         name: 'B(新)',
         sortOrder: 0,
         createdAt: DateTime(2026, 7, 30),
+        isDefault: false,
       );
       final mockAnalysisRepo = MockAnalysisRepository();
       when(
@@ -419,6 +427,7 @@ void main() {
   group('WatchlistNotifier removeStock', () {
     test('removes stock from state optimistically', () async {
       when(() => mockDb.removeFromWatchlist(any())).thenAnswer((_) async {});
+      when(() => mockDb.getWatchlistEntry(any())).thenAnswer((_) async => null);
 
       // Manually set initial state with items
       final notifier = container.read(watchlistProvider.notifier);
@@ -428,6 +437,75 @@ void main() {
       await notifier.removeStock('2330');
 
       verify(() => mockDb.removeFromWatchlist('2330')).called(1);
+    });
+  });
+
+  // ==========================================
+  // WatchlistNotifier restoreStock 保留分組(2026-08-12)
+  //
+  // 修前:removeStock 刪列(分組資訊隨列消失)→ restoreStock 重新 insert
+  // → groupId 永遠是 NULL/預設組。使用者「移除→復原」一輪,股票就從
+  // 原分組靜默搬家。
+  //
+  // 只驗 addToWatchlist 的參數:後段 _loadSingleStockData 鏈未樁,會丟
+  // 例外進 restoreStock 的 catch——不影響本組要驗的 stash 傳遞。
+  // ==========================================
+
+  group('WatchlistNotifier restoreStock 保留分組', () {
+    setUp(() {
+      when(() => mockDb.removeFromWatchlist(any())).thenAnswer((_) async {});
+      when(
+        () => mockDb.addToWatchlist(any(), groupId: any(named: 'groupId')),
+      ).thenAnswer((_) async {});
+    });
+
+    test('🚨 復原後回到原分組,而非落入預設分組', () async {
+      when(() => mockDb.getWatchlistEntry('2330')).thenAnswer(
+        (_) async => WatchlistEntry(
+          symbol: '2330',
+          createdAt: DateTime(2026, 8, 1),
+          groupId: 7,
+        ),
+      );
+      final notifier = container.read(watchlistProvider.notifier);
+
+      await notifier.removeStock('2330');
+      await notifier.restoreStock('2330');
+
+      verify(
+        () => mockDb.addToWatchlist('2330', groupId: const Value<int?>(7)),
+      ).called(1);
+    });
+
+    test('🚨 原本未分組的股票,復原後仍未分組(不得落入預設組)', () async {
+      when(() => mockDb.getWatchlistEntry('2330')).thenAnswer(
+        (_) async => WatchlistEntry(
+          symbol: '2330',
+          createdAt: DateTime(2026, 8, 1),
+          groupId: null,
+        ),
+      );
+      final notifier = container.read(watchlistProvider.notifier);
+
+      await notifier.removeStock('2330');
+      await notifier.restoreStock('2330');
+
+      // Value(null) ≠ Value.absent():前者明確要求未分組
+      verify(
+        () => mockDb.addToWatchlist('2330', groupId: const Value<int?>(null)),
+      ).called(1);
+    });
+
+    test('沒有移除紀錄時直接復原 → 不指定分組(走預設組解析)', () async {
+      when(() => mockDb.getWatchlistEntry(any())).thenAnswer((_) async => null);
+      final notifier = container.read(watchlistProvider.notifier);
+
+      await notifier.restoreStock('2330');
+
+      verify(
+        () =>
+            mockDb.addToWatchlist('2330', groupId: const Value<int?>.absent()),
+      ).called(1);
     });
   });
 

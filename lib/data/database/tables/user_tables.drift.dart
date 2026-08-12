@@ -12,6 +12,7 @@ typedef $$WatchlistGroupsTableCreateCompanionBuilder =
       i0.Value<int> id,
       required String name,
       i0.Value<int> sortOrder,
+      i0.Value<bool> isDefault,
       i0.Value<DateTime> createdAt,
     });
 typedef $$WatchlistGroupsTableUpdateCompanionBuilder =
@@ -19,6 +20,7 @@ typedef $$WatchlistGroupsTableUpdateCompanionBuilder =
       i0.Value<int> id,
       i0.Value<String> name,
       i0.Value<int> sortOrder,
+      i0.Value<bool> isDefault,
       i0.Value<DateTime> createdAt,
     });
 
@@ -90,6 +92,11 @@ class $$WatchlistGroupsTableFilterComposer
     builder: (column) => i0.ColumnFilters(column),
   );
 
+  i0.ColumnFilters<bool> get isDefault => $composableBuilder(
+    column: $table.isDefault,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
   i0.ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => i0.ColumnFilters(column),
@@ -149,6 +156,11 @@ class $$WatchlistGroupsTableOrderingComposer
     builder: (column) => i0.ColumnOrderings(column),
   );
 
+  i0.ColumnOrderings<bool> get isDefault => $composableBuilder(
+    column: $table.isDefault,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
   i0.ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => i0.ColumnOrderings(column),
@@ -172,6 +184,9 @@ class $$WatchlistGroupsTableAnnotationComposer
 
   i0.GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  i0.GeneratedColumn<bool> get isDefault =>
+      $composableBuilder(column: $table.isDefault, builder: (column) => column);
 
   i0.GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -239,11 +254,13 @@ class $$WatchlistGroupsTableTableManager
                 i0.Value<int> id = const i0.Value.absent(),
                 i0.Value<String> name = const i0.Value.absent(),
                 i0.Value<int> sortOrder = const i0.Value.absent(),
+                i0.Value<bool> isDefault = const i0.Value.absent(),
                 i0.Value<DateTime> createdAt = const i0.Value.absent(),
               }) => i1.WatchlistGroupsCompanion(
                 id: id,
                 name: name,
                 sortOrder: sortOrder,
+                isDefault: isDefault,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -251,11 +268,13 @@ class $$WatchlistGroupsTableTableManager
                 i0.Value<int> id = const i0.Value.absent(),
                 required String name,
                 i0.Value<int> sortOrder = const i0.Value.absent(),
+                i0.Value<bool> isDefault = const i0.Value.absent(),
                 i0.Value<DateTime> createdAt = const i0.Value.absent(),
               }) => i1.WatchlistGroupsCompanion.insert(
                 id: id,
                 name: name,
                 sortOrder: sortOrder,
+                isDefault: isDefault,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -2340,6 +2359,21 @@ class $WatchlistGroupsTable extends i2.WatchlistGroups
     requiredDuringInsert: false,
     defaultValue: const i3.Constant(0),
   );
+  static const i0.VerificationMeta _isDefaultMeta = const i0.VerificationMeta(
+    'isDefault',
+  );
+  @override
+  late final i0.GeneratedColumn<bool> isDefault = i0.GeneratedColumn<bool>(
+    'is_default',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: i0.GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_default" IN (0, 1))',
+    ),
+    defaultValue: const i3.Constant(false),
+  );
   static const i0.VerificationMeta _createdAtMeta = const i0.VerificationMeta(
     'createdAt',
   );
@@ -2354,7 +2388,13 @@ class $WatchlistGroupsTable extends i2.WatchlistGroups
         defaultValue: i3.currentDateAndTime,
       );
   @override
-  List<i0.GeneratedColumn> get $columns => [id, name, sortOrder, createdAt];
+  List<i0.GeneratedColumn> get $columns => [
+    id,
+    name,
+    sortOrder,
+    isDefault,
+    createdAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2384,6 +2424,12 @@ class $WatchlistGroupsTable extends i2.WatchlistGroups
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
       );
     }
+    if (data.containsKey('is_default')) {
+      context.handle(
+        _isDefaultMeta,
+        isDefault.isAcceptableOrUnknown(data['is_default']!, _isDefaultMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2411,6 +2457,10 @@ class $WatchlistGroupsTable extends i2.WatchlistGroups
         i0.DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      isDefault: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.bool,
+        data['${effectivePrefix}is_default'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         i0.DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2435,12 +2485,22 @@ class WatchlistGroupEntry extends i0.DataClass
   /// 排序順序（數字越小越前面，預設 0）
   final int sortOrder;
 
+  /// 預設分組旗標：新加入的自選自動落入此分組（全表最多一列為 true，
+  /// 由 [UserDaoMixin.setDefaultWatchlistGroup] 的交易維持）。
+  ///
+  /// 掛在分組列上而非 app_settings 存 id：旗標跟著列走，改名不斷、
+  /// 刪組自動失效，不需要懸空 id 的存在性檢查。
+  /// 既有 DB 由 `_ensureWatchlistGroupsSchema` 的 ALTER 路徑補欄
+  /// （whitelist 表不吃 fingerprint reset）。
+  final bool isDefault;
+
   /// 建立時間
   final DateTime createdAt;
   const WatchlistGroupEntry({
     required this.id,
     required this.name,
     required this.sortOrder,
+    required this.isDefault,
     required this.createdAt,
   });
   @override
@@ -2449,6 +2509,7 @@ class WatchlistGroupEntry extends i0.DataClass
     map['id'] = i0.Variable<int>(id);
     map['name'] = i0.Variable<String>(name);
     map['sort_order'] = i0.Variable<int>(sortOrder);
+    map['is_default'] = i0.Variable<bool>(isDefault);
     map['created_at'] = i0.Variable<DateTime>(createdAt);
     return map;
   }
@@ -2458,6 +2519,7 @@ class WatchlistGroupEntry extends i0.DataClass
       id: i0.Value(id),
       name: i0.Value(name),
       sortOrder: i0.Value(sortOrder),
+      isDefault: i0.Value(isDefault),
       createdAt: i0.Value(createdAt),
     );
   }
@@ -2471,6 +2533,7 @@ class WatchlistGroupEntry extends i0.DataClass
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      isDefault: serializer.fromJson<bool>(json['isDefault']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -2481,6 +2544,7 @@ class WatchlistGroupEntry extends i0.DataClass
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'isDefault': serializer.toJson<bool>(isDefault),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -2489,11 +2553,13 @@ class WatchlistGroupEntry extends i0.DataClass
     int? id,
     String? name,
     int? sortOrder,
+    bool? isDefault,
     DateTime? createdAt,
   }) => i1.WatchlistGroupEntry(
     id: id ?? this.id,
     name: name ?? this.name,
     sortOrder: sortOrder ?? this.sortOrder,
+    isDefault: isDefault ?? this.isDefault,
     createdAt: createdAt ?? this.createdAt,
   );
   WatchlistGroupEntry copyWithCompanion(i1.WatchlistGroupsCompanion data) {
@@ -2501,6 +2567,7 @@ class WatchlistGroupEntry extends i0.DataClass
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      isDefault: data.isDefault.present ? data.isDefault.value : this.isDefault,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -2511,13 +2578,14 @@ class WatchlistGroupEntry extends i0.DataClass
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('isDefault: $isDefault, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, sortOrder, createdAt);
+  int get hashCode => Object.hash(id, name, sortOrder, isDefault, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2525,6 +2593,7 @@ class WatchlistGroupEntry extends i0.DataClass
           other.id == this.id &&
           other.name == this.name &&
           other.sortOrder == this.sortOrder &&
+          other.isDefault == this.isDefault &&
           other.createdAt == this.createdAt);
 }
 
@@ -2533,29 +2602,34 @@ class WatchlistGroupsCompanion
   final i0.Value<int> id;
   final i0.Value<String> name;
   final i0.Value<int> sortOrder;
+  final i0.Value<bool> isDefault;
   final i0.Value<DateTime> createdAt;
   const WatchlistGroupsCompanion({
     this.id = const i0.Value.absent(),
     this.name = const i0.Value.absent(),
     this.sortOrder = const i0.Value.absent(),
+    this.isDefault = const i0.Value.absent(),
     this.createdAt = const i0.Value.absent(),
   });
   WatchlistGroupsCompanion.insert({
     this.id = const i0.Value.absent(),
     required String name,
     this.sortOrder = const i0.Value.absent(),
+    this.isDefault = const i0.Value.absent(),
     this.createdAt = const i0.Value.absent(),
   }) : name = i0.Value(name);
   static i0.Insertable<i1.WatchlistGroupEntry> custom({
     i0.Expression<int>? id,
     i0.Expression<String>? name,
     i0.Expression<int>? sortOrder,
+    i0.Expression<bool>? isDefault,
     i0.Expression<DateTime>? createdAt,
   }) {
     return i0.RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (isDefault != null) 'is_default': isDefault,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -2564,12 +2638,14 @@ class WatchlistGroupsCompanion
     i0.Value<int>? id,
     i0.Value<String>? name,
     i0.Value<int>? sortOrder,
+    i0.Value<bool>? isDefault,
     i0.Value<DateTime>? createdAt,
   }) {
     return i1.WatchlistGroupsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
       sortOrder: sortOrder ?? this.sortOrder,
+      isDefault: isDefault ?? this.isDefault,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -2586,6 +2662,9 @@ class WatchlistGroupsCompanion
     if (sortOrder.present) {
       map['sort_order'] = i0.Variable<int>(sortOrder.value);
     }
+    if (isDefault.present) {
+      map['is_default'] = i0.Variable<bool>(isDefault.value);
+    }
     if (createdAt.present) {
       map['created_at'] = i0.Variable<DateTime>(createdAt.value);
     }
@@ -2598,6 +2677,7 @@ class WatchlistGroupsCompanion
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('isDefault: $isDefault, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();

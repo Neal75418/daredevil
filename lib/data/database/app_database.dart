@@ -393,9 +393,10 @@ class AppDatabase extends $AppDatabase
   }
 
   /// Pre-launch idempotent schema 套用：在「不」bump schema fingerprint（不 wipe
-  /// 既有 watchlist / 行情資料）的前提下，為既有 DB 補上 watchlist 自訂分組功能。
+  /// 既有 watchlist / 行情資料）的前提下，為既有 DB 補上 watchlist 自訂分組
+  /// 功能與預設分組旗標。
   ///
-  /// 沿用 [_ensureDealerSelfNetColumn] 的先例（零資料損失、可安全重跑），分兩步：
+  /// 沿用 [_ensureDealerSelfNetColumn] 的先例（零資料損失、可安全重跑），分三步：
   ///
   /// 1. **建新表 `watchlist_groups`**：直接用 Drift 自己的 [Migrator.createTable]，
   ///    讓 DDL 與 generated schema 完全一致（避免手寫 CREATE TABLE 造成欄位/型別
@@ -407,6 +408,11 @@ class AppDatabase extends $AppDatabase
   ///    欄位是否存在，缺才補。既有自選股資料全部保留（新欄對既有列為 null =
   ///    未分組）。
   ///
+  /// 3. **為 `watchlist_groups` 加 `is_default` 欄**（2026-08-12 預設分組）：
+  ///    同樣以 `PRAGMA table_info` 判斷缺才補。既有分組一律 false——升級
+  ///    不得憑空指定預設分組。DDL 與 generated schema 的一致性由
+  ///    `watchlist_groups_default_column_migration_test` 鎖住。
+  ///
   /// 必須在 `PRAGMA foreign_keys = ON` 之前執行：欄位帶 FK 參照 watchlist_groups，
   /// 在 FK 關閉狀態下做 DDL 較安全；且步驟 1 先於步驟 2，確保 FK 參照的 parent
   /// 表已存在。
@@ -416,19 +422,39 @@ class AppDatabase extends $AppDatabase
 
     // 步驟 2：為既有 watchlist 表補 group_id 欄（缺才加）
     final columns = await customSelect("PRAGMA table_info('watchlist')").get();
-    final hasColumn = columns.any(
+    final hasGroupId = columns.any(
       (row) => row.read<String>('name') == 'group_id',
     );
-    if (hasColumn) return;
+    if (!hasGroupId) {
+      await customStatement(
+        'ALTER TABLE watchlist ADD COLUMN group_id INTEGER '
+        'REFERENCES watchlist_groups(id) ON DELETE SET NULL',
+      );
+      AppLogger.info(
+        'AppDatabase',
+        '既有 DB 補上 watchlist.group_id 欄與 watchlist_groups 表（保留既有自選股）',
+      );
+    }
 
-    await customStatement(
-      'ALTER TABLE watchlist ADD COLUMN group_id INTEGER '
-      'REFERENCES watchlist_groups(id) ON DELETE SET NULL',
+    // 步驟 3（2026-08-12）：為既有 watchlist_groups 補 is_default 欄
+    // （預設分組功能）。DDL 需與 generated schema 一致：NOT NULL DEFAULT 0
+    // + CHECK。既有分組一律補 false——升級不得憑空指定預設分組。
+    final groupColumns = await customSelect(
+      "PRAGMA table_info('watchlist_groups')",
+    ).get();
+    final hasIsDefault = groupColumns.any(
+      (row) => row.read<String>('name') == 'is_default',
     );
-    AppLogger.info(
-      'AppDatabase',
-      '既有 DB 補上 watchlist.group_id 欄與 watchlist_groups 表（保留既有自選股）',
-    );
+    if (!hasIsDefault) {
+      await customStatement(
+        'ALTER TABLE watchlist_groups ADD COLUMN is_default INTEGER '
+        'NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1))',
+      );
+      AppLogger.info(
+        'AppDatabase',
+        '既有 DB 補上 watchlist_groups.is_default 欄（保留既有分組）',
+      );
+    }
   }
 
   /// 檢查 schema fingerprint 是否與當前 code 一致，若不一致則 drop 全部 table 重建

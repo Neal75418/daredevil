@@ -18,6 +18,15 @@ class WatchlistGroups extends Table {
   /// 排序順序（數字越小越前面，預設 0）
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
+  /// 預設分組旗標：新加入的自選自動落入此分組（全表最多一列為 true，
+  /// 由 [UserDaoMixin.setDefaultWatchlistGroup] 的交易維持）。
+  ///
+  /// 掛在分組列上而非 app_settings 存 id：旗標跟著列走，改名不斷、
+  /// 刪組自動失效，不需要懸空 id 的存在性檢查。
+  /// 既有 DB 由 `_ensureWatchlistGroupsSchema` 的 ALTER 路徑補欄
+  /// （whitelist 表不吃 fingerprint reset）。
+  BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
+
   /// 建立時間
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }

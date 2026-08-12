@@ -37,6 +37,7 @@ void main() {
         name: name,
         sortOrder: sortOrder,
         createdAt: DateTime(2026),
+        isDefault: false,
       );
     }
 

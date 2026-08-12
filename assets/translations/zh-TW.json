@@ -422,7 +422,10 @@
     "trendDown": "下降趨勢",
     "trendSideways": "盤整",
     "removeTooltip": "從自選移除",
-    "addTooltip": "加入自選"
+    "addTooltip": "加入自選",
+    "setDefaultGroup": "設為預設分組",
+    "unsetDefaultGroup": "取消預設分組",
+    "defaultGroupHint": "新加入的自選會自動放進這裡"
   },
   "stock": {
     "detailTitle": "股票詳情",

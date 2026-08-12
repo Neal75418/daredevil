@@ -231,11 +231,36 @@ class _ManageGroupsSheet extends ConsumerWidget {
                   ),
                 for (final g in groups)
                   ListTile(
-                    leading: const Icon(Icons.folder_outlined),
+                    leading: Icon(
+                      g.isDefault
+                          ? Icons.folder_special
+                          : Icons.folder_outlined,
+                    ),
                     title: Text(g.name),
+                    subtitle: g.isDefault
+                        ? Text('watchlist.defaultGroupHint'.tr())
+                        : null,
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // 設為/取消預設分組（新加入的自選自動落入預設分組）
+                        IconButton(
+                          icon: Icon(
+                            g.isDefault ? Icons.star : Icons.star_outline,
+                            size: 20,
+                            color: g.isDefault
+                                ? theme.colorScheme.primary
+                                : null,
+                          ),
+                          tooltip: g.isDefault
+                              ? 'watchlist.unsetDefaultGroup'.tr()
+                              : 'watchlist.setDefaultGroup'.tr(),
+                          onPressed: () async {
+                            await notifier.setDefaultGroup(
+                              g.isDefault ? null : g.id,
+                            );
+                          },
+                        ),
                         IconButton(
                           icon: const Icon(Icons.edit_outlined, size: 20),
                           tooltip: 'watchlist.renameGroup'.tr(),

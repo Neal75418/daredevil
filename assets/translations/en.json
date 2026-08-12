@@ -422,7 +422,10 @@
     "trendDown": "Downtrend",
     "trendSideways": "Sideways",
     "removeTooltip": "Remove from watchlist",
-    "addTooltip": "Add to watchlist"
+    "addTooltip": "Add to watchlist",
+    "setDefaultGroup": "Set as default group",
+    "unsetDefaultGroup": "Unset default group",
+    "defaultGroupHint": "New stocks are added here automatically"
   },
   "stock": {
     "detailTitle": "Stock Details",
