@@ -32,16 +32,38 @@ class _IndustryRankingSectionState
 
   /// 20日/5日 是**水準值**,轉向是**變化率**——語意不同但共用一組按鈕,
   /// 因為使用者的心智模型是「換一種看法」,不是「換一個資料來源」。
-  RankingWindow get _window =>
-      _mode == _RankMode.d5 ? RankingWindow.d5 : RankingWindow.d20;
+  RankingWindow get _window => switch (_mode) {
+    _RankMode.d1 => RankingWindow.d1,
+    _RankMode.d5 => RankingWindow.d5,
+    _RankMode.d20 || _RankMode.rotation => RankingWindow.d20,
+  };
 
   String _modeLabel(_RankMode m) => switch (m) {
+    _RankMode.d1 => 'today.industryWindow1d'.tr(),
     _RankMode.d20 => 'today.industryWindow20d'.tr(),
     _RankMode.d5 => 'today.industryWindow5d'.tr(),
     _RankMode.rotation => 'today.industryRotation'.tr(),
   };
 
+  /// 口徑字幕(排行與轉向共用):中位數・合併市場——與市值加權官方類指數
+  /// 不同,這行是防止「數字對不上=壞掉」誤解的唯一防線
+  Widget _scopeCaption(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(
+      DesignTokens.spacing16,
+      0,
+      DesignTokens.spacing16,
+      DesignTokens.spacing8,
+    ),
+    child: Text(
+      'today.industryRankingScope'.tr(),
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    ),
+  );
+
   String _windowLabel(RankingWindow w) => switch (w) {
+    RankingWindow.d1 => 'today.industryWindow1d'.tr(),
     RankingWindow.d20 => 'today.industryWindow20d'.tr(),
     RankingWindow.d5 => 'today.industryWindow5d'.tr(),
   };
@@ -83,6 +105,7 @@ class _IndustryRankingSectionState
                 },
               ),
             ),
+            _scopeCaption(context),
             SizedBox(
               height: 108,
               child: ListView.separated(
@@ -148,6 +171,7 @@ class _IndustryRankingSectionState
                 },
               ),
             ),
+            _scopeCaption(context),
             SizedBox(
               height: 132,
               child: ListView.separated(
@@ -374,9 +398,9 @@ class _IndustryCard extends ConsumerWidget {
   }
 }
 
-/// 排行的三種看法。20日/5日 是**水準值**,轉向是**變化率**——語意不同,
+/// 排行的四種看法。20日/5日 是**水準值**,轉向是**變化率**——語意不同,
 /// 但共用一組按鈕,因為使用者的心智是「換一種看法」而非「換資料來源」。
-enum _RankMode { d20, d5, rotation }
+enum _RankMode { d1, d20, d5, rotation }
 
 /// 轉向卡片。
 ///

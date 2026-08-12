@@ -73,7 +73,7 @@
     "industryInstitutional": "Inst. 3D",
     "industryExcess": "vs mkt {}",
     "industryAdvancing": "Adv {}",
-    "industryInstitutionalRatio": "Inst {}",
+    "industryInstitutionalRatio": "Inst.3D {}",
     "industryTopMembers": "{} Top Movers ({})",
     "industryWindow20d": "20D",
     "industryWindow5d": "5D",
@@ -88,7 +88,9 @@
     "rotationNoSustained": "🚀 Sustained: none",
     "rotationNoSustainedHint": "No sector ranks top-tier in both 5d and 20d",
     "watchlistMaBreak": "⚠ {count} watchlist stocks broke below MA: {names}",
-    "trendGateCollapsed": "Uptrend unconfirmed ({count}) — tap to expand"
+    "trendGateCollapsed": "Uptrend unconfirmed ({count}) — tap to expand",
+    "industryWindow1d": "1D",
+    "industryRankingScope": "Median member return · TWSE+TPEx combined · ≥5 members — breadth view, differs from cap-weighted official indices"
   },
   "news": {
     "title": "Market News",
@@ -165,12 +167,6 @@
     "consecutiveSell": "{count}D Sell",
     "dealerHedgeNote": "Streak is based on dealer proprietary (self) trading, excluding hedging; the displayed net amount is the combined total including hedging.",
     "tpexIndex": "TPEx Index",
-    "industryPerformance": "Industry Performance",
-    "industryTopBottom": "Top/Bottom {count}",
-    "industryStockCount": "{count} stocks",
-    "industryEqualWeighted": "Equal Weight",
-    "industryIndexAnchor": "Index",
-    "industryMomentum5d": "5D",
     "day30Trend": "30-Day Trend",
     "totalReturnIndex": "Total Return",
     "dividendContribution": "Div. Contribution {pct}%",

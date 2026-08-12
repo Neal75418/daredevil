@@ -107,7 +107,6 @@ class IndustrySummary {
     required this.avgChangePct,
     required this.advance,
     required this.decline,
-    this.momentum5d,
   });
 
   final String industry;
@@ -115,10 +114,6 @@ class IndustrySummary {
   final double avgChangePct;
   final int advance;
   final int decline;
-
-  /// 5 交易日等權平均報酬（%）。null 代表資料不足（成分股歷史 < 6 筆或
-  /// 產業成分數未達門檻），UI 應隱藏而非顯示 0。
-  final double? momentum5d;
 }
 
 /// 帶日期的歷史資料點（時序排列 oldest→newest）

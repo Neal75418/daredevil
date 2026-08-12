@@ -812,69 +812,15 @@ void main() {
 
     // ── 產業 5 日動能：fail-soft 契約 + 正規化撞名加權合併 ─────────
     //
-    // _loadIndustryMomentum5d 對 getIndustryMomentum5dByMarket 例外有獨立
-    // try/catch（fail-soft，回傳空 map），故動能查詢失敗不應波及
-    // industrySummaryByMarket 本身（見 _loadIndustrySummaryByMarket 的外層
-    // try/catch：若內層未接住，例外會冒泡到外層，整個 result map 連同已成功
-    // 的產業資料一併被丟棄）。
-    group('產業 5 日動能', () {
-      test('動能查詢拋例外 → fail-soft：industries 仍填入、momentum5d 全為 null', () async {
+    // momentum5d 管線已於 2026-08-13 移除(唯一 UI 讀者「產業表現」區塊
+    // 併入族群排行,情緒綜合只讀 avgChangePct)。原 fail-soft 測試隨管線
+    // 刪除;撞名正規化「合併」本身仍是活邏輯,保留改寫如下。
+    group('產業名稱正規化合併', () {
+      test('兩個原始產業名稱撞同一 canonical → 合併為一筆,stockCount 加權', () async {
         setupEmptyDefaults();
 
-        when(() => mockDb.getIndustrySummaryByMarket(any(), any())).thenAnswer(
-          (_) async => [
-            (
-              industry: '半導體業',
-              stockCount: 50,
-              avgChangePct: 2.5,
-              advance: 30,
-              decline: 15,
-            ),
-          ],
-        );
-
-        when(
-          () => mockDb.getIndustryMomentum5dByMarket(any(), any()),
-        ).thenThrow(Exception('momentum query failed'));
-
-        final notifier = container.read(marketOverviewProvider.notifier);
-        await notifier.loadData();
-
-        final state = container.read(marketOverviewProvider);
-        expect(state.error, isNull, reason: '動能查詢例外屬非關鍵路徑，不應冒泡成頂層 error');
-
-        final twseIndustries = state.industrySummaryByMarket['TWSE'];
-        expect(
-          twseIndustries,
-          isNotNull,
-          reason: 'getIndustrySummaryByMarket 成功 → 產業表現不應被動能例外連帶清空',
-        );
-        expect(twseIndustries, isNotEmpty);
-        expect(
-          twseIndustries!.first.avgChangePct,
-          2.5,
-          reason: '產業本體資料（非動能欄位）應完整保留',
-        );
-
-        final allIndustries = state.industrySummaryByMarket.values.expand(
-          (list) => list,
-        );
-        expect(allIndustries, isNotEmpty);
-        for (final industry in allIndustries) {
-          expect(
-            industry.momentum5d,
-            isNull,
-            reason: '動能查詢拋例外 → fail-soft 回空 map，momentum5d 應全為 null',
-          );
-        }
-      });
-
-      test('兩個原始產業名稱正規化撞名 → momentum5d 依 stockCount 加權合併', () async {
-        setupEmptyDefaults();
-
-        // 真實撞名對：IndustryNames._normalizationMap 中「觀光事業」與
-        // 「觀光餐旅」皆正規化為「觀光餐旅類」（唯一一組兩個不同原始名稱
-        // 撞同一 canonical 值的情形）。
+        // 真實撞名對:IndustryNames._normalizationMap 中「觀光事業」與
+        // 「觀光餐旅」皆正規化為「觀光餐旅類」。
         when(() => mockDb.getIndustrySummaryByMarket(any(), 'TWSE')).thenAnswer(
           (_) async => [
             (
@@ -894,10 +840,6 @@ void main() {
           ],
         );
 
-        when(
-          () => mockDb.getIndustryMomentum5dByMarket(any(), 'TWSE'),
-        ).thenAnswer((_) async => {'觀光事業': 5.0, '觀光餐旅': 9.0});
-
         final notifier = container.read(marketOverviewProvider.notifier);
         await notifier.loadData();
 
@@ -907,19 +849,16 @@ void main() {
         expect(
           twseIndustries,
           hasLength(1),
-          reason: '兩筆原始名稱皆正規化為「觀光餐旅類」→ 應合併為一筆，不各自獨立列出',
+          reason: '兩筆原始名稱皆正規化為「觀光餐旅類」→ 應合併為一筆',
         );
 
         final merged = twseIndustries.single;
         expect(merged.industry, '觀光餐旅類');
         expect(merged.stockCount, 40, reason: '10 + 30');
-        // stockCount 加權平均：(5.0*10 + 9.0*30) / (10+30) = 320/40 = 8.0
-        // 簡單算術平均會誤算為 (5.0+9.0)/2 = 7.0——刻意取不同值以利區分。
-        expect(
-          merged.momentum5d,
-          closeTo(8.0, 1e-9),
-          reason: 'momentum5d 應為 stockCount 加權平均 8.0，而非簡單算術平均 7.0',
-        );
+        // stockCount 加權:(3.0*10 + 1.0*30) / 40 = 1.5(算術平均會是 2.0)
+        expect(merged.avgChangePct, closeTo(1.5, 1e-9));
+        expect(merged.advance, 21);
+        expect(merged.decline, 19);
       });
     });
   });

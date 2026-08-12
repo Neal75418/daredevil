@@ -73,7 +73,7 @@
     "industryInstitutional": "法人3日",
     "industryExcess": "超額 {}",
     "industryAdvancing": "上漲 {}",
-    "industryInstitutionalRatio": "法人 {}",
+    "industryInstitutionalRatio": "法人3日 {}",
     "industryTopMembers": "{} 領漲成員（{}）",
     "industryWindow20d": "20日",
     "industryWindow5d": "5日",
@@ -88,7 +88,9 @@
     "rotationNoSustained": "🚀 持續強勢:目前無",
     "rotationNoSustainedHint": "尚無族群在 5 日與 20 日同時排前段",
     "watchlistMaBreak": "⚠ 自選 {count} 檔跌破均線:{names}",
-    "trendGateCollapsed": "未確認上升趨勢({count})——與「順勢初升」門檻不符,展開查看"
+    "trendGateCollapsed": "未確認上升趨勢({count})——與「順勢初升」門檻不符,展開查看",
+    "industryWindow1d": "今日",
+    "industryRankingScope": "口徑:成員中位數報酬・上市+上櫃合併・樣本≥5檔——與市值加權的官方類指數不同,量的是族群廣度"
   },
   "news": {
     "title": "市場新聞",
@@ -165,12 +167,6 @@
     "consecutiveSell": "連{count}日賣超",
     "dealerHedgeNote": "連續天數以自營自行買賣(不含避險)計；買賣超金額為含避險合計",
     "tpexIndex": "櫃買指數",
-    "industryPerformance": "產業表現",
-    "industryTopBottom": "前後各{count}名",
-    "industryStockCount": "{count} 檔",
-    "industryEqualWeighted": "等權",
-    "industryIndexAnchor": "大盤",
-    "industryMomentum5d": "5日",
     "day30Trend": "近 30 日走勢",
     "totalReturnIndex": "含息報酬",
     "dividendContribution": "息值貢獻 {pct}%",

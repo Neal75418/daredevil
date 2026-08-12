@@ -44,6 +44,88 @@ void main() {
     );
   }
 
+  test('🚨 RankingWindow.minHistoryRows:大盤同窗報酬取第 N 筆前收盤,差一格=超額系統性偏移', () {
+    expect(RankingWindow.d20.minHistoryRows, 21);
+    expect(RankingWindow.d5.minHistoryRows, 6);
+    expect(RankingWindow.d1.minHistoryRows, 2);
+  });
+
+  group('RankingWindow.d1 今日視窗(2026-08-13 產業表現區塊合併進族群排行)', () {
+    // 造 2 筆:昨收 100、今收依 ret1 指定
+    List<DailyPriceEntry> historyWithRet1(String symbol, double ret1Pct) => [
+      createTestPrice(
+        symbol: symbol,
+        date: DateTime(2026, 8, 11),
+        close: 100.0,
+      ),
+      createTestPrice(
+        symbol: symbol,
+        date: DateTime(2026, 8, 12),
+        close: 100 * (1 + ret1Pct / 100),
+      ),
+    ];
+
+    test('🚨 d1 用當日報酬的中位數排序(口徑與 20日/5日 一致)', () {
+      final rankings = service.rank(
+        priceHistories: {
+          for (var i = 0; i < 5; i++) 'A$i': historyWithRet1('A$i', 3.0),
+          for (var i = 0; i < 5; i++) 'B$i': historyWithRet1('B$i', -1.0),
+        },
+        industries: {
+          for (var i = 0; i < 5; i++) 'A$i': '甲',
+          for (var i = 0; i < 5; i++) 'B$i': '乙',
+        },
+        names: const {},
+        institutionalHistories: const {},
+        window: RankingWindow.d1,
+      );
+
+      expect(rankings.first.industry, '甲');
+      expect(rankings.first.momentumPct, closeTo(3.0, 0.001));
+      expect(rankings.last.industry, '乙');
+      expect(rankings.last.momentumPct, closeTo(-1.0, 0.001));
+    });
+
+    test('僅 1 筆歷史(算不出當日報酬)的成員不列入', () {
+      final rankings = service.rank(
+        priceHistories: {
+          for (var i = 0; i < 5; i++) 'A$i': historyWithRet1('A$i', 2.0),
+          'X1': [
+            createTestPrice(
+              symbol: 'X1',
+              date: DateTime(2026, 8, 12),
+              close: 50,
+            ),
+          ],
+        },
+        industries: {for (var i = 0; i < 5; i++) 'A$i': '甲', 'X1': '甲'},
+        names: const {},
+        institutionalHistories: const {},
+        window: RankingWindow.d1,
+      );
+
+      expect(rankings.single.memberCount, 5, reason: 'X1 無昨收,不進分母');
+    });
+
+    test('成員數門檻與 ETF 排除跟其他視窗同口徑', () {
+      final rankings = service.rank(
+        priceHistories: {
+          for (var i = 0; i < 4; i++) 'A$i': historyWithRet1('A$i', 2.0),
+          for (var i = 0; i < 5; i++) 'E$i': historyWithRet1('E$i', 9.0),
+        },
+        industries: {
+          for (var i = 0; i < 4; i++) 'A$i': '甲',
+          for (var i = 0; i < 5; i++) 'E$i': 'ETF',
+        },
+        names: const {},
+        institutionalHistories: const {},
+        window: RankingWindow.d1,
+      );
+
+      expect(rankings, isEmpty, reason: '甲只有 4 檔不足門檻,ETF 整組排除');
+    });
+  });
+
   group('IndustryRankingService.rank', () {
     test('依產業動能中位數 DESC 排序；成員 20D 報酬與名稱正確', () {
       final rankings = service.rank(

@@ -58,15 +58,6 @@ const int kNewHighLowMinHistoryDays = 200;
 /// ≥3 門檻附帶損害最小）。
 const int kIndustryMinStockCount = 3;
 
-/// 產業表現「前後榜」（桌面 top4/bottom4）額外加嚴的最低個股數門檻。
-///
-/// 用於 [IndustryPerformanceRow._desktopItems]：等權平均對 2-4 檔迷你產業
-/// 極敏感——2026-07-16 實例「農業科技業 +3.59% ▲2▼0」單日霸榜前排，只因 2
-/// 檔股票同步上漲，不代表有意義的類股輪動。榜單改僅從個股數 ≥ 此門檻的產業中
-/// 選取前 4 / 後 4；計算門檻 [kIndustryMinStockCount]（3）不變——AVG 仍照原
-/// 樣本計算，此門檻只影響「誰能上榜」。
-const int kIndustryBoardMinStockCount = 5;
-
 /// AD 騰落線（Advance-Decline Line）累積所回看的完整覆蓋交易日數。
 ///
 /// 騰落線為每日 (上漲 − 下跌) 家數的累積running sum，需足夠天數才能呈現

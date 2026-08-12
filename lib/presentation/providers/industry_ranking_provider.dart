@@ -10,11 +10,11 @@ import 'package:daredevil/domain/services/analysis/industry_ranking_service.dart
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 
-/// 族群排行（今日頁族群 section），family 參數 = 動能視窗（20日/5日）
+/// 族群排行（今日頁族群 section），family 參數 = 動能視窗（今日/20日/5日）
 ///
 /// 全市場選定視窗動能中位數 + 外資/投信近 3 交易日方向，動能 DESC 取前
 /// [SectorParams.rankingTopN]。純 DB 讀取、無 API 呼叫；資料更新後由
-/// [dataUpdateEpochProvider] 觸發重算。兩個視窗各自快取（family），
+/// [dataUpdateEpochProvider] 觸發重算。各視窗各自快取（family），
 /// 切換不重複查 DB。
 final industryRankingProvider =
     FutureProvider.family<List<IndustryRanking>, RankingWindow>((
@@ -126,10 +126,7 @@ final industryRotationProvider = FutureProvider<List<IndustryRotation>>((
 /// 查不到足夠指數歷史時回 null——caller 據此不顯示超額，不得當成 0
 /// （0 等於宣稱「大盤沒漲跌」，把缺資料講成事實）。
 Future<double?> _marketReturnPct(AppDatabase db, RankingWindow window) async {
-  final need = switch (window) {
-    RankingWindow.d20 => 21,
-    RankingWindow.d5 => 6,
-  };
+  final need = window.minHistoryRows;
   try {
     final hist = await db.getIndexHistoryBatch([
       MarketIndexNames.taiex,

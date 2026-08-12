@@ -96,8 +96,19 @@ class SectionHeader extends StatelessWidget {
             ),
           ),
 
-          // 尾端 Widget（若有提供）
-          ?trailing,
+          // 尾端 Widget（若有提供）。Flexible+橫向捲動:trailing 原是 Row 的
+          // 裸子元素,SegmentedButton 之類的寬 trailing 在窄幅(zh 320pt、
+          // en 393pt)會 RenderFlex 溢出——2026-08-13 審查以真實譯文實測,
+          // 族群排行加第 4 個 segment 後 zh 265px/en 547px。讓步策略:
+          // 空間夠時外觀不變,不夠時 trailing 自己捲,不擠爆標題。
+          if (trailing != null)
+            Flexible(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: trailing!,
+              ),
+            ),
         ],
       ),
     );

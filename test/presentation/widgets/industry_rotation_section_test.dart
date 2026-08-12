@@ -76,6 +76,50 @@ void main() {
     tester.takeException();
   }
 
+  testWidgets('🚨 口徑字幕在排行與轉向視圖都渲染(2026-08-13 合併產業表現區塊)', (tester) async {
+    // 原「產業表現」(當日·等權·分市場)與本排行(中位數·合併)口徑互撞:
+    // 上櫃金融同屏 +4.37% vs −1.3%。合併後由這行字幕把口徑說清楚——
+    // 它就是防止「跟官方指數對不上=壞掉」誤解的唯一防線。
+    widen(tester);
+    await tester.pumpWidget(
+      app([
+        rot(
+          industry: '半導體業',
+          jump: 33,
+          category: RotationCategory.reboundFromDeep,
+        ),
+      ]),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('today.industryRankingScope'), findsOneWidget);
+
+    await tester.tap(find.text('today.industryRotation'));
+    await tester.pumpAndSettle();
+    tester.takeException();
+    expect(find.text('today.industryRankingScope'), findsOneWidget);
+  });
+
+  testWidgets('🚨 「今日」tab 存在且可切換(d1 視窗)', (tester) async {
+    widen(tester);
+    await tester.pumpWidget(
+      app([
+        rot(
+          industry: '半導體業',
+          jump: 33,
+          category: RotationCategory.reboundFromDeep,
+        ),
+      ]),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('today.industryWindow1d'), findsOneWidget);
+    await tester.tap(find.text('today.industryWindow1d'));
+    await tester.pumpAndSettle();
+    tester.takeException();
+    // 排行清單仍渲染(overrideWith 對所有 window 回同一組資料)
+    expect(find.text('today.industryRankingScope'), findsOneWidget);
+  });
+
   testWidgets('切到轉向後顯示躍升名次與分類', (tester) async {
     widen(tester);
     await tester.pumpWidget(

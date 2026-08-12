@@ -68,6 +68,15 @@ class PriceCalculator {
     return (latest - old) / old * 100;
   }
 
+  /// 1 trading day 報酬（%）— 族群排行「今日」視窗。
+  static double? ret1d(List<DailyPriceEntry>? history) {
+    if (history == null || history.length < 2) return null;
+    final latest = history.last.close;
+    final old = history[history.length - 2].close;
+    if (latest == null || old == null || old == 0) return null;
+    return (latest - old) / old * 100;
+  }
+
   /// 20 trading days 報酬（%）— 族群排行／產業動能聚合鍵。
   /// 回 null 當 history < 21 筆 / 端點 close null / 起點 0。
   static double? ret20d(List<DailyPriceEntry>? history) {

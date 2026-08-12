@@ -1319,16 +1319,13 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
 
       for (final market in [MarketCode.twse, MarketCode.tpex]) {
         var data = await _db.getIndustrySummaryByMarket(date, market);
-        var effectiveDate = date;
 
         if (data.isEmpty && fallbackDate != null) {
           data = await _db.getIndustrySummaryByMarket(fallbackDate, market);
-          effectiveDate = fallbackDate;
         }
 
         if (data.isNotEmpty) {
-          final momentum = await _loadIndustryMomentum5d(effectiveDate, market);
-          result[market] = _mergeNormalizedIndustries(data, momentum);
+          result[market] = _mergeNormalizedIndustries(data);
         }
       }
 
@@ -1339,30 +1336,14 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     }
   }
 
-  /// 載入各產業 5 日動能（依市場）
-  ///
-  /// Fail-soft：查詢例外時記錄警告並回傳空 map，讓 [_mergeNormalizedIndustries]
-  /// 合併出的每筆 [IndustrySummary.momentum5d] 維持 null（UI 隱藏該行）。
-  /// 動能為輔助判讀指標、非關鍵路徑，失敗不應波及其餘產業表現資料。
-  Future<Map<String, double>> _loadIndustryMomentum5d(
-    DateTime date,
-    String market,
-  ) async {
-    try {
-      return await _db.getIndustryMomentum5dByMarket(date, market);
-    } catch (e) {
-      AppLogger.warning('MarketOverviewNotifier', '載入產業 5 日動能失敗（$market）', e);
-      return {};
-    }
-  }
-
   /// 正規化產業名稱並合併重複項（FinMind API 命名不一致）
   ///
   /// 例如「其他電子業」與「其他電子類」會被合併為同一筆。
-  /// 合併後重新排序（avgChangePct DESC）。[momentumByIndustry] 為（正規化前）
-  /// 原始產業名稱 → 5 日動能，依 [row.stockCount] 加權併入合併結果——與
-  /// avgChangePct 相同的加權邏輯；查無動能的原始名稱視為該筆不貢獻動能
-  /// （不影響其他筆），合併後全數缺動能時 [IndustrySummary.momentum5d] 為 null。
+  /// 合併後重新排序（avgChangePct DESC）。
+  ///
+  /// 2026-08-13:momentum5d 管線整條移除——唯一 UI 讀者(產業表現區塊)
+  /// 已併入族群排行,而情緒綜合只讀 avgChangePct。原本每次刷新對兩市場
+  /// 各跑一趟 ROW_NUMBER() OVER 全市場掃描,白做。
   static List<IndustrySummary> _mergeNormalizedIndustries(
     List<
       ({
@@ -1373,15 +1354,14 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
         int decline,
       })
     >
-    rows, [
-    Map<String, double> momentumByIndustry = const {},
-  ]) {
+    rows,
+  ) {
     final merged = <String, _MutableIndustry>{};
 
     for (final row in rows) {
       final canonical = IndustryNames.normalize(row.industry);
       final entry = merged.putIfAbsent(canonical, _MutableIndustry.new);
-      entry.addRow(row, momentumByIndustry[row.industry]);
+      entry.addRow(row);
     }
 
     final list = merged.entries.map((e) => e.value.toSummary(e.key)).toList()
@@ -1397,8 +1377,6 @@ class _MutableIndustry {
   int _changePctCount = 0;
   int advance = 0;
   int decline = 0;
-  double _momentumSum = 0;
-  int _momentumWeight = 0;
 
   void addRow(
     ({
@@ -1408,27 +1386,18 @@ class _MutableIndustry {
       int advance,
       int decline,
     })
-    row, [
-    double? momentum,
-  ]) {
+    row,
+  ) {
     stockCount += row.stockCount;
     _changePctSum += row.avgChangePct * row.stockCount;
     _changePctCount += row.stockCount;
     advance += row.advance;
     decline += row.decline;
-    if (momentum != null) {
-      _momentumSum += momentum * row.stockCount;
-      _momentumWeight += row.stockCount;
-    }
   }
 
   /// 加權平均漲跌幅
   double get avgChangePct =>
       _changePctCount > 0 ? _changePctSum / _changePctCount : 0;
-
-  /// 加權平均 5 日動能；無任何構成列帶有動能資料時為 null（UI 隱藏該行）
-  double? get momentum5d =>
-      _momentumWeight > 0 ? _momentumSum / _momentumWeight : null;
 
   IndustrySummary toSummary(String industry) => IndustrySummary(
     industry: industry,
@@ -1436,7 +1405,6 @@ class _MutableIndustry {
     avgChangePct: avgChangePct,
     advance: advance,
     decline: decline,
-    momentum5d: momentum5d,
   );
 }
 

@@ -12,7 +12,6 @@ import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/advance_decline_gauge.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/breadth_trend_row.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/hero_index_section.dart';
-import 'package:daredevil/presentation/widgets/market_dashboard/industry_performance_row.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/institutional_flow_chart.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/margin_compact_row.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/chip_anomaly_row.dart';
@@ -425,7 +424,6 @@ class _MarketDashboardState extends State<MarketDashboard> {
         widget.state.turnoverComparisonByMarket[marketKey];
     final warningCounts = widget.state.warningCountsByMarket[marketKey];
     final instStreak = widget.state.institutionalStreakByMarket[marketKey];
-    final industries = widget.state.industrySummaryByMarket[marketKey];
 
     // 30日歷史趨勢
     //
@@ -502,16 +500,6 @@ class _MarketDashboardState extends State<MarketDashboard> {
       );
     }
 
-    // 產業表現
-    if (industries != null && industries.isNotEmpty) {
-      sections.add(
-        IndustryPerformanceRow(
-          industries: industries,
-          indexChangePercent: _indexChangePercent(marketKey),
-        ),
-      );
-    }
-
     // 組合所有 sections
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -558,7 +546,6 @@ class _MarketDashboardState extends State<MarketDashboard> {
       _buildInstitutionalSection,
       _buildMarginSection,
       _buildChipAnomalySection,
-      _buildIndustrySection,
     ];
 
     // 產生配對的 section rows（跳過兩側皆無資料的 section）
@@ -867,15 +854,6 @@ class _MarketDashboardState extends State<MarketDashboard> {
       anomalies: chipAnomalies ?? const [],
       warningCounts: warningCounts,
       onStockTap: (symbol) => context.push(AppRoutes.stockDetail(symbol)),
-    );
-  }
-
-  Widget? _buildIndustrySection(String market) {
-    final industries = widget.state.industrySummaryByMarket[market];
-    if (industries == null || industries.isEmpty) return null;
-    return IndustryPerformanceRow(
-      industries: industries,
-      indexChangePercent: _indexChangePercent(market),
     );
   }
 }
