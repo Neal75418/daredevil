@@ -242,7 +242,9 @@ class MarketReadingService {
   ///    （[AnalysisParams.kSynthesisInstDivergenceAmountTwse] /
   ///    [AnalysisParams.kSynthesisInstDivergenceAmountTpex]，依 [market]）
   ///    → 點名籌碼與指數背離（warning）
-  /// 3. 其餘 → 中性「多空訊號無明顯背離」
+  /// 3. 其餘 → 中性「家數與法人無背離」(2026-08-12 改詞:原「多空訊號無
+  ///    明顯背離」與同頁 52 週廣度警告「留意廣度背離」撞詞——本判讀只看
+  ///    家數與法人,不含 52 週新高低,措辭把範圍說清楚)
   ///
   /// [market] 使用 [MarketCode.twse] / [MarketCode.tpex]，決定 rule 0 附註與
   /// rule 2 的金額門檻（上櫃成交及法人量級遠小於上市，需獨立門檻）；

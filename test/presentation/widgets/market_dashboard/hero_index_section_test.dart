@@ -79,6 +79,31 @@ void main() {
         expect(find.textContaining('marketOverview.biasMa20'), findsOneWidget);
       });
 
+      testWidgets('🚨 neutral 依子狀態換措辭:V 轉站回雙均線 → 待黃金交叉', (tester) async {
+        // 2026-08-12 實況形狀:崩跌後 V 轉,收盤站上雙均線但 20MA<60MA。
+        // 修前一律顯示「均線糾結」,與畫面上 +4.4% 的正乖離自相矛盾。
+        final reclaimHistory = [
+          ...List.filled(30, 22000.0),
+          ...List.filled(25, 18000.0),
+          ...List.filled(5, 23000.0),
+        ];
+        await tester.pumpWidget(
+          buildTestApp(
+            HeroIndexSection(
+              index: createIndex(),
+              historyData: reclaimHistory,
+              stageHistory: reclaimHistory,
+            ),
+          ),
+        );
+
+        expect(
+          find.text('marketOverview.stage.neutralReclaim'),
+          findsOneWidget,
+        );
+        expect(find.text('marketOverview.stage.neutral'), findsNothing);
+      });
+
       testWidgets('shows insufficient muted text when stage history is short', (
         tester,
       ) async {

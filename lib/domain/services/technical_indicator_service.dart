@@ -16,11 +16,31 @@ enum MarketStage {
   /// 空頭排列：收盤 < MA20 < MA60
   bearish,
 
-  /// 均線糾結：未形成明確多空排列
+  /// 均線糾結：未形成明確多空排列（子狀態見 [MarketStageResult.neutralDetail]）
   neutral,
 
   /// 資料不足：有效收盤價少於 MA60 所需筆數
   insufficient,
+}
+
+/// [MarketStage.neutral] 的子狀態——由 close/MA20/MA60 三值的相對位置完整
+/// 分割,**不引入新閾值**(2026-08-12)。
+///
+/// 動機:neutral 一律顯示「均線糾結」誤導——8/12 實況 TAIEX 收盤已站上
+/// 雙均線(+4.4%/+2.3%)、只是崩跌後 20MA 尚未上穿 60MA,「糾結」讀起來
+/// 像盤整。判定邏輯不變,只是把 neutral 說清楚。
+enum NeutralStageDetail {
+  /// 收盤在雙均線之上,但 20MA 仍在 60MA 下(修復中、待黃金交叉)
+  reclaimAwaitCross,
+
+  /// 收盤在雙均線之下,但 20MA 仍在 60MA 上(轉弱中、待死亡交叉)
+  breakdownWeakening,
+
+  /// 收盤夾在兩均線之間,20MA 在下(反彈站上 20MA,60MA 壓力未過)
+  aboveShortBelowLong,
+
+  /// 收盤夾在兩均線之間,20MA 在上(跌破 20MA,60MA 支撐之上)
+  belowShortAboveLong,
 }
 
 /// 大盤位階計算結果
@@ -51,6 +71,34 @@ class MarketStageResult {
 
   /// 距 MA60 乖離率（%），正值表示收盤在均線之上
   final double? biasMa60;
+
+  /// [MarketStage.neutral] 的子狀態;非 neutral 或值缺失時為 null。
+  ///
+  /// 分割邏輯(與 [TechnicalIndicatorService.calculateMarketStage] 的
+  /// 排列判定互補,合起來覆蓋所有 close/MA20/MA60 排列):
+  /// - 收盤 ≥ 雙均線 → [NeutralStageDetail.reclaimAwaitCross]
+  /// - 收盤 ≤ 雙均線 → [NeutralStageDetail.breakdownWeakening]
+  /// - 夾層且 20MA<60MA → [NeutralStageDetail.aboveShortBelowLong]
+  /// - 夾層且 20MA≥60MA → [NeutralStageDetail.belowShortAboveLong]
+  NeutralStageDetail? get neutralDetail {
+    if (stage != MarketStage.neutral) return null;
+    final c = latestClose, s = ma20, l = ma60;
+    if (c == null || s == null || l == null) return null;
+    // 「待黃金/死亡交叉」是**交叉宣稱**,條件必須保證均線次序(2026-08-12
+    // 審查實測:死平盤 c==s==l 或 c==s>l 的等值邊界,原本會被第一支吃掉、
+    // 標成「待黃金交叉」——但交叉早發生了)。s==l = 正在交叉點上,回 null
+    // 讓 UI 落回「均線糾結」——那是字面上唯一正確的詞。
+    if (c >= s && c >= l && s < l) {
+      return NeutralStageDetail.reclaimAwaitCross;
+    }
+    if (c <= s && c <= l && s > l) {
+      return NeutralStageDetail.breakdownWeakening;
+    }
+    if (s == l) return null;
+    return s < l
+        ? NeutralStageDetail.aboveShortBelowLong
+        : NeutralStageDetail.belowShortAboveLong;
+  }
 }
 
 /// 技術指標計算服務

@@ -226,11 +226,22 @@ class HeroIndexSection extends StatelessWidget {
       );
     }
 
-    // 台股慣例：多頭 / 正乖離 = 紅、空頭 / 負乖離 = 綠、糾結 = 灰
+    // 台股慣例：多頭 / 正乖離 = 紅、空頭 / 負乖離 = 綠、糾結 = 灰。
+    // neutral 依子狀態換措辭(顏色維持灰——仍是中性位階,只是說清楚):
+    // 2026-08-12 實況,TAIEX 站上雙均線 +4.4% 卻標「糾結」,讀起來像盤整。
     final (stageColor, stageKey) = switch (result.stage) {
       MarketStage.bullish => (AppTheme.upColor, 'bullish'),
       MarketStage.bearish => (PriceColors.downFor(theme.brightness), 'bearish'),
-      MarketStage.neutral => (PriceColors.flatFor(theme.brightness), 'neutral'),
+      MarketStage.neutral => (
+        PriceColors.flatFor(theme.brightness),
+        switch (result.neutralDetail) {
+          NeutralStageDetail.reclaimAwaitCross => 'neutralReclaim',
+          NeutralStageDetail.breakdownWeakening => 'neutralBreakdown',
+          NeutralStageDetail.aboveShortBelowLong => 'neutralAboveShort',
+          NeutralStageDetail.belowShortAboveLong => 'neutralBelowShort',
+          null => 'neutral',
+        },
+      ),
       MarketStage.insufficient => (
         PriceColors.flatFor(theme.brightness),
         'insufficient',
@@ -251,25 +262,31 @@ class HeroIndexSection extends StatelessWidget {
         height: _stageRowHeight,
         child: Row(
           children: [
-            // 位階 chip
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: DesignTokens.spacing8,
-                vertical: DesignTokens.spacing2,
-              ),
-              decoration: BoxDecoration(
-                color: stageColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(DesignTokens.radiusSm),
-              ),
-              child: Text(
-                'marketOverview.stage.$stageKey'.tr(),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: PriceColors.onTintOf(
-                    stageColor,
-                    Theme.of(context).brightness,
+            // 位階 chip——子狀態措辭比舊「糾結」長 ~3 倍,手機窄幅+大字級
+            // 時要能自己讓步(ellipsis),不許把旁邊的乖離行擠爆(2026-08-12
+            // 審查 5)
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: DesignTokens.spacing8,
+                  vertical: DesignTokens.spacing2,
+                ),
+                decoration: BoxDecoration(
+                  color: stageColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusSm),
+                ),
+                child: Text(
+                  'marketOverview.stage.$stageKey'.tr(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: PriceColors.onTintOf(
+                      stageColor,
+                      Theme.of(context).brightness,
+                    ),
+                    fontWeight: FontWeight.w700,
+                    fontSize: DesignTokens.fontSizeXs,
                   ),
-                  fontWeight: FontWeight.w700,
-                  fontSize: DesignTokens.fontSizeXs,
                 ),
               ),
             ),

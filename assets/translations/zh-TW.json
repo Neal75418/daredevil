@@ -87,7 +87,8 @@
     "rotationMembers": "{} — 成員(依月漲排序,★ 為過強者榜)",
     "rotationNoSustained": "🚀 持續強勢:目前無",
     "rotationNoSustainedHint": "尚無族群在 5 日與 20 日同時排前段",
-    "watchlistMaBreak": "⚠ 自選 {count} 檔跌破均線:{names}"
+    "watchlistMaBreak": "⚠ 自選 {count} 檔跌破均線:{names}",
+    "trendGateCollapsed": "未確認上升趨勢({count})——與「順勢初升」門檻不符,展開查看"
   },
   "news": {
     "title": "市場新聞",
@@ -177,7 +178,11 @@
       "bullish": "多頭排列",
       "bearish": "空頭排列",
       "neutral": "均線糾結",
-      "insufficient": "位階資料不足"
+      "insufficient": "位階資料不足",
+      "neutralReclaim": "站回均線·待黃金交叉",
+      "neutralBreakdown": "跌破均線·趨勢轉弱",
+      "neutralAboveShort": "站上20MA·60MA壓力未過",
+      "neutralBelowShort": "跌破20MA·60MA支撐之上"
     },
     "biasMa20": "距20MA {value}%",
     "biasMa60": "距60MA {value}%",
@@ -226,7 +231,7 @@
         "weightPressure": "指數平盤但逾半個股上漲——權值壓盤、內部偏強",
         "divergenceSell": "指數上漲但外資/法人合計賣超顯著——籌碼與指數背離",
         "divergenceBuy": "指數下跌但外資/法人合計買超顯著——籌碼與指數背離",
-        "neutral": "多空訊號無明顯背離"
+        "neutral": "家數與法人無背離"
       }
     },
     "sentiment": {

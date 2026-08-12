@@ -87,7 +87,8 @@
     "rotationMembers": "{} — members (by 20d return, ★ = on strong list)",
     "rotationNoSustained": "🚀 Sustained: none",
     "rotationNoSustainedHint": "No sector ranks top-tier in both 5d and 20d",
-    "watchlistMaBreak": "⚠ {count} watchlist stocks broke below MA: {names}"
+    "watchlistMaBreak": "⚠ {count} watchlist stocks broke below MA: {names}",
+    "trendGateCollapsed": "Uptrend unconfirmed ({count}) — tap to expand"
   },
   "news": {
     "title": "Market News",
@@ -177,7 +178,11 @@
       "bullish": "Bullish Alignment",
       "bearish": "Bearish Alignment",
       "neutral": "MA Convergence",
-      "insufficient": "Insufficient Data"
+      "insufficient": "Insufficient Data",
+      "neutralReclaim": "Above MAs · awaiting golden cross",
+      "neutralBreakdown": "Below MAs · weakening",
+      "neutralAboveShort": "Above 20MA · 60MA overhead",
+      "neutralBelowShort": "Below 20MA · above 60MA"
     },
     "biasMa20": "vs MA20 {value}%",
     "biasMa60": "vs MA60 {value}%",
@@ -226,7 +231,7 @@
         "weightPressure": "Index flat but over half of stocks advancing — mega-caps capping the index, internals strong",
         "divergenceSell": "Index up but foreign/institutional flows net sell significantly — chips diverging from the index",
         "divergenceBuy": "Index down but foreign/institutional flows net buy significantly — chips diverging from the index",
-        "neutral": "No clear bull/bear divergence"
+        "neutral": "No breadth or institutional divergence"
       }
     },
     "sentiment": {

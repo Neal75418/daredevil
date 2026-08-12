@@ -99,6 +99,96 @@ void main() {
       expect(result.biasMa60! > 0, isTrue);
     });
 
+    // 均線糾結拆狀態(2026-08-12):neutral 一律顯示「糾結」誤導——
+    // 8/12 實況:TAIEX 收盤站上雙均線(+4.4%/+2.3%)但 20MA 仍在 60MA 下
+    // (崩跌後修復、待黃金交叉),被標成「糾結」讀起來像盤整。
+    // 拆四個子狀態,全部由既有三值(close/ma20/ma60)的相對位置決定,
+    // **不引入新閾值**。
+    group('neutralDetail 子狀態', () {
+      test('🚨 收盤站上雙均線但 20MA<60MA → 站回均線待交叉(8/12 TAIEX 實況)', () {
+        // 前 30 天 120 → 崩跌 25 天 80 → 最後 5 天 V 轉 130
+        final closes = [
+          ...List.filled(30, 120.0),
+          ...List.filled(25, 80.0),
+          ...List.filled(5, 130.0),
+        ];
+        final r = service.calculateMarketStage(closes);
+        expect(r.stage, MarketStage.neutral);
+        expect(r.latestClose! > r.ma20! && r.latestClose! > r.ma60!, isTrue);
+        expect(r.ma20! < r.ma60!, isTrue, reason: '前提:20MA 尚未上穿');
+        expect(r.neutralDetail, NeutralStageDetail.reclaimAwaitCross);
+      });
+
+      test('收盤跌破雙均線但 20MA>60MA → 跌破均線趨勢轉弱', () {
+        final closes = [
+          ...List.filled(30, 80.0),
+          ...List.filled(25, 120.0),
+          ...List.filled(5, 70.0),
+        ];
+        final r = service.calculateMarketStage(closes);
+        expect(r.stage, MarketStage.neutral);
+        expect(r.neutralDetail, NeutralStageDetail.breakdownWeakening);
+      });
+
+      test('🚨 收盤夾在 20MA 與 60MA 之間(20MA 在下)→ 60MA 壓力未過(8/12 櫃買實況)', () {
+        // 櫃買:距 20MA +6.9%、距 60MA −2.2%
+        final closes = [
+          ...List.filled(30, 130.0),
+          ...List.filled(25, 80.0),
+          ...List.filled(5, 100.0),
+        ];
+        final r = service.calculateMarketStage(closes);
+        expect(r.stage, MarketStage.neutral);
+        expect(r.ma20! < 100 && 100 < r.ma60!, isTrue, reason: '前提:夾層');
+        expect(r.neutralDetail, NeutralStageDetail.aboveShortBelowLong);
+      });
+
+      test('收盤夾在兩均線之間(20MA 在上)→ 跌破20MA、60MA 支撐之上', () {
+        final closes = [
+          ...List.filled(30, 70.0),
+          ...List.filled(25, 120.0),
+          ...List.filled(5, 100.0),
+        ];
+        final r = service.calculateMarketStage(closes);
+        expect(r.stage, MarketStage.neutral);
+        expect(r.neutralDetail, NeutralStageDetail.belowShortAboveLong);
+      });
+
+      test('🚨 等值邊界不得亂宣稱交叉:死平盤與 20MA 已在 60MA 上的 tie 案', () {
+        // 審查實測抓到的兩個洞:
+        // ① 死平盤 c==ma20==ma60 → 原本標「站回均線·待黃金交叉」,
+        //    但「均線糾結」才是字面正確 → 應回 null 落回糾結
+        final flat = service.calculateMarketStage(List.filled(60, 100.0));
+        expect(flat.stage, MarketStage.neutral);
+        expect(flat.neutralDetail, isNull, reason: '正在交叉點上,回 null 顯示糾結');
+
+        // ② c==ma20 且 ma20>ma60 → 原本標「待黃金交叉」但交叉早發生了;
+        //    修後不得再進 reclaimAwaitCross
+        final tie = service.calculateMarketStage([
+          ...List.filled(40, 90.0),
+          ...List.filled(20, 110.0),
+        ]);
+        expect(tie.stage, MarketStage.neutral);
+        expect(tie.ma20! > tie.ma60!, isTrue, reason: '前提:20MA 已在上');
+        expect(
+          tie.neutralDetail,
+          isNot(NeutralStageDetail.reclaimAwaitCross),
+          reason: '20MA 已在 60MA 上,「待黃金交叉」是錯的宣稱',
+        );
+      });
+
+      test('多空排列與資料不足時為 null', () {
+        final bull = service.calculateMarketStage(
+          List.generate(80, (i) => 100.0 + i),
+        );
+        expect(bull.neutralDetail, isNull);
+        final short = service.calculateMarketStage(
+          List.generate(10, (i) => 100.0 + i),
+        );
+        expect(short.neutralDetail, isNull);
+      });
+    });
+
     test('detects bearish alignment (close < MA20 < MA60)', () {
       // 持續下降：最新收盤 < MA20 < MA60
       final closes = List.generate(80, (i) => 200.0 - i.toDouble());
