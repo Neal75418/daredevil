@@ -130,14 +130,27 @@ Future<void> main(List<String> args) async {
         '${result.quotesFetched}/${result.symbolsWanted} 檔',
       );
     }
+    // 批次錯誤明細一律進 stderr(同一份日誌檔):2026-08-11/12 共 21 輪
+    // 早盤失敗只留下「報價全滅」四個字,分不出 timeout/DNS/連線重置/限流
+    // ——對症才有藥,型別是第一線索
+    final errorKinds = result.quoteErrors.toSet();
+    for (final e in errorKinds) {
+      stderr.writeln('[intraday_alert]   ↳ $e');
+    }
     if (result.symbolsWanted > 0 && result.quotesFetched == 0) {
-      beat('FAIL(報價全滅)');
+      beat(
+        'FAIL(報價全滅'
+        '${errorKinds.isEmpty ? '' : ': ${errorKinds.take(2).join(' | ')}'})',
+      );
       // 報價全滅 ≠ 沒到價:這是故障,要能從 exit code 看出來
       stderr.writeln('[intraday_alert] 報價全數失敗,本輪判定不可信');
       exit(1);
     }
     if (fired.isEmpty) {
-      beat('ok(無觸價,報價 ${result.quotesFetched}/${result.symbolsWanted})');
+      beat(
+        'ok(無觸價,報價 ${result.quotesFetched}/${result.symbolsWanted}'
+        '${errorKinds.isEmpty ? '' : ',批次錯誤 ${errorKinds.length} 種'})',
+      );
       exit(0);
     }
 

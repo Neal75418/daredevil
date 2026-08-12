@@ -67,9 +67,10 @@ void main() {
 
   test('🚨 跌破目標 → 觸發、標記、回報快照', () async {
     when(() => db.getActiveAlerts()).thenAnswer((_) async => [alert()]);
-    when(
-      () => client.fetchQuotes(any()),
-    ).thenAnswer((_) async => {'3231': quote('3231', 179.5)});
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async =>
+          (quotes: {'3231': quote('3231', 179.5)}, errors: const <String>[]),
+    );
 
     final fired = (await monitor.check()).fired;
 
@@ -81,9 +82,10 @@ void main() {
 
   test('未達目標 → 不觸發、不寫 DB', () async {
     when(() => db.getActiveAlerts()).thenAnswer((_) async => [alert()]);
-    when(
-      () => client.fetchQuotes(any()),
-    ).thenAnswer((_) async => {'3231': quote('3231', 181.0)});
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async =>
+          (quotes: {'3231': quote('3231', 181.0)}, errors: const <String>[]),
+    );
 
     expect((await monitor.check()).fired, isEmpty);
     verifyNever(() => db.claimAlertTrigger(any(), now: any(named: 'now')));
@@ -93,9 +95,10 @@ void main() {
     when(
       () => db.getActiveAlerts(),
     ).thenAnswer((_) async => [alert(type: 'ABOVE', target: 202.5)]);
-    when(
-      () => client.fetchQuotes(any()),
-    ).thenAnswer((_) async => {'3231': quote('3231', 203.0)});
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async =>
+          (quotes: {'3231': quote('3231', 203.0)}, errors: const <String>[]),
+    );
 
     expect((await monitor.check()).fired.length, 1);
   });
@@ -112,9 +115,10 @@ void main() {
       createdAt: DateTime(2026, 8, 8),
     );
     when(() => db.getActiveAlerts()).thenAnswer((_) async => [done]);
-    when(
-      () => client.fetchQuotes(any()),
-    ).thenAnswer((_) async => {'3231': quote('3231', 170.0)});
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async =>
+          (quotes: {'3231': quote('3231', 170.0)}, errors: const <String>[]),
+    );
 
     expect((await monitor.check()).fired, isEmpty);
     verifyNever(() => db.claimAlertTrigger(any(), now: any(named: 'now')));
@@ -125,7 +129,10 @@ void main() {
     // 全部測試照樣綠——而 CLI 的 exit-1 分支完全靠這兩個數字,等於故障
     // 偵測被靜默停用。
     when(() => db.getActiveAlerts()).thenAnswer((_) async => [alert()]);
-    when(() => client.fetchQuotes(any())).thenAnswer((_) async => const {});
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async =>
+          (quotes: const <String, IntradayQuote>{}, errors: const <String>[]),
+    );
 
     final r = await monitor.check();
 
@@ -135,9 +142,10 @@ void main() {
 
   test('報價成功時 quotesFetched 反映實際筆數', () async {
     when(() => db.getActiveAlerts()).thenAnswer((_) async => [alert()]);
-    when(
-      () => client.fetchQuotes(any()),
-    ).thenAnswer((_) async => {'3231': quote('3231', 181.0)});
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async =>
+          (quotes: {'3231': quote('3231', 181.0)}, errors: const <String>[]),
+    );
 
     final r = await monitor.check();
     expect(r.quotesFetched, 1);
@@ -153,7 +161,10 @@ void main() {
 
   test('🚨 報價缺該檔(停牌/API 漏) → 略過,不當成觸發', () async {
     when(() => db.getActiveAlerts()).thenAnswer((_) async => [alert()]);
-    when(() => client.fetchQuotes(any())).thenAnswer((_) async => const {});
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async =>
+          (quotes: const <String, IntradayQuote>{}, errors: const <String>[]),
+    );
 
     expect((await monitor.check()).fired, isEmpty);
     verifyNever(() => db.claimAlertTrigger(any(), now: any(named: 'now')));
@@ -166,7 +177,10 @@ void main() {
     when(
       () => db.getAllActiveStocks(),
     ).thenAnswer((_) async => [stock('6538', 'TPEx')]);
-    when(() => client.fetchQuotes(any())).thenAnswer((_) async => const {});
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async =>
+          (quotes: const <String, IntradayQuote>{}, errors: const <String>[]),
+    );
 
     await monitor.check();
 
@@ -178,9 +192,10 @@ void main() {
 
   test('🚨 認領失敗(別的 process 先觸發)→ 不列入 fired,不重複通知', () async {
     when(() => db.getActiveAlerts()).thenAnswer((_) async => [alert()]);
-    when(
-      () => client.fetchQuotes(any()),
-    ).thenAnswer((_) async => {'3231': quote('3231', 179.5)});
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async =>
+          (quotes: {'3231': quote('3231', 179.5)}, errors: const <String>[]),
+    );
     when(
       () => db.claimAlertTrigger(any(), now: any(named: 'now')),
     ).thenAnswer((_) async => false);
@@ -188,5 +203,20 @@ void main() {
     final r = await monitor.check();
 
     expect(r.fired, isEmpty, reason: 'launchd CLI 已經叫過了,app 不要再叫一次');
+  });
+
+  test('🚨 報價批次錯誤要浮到 MonitorResult(AOT CLI 的日誌靠它)', () async {
+    when(() => db.getActiveAlerts()).thenAnswer((_) async => [alert()]);
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async => (
+        quotes: const <String, IntradayQuote>{},
+        errors: const ['DioException.connectionTimeout: MIS 沒回'],
+      ),
+    );
+
+    final r = await monitor.check();
+
+    expect(r.quotesFetched, 0);
+    expect(r.quoteErrors, const ['DioException.connectionTimeout: MIS 沒回']);
   });
 }

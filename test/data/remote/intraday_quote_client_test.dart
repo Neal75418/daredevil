@@ -91,12 +91,12 @@ void main() {
       if (i == 0) throw const SocketException_('batch 0 down');
       return _misBody(['9999']);
     });
-    final quotes = await clientWith(
+    final r = await clientWith(
       adapter,
     ).fetchQuotes({for (var i = 0; i < 40; i++) '${2000 + i}': 'TWSE'});
 
     expect(adapter.requests.length, 2, reason: '第一批炸了仍要送第二批');
-    expect(quotes.containsKey('9999'), isTrue, reason: '第二批的結果要留著');
+    expect(r.quotes.containsKey('9999'), isTrue, reason: '第二批的結果要留著');
   });
 
   test('🚨 限流(回 HTML)→ 拋 RateLimitException,不吞成「這批失敗」', () async {
@@ -116,14 +116,56 @@ void main() {
 
   test('空輸入 → 不打 API', () async {
     final adapter = _FakeAdapter((_, __) => _misBody(const []));
-    expect(await clientWith(adapter).fetchQuotes(const {}), isEmpty);
+    expect((await clientWith(adapter).fetchQuotes(const {})).quotes, isEmpty);
     expect(adapter.requests, isEmpty);
+  });
+
+  // 錯誤浮出(2026-08-12):批次錯誤原本只進 AppLogger.warning,而 launchd
+  // 跑的是 AOT 編譯 CLI——AppLogger 的 assert 判定在 AOT 下永遠 release、
+  // 全靜默。結果三個交易日的早盤失敗(8/11 九輪、8/12 十二輪)日誌只有
+  // 「報價全滅」四個字,無從分辨 timeout/DNS/連線重置/限流。
+  group('錯誤浮出 errors', () {
+    test('🚨 批次失敗時 errors 帶回錯誤型別與訊息', () async {
+      final adapter = _FakeAdapter(
+        (_, __) => throw const SocketException_('connection refused'),
+      );
+      final r = await clientWith(adapter).fetchQuotes({'2330': 'TWSE'});
+
+      expect(r.quotes, isEmpty);
+      expect(r.errors, hasLength(1));
+      expect(r.errors.single, contains('DioException'), reason: '錯誤型別是診斷的第一線索');
+      expect(
+        r.errors.single,
+        contains('connection refused'),
+        reason: '原始訊息要保留',
+      );
+    });
+
+    test('全部成功時 errors 為空', () async {
+      final adapter = _FakeAdapter((_, __) => _misBody(['2330']));
+      final r = await clientWith(adapter).fetchQuotes({'2330': 'TWSE'});
+      expect(r.quotes['2330']?.price, 100.0);
+      expect(r.errors, isEmpty);
+    });
+
+    test('部分批次失敗:成功批的報價與失敗批的錯誤並存', () async {
+      final adapter = _FakeAdapter((i, _) {
+        if (i == 0) throw const SocketException_('batch 0 down');
+        return _misBody(['9999']);
+      });
+      final r = await clientWith(
+        adapter,
+      ).fetchQuotes({for (var i = 0; i < 40; i++) '${2000 + i}': 'TWSE'});
+
+      expect(r.quotes.containsKey('9999'), isTrue);
+      expect(r.errors, hasLength(1));
+    });
   });
 
   test('MIS 回應前綴空行仍能解析(2026-08-08 實測的真實行為)', () async {
     final adapter = _FakeAdapter((_, __) => '\n\n\n\n${_misBody(['2330'])}');
-    final quotes = await clientWith(adapter).fetchQuotes({'2330': 'TWSE'});
-    expect(quotes['2330']?.price, 100.0);
+    final r = await clientWith(adapter).fetchQuotes({'2330': 'TWSE'});
+    expect(r.quotes['2330']?.price, 100.0);
   });
 }
 

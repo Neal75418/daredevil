@@ -9,10 +9,14 @@ import 'package:daredevil/data/remote/intraday_quote_client.dart';
 /// [quotesFetched]/[symbolsWanted] 是診斷關鍵:「本輪無觸價」可能是
 /// 沒到價(正常),也可能是報價全數失敗(要修)——沒有這兩個數字就
 /// 分不出來,而兩者的處置完全不同。
+///
+/// [quoteErrors] 是失敗批次的型別+訊息摘要——AOT CLI 裡 AppLogger 靜默,
+/// 錯誤必須走結果鏈才進得了日誌(2026-08-12 早盤盲區調查)。
 typedef MonitorResult = ({
   List<TriggeredAlert> fired,
   int quotesFetched,
   int symbolsWanted,
+  List<String> quoteErrors,
 });
 
 /// 一筆被觸價的提醒 + 當下報價(通知與後續觀察的素材)
@@ -66,6 +70,7 @@ class IntradayAlertMonitor {
         fired: const <TriggeredAlert>[],
         quotesFetched: 0,
         symbolsWanted: 0,
+        quoteErrors: const <String>[],
       );
     }
 
@@ -82,10 +87,11 @@ class IntradayAlertMonitor {
         fired: const <TriggeredAlert>[],
         quotesFetched: 0,
         symbolsWanted: 0,
+        quoteErrors: const <String>[],
       );
     }
 
-    final quotes = await _client.fetchQuotes(wanted);
+    final (:quotes, :errors) = await _client.fetchQuotes(wanted);
     final fired = <TriggeredAlert>[];
     final stamp = now ?? DateTime.now();
 
@@ -116,6 +122,7 @@ class IntradayAlertMonitor {
       fired: fired,
       quotesFetched: quotes.length,
       symbolsWanted: wanted.length,
+      quoteErrors: errors,
     );
   }
 }
