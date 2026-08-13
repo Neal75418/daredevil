@@ -106,21 +106,19 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
     // 背景條滿條基準=可見清單各欄最大 |值|,**排除低基期列**——聯上
     // +1,096,390% 這種怪物若參與正規化,其他所有列的條全部趴地;
     // 怪物自己夾在滿條(fractionOf 會 clamp),視覺仍是「頂格」誠實
-    double maxAbsOf(double? Function(RevenueOverviewRow) pick) {
-      double foldMax(Iterable<RevenueOverviewRow> it) =>
-          it.fold<double>(0, (acc, r) {
-            final v = pick(r)?.abs() ?? 0;
-            return v > acc ? v : acc;
-          });
-      final normal = foldMax(rows.where((r) => !r.isLowBase));
-      // 可見列全是低基期(如過濾後)時排除法會歸零、整頁無條——
-      // fallback 全列 max,怪物之間自相正規化(2026-08-13 終審實測)
-      return normal > 0 ? normal : foldMax(rows);
+    // 雙層馴服(2026-08-14):排除擋「已標記」的低基期怪,p95 馴「未標記」
+    // 的重尾(潤隆型:累計比單月更猛=合法,但 +3,460% 當滿條會讓中段
+    // 全淡)。全低基期(如過濾後)→ fallback 全列 p95,怪物自相正規化。
+    double scaleOf(double? Function(RevenueOverviewRow) pick) {
+      final normal = GrowthBarCell.barScale(
+        rows.where((r) => !r.isLowBase).map(pick),
+      );
+      return normal > 0 ? normal : GrowthBarCell.barScale(rows.map(pick));
     }
 
-    final maxAbsMom = maxAbsOf((r) => r.momGrowth);
-    final maxAbsYoy = maxAbsOf((r) => r.yoyGrowth);
-    final maxAbsYtd = maxAbsOf((r) => r.ytdYoyGrowth);
+    final maxAbsMom = scaleOf((r) => r.momGrowth);
+    final maxAbsYoy = scaleOf((r) => r.yoyGrowth);
+    final maxAbsYtd = scaleOf((r) => r.ytdYoyGrowth);
 
     return ThemedRefreshIndicator(
       onRefresh: () => ref.read(revenueOverviewProvider.notifier).loadData(),

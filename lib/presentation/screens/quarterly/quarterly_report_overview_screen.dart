@@ -105,12 +105,9 @@ class _QuarterlyReportOverviewScreenState
   ) {
     final theme = Theme.of(context);
     final rows = state.visibleRows(watchlistSymbols);
-    // 背景條的滿條基準=可見清單最大 |EPS 年增差值|(換排序/過濾自動重校)
-    final maxAbsDelta = rows.fold<double>(
-      0,
-      (acc, r) =>
-          (r.epsYoyDelta?.abs() ?? 0) > acc ? r.epsYoyDelta!.abs() : acc,
-    );
+    // 背景條滿條基準=可見清單 |EPS 年增差值| 的 p95(重尾馴服,見
+    // GrowthBarCell.barScale;換排序/過濾自動重校)
+    final maxAbsDelta = GrowthBarCell.barScale(rows.map((r) => r.epsYoyDelta));
 
     return ThemedRefreshIndicator(
       onRefresh: () =>

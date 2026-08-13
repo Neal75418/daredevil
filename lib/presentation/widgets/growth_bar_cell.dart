@@ -34,6 +34,24 @@ class GrowthBarCell extends StatelessWidget {
 
   final bool bold;
 
+  /// 滿條基準:可見清單 |值| 的 **p95 分位數**(nearest-rank),超過者
+  /// 由 [fractionOf] 夾滿條。
+  ///
+  /// 用分位數而非 max(2026-08-14 終審建議):重尾欄一個合法怪物
+  /// (潤隆單月 +3,460%,累計更猛、不是低基期)當滿條,+300% 的列只剩
+  /// 8% 長——中段全部淡到不可讀。p95 讓 95% 的列有可讀比例,尾巴夾
+  /// 滿條仍是「頂格」誠實。小樣本時 nearest-rank 自然退化為 max,
+  /// 不需特判。
+  static double barScale(Iterable<double?> values) {
+    final abs = [
+      for (final v in values)
+        if (v != null) v.abs(),
+    ]..sort();
+    if (abs.isEmpty) return 0;
+    final rank = (abs.length * 0.95).ceil().clamp(1, abs.length);
+    return abs[rank - 1];
+  }
+
   /// 條長比例(供測試直接驗算)
   @visibleForTesting
   static double fractionOf(double? value, double maxAbs) {
