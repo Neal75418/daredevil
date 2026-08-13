@@ -60,6 +60,16 @@ class QuarterlyReportOverviewRow {
   double? get epsYoyDelta =>
       (eps != null && priorEps != null) ? eps! - priorEps! : null;
 
+  /// 淨利率 %(淨利/營收,同為千元單位消掉;2026-08-13)。
+  ///
+  /// 給 EPS 榜一個品質維度:同樣的 EPS 年增,44% 淨利率(宜鼎)與
+  /// 12% 淨利率的含金量不同。缺任一值或營收 ≤0 為 null——不除零、
+  /// 不用假 0 冒充「零利潤」。
+  double? get netMarginPct =>
+      (netIncome != null && revenue != null && revenue! > 0)
+      ? netIncome! / revenue! * 100
+      : null;
+
   /// 轉虧為盈(去年同期 EPS ≤ 0、本期 > 0;兩值皆須存在)
   bool get isTurnaround =>
       eps != null && priorEps != null && priorEps! <= 0 && eps! > 0;

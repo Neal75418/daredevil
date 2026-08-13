@@ -7,6 +7,14 @@ import 'package:daredevil/core/theme/semantic_colors.dart';
 /// 統一管理應用程式中的間距、圓角、透明度等設計參數，
 /// 確保 UI 風格一致性，避免魔術數字。
 abstract final class DesignTokens {
+  /// 低基期營收列的淡化(2026-08-13):與族群轉向「強者榜 0 檔」卡片同
+  /// 策略——掃過去自然跳過,但點得到、讀得到
+  static const double lowBaseRowOpacity = 0.55;
+
+  /// 數值欄背景比例條(GrowthBarCell):高度與透明度——低透明墊底不搶字
+  static const double growthBarHeight = 16;
+  static const double growthBarAlpha = 0.14;
+
   // ==================================================
   // 間距系統 (8dp Grid)
   // ==================================================

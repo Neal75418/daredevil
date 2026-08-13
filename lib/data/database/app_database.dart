@@ -209,6 +209,7 @@ class AppDatabase extends $AppDatabase
       // 會把所有 Drift managed table drop 後由 Migrator 重建。
       await _ensureSchemaFingerprint();
       await _ensureDealerSelfNetColumn();
+      await _ensureMonthlyRevenueYtdColumn();
       await _ensureRuleAccuracyDistinctDatesColumn();
       await _ensureWatchlistGroupsSchema();
       await _ensurePinnedThesisSchema();
@@ -389,6 +390,30 @@ class AppDatabase extends $AppDatabase
     AppLogger.info(
       'AppDatabase',
       '既有 DB 補上 daily_institutional.dealer_self_net 欄（保留既有資料）',
+    );
+  }
+
+  /// 為既有 monthly_revenue 補 ytd_yoy_growth 欄(2026-08-13 累計年增)。
+  ///
+  /// 沿用 [_ensureDealerSelfNetColumn] 前例:idempotent、缺才加、
+  /// 不 bump fingerprint(bump 會 wipe 全部非白名單表,58.7 萬列價格
+  /// 重抓要燒數天 FinMind 配額)。舊列為 null——歷史月份的累計值
+  /// 本來就沒抓過,下次公布期起自然填充。
+  Future<void> _ensureMonthlyRevenueYtdColumn() async {
+    final columns = await customSelect(
+      "PRAGMA table_info('monthly_revenue')",
+    ).get();
+    final hasColumn = columns.any(
+      (row) => row.read<String>('name') == 'ytd_yoy_growth',
+    );
+    if (hasColumn) return;
+
+    await customStatement(
+      'ALTER TABLE monthly_revenue ADD COLUMN ytd_yoy_growth REAL',
+    );
+    AppLogger.info(
+      'AppDatabase',
+      '既有 DB 補上 monthly_revenue.ytd_yoy_growth 欄（保留既有資料）',
     );
   }
 

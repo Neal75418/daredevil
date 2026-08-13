@@ -125,4 +125,42 @@ void main() {
       expect(rows.single.code, '1101');
     });
   });
+
+  group('累計年增(2026-08-13 一魚三吃:欄位+低基期識別+排序防護)', () {
+    test('🚨 真實 fixture:累計前期比較增減被解析(鮮活果汁 +41.87%)', () {
+      final rows = MopsClient.parseRevenueCsv(realBytes, year: 2026, month: 7);
+      final row = rows.firstWhere((r) => r.code == '1256');
+      expect(row.ytdYoyGrowth, isNotNull);
+      expect(row.ytdYoyGrowth!, closeTo(41.87, 0.01));
+    });
+
+    test('🚨 累計欄自洽失配 → ytd 設 null,單月欄仍完好(不整列拒收)', () {
+      // 單月三欄自洽([5][6][7] vs [8][9]),但累計增減 [12] 與 [10][11]
+      // 重算差 30 個百分點——累計欄壞不該拖累單月資料
+      final line =
+          '"115/08/04","115/7","9999","X","ELEC","1100","1000","1000",'
+          '"10.0","10.0","2000","1000","70.0","-"\n';
+      final rows = MopsClient.parseRevenueCsv(
+        line.codeUnits,
+        year: 2026,
+        month: 7,
+      );
+      expect(rows, hasLength(1));
+      expect(rows.single.yoyGrowth, closeTo(10.0, 0.01));
+      expect(rows.single.ytdYoyGrowth, isNull, reason: '失配的累計值不可落庫');
+    });
+
+    test('舊版式(僅 10 欄)→ 列仍解析,ytd 為 null(向後相容)', () {
+      final line =
+          '"115/08/04","115/7","9998","X","ELEC","1100","1000","1000",'
+          '"10.0","10.0"\n';
+      final rows = MopsClient.parseRevenueCsv(
+        line.codeUnits,
+        year: 2026,
+        month: 7,
+      );
+      expect(rows, hasLength(1));
+      expect(rows.single.ytdYoyGrowth, isNull);
+    });
+  });
 }

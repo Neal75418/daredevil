@@ -7,7 +7,7 @@ import 'package:daredevil/presentation/providers/providers.dart';
 
 /// 營收總覽的排序鍵(全部基於資料庫真實存在的欄位——「公布順序」
 /// 因無公布日欄位而刻意不提供,見 2026-08-05 設計討論)
-enum RevenueSortBy { yoy, mom, revenue }
+enum RevenueSortBy { yoy, mom, revenue, ytdYoy }
 
 /// 營收總覽的過濾器(過濾是使用者主動選的,預設「全部」不裁剪——
 /// 清單的完整性是本頁的存在理由)
@@ -63,10 +63,17 @@ class RevenueOverviewState {
       RevenueSortBy.yoy => r.yoyGrowth,
       RevenueSortBy.mom => r.momGrowth,
       RevenueSortBy.revenue => r.revenue,
+      RevenueSortBy.ytdYoy => r.ytdYoyGrowth,
     };
 
     rows = List.of(rows)
       ..sort((a, b) {
+        // 年增排序的低基期防護(2026-08-13):怪物列(聯上單月 +109 萬%)
+        // 沉到非低基期之後——沉底是排序不是裁剪,列仍完整可見(淡化)。
+        // 只有年增排序需要:其他排序鍵不受基期效應污染。
+        if (sortBy == RevenueSortBy.yoy && a.isLowBase != b.isLowBase) {
+          return a.isLowBase ? 1 : -1;
+        }
         final ka = keyOf(a);
         final kb = keyOf(b);
         if (ka == null && kb == null) return a.symbol.compareTo(b.symbol);

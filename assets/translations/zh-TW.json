@@ -1595,11 +1595,14 @@
     "sort": {
       "yoy": "年增率",
       "mom": "月增率",
-      "revenue": "營收額"
+      "revenue": "營收額",
+      "ytdYoy": "累計年增"
     },
     "entryTitle": "{month} 月營收公布中",
     "entrySubtitle": "已公布 {filed} 家・自選 {watchFiled}/{watchTotal} 已交卷",
-    "revenueCol": "營收"
+    "revenueCol": "營收",
+    "ytdShort": "累計年增",
+    "lowBase": "低基期"
   },
   "instRanking": {
     "title": "法人買賣超排行",
@@ -1643,6 +1646,7 @@
     "entrySubtitle": "已公布 {filed} 家・自選 {watchFiled}/{watchTotal} 已交卷",
     "entryTitleComplete": "Q{quarter} 季報總表",
     "entrySubtitleComplete": "共 {filed} 家・完整清單",
-    "yoyCol": "年增"
+    "yoyCol": "年增",
+    "marginCol": "淨利率"
   }
 }

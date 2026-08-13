@@ -5,6 +5,7 @@ import 'package:meta/meta.dart';
 
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
+import 'package:daredevil/data/models/shared/ytd_yoy_parser.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/remote/market_client_mixin.dart';
 
@@ -26,6 +27,7 @@ class MopsMonthlyRevenue {
     required this.revenue,
     this.momGrowth,
     this.yoyGrowth,
+    this.ytdYoyGrowth,
   });
 
   final String code;
@@ -39,6 +41,9 @@ class MopsMonthlyRevenue {
   final double revenue;
   final double? momGrowth;
   final double? yoyGrowth;
+
+  /// 累計年增率 %(CSV [10..12] 欄;自洽失配或舊版式缺欄為 null)
+  final double? ytdYoyGrowth;
 }
 
 /// 公開資訊觀測站(舊版 `mopsov.twse.com.tw`)月營收 client。
@@ -153,6 +158,17 @@ class MopsClient {
       // (失配 ≤2 筆)時的失守窗;單一失配仍容忍(個股特例)。
       if (rowInconsistent >= 2) continue;
 
+      // 累計欄([10]當月累計/[11]去年累計/[12]前期比較增減%):
+      // 自洽政策與單月欄一致,但失配只廢累計欄不廢整列——
+      // 累計欄壞不該拖累完好的單月資料(舊版式 <13 欄= null)
+      final double? ytdYoy = fields.length >= 13
+          ? parseSelfCheckedYtdYoy(
+              ytdCurrent: double.tryParse(fields[10]),
+              ytdPrior: double.tryParse(fields[11]),
+              ytdPct: double.tryParse(fields[12]),
+            )
+          : null;
+
       byCode.putIfAbsent(
         code,
         () => MopsMonthlyRevenue(
@@ -162,6 +178,7 @@ class MopsClient {
           revenue: revenue,
           momGrowth: mom,
           yoyGrowth: yoy,
+          ytdYoyGrowth: ytdYoy,
         ),
       );
     }

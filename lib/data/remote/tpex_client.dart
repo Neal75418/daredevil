@@ -976,43 +976,10 @@ class TpexClient {
   ///   ...
   /// }
   TpexMonthlyRevenue? _parseMonthlyRevenueItem(Map<String, dynamic> json) {
+    // 解析邏輯已搬入 model(2026-08-13,含累計年增的自洽政策),
+    // 這裡只留 try/catch 與記錄——model 對壞形狀回 null 不丟
     try {
-      final code = json['公司代號']?.toString().trim() ?? '';
-      if (code.isEmpty) return null;
-
-      // 過濾非股票代碼
-      if (!StockPatterns.isTpexCode(code)) return null;
-
-      // 解析資料年月（格式: "11412" -> 民國 114 年 12 月）
-      final dataYearMonth = json['資料年月']?.toString() ?? '';
-      if (dataYearMonth.length < 5) return null;
-
-      final rocYear = int.tryParse(dataYearMonth.substring(0, 3));
-      final month = int.tryParse(dataYearMonth.substring(3));
-      if (rocYear == null || month == null) return null;
-      if (month < 1 || month > 12) return null;
-
-      final year = rocYear + ApiConfig.rocYearOffset; // 轉換為西元年
-      final date = DateTime(year, month);
-
-      // 解析數值
-      double? parseValue(dynamic value) {
-        if (value == null || value == '' || value == '-') return null;
-        final str = value.toString().replaceAll(',', '').trim();
-        if (str.isEmpty) return null;
-        return double.tryParse(str);
-      }
-
-      return TpexMonthlyRevenue(
-        date: date,
-        code: code,
-        name: json['公司名稱']?.toString().trim() ?? '',
-        revenue: parseValue(json['營業收入-當月營收']) ?? 0,
-        revenueYear: year,
-        revenueMonth: month,
-        momGrowth: parseValue(json['營業收入-上月比較增減(%)']),
-        yoyGrowth: parseValue(json['營業收入-去年同月增減(%)']),
-      );
+      return TpexMonthlyRevenue.fromJson(json);
     } catch (e) {
       AppLogger.debug(_tag, '月營收項目解析失敗: $e');
       return null;

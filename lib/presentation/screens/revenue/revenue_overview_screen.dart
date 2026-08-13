@@ -16,6 +16,7 @@ import 'package:daredevil/data/database/dao/revenue_dao.dart';
 import 'package:daredevil/presentation/providers/revenue_overview_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
+import 'package:daredevil/presentation/widgets/growth_bar_cell.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
 
@@ -102,6 +103,24 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
   ) {
     final theme = Theme.of(context);
     final rows = state.visibleRows(watchlistSymbols);
+    // 背景條滿條基準=可見清單各欄最大 |值|,**排除低基期列**——聯上
+    // +1,096,390% 這種怪物若參與正規化,其他所有列的條全部趴地;
+    // 怪物自己夾在滿條(fractionOf 會 clamp),視覺仍是「頂格」誠實
+    double maxAbsOf(double? Function(RevenueOverviewRow) pick) {
+      double foldMax(Iterable<RevenueOverviewRow> it) =>
+          it.fold<double>(0, (acc, r) {
+            final v = pick(r)?.abs() ?? 0;
+            return v > acc ? v : acc;
+          });
+      final normal = foldMax(rows.where((r) => !r.isLowBase));
+      // 可見列全是低基期(如過濾後)時排除法會歸零、整頁無條——
+      // fallback 全列 max,怪物之間自相正規化(2026-08-13 終審實測)
+      return normal > 0 ? normal : foldMax(rows);
+    }
+
+    final maxAbsMom = maxAbsOf((r) => r.momGrowth);
+    final maxAbsYoy = maxAbsOf((r) => r.yoyGrowth);
+    final maxAbsYtd = maxAbsOf((r) => r.ytdYoyGrowth);
 
     return ThemedRefreshIndicator(
       onRefresh: () => ref.read(revenueOverviewProvider.notifier).loadData(),
@@ -123,8 +142,12 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
               padding: const EdgeInsets.only(bottom: DesignTokens.spacing24),
               sliver: SliverList.builder(
                 itemCount: rows.length,
-                itemBuilder: (context, index) =>
-                    _buildRow(theme, rows[index], watchlistSymbols),
+                itemBuilder: (context, index) => _buildRow(
+                  theme,
+                  rows[index],
+                  watchlistSymbols,
+                  (mom: maxAbsMom, yoy: maxAbsYoy, ytd: maxAbsYtd),
+                ),
               ),
             ),
         ],
@@ -200,18 +223,23 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
             ],
           ),
           const SizedBox(height: DesignTokens.spacing8),
-          SegmentedButton<RevenueSortBy>(
-            segments: [
-              for (final s in RevenueSortBy.values)
-                ButtonSegment(
-                  value: s,
-                  label: Text('revenueOverview.sort.${s.name}'.tr()),
-                ),
-            ],
-            selected: {state.sortBy},
-            onSelectionChanged: (selection) => ref
-                .read(revenueOverviewProvider.notifier)
-                .setSortBy(selection.first),
+          // 橫向捲動(2026-08-13):四段+長語系(en)在手機寬會溢出/折行
+          // ——與 SectionHeader trailing 同讓步策略,空間不夠自己捲
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<RevenueSortBy>(
+              segments: [
+                for (final s in RevenueSortBy.values)
+                  ButtonSegment(
+                    value: s,
+                    label: Text('revenueOverview.sort.${s.name}'.tr()),
+                  ),
+              ],
+              selected: {state.sortBy},
+              onSelectionChanged: (selection) => ref
+                  .read(revenueOverviewProvider.notifier)
+                  .setSortBy(selection.first),
+            ),
           ),
         ],
       ),
@@ -222,12 +250,15 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
     ThemeData theme,
     RevenueOverviewRow row,
     Set<String> watchlistSymbols,
+    ({double mom, double yoy, double ytd}) maxAbs,
   ) {
     final isWatched = watchlistSymbols.contains(row.symbol);
     // 營收單位千元 → 轉元再交給 compact(億/萬)
     final revenueLabel = LocalizedNumberFormat.compact(row.revenue * 1000);
 
-    return InkWell(
+    // 低基期(單月年增極端、累計平庸=一次性認列):淡化+標記,列不裁
+    // ——完整性定稿(2026-08-05)只允許動視覺與排序,不允許動成員資格
+    final child = InkWell(
       onTap: () => context.push(AppRoutes.stockDetail(row.symbol)),
       child: Padding(
         padding: const EdgeInsets.symmetric(
@@ -258,9 +289,16 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
                       color: theme.colorScheme.primary,
                     ),
                   ],
+                  // 徽章包 Flexible(2026-08-13):手機寬(390)下名稱欄僅剩
+                  // 十幾 px,固定寬徽章會把整列擠爆——空間夠時原樣,
+                  // 不夠時徽章自己縮(內文 clip),列不炸
                   if (row.isNewHigh) ...[
                     const SizedBox(width: DesignTokens.spacing4),
-                    _newHighBadge(theme),
+                    Flexible(child: _newHighBadge(theme)),
+                  ],
+                  if (row.isLowBase) ...[
+                    const SizedBox(width: DesignTokens.spacing4),
+                    Flexible(child: _lowBaseBadge(theme)),
                   ],
                 ],
               ),
@@ -277,13 +315,18 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
               ),
             ),
             const SizedBox(width: DesignTokens.spacing12),
-            _growthCell(theme, value: row.momGrowth),
+            _barCell(row.momGrowth, maxAbs.mom),
             const SizedBox(width: DesignTokens.spacing12),
-            _growthCell(theme, value: row.yoyGrowth),
+            _barCell(row.yoyGrowth, maxAbs.yoy),
+            const SizedBox(width: DesignTokens.spacing12),
+            _barCell(row.ytdYoyGrowth, maxAbs.ytd),
           ],
         ),
       ),
     );
+    return row.isLowBase
+        ? Opacity(opacity: DesignTokens.lowBaseRowOpacity, child: child)
+        : child;
   }
 
   Widget _newHighBadge(ThemeData theme) {
@@ -295,10 +338,32 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
       ),
       child: Text(
         'revenueOverview.newHigh'.tr(),
+        maxLines: 1,
+        overflow: TextOverflow.clip,
         style: theme.textTheme.labelSmall?.copyWith(
           color: PriceColors.onTintOf(AppTheme.upColor, theme.brightness),
           fontSize: DesignTokens.fontSizeXs,
           fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  /// 低基期標記:中性色(紅綠專屬股價語意,這是資料品質提示非漲跌)
+  Widget _lowBaseBadge(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(DesignTokens.radiusSm),
+      ),
+      child: Text(
+        'revenueOverview.lowBase'.tr(),
+        maxLines: 1,
+        overflow: TextOverflow.clip,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontSize: DesignTokens.fontSizeXs,
         ),
       ),
     );
@@ -342,31 +407,25 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
           h('revenueOverview.momShort'),
           const SizedBox(width: DesignTokens.spacing12),
           h('revenueOverview.yoyShort'),
+          const SizedBox(width: DesignTokens.spacing12),
+          h('revenueOverview.ytdShort'),
         ],
       ),
     );
   }
 
-  static const double _growthCellWidth = 76;
+  // 62/88(2026-08-13 審查 Critical 2):加第四欄後固定欄合計不得超過
+  // 375pt 手機寬——76×3 時 384pt 直接溢出 9px、名稱欄歸零。62 實測
+  // 375 可容(名稱欄 ~33px)、390 起正常。加第五欄前先重算這筆帳。
+  static const double _growthCellWidth = 62;
   static const double _revenueCellWidth = 88;
 
-  Widget _growthCell(ThemeData theme, {required double? value}) {
-    final color = value == null
-        ? theme.colorScheme.onSurfaceVariant
-        : AppTheme.getPriceColor(value, theme.brightness);
-    return SizedBox(
-      width: _growthCellWidth,
-      child: Text(
-        value == null
-            ? '--'
-            : '${value > 0 ? '+' : ''}${value.toStringAsFixed(1)}%',
-        textAlign: TextAlign.end,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w600,
-          fontFeatures: const [FontFeature.tabularFigures()],
-        ),
-      ),
-    );
-  }
+  Widget _barCell(double? value, double maxAbs) => GrowthBarCell(
+    width: _growthCellWidth,
+    text: value == null
+        ? '--'
+        : '${value > 0 ? '+' : ''}${value.toStringAsFixed(1)}%',
+    value: value,
+    maxAbs: maxAbs,
+  );
 }

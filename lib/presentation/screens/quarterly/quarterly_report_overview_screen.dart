@@ -16,6 +16,7 @@ import 'package:daredevil/data/database/dao/quarterly_report_dao.dart';
 import 'package:daredevil/presentation/providers/quarterly_report_overview_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
+import 'package:daredevil/presentation/widgets/growth_bar_cell.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
 
@@ -104,6 +105,12 @@ class _QuarterlyReportOverviewScreenState
   ) {
     final theme = Theme.of(context);
     final rows = state.visibleRows(watchlistSymbols);
+    // 背景條的滿條基準=可見清單最大 |EPS 年增差值|(換排序/過濾自動重校)
+    final maxAbsDelta = rows.fold<double>(
+      0,
+      (acc, r) =>
+          (r.epsYoyDelta?.abs() ?? 0) > acc ? r.epsYoyDelta!.abs() : acc,
+    );
 
     return ThemedRefreshIndicator(
       onRefresh: () =>
@@ -126,8 +133,12 @@ class _QuarterlyReportOverviewScreenState
               padding: const EdgeInsets.only(bottom: DesignTokens.spacing24),
               sliver: SliverList.builder(
                 itemCount: rows.length,
-                itemBuilder: (context, index) =>
-                    _buildRow(theme, rows[index], watchlistSymbols),
+                itemBuilder: (context, index) => _buildRow(
+                  theme,
+                  rows[index],
+                  watchlistSymbols,
+                  maxAbsDelta,
+                ),
               ),
             ),
         ],
@@ -200,18 +211,23 @@ class _QuarterlyReportOverviewScreenState
             ],
           ),
           const SizedBox(height: DesignTokens.spacing8),
-          SegmentedButton<QuarterlySortBy>(
-            segments: [
-              for (final s in QuarterlySortBy.values)
-                ButtonSegment(
-                  value: s,
-                  label: Text('quarterlyOverview.sort.${s.name}'.tr()),
-                ),
-            ],
-            selected: {state.sortBy},
-            onSelectionChanged: (selection) => ref
-                .read(quarterlyReportOverviewProvider.notifier)
-                .setSortBy(selection.first),
+          // 橫向捲動(2026-08-13):長語系(en)在手機寬會溢出/折行
+          // ——與 SectionHeader trailing 同讓步策略,空間不夠自己捲
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<QuarterlySortBy>(
+              segments: [
+                for (final s in QuarterlySortBy.values)
+                  ButtonSegment(
+                    value: s,
+                    label: Text('quarterlyOverview.sort.${s.name}'.tr()),
+                  ),
+              ],
+              selected: {state.sortBy},
+              onSelectionChanged: (selection) => ref
+                  .read(quarterlyReportOverviewProvider.notifier)
+                  .setSortBy(selection.first),
+            ),
           ),
         ],
       ),
@@ -222,6 +238,7 @@ class _QuarterlyReportOverviewScreenState
     ThemeData theme,
     QuarterlyReportOverviewRow row,
     Set<String> watchlistSymbols,
+    double maxAbsDelta,
   ) {
     final isWatched = watchlistSymbols.contains(row.symbol);
 
@@ -258,7 +275,8 @@ class _QuarterlyReportOverviewScreenState
                   ],
                   if (row.isTurnaround) ...[
                     const SizedBox(width: DesignTokens.spacing4),
-                    _turnaroundBadge(theme),
+                    // Flexible:同月營收頁——窄幅下固定寬徽章會擠爆列
+                    Flexible(child: _turnaroundBadge(theme)),
                   ],
                 ],
               ),
@@ -270,7 +288,17 @@ class _QuarterlyReportOverviewScreenState
               bold: true,
             ),
             const SizedBox(width: DesignTokens.spacing12),
-            _yoyCell(theme, row.epsYoyDelta),
+            // EPS 年增差值(元):排序鍵直接顯示(帶號,紅=優於去年、
+            // 綠=遜於去年,同股價語意);背景條=相對可見清單最大差值
+            GrowthBarCell(
+              width: _cellWidth,
+              text: row.epsYoyDelta == null
+                  ? '--'
+                  : '${row.epsYoyDelta! > 0 ? '+' : ''}'
+                        '${row.epsYoyDelta!.toStringAsFixed(2)}',
+              value: row.epsYoyDelta,
+              maxAbs: maxAbsDelta,
+            ),
             const SizedBox(width: DesignTokens.spacing12),
             _numCell(
               theme,
@@ -280,24 +308,18 @@ class _QuarterlyReportOverviewScreenState
                   : LocalizedNumberFormat.compact(row.netIncome! * 1000),
               color: theme.colorScheme.onSurfaceVariant,
             ),
+            const SizedBox(width: DesignTokens.spacing12),
+            _numCell(
+              theme,
+              // 淨利率:EPS 榜的品質維度(同 EPS 年增,含金量看利潤率)
+              row.netMarginPct == null
+                  ? '--'
+                  : '${row.netMarginPct!.toStringAsFixed(1)}%',
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ],
         ),
       ),
-    );
-  }
-
-  /// EPS 年增差值(元):排序鍵直接顯示(2026-08-06——原本只顯本期與
-  /// 去年兩個原料,排序依據要使用者心算,等於沒溝通)。帶號、按方向
-  /// 著色(紅=優於去年、綠=遜於去年,同股價漲跌語意);無基準顯「--」。
-  /// 去年同期值=EPS−年增,可推導;「去年虧損」狀態由轉盈 badge 標示。
-  Widget _yoyCell(ThemeData theme, double? delta) {
-    if (delta == null) {
-      return _numCell(theme, '--', color: theme.colorScheme.onSurfaceVariant);
-    }
-    return _numCell(
-      theme,
-      '${delta > 0 ? '+' : ''}${delta.toStringAsFixed(2)}',
-      color: AppTheme.getPriceColor(delta, theme.brightness),
     );
   }
 
@@ -310,6 +332,8 @@ class _QuarterlyReportOverviewScreenState
       ),
       child: Text(
         'quarterlyOverview.turnaround'.tr(),
+        maxLines: 1,
+        overflow: TextOverflow.clip,
         style: theme.textTheme.labelSmall?.copyWith(
           color: PriceColors.onTintOf(AppTheme.upColor, theme.brightness),
           fontSize: DesignTokens.fontSizeXs,
@@ -346,12 +370,18 @@ class _QuarterlyReportOverviewScreenState
           h('quarterlyOverview.yoyCol'),
           const SizedBox(width: DesignTokens.spacing12),
           h('quarterlyOverview.netIncomeCol'),
+          const SizedBox(width: DesignTokens.spacing12),
+          h('quarterlyOverview.marginCol'),
         ],
       ),
     );
   }
 
-  static const double _cellWidth = 76;
+  // 62(2026-08-13 終審 Critical 1):加淨利率欄後 76×4+間距+padding=384
+  // >375pt 手機寬直接溢出、股名歸零——與月營收頁同一筆帳(62×4+48+32=328,
+  // 375 下股名剩 47px)。加欄前先重算;375 守門測試在 quarterly_overview_
+  // screen_test。
+  static const double _cellWidth = 62;
 
   Widget _numCell(
     ThemeData theme,

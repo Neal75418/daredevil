@@ -2306,6 +2306,7 @@ typedef $$MonthlyRevenueTableCreateCompanionBuilder =
       required double revenue,
       i0.Value<double?> momGrowth,
       i0.Value<double?> yoyGrowth,
+      i0.Value<double?> ytdYoyGrowth,
       i0.Value<int> rowid,
     });
 typedef $$MonthlyRevenueTableUpdateCompanionBuilder =
@@ -2317,6 +2318,7 @@ typedef $$MonthlyRevenueTableUpdateCompanionBuilder =
       i0.Value<double> revenue,
       i0.Value<double?> momGrowth,
       i0.Value<double?> yoyGrowth,
+      i0.Value<double?> ytdYoyGrowth,
       i0.Value<int> rowid,
     });
 
@@ -2405,6 +2407,11 @@ class $$MonthlyRevenueTableFilterComposer
     builder: (column) => i0.ColumnFilters(column),
   );
 
+  i0.ColumnFilters<double> get ytdYoyGrowth => $composableBuilder(
+    column: $table.ytdYoyGrowth,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
   i4.$$StockMasterTableFilterComposer get symbol {
     final i4.$$StockMasterTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -2472,6 +2479,11 @@ class $$MonthlyRevenueTableOrderingComposer
     builder: (column) => i0.ColumnOrderings(column),
   );
 
+  i0.ColumnOrderings<double> get ytdYoyGrowth => $composableBuilder(
+    column: $table.ytdYoyGrowth,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
   i4.$$StockMasterTableOrderingComposer get symbol {
     final i4.$$StockMasterTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -2530,6 +2542,11 @@ class $$MonthlyRevenueTableAnnotationComposer
 
   i0.GeneratedColumn<double> get yoyGrowth =>
       $composableBuilder(column: $table.yoyGrowth, builder: (column) => column);
+
+  i0.GeneratedColumn<double> get ytdYoyGrowth => $composableBuilder(
+    column: $table.ytdYoyGrowth,
+    builder: (column) => column,
+  );
 
   i4.$$StockMasterTableAnnotationComposer get symbol {
     final i4.$$StockMasterTableAnnotationComposer composer = $composerBuilder(
@@ -2596,6 +2613,7 @@ class $$MonthlyRevenueTableTableManager
                 i0.Value<double> revenue = const i0.Value.absent(),
                 i0.Value<double?> momGrowth = const i0.Value.absent(),
                 i0.Value<double?> yoyGrowth = const i0.Value.absent(),
+                i0.Value<double?> ytdYoyGrowth = const i0.Value.absent(),
                 i0.Value<int> rowid = const i0.Value.absent(),
               }) => i1.MonthlyRevenueCompanion(
                 symbol: symbol,
@@ -2605,6 +2623,7 @@ class $$MonthlyRevenueTableTableManager
                 revenue: revenue,
                 momGrowth: momGrowth,
                 yoyGrowth: yoyGrowth,
+                ytdYoyGrowth: ytdYoyGrowth,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2616,6 +2635,7 @@ class $$MonthlyRevenueTableTableManager
                 required double revenue,
                 i0.Value<double?> momGrowth = const i0.Value.absent(),
                 i0.Value<double?> yoyGrowth = const i0.Value.absent(),
+                i0.Value<double?> ytdYoyGrowth = const i0.Value.absent(),
                 i0.Value<int> rowid = const i0.Value.absent(),
               }) => i1.MonthlyRevenueCompanion.insert(
                 symbol: symbol,
@@ -2625,6 +2645,7 @@ class $$MonthlyRevenueTableTableManager
                 revenue: revenue,
                 momGrowth: momGrowth,
                 yoyGrowth: yoyGrowth,
+                ytdYoyGrowth: ytdYoyGrowth,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -7653,6 +7674,17 @@ class $MonthlyRevenueTable extends i2.MonthlyRevenue
     type: i0.DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const i0.VerificationMeta _ytdYoyGrowthMeta =
+      const i0.VerificationMeta('ytdYoyGrowth');
+  @override
+  late final i0.GeneratedColumn<double> ytdYoyGrowth =
+      i0.GeneratedColumn<double>(
+        'ytd_yoy_growth',
+        aliasedName,
+        true,
+        type: i0.DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
   @override
   List<i0.GeneratedColumn> get $columns => [
     symbol,
@@ -7662,6 +7694,7 @@ class $MonthlyRevenueTable extends i2.MonthlyRevenue
     revenue,
     momGrowth,
     yoyGrowth,
+    ytdYoyGrowth,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7733,6 +7766,15 @@ class $MonthlyRevenueTable extends i2.MonthlyRevenue
         yoyGrowth.isAcceptableOrUnknown(data['yoy_growth']!, _yoyGrowthMeta),
       );
     }
+    if (data.containsKey('ytd_yoy_growth')) {
+      context.handle(
+        _ytdYoyGrowthMeta,
+        ytdYoyGrowth.isAcceptableOrUnknown(
+          data['ytd_yoy_growth']!,
+          _ytdYoyGrowthMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7770,6 +7812,10 @@ class $MonthlyRevenueTable extends i2.MonthlyRevenue
         i0.DriftSqlType.double,
         data['${effectivePrefix}yoy_growth'],
       ),
+      ytdYoyGrowth: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.double,
+        data['${effectivePrefix}ytd_yoy_growth'],
+      ),
     );
   }
 
@@ -7801,6 +7847,14 @@ class MonthlyRevenueEntry extends i0.DataClass
 
   /// 年增率（%）
   final double? yoyGrowth;
+
+  /// 累計年增率 %(年初至當月 vs 去年同期;2026-08-13 加欄)。
+  ///
+  /// 來源與單月欄同一支 API(openapi/MOPS 皆自帶),FinMind 歷史回補
+  /// 路徑無此資料留 null。既有 DB 由 `_ensureMonthlyRevenueYtdColumn`
+  /// 補欄——本表不在 fingerprint 白名單,但 bump 指紋會 wipe 全部非
+  /// 白名單表(含 58.7 萬列價格),走 ALTER 前例(dealer_self_net)。
+  final double? ytdYoyGrowth;
   const MonthlyRevenueEntry({
     required this.symbol,
     required this.date,
@@ -7809,6 +7863,7 @@ class MonthlyRevenueEntry extends i0.DataClass
     required this.revenue,
     this.momGrowth,
     this.yoyGrowth,
+    this.ytdYoyGrowth,
   });
   @override
   Map<String, i0.Expression> toColumns(bool nullToAbsent) {
@@ -7823,6 +7878,9 @@ class MonthlyRevenueEntry extends i0.DataClass
     }
     if (!nullToAbsent || yoyGrowth != null) {
       map['yoy_growth'] = i0.Variable<double>(yoyGrowth);
+    }
+    if (!nullToAbsent || ytdYoyGrowth != null) {
+      map['ytd_yoy_growth'] = i0.Variable<double>(ytdYoyGrowth);
     }
     return map;
   }
@@ -7840,6 +7898,9 @@ class MonthlyRevenueEntry extends i0.DataClass
       yoyGrowth: yoyGrowth == null && nullToAbsent
           ? const i0.Value.absent()
           : i0.Value(yoyGrowth),
+      ytdYoyGrowth: ytdYoyGrowth == null && nullToAbsent
+          ? const i0.Value.absent()
+          : i0.Value(ytdYoyGrowth),
     );
   }
 
@@ -7856,6 +7917,7 @@ class MonthlyRevenueEntry extends i0.DataClass
       revenue: serializer.fromJson<double>(json['revenue']),
       momGrowth: serializer.fromJson<double?>(json['momGrowth']),
       yoyGrowth: serializer.fromJson<double?>(json['yoyGrowth']),
+      ytdYoyGrowth: serializer.fromJson<double?>(json['ytdYoyGrowth']),
     );
   }
   @override
@@ -7869,6 +7931,7 @@ class MonthlyRevenueEntry extends i0.DataClass
       'revenue': serializer.toJson<double>(revenue),
       'momGrowth': serializer.toJson<double?>(momGrowth),
       'yoyGrowth': serializer.toJson<double?>(yoyGrowth),
+      'ytdYoyGrowth': serializer.toJson<double?>(ytdYoyGrowth),
     };
   }
 
@@ -7880,6 +7943,7 @@ class MonthlyRevenueEntry extends i0.DataClass
     double? revenue,
     i0.Value<double?> momGrowth = const i0.Value.absent(),
     i0.Value<double?> yoyGrowth = const i0.Value.absent(),
+    i0.Value<double?> ytdYoyGrowth = const i0.Value.absent(),
   }) => i1.MonthlyRevenueEntry(
     symbol: symbol ?? this.symbol,
     date: date ?? this.date,
@@ -7888,6 +7952,7 @@ class MonthlyRevenueEntry extends i0.DataClass
     revenue: revenue ?? this.revenue,
     momGrowth: momGrowth.present ? momGrowth.value : this.momGrowth,
     yoyGrowth: yoyGrowth.present ? yoyGrowth.value : this.yoyGrowth,
+    ytdYoyGrowth: ytdYoyGrowth.present ? ytdYoyGrowth.value : this.ytdYoyGrowth,
   );
   MonthlyRevenueEntry copyWithCompanion(i1.MonthlyRevenueCompanion data) {
     return MonthlyRevenueEntry(
@@ -7902,6 +7967,9 @@ class MonthlyRevenueEntry extends i0.DataClass
       revenue: data.revenue.present ? data.revenue.value : this.revenue,
       momGrowth: data.momGrowth.present ? data.momGrowth.value : this.momGrowth,
       yoyGrowth: data.yoyGrowth.present ? data.yoyGrowth.value : this.yoyGrowth,
+      ytdYoyGrowth: data.ytdYoyGrowth.present
+          ? data.ytdYoyGrowth.value
+          : this.ytdYoyGrowth,
     );
   }
 
@@ -7914,7 +7982,8 @@ class MonthlyRevenueEntry extends i0.DataClass
           ..write('revenueMonth: $revenueMonth, ')
           ..write('revenue: $revenue, ')
           ..write('momGrowth: $momGrowth, ')
-          ..write('yoyGrowth: $yoyGrowth')
+          ..write('yoyGrowth: $yoyGrowth, ')
+          ..write('ytdYoyGrowth: $ytdYoyGrowth')
           ..write(')'))
         .toString();
   }
@@ -7928,6 +7997,7 @@ class MonthlyRevenueEntry extends i0.DataClass
     revenue,
     momGrowth,
     yoyGrowth,
+    ytdYoyGrowth,
   );
   @override
   bool operator ==(Object other) =>
@@ -7939,7 +8009,8 @@ class MonthlyRevenueEntry extends i0.DataClass
           other.revenueMonth == this.revenueMonth &&
           other.revenue == this.revenue &&
           other.momGrowth == this.momGrowth &&
-          other.yoyGrowth == this.yoyGrowth);
+          other.yoyGrowth == this.yoyGrowth &&
+          other.ytdYoyGrowth == this.ytdYoyGrowth);
 }
 
 class MonthlyRevenueCompanion
@@ -7951,6 +8022,7 @@ class MonthlyRevenueCompanion
   final i0.Value<double> revenue;
   final i0.Value<double?> momGrowth;
   final i0.Value<double?> yoyGrowth;
+  final i0.Value<double?> ytdYoyGrowth;
   final i0.Value<int> rowid;
   const MonthlyRevenueCompanion({
     this.symbol = const i0.Value.absent(),
@@ -7960,6 +8032,7 @@ class MonthlyRevenueCompanion
     this.revenue = const i0.Value.absent(),
     this.momGrowth = const i0.Value.absent(),
     this.yoyGrowth = const i0.Value.absent(),
+    this.ytdYoyGrowth = const i0.Value.absent(),
     this.rowid = const i0.Value.absent(),
   });
   MonthlyRevenueCompanion.insert({
@@ -7970,6 +8043,7 @@ class MonthlyRevenueCompanion
     required double revenue,
     this.momGrowth = const i0.Value.absent(),
     this.yoyGrowth = const i0.Value.absent(),
+    this.ytdYoyGrowth = const i0.Value.absent(),
     this.rowid = const i0.Value.absent(),
   }) : symbol = i0.Value(symbol),
        date = i0.Value(date),
@@ -7984,6 +8058,7 @@ class MonthlyRevenueCompanion
     i0.Expression<double>? revenue,
     i0.Expression<double>? momGrowth,
     i0.Expression<double>? yoyGrowth,
+    i0.Expression<double>? ytdYoyGrowth,
     i0.Expression<int>? rowid,
   }) {
     return i0.RawValuesInsertable({
@@ -7994,6 +8069,7 @@ class MonthlyRevenueCompanion
       if (revenue != null) 'revenue': revenue,
       if (momGrowth != null) 'mom_growth': momGrowth,
       if (yoyGrowth != null) 'yoy_growth': yoyGrowth,
+      if (ytdYoyGrowth != null) 'ytd_yoy_growth': ytdYoyGrowth,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -8006,6 +8082,7 @@ class MonthlyRevenueCompanion
     i0.Value<double>? revenue,
     i0.Value<double?>? momGrowth,
     i0.Value<double?>? yoyGrowth,
+    i0.Value<double?>? ytdYoyGrowth,
     i0.Value<int>? rowid,
   }) {
     return i1.MonthlyRevenueCompanion(
@@ -8016,6 +8093,7 @@ class MonthlyRevenueCompanion
       revenue: revenue ?? this.revenue,
       momGrowth: momGrowth ?? this.momGrowth,
       yoyGrowth: yoyGrowth ?? this.yoyGrowth,
+      ytdYoyGrowth: ytdYoyGrowth ?? this.ytdYoyGrowth,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -8044,6 +8122,9 @@ class MonthlyRevenueCompanion
     if (yoyGrowth.present) {
       map['yoy_growth'] = i0.Variable<double>(yoyGrowth.value);
     }
+    if (ytdYoyGrowth.present) {
+      map['ytd_yoy_growth'] = i0.Variable<double>(ytdYoyGrowth.value);
+    }
     if (rowid.present) {
       map['rowid'] = i0.Variable<int>(rowid.value);
     }
@@ -8060,6 +8141,7 @@ class MonthlyRevenueCompanion
           ..write('revenue: $revenue, ')
           ..write('momGrowth: $momGrowth, ')
           ..write('yoyGrowth: $yoyGrowth, ')
+          ..write('ytdYoyGrowth: $ytdYoyGrowth, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();

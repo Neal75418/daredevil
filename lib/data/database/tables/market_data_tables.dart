@@ -212,6 +212,14 @@ class MonthlyRevenue extends Table {
   /// 年增率（%）
   RealColumn get yoyGrowth => real().nullable()();
 
+  /// 累計年增率 %(年初至當月 vs 去年同期;2026-08-13 加欄)。
+  ///
+  /// 來源與單月欄同一支 API(openapi/MOPS 皆自帶),FinMind 歷史回補
+  /// 路徑無此資料留 null。既有 DB 由 `_ensureMonthlyRevenueYtdColumn`
+  /// 補欄——本表不在 fingerprint 白名單,但 bump 指紋會 wipe 全部非
+  /// 白名單表(含 58.7 萬列價格),走 ALTER 前例(dealer_self_net)。
+  RealColumn get ytdYoyGrowth => real().nullable()();
+
   @override
   Set<Column> get primaryKey => {symbol, date};
 }

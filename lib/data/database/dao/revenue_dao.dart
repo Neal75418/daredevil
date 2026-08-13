@@ -1,3 +1,4 @@
+import 'package:daredevil/core/constants/revenue_overview_params.dart';
 import 'package:drift/drift.dart';
 
 import 'package:daredevil/data/database/app_database.drift.dart';
@@ -34,6 +35,7 @@ class RevenueOverviewRow {
     required this.revenue,
     required this.momGrowth,
     required this.yoyGrowth,
+    this.ytdYoyGrowth,
     required this.isNewHigh,
   });
 
@@ -46,8 +48,23 @@ class RevenueOverviewRow {
   final double? momGrowth;
   final double? yoyGrowth;
 
+  /// 累計年增率 %(年初至當月 vs 去年同期;缺值/自洽失配為 null)
+  final double? ytdYoyGrowth;
+
   /// 當月營收 > 歷史最高(純資料口徑,不含技術過濾)
   final bool isNewHigh;
+
+  /// 低基期識別(2026-08-13):單月年增極端而累計年增平庸=基期效應/
+  /// 一次性認列(聯上 2026-07 單月 +1,096,390% 實例)。用兩個資料點的
+  /// **關係**判定,參數見 [RevenueOverviewParams]。累計缺值不標——
+  /// 資料缺不是證據。
+  bool get isLowBase {
+    final yoy = yoyGrowth;
+    final ytd = ytdYoyGrowth;
+    if (yoy == null || ytd == null) return false;
+    if (yoy < RevenueOverviewParams.lowBaseMinYoyPct) return false;
+    return ytd < yoy / RevenueOverviewParams.lowBaseDivergenceRatio;
+  }
 }
 
 /// 月營收操作
@@ -121,6 +138,7 @@ mixin RevenueDaoMixin on $AppDatabase {
         revenue: row.read<double>('revenue'),
         momGrowth: row.readNullable<double>('mom_growth'),
         yoyGrowth: row.readNullable<double>('yoy_growth'),
+        ytdYoyGrowth: row.readNullable<double>('ytd_yoy_growth'),
       );
       result[entry.symbol] = entry;
     }
@@ -187,6 +205,7 @@ mixin RevenueDaoMixin on $AppDatabase {
         revenue: row.read<double>('revenue'),
         momGrowth: row.readNullable<double>('mom_growth'),
         yoyGrowth: row.readNullable<double>('yoy_growth'),
+        ytdYoyGrowth: row.readNullable<double>('ytd_yoy_growth'),
       );
       result.putIfAbsent(symbol, () => []).add(entry);
     }
@@ -213,6 +232,15 @@ mixin RevenueDaoMixin on $AppDatabase {
                   revenue: excluded.revenue,
                   momGrowth: coalesce([excluded.momGrowth, old.momGrowth]),
                   yoyGrowth: coalesce([excluded.yoyGrowth, old.yoyGrowth]),
+                  // coalesce 而非直接覆蓋(2026-08-13 審查 Critical 1):
+                  // FinMind 歷史路徑的 companion 不帶本欄,excluded 為 NULL
+                  // ——直接覆蓋會把 openapi/MOPS 已寫入的好值洗掉;漏列則
+                  // FinMind 先到的列**永遠 NULL**(實測:自選股最容易先被
+                  // FinMind 觸到,正是使用者最在乎的列)
+                  ytdYoyGrowth: coalesce([
+                    excluded.ytdYoyGrowth,
+                    old.ytdYoyGrowth,
+                  ]),
                 ),
               ),
         );
@@ -244,7 +272,7 @@ mixin RevenueDaoMixin on $AppDatabase {
     final rows = await customSelect(
       '''
       SELECT mr.symbol, sm.name, sm.market,
-             mr.revenue, mr.mom_growth, mr.yoy_growth,
+             mr.revenue, mr.mom_growth, mr.yoy_growth, mr.ytd_yoy_growth,
              (SELECT MAX(h.revenue) FROM monthly_revenue h
                WHERE h.symbol = mr.symbol
                  AND NOT (h.revenue_year = mr.revenue_year
@@ -268,6 +296,7 @@ mixin RevenueDaoMixin on $AppDatabase {
         revenue: revenue,
         momGrowth: r.readNullable<double>('mom_growth'),
         yoyGrowth: r.readNullable<double>('yoy_growth'),
+        ytdYoyGrowth: r.readNullable<double>('ytd_yoy_growth'),
         // 無歷史基準(首月資料)不算創高——「創高」必須有可比對象
         isNewHigh: maxPrior != null && maxPrior > 0 && revenue > maxPrior,
       );

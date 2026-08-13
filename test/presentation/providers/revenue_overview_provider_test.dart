@@ -14,6 +14,7 @@ void main() {
     double? mom,
     double? yoy,
     bool newHigh = false,
+    double? ytd,
     String market = 'TWSE',
   }) => RevenueOverviewRow(
     symbol: symbol,
@@ -22,6 +23,7 @@ void main() {
     revenue: revenue,
     momGrowth: mom,
     yoyGrowth: yoy,
+    ytdYoyGrowth: ytd,
     isNewHigh: newHigh,
   );
 
@@ -91,5 +93,49 @@ void main() {
   test('overview 為 null → 空列表不炸', () {
     const state = RevenueOverviewState();
     expect(state.visibleRows(const {}), isEmpty);
+  });
+
+  group('低基期沉底(2026-08-13 年增排序防護)', () {
+    test('🚨 年增排序:低基期列沉到非低基期之後,組內仍按年增', () {
+      // 聯上形狀(單月 +109 萬%、累計平庸)不得再霸榜
+      final rows = [
+        row('4113', yoy: 1096390.6, ytd: 48.0), // 低基期怪物
+        row('2330', yoy: 25.0, ytd: 30.0),
+        row('3231', yoy: 80.0, ytd: 70.0),
+        row('9999', yoy: 300.0, ytd: 10.0), // 也是低基期
+      ];
+      final visible = stateWith(rows).visibleRows(const {});
+      expect(visible.map((r) => r.symbol).toList(), [
+        '3231', '2330', // 正常組按年增
+        '4113', '9999', // 低基期組沉底,組內仍按年增
+      ]);
+    });
+
+    test('其他排序(營收額)不受低基期影響', () {
+      final rows = [
+        row('4113', yoy: 1096390.6, ytd: 48.0, revenue: 999999),
+        row('2330', yoy: 25.0, ytd: 30.0, revenue: 100),
+      ];
+      final visible = stateWith(
+        rows,
+        sortBy: RevenueSortBy.revenue,
+      ).visibleRows(const {});
+      expect(visible.first.symbol, '4113', reason: '營收額排序看營收,不沉底');
+    });
+
+    test('🚨 新排序選項:累計年增', () {
+      final rows = [
+        row('A111', yoy: 10.0, ytd: 50.0),
+        row('B222', yoy: 90.0, ytd: 20.0),
+        row('C333', yoy: 30.0, ytd: null),
+      ];
+      final visible = stateWith(
+        rows,
+        sortBy: RevenueSortBy.ytdYoy,
+      ).visibleRows(const {});
+      expect(visible.map((r) => r.symbol).toList(), [
+        'A111', 'B222', 'C333', // ytd 降冪,null 沉底
+      ]);
+    });
   });
 }

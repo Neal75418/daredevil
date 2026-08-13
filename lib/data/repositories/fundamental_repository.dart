@@ -361,6 +361,7 @@ class FundamentalRepository implements IFundamentalRepository {
           revenue: r.revenue,
           momGrowth: Value(r.momGrowth),
           yoyGrowth: Value(r.yoyGrowth),
+          ytdYoyGrowth: Value(r.ytdYoyGrowth),
         );
       }).toList();
 
@@ -451,6 +452,7 @@ class FundamentalRepository implements IFundamentalRepository {
             revenue: item.revenue,
             momGrowth: Value(item.momGrowth),
             yoyGrowth: Value(item.yoyGrowth),
+            ytdYoyGrowth: Value(item.ytdYoyGrowth),
           ),
         );
         successCount++;
@@ -528,6 +530,7 @@ class FundamentalRepository implements IFundamentalRepository {
                 revenue: r.revenue,
                 momGrowth: Value(r.momGrowth),
                 yoyGrowth: Value(r.yoyGrowth),
+                ytdYoyGrowth: Value(r.ytdYoyGrowth),
               ),
             )
             .toList();
