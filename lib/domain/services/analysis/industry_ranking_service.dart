@@ -1,3 +1,4 @@
+import 'package:daredevil/core/constants/industry_names.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/domain/services/price_calculator.dart';
 import 'package:daredevil/data/database/app_database.dart';
@@ -41,8 +42,11 @@ class IndustryRankingService {
     // 產業 → 成員 (symbol, 選定視窗報酬)
     final membersByIndustry = <String, List<IndustryMember>>{};
     for (final entry in priceHistories.entries) {
-      final industry = industries[entry.key];
-      if (industry == null || industry.isEmpty) continue;
+      final raw = industries[entry.key];
+      if (raw == null || raw.isEmpty) continue;
+      // 跨市場異名收斂(金融業→金融保險):不收斂會把同板塊拆成兩行,
+      // 且 min-5 門檻下兩邊可能雙雙隱形(2026-08-13)
+      final industry = IndustryNames.normalize(raw);
       if (industry.contains('ETF')) continue;
       final ret = retOf(entry.value);
       if (ret == null) continue;
@@ -238,8 +242,9 @@ class IndustryRankingService {
   ) {
     final out = <String, Set<String>>{};
     for (final entry in priceHistories.entries) {
-      final industry = industries[entry.key];
-      if (industry == null || industry.isEmpty) continue;
+      final raw = industries[entry.key];
+      if (raw == null || raw.isEmpty) continue;
+      final industry = IndustryNames.normalize(raw); // 同 rank() 的收斂口徑
       if (industry.contains('ETF')) continue;
       final ret = PriceCalculator.ret20d(entry.value);
       if (ret == null || ret <= SectorParams.rotationStrongListRet20Pct) {

@@ -44,6 +44,26 @@ void main() {
     );
   }
 
+  test('🚨 上市「金融保險」與上櫃「金融業」必須合併為同一族群', () {
+    // 2026-08-13「今日」tab 首日實測:全部產業裡唯一的跨市場異名對,
+    // 兩組分開排竟包辦第 1、2 名——同一個板塊被標籤拆成兩行。
+    // 更陰險的是 min-5 門檻:各自不足 5 檔時**兩邊都整組隱形**。
+    final result = service.rank(
+      priceHistories: {
+        for (var i = 0; i < 3; i++) 'F$i': historyWithRet20('F$i', 5),
+        for (var i = 0; i < 2; i++) 'G$i': historyWithRet20('G$i', 5),
+      },
+      industries: {
+        for (var i = 0; i < 3; i++) 'F$i': '金融保險',
+        for (var i = 0; i < 2; i++) 'G$i': '金融業',
+      },
+      names: const {},
+      institutionalHistories: const {},
+    );
+    expect(result, hasLength(1), reason: '3+2 合併=5 檔過門檻;分裂則兩組都 <5 全隱形');
+    expect(result.single.memberCount, 5);
+  });
+
   test('🚨 RankingWindow.minHistoryRows:大盤同窗報酬取第 N 筆前收盤,差一格=超額系統性偏移', () {
     expect(RankingWindow.d20.minHistoryRows, 21);
     expect(RankingWindow.d5.minHistoryRows, 6);
