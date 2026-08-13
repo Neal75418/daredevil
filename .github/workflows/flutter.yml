@@ -137,7 +137,7 @@ jobs:
       # 吃光 job 10 分鐘餘裕 → 整個 run 被取消（測試其實已全過）。
       # fail_ci_if_error 只擋「錯誤」擋不住「卡死」，故改以步驟級逾時設上限。
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         timeout-minutes: 3
         continue-on-error: true
         with:
