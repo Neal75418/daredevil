@@ -48,12 +48,24 @@ jobs:
         with:
           path: |
             .dart_tool/build/
+            .dart_tool/hooks_runner/shared/
             lib/**/*.drift.dart
           key: build-runner-${{ runner.os }}-${{ hashFiles('pubspec.lock', 'lib/data/database/tables/**', 'lib/domain/models/**') }}
           restore-keys: build-runner-${{ runner.os }}-
 
       - name: Generate code (Drift)
-        run: dart run build_runner build --delete-conflicting-outputs
+        # sqlite3 native-asset hook 會從 GitHub Releases 下載 libsqlite3——
+        # 2026-08-12 兩個 run 因 CDN 中途斷線而紅(與程式碼無關,見
+        # intraday_alert_heartbeat_test 的失敗訊息「Building assets for
+        # package:sqlite3 failed」)。產物已入上方快取,正常不會走到下載;
+        # 走到時給 3 次機會。
+        run: |
+          for i in 1 2 3; do
+            dart run build_runner build --delete-conflicting-outputs && exit 0
+            echo "build_runner attempt $i failed; retrying in 15s..."
+            sleep 15
+          done
+          exit 1
 
       - name: Verify formatting
         run: dart format --output=none --set-exit-if-changed .
@@ -95,12 +107,24 @@ jobs:
         with:
           path: |
             .dart_tool/build/
+            .dart_tool/hooks_runner/shared/
             lib/**/*.drift.dart
           key: build-runner-${{ runner.os }}-${{ hashFiles('pubspec.lock', 'lib/data/database/tables/**', 'lib/domain/models/**') }}
           restore-keys: build-runner-${{ runner.os }}-
 
       - name: Generate code (Drift)
-        run: dart run build_runner build --delete-conflicting-outputs
+        # sqlite3 native-asset hook 會從 GitHub Releases 下載 libsqlite3——
+        # 2026-08-12 兩個 run 因 CDN 中途斷線而紅(與程式碼無關,見
+        # intraday_alert_heartbeat_test 的失敗訊息「Building assets for
+        # package:sqlite3 failed」)。產物已入上方快取,正常不會走到下載;
+        # 走到時給 3 次機會。
+        run: |
+          for i in 1 2 3; do
+            dart run build_runner build --delete-conflicting-outputs && exit 0
+            echo "build_runner attempt $i failed; retrying in 15s..."
+            sleep 15
+          done
+          exit 1
 
       - name: Run tests
         run: flutter test --coverage --exclude-tags golden --total-shards=3 --shard-index=${{ matrix.shard }}
