@@ -100,6 +100,10 @@ void main() {
       expect(find.text('半導體業'), findsNothing);
       expect(find.text('紡織業'), findsNothing, reason: '20日資料不得出現,否則預設仍是 d20');
 
+      // SectionHeader 用 flutter_animate,進場中 IgnorePointer 會吃掉點擊
+      // (CLAUDE.md 慣例:先推進 1s)
+      await tester.pump(const Duration(seconds: 1));
+      await tester.ensureVisible(find.text('today.industryWindow5d'));
       await tester.tap(find.text('today.industryWindow5d'));
       await tester.pumpAndSettle();
 
@@ -115,6 +119,27 @@ void main() {
 
       expect(find.text('today.industryRanking'), findsNothing);
       expect(find.byType(Card), findsNothing);
+    });
+
+    testWidgets('分頁順序:今日→5日→20日→轉向(視窗升冪,轉向殿後)', (tester) async {
+      // 2026-08-14 使用者指出「今日→20日→5日」不單調——順序由 enum
+      // 宣告順序決定,這裡釘住,再插新視窗時不會又漏排
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildSection(const {
+          RankingWindow.d1: [semis],
+        }),
+      );
+      await tester.pumpAndSettle();
+
+      final labels = [
+        'today.industryWindow1d',
+        'today.industryWindow5d',
+        'today.industryWindow20d',
+        'today.industryRotation',
+      ];
+      final xs = [for (final l in labels) tester.getTopLeft(find.text(l)).dx];
+      expect(List.of(xs)..sort(), xs, reason: '分頁的水平位置必須依 今日→5日→20日→轉向 遞增');
     });
 
     testWidgets('點卡片開領漲成員 sheet', (tester) async {
