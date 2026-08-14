@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
@@ -99,11 +101,13 @@ class HistoricalPriceSyncer {
     // 會卡在 220-240 天區間永遠不被同步，52w rule 永久無法觸發。
     final priorityLocked = <String>{...watchlistSymbols, ...popularStocks};
 
+    final backoff = await _loadBackoff();
     final symbolsNeedingData = _findSymbolsNeedingData(
       symbolsForHistory,
       coverageBatch,
       date,
       priorityLocked: priorityLocked,
+      backoff: backoff,
     );
     final scanMs = phaseTimer.elapsedMilliseconds;
     AppLogger.debug(
@@ -154,11 +158,19 @@ class HistoricalPriceSyncer {
       totalNeeded: symbolsNeedingData.length,
       onProgress: onProgress,
     );
+    await _updateBackoff(
+      backoff,
+      succeeded: batchResult.succeededSymbols,
+      preCoverage: coverageBatch,
+      historyStartDate: historyStartDate,
+      date: date,
+    );
     return HistoricalPriceSyncResult(
       syncedCount: batchResult.syncedCount,
       symbolsProcessed: batchResult.symbolsProcessed,
       totalSymbolsNeeded: batchResult.totalSymbolsNeeded,
       failedSymbols: batchResult.failedSymbols,
+      succeededSymbols: batchResult.succeededSymbols,
       marketDayRows: marketDayRows,
       rateLimitError: batchResult.rateLimitError,
     );
@@ -301,13 +313,86 @@ class HistoricalPriceSyncer {
   /// lenient 早退（180 天），必須追到 [minRequiredDays]（250 天）才算夠。
   /// 與下游 52w high/low rule 的硬性需求對齊；non-priority 股維持 180
   /// 早退避免無效追打。
+  /// 讀退避表(壞 JSON 一律當空表,fail-open——退避只是省配額,不是正確性)
+  Future<Map<String, DateTime>> _loadBackoff() async {
+    final raw = await _db.getSetting(
+      DataFreshness.historicalBackfillBackoffKey,
+    );
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      return {
+        for (final e in decoded.entries)
+          if (DateTime.tryParse(e.value as String) != null)
+            e.key: DateTime.parse(e.value as String),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// 成功同步後的收斂記帳(回補收斂設計「陷阱 1 假進度」的對策):
+  /// **進度=覆蓋筆數成長**,不是「有寫入列」——重寫既有列也會讓寫入數
+  /// >0(8291 實錄:139 列重寫 124 列,連日「成功」但永不收斂)。
+  /// 無成長 → 記退避日;有成長 → 清標記(自癒,不會永久封鎖)。
+  Future<void> _updateBackoff(
+    Map<String, DateTime> backoff, {
+    required List<String> succeeded,
+    required Map<String, PriceCoverage> preCoverage,
+    required DateTime historyStartDate,
+    required DateTime date,
+  }) async {
+    if (succeeded.isEmpty) return;
+    final post = await _db.getPriceCoverageBatch(
+      succeeded,
+      startDate: historyStartDate,
+      endDate: date,
+    );
+    var changed = false;
+    for (final symbol in succeeded) {
+      final pre = preCoverage[symbol]?.count ?? 0;
+      final now = post[symbol]?.count ?? 0;
+      if (now > pre) {
+        if (backoff.remove(symbol) != null) changed = true;
+      } else {
+        backoff[symbol] = date;
+        changed = true;
+        AppLogger.debug(
+          'HistoricalPriceSyncer',
+          '$symbol: 抓取成功但覆蓋無成長($pre→$now),退避 '
+              '${DataFreshness.historicalBackfillBackoffDays} 天',
+        );
+      }
+    }
+    if (changed) {
+      await _db.setSetting(
+        DataFreshness.historicalBackfillBackoffKey,
+        jsonEncode({
+          for (final e in backoff.entries)
+            e.key: e.value.toIso8601String().substring(0, 10),
+        }),
+      );
+    }
+  }
+
   List<String> _findSymbolsNeedingData(
     List<String> symbols,
     Map<String, PriceCoverage> coverageBatch,
     DateTime date, {
     Set<String> priorityLocked = const {},
+    Map<String, DateTime> backoff = const {},
   }) {
     final result = <String>[];
+    var backoffSkipped = 0;
+    // 退避期內跳過(期滿重試):見 _updateBackoff 與
+    // DataFreshness.historicalBackfillBackoffDays 的設計說明
+    bool inBackoff(String symbol) {
+      final marked = backoff[symbol];
+      if (marked == null) return false;
+      return date.difference(marked).inDays <
+          DataFreshness.historicalBackfillBackoffDays;
+    }
+
     const minRequiredDays = IndicatorParams.week52Days;
     const nearThreshold = IndicatorParams.historyNearCompleteThreshold;
 
@@ -328,7 +413,11 @@ class HistoricalPriceSyncer {
       if (!isPriority && priceCount >= nearThreshold) continue;
 
       if (coverage == null || priceCount == 0) {
-        result.add(symbol);
+        if (inBackoff(symbol)) {
+          backoffSkipped++;
+        } else {
+          result.add(symbol);
+        }
         continue;
       }
 
@@ -346,7 +435,11 @@ class HistoricalPriceSyncer {
         if (isUpToDate && hasMultipleDays && daysSinceFirstTrade > 0) {
           // 新上市股票：有多天資料且已是最新，走 _hasEnoughDataForAge 判斷
         } else {
-          result.add(symbol);
+          if (inBackoff(symbol)) {
+            backoffSkipped++;
+          } else {
+            result.add(symbol);
+          }
           continue;
         }
       }
@@ -358,9 +451,20 @@ class HistoricalPriceSyncer {
         continue;
       }
 
-      result.add(symbol);
+      if (inBackoff(symbol)) {
+        backoffSkipped++;
+      } else {
+        result.add(symbol);
+      }
     }
 
+    if (backoffSkipped > 0) {
+      AppLogger.info(
+        'HistoricalPriceSyncer',
+        '回補退避跳過 $backoffSkipped 檔(覆蓋無成長,'
+            '${DataFreshness.historicalBackfillBackoffDays} 天後重試)',
+      );
+    }
     return result;
   }
 
@@ -633,6 +737,7 @@ class HistoricalPriceSyncer {
     Object? rateLimitError;
     var consecutiveFailedBatches = 0;
     var symbolsSucceeded = 0;
+    final succeededSymbols = <String>[];
 
     for (var i = 0; i < total; i += batchSize) {
       if (rateLimited) break;
@@ -685,6 +790,7 @@ class HistoricalPriceSyncer {
           historySynced += count;
           batchHasSuccess = true;
           symbolsSucceeded++;
+          succeededSymbols.add(symbol);
         }
       }
 
@@ -719,6 +825,7 @@ class HistoricalPriceSyncer {
       symbolsProcessed: symbolsSucceeded,
       totalSymbolsNeeded: totalNeeded,
       failedSymbols: failedSymbols,
+      succeededSymbols: succeededSymbols,
       rateLimitError: rateLimitError,
     );
   }
@@ -731,6 +838,7 @@ class HistoricalPriceSyncResult {
     required this.symbolsProcessed,
     this.totalSymbolsNeeded = 0,
     this.failedSymbols = const [],
+    this.succeededSymbols = const [],
     this.marketDayRows = 0,
     this.rateLimitError,
   });
@@ -739,6 +847,10 @@ class HistoricalPriceSyncResult {
   final int symbolsProcessed;
   final int totalSymbolsNeeded;
   final List<String> failedSymbols;
+
+  /// 本輪成功呼叫 API 的 symbol(退避記帳用——與 [failedSymbols] 互斥,
+  /// 但限流中止後未嘗試的不在任一邊)
+  final List<String> succeededSymbols;
 
   /// Phase 0（市場日快照回補）寫入的價格列數
   final int marketDayRows;

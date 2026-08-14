@@ -1,5 +1,6 @@
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/api_config.dart';
+import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.dart';
@@ -122,6 +123,9 @@ void main() {
     when(
       () => mockDb.getMarketsForSymbolsBatch(any()),
     ).thenAnswer((_) async => <String, String>{});
+    // 回補退避的良性預設:無標記、寫入不做事
+    when(() => mockDb.getSetting(any())).thenAnswer((_) async => null);
+    when(() => mockDb.setSetting(any(), any())).thenAnswer((_) async {});
   });
 
   group('HistoricalPriceSyncer', () {
@@ -1175,6 +1179,149 @@ void main() {
 
       expect(result.rateLimited, isFalse);
       expect(result.rateLimitError, isNull);
+    });
+  });
+
+  group('回補退避(2026-08-14 假進度收斂:8291 連日重打實錄)', () {
+    // 8291 尚茂:窗內密度 48.6% 永遠低於 50% 門檻,FinMind 已無更多資料,
+    // 每天白燒 1 個配額(2026-07-27 起)。設計=時間退避:成功抓取但覆蓋
+    // 無成長 → 記日期,退避期內跳過,期滿重試(自癒,浪費有上界)。
+    List<DailyPriceEntry> thinStock() => createPrices(
+      '8291',
+      139,
+      firstDate: testDate.subtract(const Duration(days: 400)),
+    );
+
+    test('🚨 成功抓取但覆蓋無成長 → 寫入退避標記', () async {
+      setupSufficientDataSymbols([]);
+      setupPriceHistoryBatch({'8291': thinStock()});
+      setupSyncSuccess('8291', count: 124); // 假進度:有寫入但全是重寫既有列
+
+      await syncer.syncHistoricalPrices(
+        date: testDate,
+        watchlistSymbols: [],
+        popularStocks: [],
+        marketCandidates: ['8291'],
+      );
+
+      final captured = verify(
+        () => mockDb.setSetting(
+          DataFreshness.historicalBackfillBackoffKey,
+          captureAny(),
+        ),
+      ).captured;
+      expect(captured, isNotEmpty, reason: '無成長必須留下退避標記');
+      expect(captured.last as String, contains('8291'));
+    });
+
+    test('🚨 退避期內 → 跳過不打 API', () async {
+      when(
+        () => mockDb.getSetting(DataFreshness.historicalBackfillBackoffKey),
+      ).thenAnswer((_) async => '{"8291":"2025-01-10"}'); // 5 天前,期內
+      setupSufficientDataSymbols([]);
+      setupPriceHistoryBatch({'8291': thinStock()});
+
+      await syncer.syncHistoricalPrices(
+        date: testDate,
+        watchlistSymbols: [],
+        popularStocks: [],
+        marketCandidates: ['8291'],
+      );
+
+      verifyNever(
+        () => mockPriceRepo.syncStockPrices(
+          '8291',
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      );
+    });
+
+    test('退避期滿 → 重試一次(FinMind 可能有新資料)', () async {
+      when(
+        () => mockDb.getSetting(DataFreshness.historicalBackfillBackoffKey),
+      ).thenAnswer((_) async => '{"8291":"2024-11-01"}'); // 75 天前,期滿
+      setupSufficientDataSymbols([]);
+      setupPriceHistoryBatch({'8291': thinStock()});
+      setupSyncSuccess('8291', count: 124);
+
+      await syncer.syncHistoricalPrices(
+        date: testDate,
+        watchlistSymbols: [],
+        popularStocks: [],
+        marketCandidates: ['8291'],
+      );
+
+      verify(
+        () => mockPriceRepo.syncStockPrices(
+          '8291',
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).called(1);
+    });
+
+    test('🚨 覆蓋有成長 → 清除既有標記(自癒,不會永久封鎖)', () async {
+      when(
+        () => mockDb.getSetting(DataFreshness.historicalBackfillBackoffKey),
+      ).thenAnswer((_) async => '{"8291":"2024-11-01"}'); // 期滿重試
+      setupSufficientDataSymbols([]);
+      // 兩段式覆蓋:需求掃描時 139,同步後重查 150(有成長)
+      var calls = 0;
+      final pre = {'8291': thinStock()};
+      final post = {
+        '8291': createPrices(
+          '8291',
+          150,
+          firstDate: testDate.subtract(const Duration(days: 400)),
+        ),
+      };
+      when(
+        () => mockDb.getPriceCoverageBatch(
+          any(),
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenAnswer((_) async {
+        calls++;
+        final src = calls == 1 ? pre : post;
+        final out = <String, PriceCoverage>{};
+        for (final e in src.entries) {
+          final months = <(int, int), int>{};
+          for (final p in e.value) {
+            final k = (p.date.year, p.date.month);
+            months[k] = (months[k] ?? 0) + 1;
+          }
+          out[e.key] = PriceCoverage(
+            count: e.value.length,
+            firstDate: e.value.first.date,
+            lastDate: e.value.last.date,
+            daysByMonth: months,
+          );
+        }
+        return out;
+      });
+      setupSyncSuccess('8291', count: 150);
+
+      await syncer.syncHistoricalPrices(
+        date: testDate,
+        watchlistSymbols: [],
+        popularStocks: [],
+        marketCandidates: ['8291'],
+      );
+
+      final captured = verify(
+        () => mockDb.setSetting(
+          DataFreshness.historicalBackfillBackoffKey,
+          captureAny(),
+        ),
+      ).captured;
+      expect(captured, isNotEmpty);
+      expect(
+        captured.last as String,
+        isNot(contains('8291')),
+        reason: '成長後標記必須清除——退避不可變成永久封鎖',
+      );
     });
   });
 }

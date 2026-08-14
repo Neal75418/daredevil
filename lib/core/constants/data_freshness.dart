@@ -3,6 +3,21 @@
 /// 集中管理 Repository 層使用的批次資料快取門檻、
 /// 時效性判斷天數和回溯緩衝天數。
 abstract final class DataFreshness {
+  /// 歷史回補退避:app_settings key,值為 JSON {symbol: 'yyyy-MM-dd'}
+  /// (最後一次「成功抓取但覆蓋無成長」的日期)。
+  ///
+  /// 動機(2026-08-14,8291 尚茂實錄):窗內交易密度天生低於
+  /// minAcceptableDataRatio 的股票,FinMind 已無更多資料仍每天被重打
+  /// (2026-07-27 起每天白燒 1 個配額)。「count 比對」式標記會被滑動
+  /// 窗的 ±1 抖動打穿,故用時間退避:期內跳過、期滿重試一次(新上市
+  /// 補檔或除牌復牌時自癒),浪費有上界=1 次/退避期。
+  static const String historicalBackfillBackoffKey =
+      'historical_backfill_backoff_v1';
+
+  /// 退避天數:30 天重試一次的浪費(1 次呼叫)可忽略,而真有新資料時
+  /// 最多晚 30 天補上——歷史資料的時效壓力本來就低。
+  static const int historicalBackfillBackoffDays = 30;
+
   // ==================================================
   // 批次資料快取門檻
   // ==================================================
