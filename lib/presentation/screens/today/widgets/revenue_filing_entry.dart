@@ -9,6 +9,7 @@ import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/utils/taiwan_time.dart';
 import 'package:daredevil/presentation/providers/revenue_overview_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
+import 'package:daredevil/presentation/screens/today/widgets/filing_unfiled_label.dart';
 
 /// 今日頁的「月營收公布中」入口(僅每月 1~[ApiConfig.mopsRevenueWindowLastDay]
 /// 日顯示)。
@@ -68,14 +69,23 @@ class _RevenueFilingEntrySectionState
       return const SizedBox.shrink();
     }
 
-    final watchlistSymbols = ref.watch(
-      watchlistProvider.select((s) => s.items.map((i) => i.symbol).toSet()),
+    final watchlistItems = ref.watch(
+      watchlistProvider.select(
+        (s) => [for (final i in s.items) (symbol: i.symbol, name: i.stockName)],
+      ),
     );
     final theme = Theme.of(context);
 
     final filed = overview.rows.length;
     final filedSymbols = overview.rows.map((r) => r.symbol).toSet();
-    final watchFiled = watchlistSymbols.intersection(filedSymbols).length;
+    final watchFiled = watchlistItems
+        .where((i) => filedSymbols.contains(i.symbol))
+        .length;
+    // 沉默點名:「壓線的沉默也是資訊」——把還沒交卷的自選亮出來
+    final unfiled = unfiledNamesLabel(
+      watchlistItems: watchlistItems,
+      filedSymbols: filedSymbols,
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -118,13 +128,22 @@ class _RevenueFilingEntrySectionState
                           namedArgs: {
                             'filed': '$filed',
                             'watchFiled': '$watchFiled',
-                            'watchTotal': '${watchlistSymbols.length}',
+                            'watchTotal': '${watchlistItems.length}',
                           },
                         ),
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
+                      if (unfiled != null)
+                        Text(
+                          'revenueOverview.entryUnfiled'.tr(
+                            namedArgs: {'names': unfiled},
+                          ),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.tertiary,
+                          ),
+                        ),
                     ],
                   ),
                 ),

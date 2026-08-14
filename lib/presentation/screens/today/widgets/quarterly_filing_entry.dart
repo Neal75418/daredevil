@@ -9,6 +9,7 @@ import 'package:daredevil/core/utils/quarterly_filing_calendar.dart';
 import 'package:daredevil/core/utils/taiwan_time.dart';
 import 'package:daredevil/presentation/providers/quarterly_report_overview_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
+import 'package:daredevil/presentation/screens/today/widgets/filing_unfiled_label.dart';
 
 /// 今日頁的季報入口——**常駐**,文案隨申報窗口切換(2026-08-06 定案):
 ///
@@ -67,14 +68,25 @@ class _QuarterlyFilingEntrySectionState
         overview.year == expected.year &&
         overview.quarter == expected.quarter;
 
-    final watchlistSymbols = ref.watch(
-      watchlistProvider.select((s) => s.items.map((i) => i.symbol).toSet()),
+    final watchlistItems = ref.watch(
+      watchlistProvider.select(
+        (s) => [for (final i in s.items) (symbol: i.symbol, name: i.stockName)],
+      ),
     );
     final theme = Theme.of(context);
 
     final filed = overview.rows.length;
     final filedSymbols = overview.rows.map((r) => r.symbol).toSet();
-    final watchFiled = watchlistSymbols.intersection(filedSymbols).length;
+    final watchFiled = watchlistItems
+        .where((i) => filedSymbols.contains(i.symbol))
+        .length;
+    // 沉默點名(僅公布中——總表模式全員已交,點名無意義)
+    final unfiled = inProgress
+        ? unfiledNamesLabel(
+            watchlistItems: watchlistItems,
+            filedSymbols: filedSymbols,
+          )
+        : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -119,7 +131,7 @@ class _QuarterlyFilingEntrySectionState
                                 namedArgs: {
                                   'filed': '$filed',
                                   'watchFiled': '$watchFiled',
-                                  'watchTotal': '${watchlistSymbols.length}',
+                                  'watchTotal': '${watchlistItems.length}',
                                 },
                               )
                             : 'quarterlyOverview.entrySubtitleComplete'.tr(
@@ -129,6 +141,15 @@ class _QuarterlyFilingEntrySectionState
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
+                      if (unfiled != null)
+                        Text(
+                          'quarterlyOverview.entryUnfiled'.tr(
+                            namedArgs: {'names': unfiled},
+                          ),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.tertiary,
+                          ),
+                        ),
                     ],
                   ),
                 ),
