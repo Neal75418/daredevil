@@ -1602,7 +1602,9 @@
     "entrySubtitle": "已公布 {filed} 家・自選 {watchFiled}/{watchTotal} 已交卷",
     "revenueCol": "營收",
     "ytdShort": "累計年增",
-    "lowBase": "低基期"
+    "lowBase": "低基期",
+    "histogramCaption": "已申報 {count} 家 · 年增中位 {median} · 年增為正 {rising}%",
+    "entryUnfiled": "未交卷:{names}"
   },
   "instRanking": {
     "title": "法人買賣超排行",
@@ -1647,6 +1649,7 @@
     "entryTitleComplete": "Q{quarter} 季報總表",
     "entrySubtitleComplete": "共 {filed} 家・完整清單",
     "yoyCol": "年增",
-    "marginCol": "淨利率"
+    "marginCol": "淨利率",
+    "entryUnfiled": "未交卷:{names}"
   }
 }

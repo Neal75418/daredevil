@@ -16,10 +16,13 @@ void main() {
       final ro = map['revenueOverview'] as Map<String, dynamic>;
       expect(ro['ytdShort'], isA<String>());
       expect(ro['lowBase'], isA<String>());
+      expect(ro['histogramCaption'], isA<String>());
       expect((ro['sort'] as Map<String, dynamic>)['ytdYoy'], isA<String>());
       // 季報同輪新增的 key 一起守(screen 測試比對原始 key,JSON 缺失照樣綠)
       final qo = map['quarterlyOverview'] as Map<String, dynamic>;
       expect(qo['marginCol'], isA<String>());
+      expect(ro['entryUnfiled'], isA<String>());
+      expect(qo['entryUnfiled'], isA<String>());
     });
   }
 }

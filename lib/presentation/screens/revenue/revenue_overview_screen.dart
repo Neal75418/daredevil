@@ -17,6 +17,7 @@ import 'package:daredevil/presentation/providers/revenue_overview_provider.dart'
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/growth_bar_cell.dart';
+import 'package:daredevil/presentation/widgets/revenue_yoy_histogram.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
 
@@ -125,6 +126,16 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
       child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(child: _buildProgressHeader(overview)),
+          // 市場體溫:用**全體已申報列**(非過濾後的 rows)——過濾是找個股,
+          // 體溫是問市場,兩者刻意不同母體
+          SliverToBoxAdapter(
+            child: RevenueYoyHistogram(
+              values: [
+                for (final r in overview.rows)
+                  if (r.yoyGrowth != null) r.yoyGrowth!,
+              ],
+            ),
+          ),
           SliverToBoxAdapter(child: _buildControls(state)),
           SliverToBoxAdapter(child: _buildColumnHeader(theme)),
           if (rows.isEmpty)

@@ -162,4 +162,16 @@ void main() {
       reason: '正常列的比例必須可讀,不得被怪物壓扁',
     );
   });
+
+  testWidgets('分佈橫幅:渲染且母體=全體已申報(不受過濾影響)', (tester) async {
+    widen(tester);
+    await tester.pumpWidget(
+      app([
+        row('2330', yoy: 25.0, ytd: 30.0),
+        row('4113', yoy: 1096390.6, ytd: 48.0),
+      ]),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('revenueOverview.histogramCaption'), findsOneWidget);
+  });
 }

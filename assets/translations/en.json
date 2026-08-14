@@ -1602,7 +1602,9 @@
     "entrySubtitle": "{filed} reported · watchlist {watchFiled}/{watchTotal} filed",
     "revenueCol": "Revenue",
     "ytdShort": "YTD YoY",
-    "lowBase": "Low base"
+    "lowBase": "Low base",
+    "histogramCaption": "{count} filed · median YoY {median} · {rising}% positive",
+    "entryUnfiled": "Unfiled: {names}"
   },
   "instRanking": {
     "title": "Institutional Ranking",
@@ -1647,6 +1649,7 @@
     "entryTitleComplete": "Q{quarter} report summary",
     "entrySubtitleComplete": "{filed} companies · full list",
     "yoyCol": "YoY",
-    "marginCol": "Margin"
+    "marginCol": "Margin",
+    "entryUnfiled": "Unfiled: {names}"
   }
 }

@@ -15,6 +15,9 @@ abstract final class DesignTokens {
   static const double growthBarHeight = 16;
   static const double growthBarAlpha = 0.14;
 
+  /// 營收年增分佈橫幅的柱狀區高度(RevenueYoyHistogram)
+  static const double histogramBarAreaHeight = 44;
+
   // ==================================================
   // 間距系統 (8dp Grid)
   // ==================================================
