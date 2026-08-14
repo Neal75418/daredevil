@@ -11,8 +11,13 @@ import 'package:daredevil/presentation/providers/revenue_overview_provider.dart'
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/screens/today/widgets/filing_unfiled_label.dart';
 
-/// 今日頁的「月營收公布中」入口(僅每月 1~[ApiConfig.mopsRevenueWindowLastDay]
-/// 日顯示)。
+/// 今日頁的「月營收」入口,常駐兩態(2026-08-15 對齊季報 pattern):
+/// 每月 1~[ApiConfig.mopsRevenueWindowLastDay] 日為「公布中」(進度+
+/// 沉默點名),窗口外落回「總表」(共 N 家·完整清單)。
+///
+/// 窗外不消失的理由:本入口是總覽頁**唯一導航入口**,舊行為(窗外
+/// shrink)讓 15 日~月底整條功能鏈不可達,而上月營收在月中仍有查閱
+/// 價值。
 ///
 /// 只是入口不是內容:進度+自選交卷數一行帶過,點擊進
 /// [AppRoutes.revenueOverview] 的完整清單頁——清單的完整性在那裡,
@@ -52,7 +57,6 @@ class _RevenueFilingEntrySectionState
 
   @override
   Widget build(BuildContext context) {
-    if (!_inWindow) return const SizedBox.shrink();
     _ensureLoadedToday();
 
     final overview = ref.watch(
@@ -60,14 +64,15 @@ class _RevenueFilingEntrySectionState
     );
     if (overview == null) return const SizedBox.shrink();
 
-    // 月份 gate(複審 Low #4):公布窗口內但 DB 最新月還是**前前月**
-    // (每月 1 日當晚同步前的常態)時,不顯示「6 月營收公布中」這種
-    // 矛盾入口——等第一批新月資料落庫再現身。
+    // 「公布中」須同時滿足:窗口內 **且** DB 最新月=窗口對應月(上月)。
+    // 窗口首日同步前 DB 還停在前前月時,自動落回總表模式——不會出現
+    // 「6 月營收公布中」這種矛盾文案,也不會像舊版一樣整個消失。
     final now = TaiwanTime.now();
     final expected = DateTime(now.year, now.month - 1);
-    if (overview.year != expected.year || overview.month != expected.month) {
-      return const SizedBox.shrink();
-    }
+    final inProgress =
+        _inWindow &&
+        overview.year == expected.year &&
+        overview.month == expected.month;
 
     final watchlistItems = ref.watch(
       watchlistProvider.select(
@@ -81,11 +86,13 @@ class _RevenueFilingEntrySectionState
     final watchFiled = watchlistItems
         .where((i) => filedSymbols.contains(i.symbol))
         .length;
-    // 沉默點名:「壓線的沉默也是資訊」——把還沒交卷的自選亮出來
-    final unfiled = unfiledNamesLabel(
-      watchlistItems: watchlistItems,
-      filedSymbols: filedSymbols,
-    );
+    // 沉默點名(僅公布中——總表模式窗口已關,沉默不再是資訊)
+    final unfiled = inProgress
+        ? unfiledNamesLabel(
+            watchlistItems: watchlistItems,
+            filedSymbols: filedSymbols,
+          )
+        : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -116,21 +123,26 @@ class _RevenueFilingEntrySectionState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'revenueOverview.entryTitle'.tr(
-                          namedArgs: {'month': '${overview.month}'},
-                        ),
+                        (inProgress
+                                ? 'revenueOverview.entryTitle'
+                                : 'revenueOverview.entryTitleComplete')
+                            .tr(namedArgs: {'month': '${overview.month}'}),
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
-                        'revenueOverview.entrySubtitle'.tr(
-                          namedArgs: {
-                            'filed': '$filed',
-                            'watchFiled': '$watchFiled',
-                            'watchTotal': '${watchlistItems.length}',
-                          },
-                        ),
+                        inProgress
+                            ? 'revenueOverview.entrySubtitle'.tr(
+                                namedArgs: {
+                                  'filed': '$filed',
+                                  'watchFiled': '$watchFiled',
+                                  'watchTotal': '${watchlistItems.length}',
+                                },
+                              )
+                            : 'revenueOverview.entrySubtitleComplete'.tr(
+                                namedArgs: {'filed': '$filed'},
+                              ),
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),

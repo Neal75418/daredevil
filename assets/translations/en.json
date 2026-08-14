@@ -1600,6 +1600,8 @@
     },
     "entryTitle": "{month} revenue filing in progress",
     "entrySubtitle": "{filed} reported · watchlist {watchFiled}/{watchTotal} filed",
+    "entryTitleComplete": "{month} revenue summary",
+    "entrySubtitleComplete": "{filed} companies · full list",
     "revenueCol": "Revenue",
     "ytdShort": "YTD YoY",
     "lowBase": "Low base",

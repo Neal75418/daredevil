@@ -1600,6 +1600,8 @@
     },
     "entryTitle": "{month} 月營收公布中",
     "entrySubtitle": "已公布 {filed} 家・自選 {watchFiled}/{watchTotal} 已交卷",
+    "entryTitleComplete": "{month} 月營收總表",
+    "entrySubtitleComplete": "共 {filed} 家・完整清單",
     "revenueCol": "營收",
     "ytdShort": "累計年增",
     "lowBase": "低基期",

@@ -23,6 +23,9 @@ void main() {
       expect(qo['marginCol'], isA<String>());
       expect(ro['entryUnfiled'], isA<String>());
       expect(qo['entryUnfiled'], isA<String>());
+      // 月營收入口窗外總表模式(2026-08-15 對齊季報兩態)
+      expect(ro['entryTitleComplete'], isA<String>());
+      expect(ro['entrySubtitleComplete'], isA<String>());
     });
   }
 }

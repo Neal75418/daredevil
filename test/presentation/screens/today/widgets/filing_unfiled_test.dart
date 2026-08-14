@@ -161,5 +161,45 @@ void main() {
 
       expect(find.text('revenueOverview.entryUnfiled'), findsNothing);
     });
+
+    testWidgets('🚨 窗口外(15 日起)→ 入口不消失,落回總表模式且不點名', (tester) async {
+      // 2026-08-15 撞到的設計缺口:入口是總覽頁唯一導航,窗外整個蒸發
+      // 等於 15 日~月底總覽頁不可達——對齊季報的兩態 pattern
+      TaiwanTime.debugNowOverride = () => DateTime(2026, 8, 20);
+      await tester.pumpWidget(
+        app(
+          filed: [filedRow('2330')],
+          watchlist: [wlItem('2330', '台積電'), wlItem('2317', '鴻海')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('revenueOverview.entryTitleComplete'), findsOneWidget);
+      expect(
+        find.text('revenueOverview.entrySubtitleComplete'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('revenueOverview.entryUnfiled'),
+        findsNothing,
+        reason: '總表模式點名無意義(窗口已關,沉默不再是資訊)',
+      );
+    });
+
+    testWidgets('窗口內但 DB 還停在前前月 → 落回總表而非消失(同季報 fallback)', (tester) async {
+      // 每月 1 日當晚同步前的常態:窗口開了但新月資料未落庫。
+      // 舊行為是入口消失;改為顯示上月總表,與季報一致
+      TaiwanTime.debugNowOverride = () => DateTime(2026, 9, 2); // 8 月窗口
+      await tester.pumpWidget(
+        app(
+          filed: [filedRow('2330')], // overview 月份仍為 7(前前月)
+          watchlist: [wlItem('2330', '台積電')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('revenueOverview.entryTitleComplete'), findsOneWidget);
+      expect(find.text('revenueOverview.entryTitle'), findsNothing);
+    });
   });
 }
