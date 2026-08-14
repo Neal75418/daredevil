@@ -736,7 +736,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                   ref.read(scanProvider.notifier).toggleWatchlist(stock.symbol);
                 },
                 backgroundColor: stock.isInWatchlist
-                    ? Colors.red.shade400
+                    ? AppTheme.errorColor
                     : Colors.amber,
                 foregroundColor: Colors.white,
                 icon: stock.isInWatchlist ? Icons.star_outline : Icons.star,

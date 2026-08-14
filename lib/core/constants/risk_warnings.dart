@@ -88,12 +88,6 @@ abstract final class RiskWarnings {
     return null;
   }
 
-  /// 查嚴重度（用 DB code 字串）；無法解析或非 warning-class 回 `null`。
-  static RiskSeverity? severityOfCode(String code) {
-    final type = reasonTypeFromCode(code);
-    return type == null ? null : severityOf(type);
-  }
-
   /// 取一組警訊中**最高**嚴重度（任一 severe → severe），空集合回 `null`。
   static RiskSeverity? topSeverity(Iterable<ReasonType> warnings) {
     RiskSeverity? top;

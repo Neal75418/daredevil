@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/event_calendar_provider.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
@@ -37,7 +38,7 @@ class EventListTile extends StatelessWidget {
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 16),
-        color: Colors.red,
+        color: AppTheme.errorColor,
         child: const Icon(Icons.delete, color: Colors.white),
       ),
       child: Semantics(

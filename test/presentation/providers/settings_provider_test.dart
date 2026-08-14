@@ -56,7 +56,6 @@ void main() {
 
       expect(state.themeMode, ThemeMode.system);
       expect(state.locale, AppLocale.zhTW);
-      expect(state.isLoaded, isFalse);
       expect(state.showWarningBadges, isTrue);
       expect(state.insiderNotifications, isTrue);
       expect(state.disposalUrgentAlerts, isTrue);
@@ -135,7 +134,6 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       final state = container2.read(settingsProvider);
-      expect(state.isLoaded, isTrue);
       expect(state.themeMode, ThemeMode.dark);
       expect(state.locale, AppLocale.en);
       expect(state.showWarningBadges, isFalse);

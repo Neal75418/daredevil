@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/reason_type.dart';
 import 'package:daredevil/core/constants/rule_enums.dart';
+import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/technical_indicators.dart';
@@ -455,6 +456,19 @@ void main() {
       expect(r, isNotNull);
       expect(r!.type, ReasonType.kdHighPullback);
       expect(r.score, 12);
+    });
+
+    // 2026-08-15 審計後修:KD 是四胞胎中唯一漏抄 minHistoryDays guard 的,
+    // 但實測被 Step 4 完全遮蔽(wasStrongOverPeriod 需 21 根、20 根必 false)
+    // ——無行為後果。本測試是**特徵化測試**:釘住「短歷史必拒絕」契約,
+    // 無論哪一步在擋;prologue 抽共用時這條保證重構不破壞拒絕行為
+    test('null when history < minHistoryDays (特徵化:短歷史必拒絕)', () {
+      final p = buildPrices(count: PullbackParams.minHistoryDays - 1);
+      p[0] = candle(dayIdx: 0, open: 90, high: 91, low: 89, close: 90);
+      p[15] = candle(dayIdx: 15, open: 98, high: 100, low: 97, close: 99);
+      p[19] = candle(dayIdx: 19, open: 100, high: 101, low: 99, close: 100);
+      final r = rule.evaluate(kdCtx(kdK: 70, kdD: 65, prevKdK: 85), stock(p));
+      expect(r, isNull, reason: '20 根 < minHistoryDays 21,必須拒絕評估');
     });
 
     // Fix 1（Critical audit #1）：KD 規則是四條 pullback rule 中唯一沒 call

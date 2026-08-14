@@ -11,10 +11,7 @@
     "confirm": "確認",
     "save": "儲存",
     "delete": "刪除",
-    "edit": "編輯",
-    "add": "新增",
     "close": "關閉",
-    "done": "完成",
     "search": "搜尋",
     "refresh": "重新整理",
     "settings": "設定",
@@ -53,13 +50,7 @@
   "today": {
     "top10": "今日推薦 ({count} 檔)",
     "top10Loading": "今日推薦",
-    "horizon": {
-      "short": "短線",
-      "long": "長線"
-    },
-    "watchlistStatus": "自選狀態",
     "updateData": "更新資料",
-    "startingUpdate": "開始更新...",
     "lastUpdate": "最後更新: {time}",
     "updateFailed": "更新失敗: {error}",
     "warningDetail": "部分資料未成功同步",
@@ -261,17 +252,7 @@
       "subtitleShortSurge": "當日融券賣出暴增，注意空頭壓力",
       "subtitleInstitutionalSurge": "法人單日買賣超越近期均值 5 倍",
       "moreItems": "展開全部（還有 {count} 檔）",
-      "collapse": "收合",
-      "desc": {
-        "highPledge": "董監質押 {value}，若股價下跌有強制賣出風險",
-        "insiderTransferZero": "已申報轉讓意向，尚未實際執行",
-        "insiderTransfer": "申報轉讓 {value}，需追蹤是否陸續出脫",
-        "foreignNearLimit": "外資已達上限的 {value}，後續買盤空間受限",
-        "shortSurge": "融券是近5日均量的 {value}，放空力道異常強勁",
-        "instBuy": "法人大量買入 {value}，籌碼集中跡象",
-        "instSell": "法人大量賣出 {value}，機構出脫跡象",
-        "instMove": "法人大量異動 {value}，籌碼面需留意"
-      }
+      "collapse": "收合"
     }
   },
   "stockSearch": {
@@ -379,7 +360,6 @@
     "add": "新增股票",
     "addDialog": "新增自選",
     "symbolLabel": "股票代號",
-    "symbolHint": "例如: 2330",
     "removed": "已從自選移除 {symbol}",
     "added": "已加入 {symbol}",
     "addedToWatchlist": "已加入自選 {symbol}",
@@ -429,7 +409,6 @@
     "defaultGroupHint": "新加入的自選會自動放進這裡"
   },
   "stock": {
-    "detailTitle": "股票詳情",
     "addToWatchlist": "加入自選",
     "removeFromWatchlist": "從自選移除",
     "viewDetails": "查看詳情",
@@ -583,13 +562,11 @@
     "sideways": "盤整"
   },
   "price": {
-    "label": "價格",
     "up": "上漲",
     "down": "下跌",
     "neutral": "持平",
     "limitUp": "漲停",
-    "limitDown": "跌停",
-    "value": "{price} 元"
+    "limitDown": "跌停"
   },
   "reasons": {
     "label": "推薦理由",
@@ -723,7 +700,6 @@
     "clearFilter": "清除篩選",
     "noWatchlist": "尚無自選股票",
     "noWatchlistHint": "在市場掃描頁面\n點擊星號加入自選",
-    "goToScan": "前往掃描",
     "addWatchlist": "新增自選",
     "noNews": "暫無新聞",
     "noNewsHint": "目前沒有相關新聞",
@@ -746,13 +722,10 @@
     "priceChangeNeutral": "持平",
     "score": "評分 {score} 分",
     "signals": "訊號: {signals}",
-    "addToWatchlist": "加入自選",
-    "removeFromWatchlist": "從自選移除",
     "sparklineDefault": "近期價格走勢圖",
     "sparklineFlat": "近 {days} 日價格持平走勢圖",
     "sparklineTrendUp": "近 {days} 日價格上漲 {change} 百分比走勢圖",
     "sparklineTrendDown": "近 {days} 日價格下跌 {change} 百分比走勢圖",
-    "buttonPress": "按鈕: {label}",
     "shimmerStockList": "股票列表載入中",
     "shimmerStockDetail": "股票詳情載入中",
     "shimmerNewsList": "新聞列表載入中",
@@ -769,12 +742,6 @@
     "priceChart": "價格走勢圖",
     "trendChart": "趨勢圖",
     "distributionChart": "報酬分布圖"
-  },
-  "status": {
-    "hasSignal": "有訊號",
-    "volatile": "波動中",
-    "quiet": "平靜",
-    "signalType": "有訊號: {type}"
   },
   "fundamental": {
     "dividendYearAverage": "{years}年平均: "
@@ -909,17 +876,6 @@
       "insiderSelling": "董監持股連續減持",
       "insiderBuying": "董監大量增持",
       "highPledgeRatio": "董監質押比例過高"
-    },
-    "category": {
-      "price": "價格",
-      "volume": "成交量",
-      "indicator": "技術指標",
-      "level": "支撐壓力",
-      "week52": "新高新低",
-      "ma": "均線",
-      "fundamental": "基本面",
-      "warning": "警示",
-      "insider": "董監"
     },
     "alertType": {
       "above": "價格高於",

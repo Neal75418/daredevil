@@ -10,7 +10,6 @@ void main() {
   group('SignalConfluence.match', () {
     test('match when all groups have at least one hit', () {
       const pattern = SignalConfluence(
-        id: 'test',
         signalGroups: [
           {'A', 'B'},
           {'C', 'D'},
@@ -25,7 +24,6 @@ void main() {
 
     test('return null when a group has no match', () {
       const pattern = SignalConfluence(
-        id: 'test',
         signalGroups: [
           {'A', 'B'},
           {'C', 'D'},
@@ -39,7 +37,6 @@ void main() {
 
     test('return all matched types from multiple groups', () {
       const pattern = SignalConfluence(
-        id: 'test',
         signalGroups: [
           {'A', 'B'},
           {'C'},

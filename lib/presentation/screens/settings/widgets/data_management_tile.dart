@@ -6,6 +6,7 @@ import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/presentation/widgets/api_rate_limit_dialog.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/today_provider.dart';
+import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 
 /// 資料管理項目：強制同步與歷史資料進度
@@ -143,10 +144,10 @@ class _DataManagementTileState extends ConsumerState<DataManagementTile> {
                       : Icons.check_circle,
                   size: 16,
                   color: _syncSuccess != true
-                      ? Colors.red
+                      ? AppTheme.errorColor
                       : _hasWarnings
-                      ? Colors.orange
-                      : Colors.green,
+                      ? DesignTokens.warningColor(theme)
+                      : DesignTokens.successColor(theme),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -154,10 +155,10 @@ class _DataManagementTileState extends ConsumerState<DataManagementTile> {
                     _syncResult!,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: _syncSuccess != true
-                          ? Colors.red
+                          ? AppTheme.errorColor
                           : _hasWarnings
-                          ? Colors.orange
-                          : Colors.green,
+                          ? DesignTokens.warningColor(theme)
+                          : DesignTokens.successColor(theme),
                     ),
                   ),
                 ),
@@ -187,7 +188,7 @@ class _DataManagementTileState extends ConsumerState<DataManagementTile> {
                 isComplete ? Icons.check_circle : Icons.history,
                 size: 16,
                 color: isComplete
-                    ? Colors.green
+                    ? DesignTokens.successColor(theme)
                     : theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: 8),
@@ -217,7 +218,9 @@ class _DataManagementTileState extends ConsumerState<DataManagementTile> {
               minHeight: 6,
               backgroundColor: theme.colorScheme.surfaceContainerHighest,
               valueColor: AlwaysStoppedAnimation<Color>(
-                isComplete ? Colors.green : theme.colorScheme.primary,
+                isComplete
+                    ? DesignTokens.successColor(theme)
+                    : theme.colorScheme.primary,
               ),
             ),
           ),

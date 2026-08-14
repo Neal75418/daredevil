@@ -59,7 +59,7 @@ void main() {
       ),
     ).thenAnswer((_) async => 1000);
     when(
-      () => mockTradingRepo.syncAllMarginTradingFromTwse(
+      () => mockTradingRepo.syncAllMarginTrading(
         date: any(named: 'date'),
         force: any(named: 'force'),
       ),

@@ -52,7 +52,8 @@ class InstitutionalRepository implements IInstitutionalRepository {
   ///
   /// ⚠️ landmine：此路徑**目前未接入 daily 更新流程**（daily 走
   /// [syncAllMarketInstitutional] 的 TWSE/TPEx 整批）。它經 FinMind 的
-  /// [DtoExtensions.toDatabaseCompanion] 寫入，而該 companion **不寫
+  /// FinMindInstitutionalExt.toDatabaseCompanion
+  /// (dto_extensions.dart) 寫入，而該 companion **不寫
   /// dealer_self_net（會留 NULL）**，且 FinMind 的 dealer_net 是
   /// 「自行+避險」buy−sell 衍生、與 TWSE row[11] 口徑不完全等價。
   /// **若日後要把它重新接到 daily_institutional 寫入流程，必須先補

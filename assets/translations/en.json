@@ -11,10 +11,7 @@
     "confirm": "Confirm",
     "save": "Save",
     "delete": "Delete",
-    "edit": "Edit",
-    "add": "Add",
     "close": "Close",
-    "done": "Done",
     "search": "Search",
     "refresh": "Refresh",
     "settings": "Settings",
@@ -53,13 +50,7 @@
   "today": {
     "top10": "Today's Picks ({count})",
     "top10Loading": "Today's Picks",
-    "horizon": {
-      "short": "Short",
-      "long": "Long"
-    },
-    "watchlistStatus": "Watchlist Status",
     "updateData": "Update Data",
-    "startingUpdate": "Starting update...",
     "lastUpdate": "Last updated: {time}",
     "updateFailed": "Update failed: {error}",
     "warningDetail": "Some data failed to sync",
@@ -261,17 +252,7 @@
       "subtitleShortSurge": "Single-day short selling surged, watch for downside pressure",
       "subtitleInstitutionalSurge": "Single-day institutional net flow exceeds 5x recent average",
       "moreItems": "Show all ({count} more)",
-      "collapse": "Collapse",
-      "desc": {
-        "highPledge": "Pledged {value} — forced sell risk if price drops",
-        "insiderTransferZero": "Transfer declared, not yet executed",
-        "insiderTransfer": "Declared transfer of {value} — track follow-through",
-        "foreignNearLimit": "Foreign at {value} of ceiling — limited upside from inflows",
-        "shortSurge": "Short vol is {value} of 5-day avg — strong bearish pressure",
-        "instBuy": "Institutions bought {value} — chips concentrating",
-        "instSell": "Institutions sold {value} — unwinding position",
-        "instMove": "Large institutional move of {value} — monitor chip flow"
-      }
+      "collapse": "Collapse"
     }
   },
   "stockSearch": {
@@ -379,7 +360,6 @@
     "add": "Add Stock",
     "addDialog": "Add to Watchlist",
     "symbolLabel": "Stock Symbol",
-    "symbolHint": "e.g., 2330",
     "removed": "Removed {symbol} from watchlist",
     "added": "Added {symbol}",
     "addedToWatchlist": "Added {symbol} to watchlist",
@@ -429,7 +409,6 @@
     "defaultGroupHint": "New stocks are added here automatically"
   },
   "stock": {
-    "detailTitle": "Stock Details",
     "addToWatchlist": "Add to Watchlist",
     "removeFromWatchlist": "Remove from Watchlist",
     "viewDetails": "View Details",
@@ -583,13 +562,11 @@
     "sideways": "Sideways"
   },
   "price": {
-    "label": "Price",
     "up": "Up",
     "down": "Down",
     "neutral": "Unchanged",
     "limitUp": "Limit Up",
-    "limitDown": "Limit Down",
-    "value": "{price}"
+    "limitDown": "Limit Down"
   },
   "reasons": {
     "label": "Recommendation Reasons",
@@ -723,7 +700,6 @@
     "clearFilter": "Clear Filters",
     "noWatchlist": "Watchlist Empty",
     "noWatchlistHint": "Go to Market Scan and\ntap the star to add stocks",
-    "goToScan": "Go to Scan",
     "addWatchlist": "Add Stock",
     "noNews": "No News",
     "noNewsHint": "No related news at this time",
@@ -746,13 +722,10 @@
     "priceChangeNeutral": "Unchanged",
     "score": "Score {score} points",
     "signals": "Signals: {signals}",
-    "addToWatchlist": "Add to watchlist",
-    "removeFromWatchlist": "Remove from watchlist",
     "sparklineDefault": "Recent price trend chart",
     "sparklineFlat": "Price unchanged over {days} days chart",
     "sparklineTrendUp": "Price up {change} percent over {days} days chart",
     "sparklineTrendDown": "Price down {change} percent over {days} days chart",
-    "buttonPress": "Button: {label}",
     "shimmerStockList": "Loading stock list",
     "shimmerStockDetail": "Loading stock detail",
     "shimmerNewsList": "Loading news list",
@@ -769,12 +742,6 @@
     "priceChart": "Price chart",
     "trendChart": "Trend chart",
     "distributionChart": "Return distribution chart"
-  },
-  "status": {
-    "hasSignal": "Has Signal",
-    "volatile": "Volatile",
-    "quiet": "Quiet",
-    "signalType": "Signal: {type}"
   },
   "fundamental": {
     "dividendYearAverage": "{years}Y Avg: "
@@ -909,17 +876,6 @@
       "insiderSelling": "Insider consecutive selling",
       "insiderBuying": "Significant insider buying",
       "highPledgeRatio": "High insider pledge ratio"
-    },
-    "category": {
-      "price": "Price",
-      "volume": "Volume",
-      "indicator": "Indicator",
-      "level": "Support/Resistance",
-      "week52": "52-Week",
-      "ma": "Moving Avg",
-      "fundamental": "Fundamental",
-      "warning": "Warning",
-      "insider": "Insider"
     },
     "alertType": {
       "above": "Price Above",

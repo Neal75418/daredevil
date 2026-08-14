@@ -62,7 +62,6 @@ class FakePortfolioNotifier extends PortfolioNotifier {
 // ==========================================
 
 PortfolioPositionData createPosition({
-  int positionId = 1,
   String symbol = '2330',
   String? stockName = '台積電',
   double quantity = 1000,
@@ -72,7 +71,6 @@ PortfolioPositionData createPosition({
   double? currentPrice = 600.0,
 }) {
   return PortfolioPositionData(
-    positionId: positionId,
     symbol: symbol,
     stockName: stockName,
     quantity: quantity,

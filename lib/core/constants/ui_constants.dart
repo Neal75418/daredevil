@@ -26,7 +26,4 @@ abstract final class UiConstants {
   /// 走勢圖佔 78px (70+8)，需要比 compact 門檻更多空間，
   /// 避免 320-400px 邊界寬度的水平溢出。
   static const double sparklineMinWidth = 400.0;
-
-  /// 自訂篩選捲動載入觸發距離（像素）
-  static const double scrollLoadMoreThreshold = 200.0;
 }

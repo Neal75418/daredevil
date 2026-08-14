@@ -142,12 +142,6 @@ abstract final class DesignTokens {
   /// 14dp - 小圖示
   static const double iconSizeSm = 14.0;
 
-  /// 18dp - 中等圖示
-  static const double iconSizeMd = 18.0;
-
-  /// 24dp - 標準圖示
-  static const double iconSizeLg = 24.0;
-
   /// 26dp - 大圖示（自選按鈕）
   static const double iconSizeXl = 26.0;
 

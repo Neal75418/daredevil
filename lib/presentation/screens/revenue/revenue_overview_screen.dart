@@ -47,7 +47,7 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(revenueOverviewProvider);
     final watchlistSymbols = ref.watch(
-      watchlistProvider.select((s) => s.items.map((i) => i.symbol).toSet()),
+      watchlistProvider.select((s) => s.watchedSymbols),
     );
     final theme = Theme.of(context);
     final overview = state.overview;

@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:daredevil/core/constants/api_endpoints.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
+import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 
@@ -126,7 +127,7 @@ class _ApiTokenTileState extends ConsumerState<ApiTokenTile> {
                 },
                 child: Text(
                   'common.delete'.tr(),
-                  style: const TextStyle(color: Colors.red),
+                  style: const TextStyle(color: AppTheme.errorColor),
                 ),
               ),
             TextButton(
@@ -250,7 +251,7 @@ class _ApiTokenTileState extends ConsumerState<ApiTokenTile> {
           leading: Icon(
             _hasToken ? Icons.key_rounded : Icons.key_off_rounded,
             color: _hasToken
-                ? Colors.green
+                ? DesignTokens.successColor(theme)
                 : theme.colorScheme.onSurfaceVariant,
           ),
           title: Text('settings.apiToken'.tr()),
@@ -300,14 +301,18 @@ class _ApiTokenTileState extends ConsumerState<ApiTokenTile> {
                 Icon(
                   _testSuccess == true ? Icons.check_circle : Icons.error,
                   size: 16,
-                  color: _testSuccess == true ? Colors.green : Colors.red,
+                  color: _testSuccess == true
+                      ? DesignTokens.successColor(theme)
+                      : AppTheme.errorColor,
                 ),
                 const SizedBox(width: DesignTokens.spacing8),
                 Expanded(
                   child: Text(
                     _testResult!,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: _testSuccess == true ? Colors.green : Colors.red,
+                      color: _testSuccess == true
+                          ? DesignTokens.successColor(theme)
+                          : AppTheme.errorColor,
                     ),
                   ),
                 ),

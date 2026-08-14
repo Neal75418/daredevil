@@ -14,7 +14,8 @@ enum InterpretationTone { positive, warning, negative, neutral }
 /// 單則大盤判讀結果
 ///
 /// [messageKey] 為 i18n key（`marketOverview.reading.*`），由 UI 以 `.tr()`
-/// 解析；[args] 為帶參數的 namedArgs（目前皆為 null，預留擴充）。
+/// 解析；[args] 為帶參數的 namedArgs——綜合判讀(rule 0)等分支會帶
+/// pct/breadthPct/netAmount 等參數,無參數的判讀為 null。
 class MarketReading {
   const MarketReading({
     required this.messageKey,

@@ -31,14 +31,11 @@ abstract class ITradingRepository {
   });
 
   /// 從 TWSE/TPEX 同步全市場融資融券資料。回傳同步筆數，null 表示已快取（跳過同步）。
-  Future<int?> syncAllMarginTradingFromTwse({
-    DateTime? date,
-    bool force = false,
-  });
+  Future<int?> syncAllMarginTrading({DateTime? date, bool force = false});
 
   /// 回補**指定歷史交易日**、**指定市場**的融資融券資料。
   ///
-  /// 與 [syncAllMarginTradingFromTwse] 的差異：
+  /// 與 [syncAllMarginTrading] 的差異：
   /// - 每日路徑刻意不傳日期（TPEx 有 T+1 延遲，端點自動回最新可用日）；
   ///   回補路徑明確指定日期，並丟棄「entry 日期 ≠ 請求日期」的列
   ///   （端點無視日期參數時的防護）。

@@ -50,25 +50,16 @@ class DividendIntelligenceService {
       final personalYield = costBasis > 0
           ? (expectedYearlyAmount / costBasis) * 100
           : 0.0;
-      final marketYield = marketValue > 0
-          ? (expectedYearlyAmount / marketValue) * 100
-          : 0.0;
-
       // 股利趨勢
       final trend = _analyzeTrend(history);
 
       stockDividends.add(
         StockDividendInfo(
           symbol: pos.symbol,
-          shares: pos.quantity,
-          avgCost: pos.avgCost,
-          currentPrice: currentPrice,
           estimatedDividendPerShare: estimatedDividend,
           expectedYearlyAmount: expectedYearlyAmount,
           personalYield: personalYield,
-          marketYield: marketYield,
           trend: trend,
-          lastDividend: history.isNotEmpty ? history.first : null,
         ),
       );
     }
@@ -192,21 +183,13 @@ class DividendAnalysis {
 class StockDividendInfo {
   const StockDividendInfo({
     required this.symbol,
-    required this.shares,
-    required this.avgCost,
-    required this.currentPrice,
     required this.estimatedDividendPerShare,
     required this.expectedYearlyAmount,
     required this.personalYield,
-    required this.marketYield,
     required this.trend,
-    this.lastDividend,
   });
 
   final String symbol;
-  final double shares;
-  final double avgCost;
-  final double currentPrice;
 
   /// 預估每股股利
   final double estimatedDividendPerShare;
@@ -217,14 +200,8 @@ class StockDividendInfo {
   /// 個人殖利率（以成本計算）
   final double personalYield;
 
-  /// 市場殖利率（以現價計算）
-  final double marketYield;
-
   /// 股利趨勢
   final DividendTrend trend;
-
-  /// 最近一筆股利記錄
-  final DividendHistoryEntry? lastDividend;
 }
 
 /// 股利趨勢

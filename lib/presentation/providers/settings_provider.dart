@@ -49,7 +49,6 @@ class SettingsState {
   const SettingsState({
     this.themeMode = ThemeMode.system,
     this.locale = AppLocale.zhTW,
-    this.isLoaded = false,
     this.showWarningBadges = true,
     this.insiderNotifications = true,
     this.disposalUrgentAlerts = true,
@@ -61,7 +60,6 @@ class SettingsState {
 
   final ThemeMode themeMode;
   final AppLocale locale;
-  final bool isLoaded;
 
   /// 在自選股顯示警示標記（注意/處置/高質押）
   final bool showWarningBadges;
@@ -87,7 +85,6 @@ class SettingsState {
   SettingsState copyWith({
     ThemeMode? themeMode,
     AppLocale? locale,
-    bool? isLoaded,
     bool? showWarningBadges,
     bool? insiderNotifications,
     bool? disposalUrgentAlerts,
@@ -99,7 +96,6 @@ class SettingsState {
     return SettingsState(
       themeMode: themeMode ?? this.themeMode,
       locale: locale ?? this.locale,
-      isLoaded: isLoaded ?? this.isLoaded,
       showWarningBadges: showWarningBadges ?? this.showWarningBadges,
       insiderNotifications: insiderNotifications ?? this.insiderNotifications,
       disposalUrgentAlerts: disposalUrgentAlerts ?? this.disposalUrgentAlerts,
@@ -156,7 +152,6 @@ class SettingsNotifier extends Notifier<SettingsState> {
       state = SettingsState(
         themeMode: themeMode,
         locale: locale,
-        isLoaded: true,
         showWarningBadges: showWarningBadges,
         insiderNotifications: insiderNotifications,
         disposalUrgentAlerts: disposalUrgentAlerts,
@@ -172,7 +167,6 @@ class SettingsNotifier extends Notifier<SettingsState> {
       );
     } catch (e) {
       AppLogger.warning('SettingsNotifier', '載入設定失敗', e);
-      state = state.copyWith(isLoaded: true);
     }
   }
 

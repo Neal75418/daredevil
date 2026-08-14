@@ -1,6 +1,6 @@
 // 融資融券歷史回補（TradingRepository.backfillMarginTradingByDate）
 //
-// 每日路徑（syncAllMarginTradingFromTwse）刻意**不傳日期**——TPEx 有 T+1
+// 每日路徑（syncAllMarginTrading）刻意**不傳日期**——TPEx 有 T+1
 // 延遲，省略日期時端點自動回最新可用日。回補是另一條路徑：明確指定歷史日期，
 // 並以「entry 自身日期 == 請求日期」過濾（端點若無視日期參數只會回空，
 // 不會寫出錯誤日期的列）。

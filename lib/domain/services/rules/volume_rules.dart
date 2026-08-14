@@ -1,4 +1,5 @@
 import 'package:daredevil/core/constants/rule_params.dart';
+import 'package:daredevil/domain/services/price_calculator.dart';
 import 'package:daredevil/domain/models/models.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
 
@@ -31,21 +32,17 @@ class VolumeSpikeRule extends StockRule {
       if (pctChange < TrendParams.minPriceChangeForVolume) return null;
     }
 
-    // 計算 MA20 成交量並處理停牌日
-    // 取近 20 日，過濾掉零成交量日（停牌）
-    final recentVolumes = data.prices.reversed
-        .skip(1) // skip today
-        .take(RuleParams.volMa)
-        .map((p) => p.volume ?? 0.0)
-        .where((v) => v > 0) // 過濾停牌日（成交量 = 0）
-        .toList();
-
-    final minValidDays = (RuleParams.volMa * RuleParams.volMaMinValidDayRatio)
-        .floor();
-    if (recentVolumes.length < minValidDays) return null;
-
-    final avgVolume =
-        recentVolumes.reduce((a, b) => a + b) / recentVolumes.length;
+    // MA20 均量:接現成 helper(2026-08-15 審計——排除今日、濾停牌、
+    // 近 20 日須至少 minValidDays 個有效交易日,與原 inline 等價)
+    final avgVolume = PriceCalculator.calculateAverageVolume(
+      data.prices,
+      days: RuleParams.volMa,
+      skipLast: true,
+      filterZero: true,
+      minValidDays: (RuleParams.volMa * RuleParams.volMaMinValidDayRatio)
+          .floor(),
+    );
+    if (avgVolume == null) return null;
 
     // 檢查門檻（均量的 4 倍）
     if (avgVolume > 0 &&
@@ -58,7 +55,6 @@ class VolumeSpikeRule extends StockRule {
           'volume': todayVolume,
           'avgVolume': avgVolume,
           'multiple': todayVolume / avgVolume,
-          'validDays': recentVolumes.length,
         },
       );
     }
@@ -108,20 +104,17 @@ class PriceSpikeRule extends StockRule {
     // 成交量確認：過濾無量異動
     if (todayVolume == null || todayVolume <= 0) return null;
 
-    // 計算 MA20 成交量（過濾停牌日）
-    final recentVolumes = data.prices.reversed
-        .skip(1) // 跳過今天
-        .take(RuleParams.volMa)
-        .map((p) => p.volume ?? 0.0)
-        .where((v) => v > 0) // 過濾停牌日
-        .toList();
-
-    final minValidDays = (RuleParams.volMa * RuleParams.volMaMinValidDayRatio)
-        .floor();
-    if (recentVolumes.length < minValidDays) return null;
-
-    final avgVolume =
-        recentVolumes.reduce((a, b) => a + b) / recentVolumes.length;
+    // MA20 均量:接現成 helper(2026-08-15 審計——排除今日、濾停牌、
+    // 近 20 日須至少 minValidDays 個有效交易日,與原 inline 等價)
+    final avgVolume = PriceCalculator.calculateAverageVolume(
+      data.prices,
+      days: RuleParams.volMa,
+      skipLast: true,
+      filterZero: true,
+      minValidDays: (RuleParams.volMa * RuleParams.volMaMinValidDayRatio)
+          .floor(),
+    );
+    if (avgVolume == null) return null;
 
     // 成交量需達均量 1.5 倍以上
     if (avgVolume <= 0 ||

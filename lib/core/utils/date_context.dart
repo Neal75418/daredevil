@@ -1,4 +1,3 @@
-import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/taiwan_time.dart';
 
 /// 日期處理工具類別，確保應用程式中日期處理的一致性
@@ -76,19 +75,6 @@ class DateContext {
     final m = date.month.toString().padLeft(2, '0');
     final d = date.day.toString().padLeft(2, '0');
     return '$y-$m-$d';
-  }
-
-  /// 安全地解析 'YYYY-MM-DD' 格式字串為 DateTime
-  ///
-  /// 解析失敗時回傳 null，而非拋出例外
-  static DateTime? tryParseYmd(String? dateStr) {
-    if (dateStr == null || dateStr.isEmpty) return null;
-    try {
-      return DateTime.parse(dateStr);
-    } catch (e) {
-      AppLogger.debug('DateContext', '解析日期失敗: $dateStr ($e)');
-      return null;
-    }
   }
 
   /// 解析季度日期字串（如 "2024-Q1" → DateTime(2024, 1, 1)）

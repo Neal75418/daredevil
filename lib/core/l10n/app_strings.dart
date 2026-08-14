@@ -19,28 +19,10 @@ class S {
   // 應用程式通用
   // ==================================================
   static String get appName => 'app.name'.tr();
-  static String get loading => 'common.loading'.tr();
   static String get retry => 'common.retry'.tr();
-  static String get cancel => 'common.cancel'.tr();
-  static String get confirm => 'common.confirm'.tr();
-  static String get save => 'common.save'.tr();
-  static String get delete => 'common.delete'.tr();
-  static String get edit => 'common.edit'.tr();
-  static String get add => 'common.add'.tr();
-  static String get close => 'common.close'.tr();
-  static String get done => 'common.done'.tr();
-  static String get search => 'common.search'.tr();
   static String get refresh => 'common.refresh'.tr();
   static String get settings => 'common.settings'.tr();
   static String get detail => 'common.detail'.tr();
-
-  // ==================================================
-  // 導航
-  // ==================================================
-  static String get navToday => 'nav.today'.tr();
-  static String get navScan => 'nav.scan'.tr();
-  static String get navWatchlist => 'nav.watchlist'.tr();
-  static String get navNews => 'nav.news'.tr();
 
   // ==================================================
   // 今日頁面
@@ -58,11 +40,7 @@ class S {
   /// loading / error fallback header（沒 count）
   static String get todayTop10Loading => 'today.top10Loading'.tr();
 
-  static String get todayHorizonShort => 'today.horizon.short'.tr();
-  static String get todayHorizonLong => 'today.horizon.long'.tr();
-  static String get todayWatchlistStatus => 'today.watchlistStatus'.tr();
   static String get todayUpdateData => 'today.updateData'.tr();
-  static String get todayStartingUpdate => 'today.startingUpdate'.tr();
   static String get todayPriceAlert => 'today.priceAlert'.tr();
   static String todayLastUpdate(String time) =>
       'today.lastUpdate'.tr(namedArgs: {'time': time});
@@ -95,21 +73,12 @@ class S {
   // ==================================================
   // 自選股頁面
   // ==================================================
-  static String get watchlistTitle => 'watchlist.title'.tr();
-  static String get watchlistAdd => 'watchlist.add'.tr();
-  static String get watchlistAddDialog => 'watchlist.addDialog'.tr();
-  static String get watchlistSymbolLabel => 'watchlist.symbolLabel'.tr();
-  static String get watchlistSymbolHint => 'watchlist.symbolHint'.tr();
   static String watchlistRemoved(String symbol) =>
       'watchlist.removed'.tr(namedArgs: {'symbol': symbol});
-  static String watchlistAdded(String symbol) =>
-      'watchlist.added'.tr(namedArgs: {'symbol': symbol});
   static String watchlistAddedToWatchlist(String symbol) =>
       'watchlist.addedToWatchlist'.tr(namedArgs: {'symbol': symbol});
   static String get watchlistAddFailed => 'watchlist.addFailed'.tr();
   static String get watchlistRemoveFailed => 'watchlist.removeFailed'.tr();
-  static String watchlistNotFound(String symbol) =>
-      'watchlist.notFound'.tr(namedArgs: {'symbol': symbol});
   static String get watchlistUndo => 'watchlist.undo'.tr();
   static String get watchlistRemoveTooltip => 'watchlist.removeTooltip'.tr();
   static String get watchlistAddTooltip => 'watchlist.addTooltip'.tr();
@@ -117,7 +86,6 @@ class S {
   // ==================================================
   // 股票詳情
   // ==================================================
-  static String get stockDetailTitle => 'stock.detailTitle'.tr();
   static String get stockAddToWatchlist => 'stock.addToWatchlist'.tr();
   static String get stockRemoveFromWatchlist =>
       'stock.removeFromWatchlist'.tr();
@@ -129,6 +97,8 @@ class S {
   // ==================================================
   static String get scoreLabel => 'score.label'.tr();
   static String get scoreLevelStrong => 'score.strong'.tr();
+  // 下三者無外部呼叫者,但由 [getScoreLevel] 裸名消費(2026-08-15 審計:
+  // 外部 grep `S.x` 會誤判死碼,類內傳遞性存活)
   static String get scoreLevelWatch => 'score.watch'.tr();
   static String get scoreLevelNormal => 'score.normal'.tr();
   static String get scoreLevelWait => 'score.wait'.tr();
@@ -143,6 +113,7 @@ class S {
   // ==================================================
   // 趨勢
   // ==================================================
+  // 由 [getTrendLabel] 裸名消費(傳遞性存活,同評分區說明)
   static String get trendUp => 'trend.up'.tr();
   static String get trendDown => 'trend.down'.tr();
   static String get trendSideways => 'trend.sideways'.tr();
@@ -158,7 +129,6 @@ class S {
   // ==================================================
   // 價格
   // ==================================================
-  static String get priceLabel => 'price.label'.tr();
   static String get priceUp => 'price.up'.tr();
   static String get priceDown => 'price.down'.tr();
   static String get priceNeutral => 'price.neutral'.tr();
@@ -169,9 +139,6 @@ class S {
     if (change == null || change == 0) return priceNeutral;
     return change > 0 ? priceUp : priceDown;
   }
-
-  static String priceValue(double price) =>
-      'price.value'.tr(namedArgs: {'price': price.toStringAsFixed(2)});
 
   // ==================================================
   // 推薦理由（訊號類型）
@@ -190,7 +157,6 @@ class S {
   static String get emptyClearFilter => 'empty.clearFilter'.tr();
   static String get emptyNoWatchlist => 'empty.noWatchlist'.tr();
   static String get emptyNoWatchlistHint => 'empty.noWatchlistHint'.tr();
-  static String get emptyGoToScan => 'empty.goToScan'.tr();
   static String get emptyAddWatchlist => 'empty.addWatchlist'.tr();
   static String get emptyNoNews => 'empty.noNews'.tr();
   static String get emptyNoNewsHint => 'empty.noNewsHint'.tr();
@@ -223,12 +189,6 @@ class S {
       'accessibility.score'.tr(namedArgs: {'score': score.toString()});
   static String accessibilitySignals(String signals) =>
       'accessibility.signals'.tr(namedArgs: {'signals': signals});
-  static String get accessibilityAddToWatchlist =>
-      'accessibility.addToWatchlist'.tr();
-  static String get accessibilityRemoveFromWatchlist =>
-      'accessibility.removeFromWatchlist'.tr();
-  static String accessibilityButtonPress(String label) =>
-      'accessibility.buttonPress'.tr(namedArgs: {'label': label});
 
   // 股票詳情頁無障礙標籤
   static String accessibilityClosePrice(String price) =>
@@ -283,15 +243,6 @@ class S {
       'accessibility.shimmerNewsList'.tr();
   static String get shimmerLoadingGenericList =>
       'accessibility.shimmerGenericList'.tr();
-
-  // ==================================================
-  // 自選股狀態圖示
-  // ==================================================
-  static String get statusHasSignal => 'status.hasSignal'.tr();
-  static String get statusVolatile => 'status.volatile'.tr();
-  static String get statusQuiet => 'status.quiet'.tr();
-  static String signalType(String? type) =>
-      'status.signalType'.tr(namedArgs: {'type': type ?? '異常'});
 
   // ==================================================
   // 市場類型

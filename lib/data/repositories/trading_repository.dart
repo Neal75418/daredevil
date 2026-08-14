@@ -89,13 +89,9 @@ class TradingRepository implements ITradingRepository {
       // 註：呼叫此方法前必須先同步價格資料
       var prices = await _db.getPricesForDate(targetDate);
 
-      // 備援 1：若 UTC 日期無結果，嘗試本地日期
-      // Database 可能以本地時間或正規化 UTC 儲存日期
-      if (prices.isEmpty) {
-        prices = await _db.getPricesForDate(targetDate.toLocal());
-      }
-
-      // 備援 2：嘗試範圍查詢（涵蓋 UTC 和本地時間）
+      // 備援：範圍查詢,防「帶時間分量的髒歷史日期」逃過 equals 比對。
+      // (2026-08-15 審計刪掉原「備援 1」:targetDate 經 DateContext.normalize
+      // 必為本地午夜,對它 .toLocal() 是 no-op,與主查詢逐 bit 相同)
       if (prices.isEmpty) {
         final year = targetDate.year;
         final month = targetDate.month;
@@ -235,7 +231,7 @@ class TradingRepository implements ITradingRepository {
   /// 包含新鮮度檢查以避免不必要的 API 呼叫。
   /// 設定 [force] 為 true 可略過新鮮度檢查。
   @override
-  Future<int?> syncAllMarginTradingFromTwse({
+  Future<int?> syncAllMarginTrading({
     DateTime? date,
     bool force = false,
   }) async {

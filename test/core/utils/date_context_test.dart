@@ -169,39 +169,5 @@ void main() {
         expect(DateContext.formatYmd(date), equals('999-01-01'));
       });
     });
-
-    group('tryParseYmd', () {
-      test('parses valid YYYY-MM-DD string', () {
-        final result = DateContext.tryParseYmd('2024-03-15');
-
-        expect(result, isNotNull);
-        expect(result!.year, equals(2024));
-        expect(result.month, equals(3));
-        expect(result.day, equals(15));
-      });
-
-      test('returns null for invalid format', () {
-        expect(DateContext.tryParseYmd('invalid'), isNull);
-        expect(DateContext.tryParseYmd('2024/03/15'), isNull);
-        expect(DateContext.tryParseYmd('15-03-2024'), isNull);
-      });
-
-      test('returns null for null input', () {
-        expect(DateContext.tryParseYmd(null), isNull);
-      });
-
-      test('returns null for empty string', () {
-        expect(DateContext.tryParseYmd(''), isNull);
-      });
-
-      test('parses ISO 8601 datetime string', () {
-        final result = DateContext.tryParseYmd('2024-03-15T10:30:00');
-
-        expect(result, isNotNull);
-        expect(result!.year, equals(2024));
-        expect(result.month, equals(3));
-        expect(result.day, equals(15));
-      });
-    });
   });
 }

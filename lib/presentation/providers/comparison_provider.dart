@@ -27,7 +27,6 @@ class ComparisonState {
     this.latestPricesMap = const {},
     this.priceHistoriesMap = const {},
     this.analysesMap = const {},
-    this.reasonsMap = const {},
     this.valuationsMap = const {},
     this.institutionalMap = const {},
     this.epsMap = const {},
@@ -42,7 +41,6 @@ class ComparisonState {
   final Map<String, DailyPriceEntry> latestPricesMap;
   final Map<String, List<DailyPriceEntry>> priceHistoriesMap;
   final Map<String, DailyAnalysisEntry> analysesMap;
-  final Map<String, List<DailyReasonEntry>> reasonsMap;
   final Map<String, StockValuationEntry> valuationsMap;
   final Map<String, List<DailyInstitutionalEntry>> institutionalMap;
   final Map<String, List<FinancialDataEntry>> epsMap;
@@ -60,7 +58,6 @@ class ComparisonState {
     Map<String, DailyPriceEntry>? latestPricesMap,
     Map<String, List<DailyPriceEntry>>? priceHistoriesMap,
     Map<String, DailyAnalysisEntry>? analysesMap,
-    Map<String, List<DailyReasonEntry>>? reasonsMap,
     Map<String, StockValuationEntry>? valuationsMap,
     Map<String, List<DailyInstitutionalEntry>>? institutionalMap,
     Map<String, List<FinancialDataEntry>>? epsMap,
@@ -75,7 +72,6 @@ class ComparisonState {
       latestPricesMap: latestPricesMap ?? this.latestPricesMap,
       priceHistoriesMap: priceHistoriesMap ?? this.priceHistoriesMap,
       analysesMap: analysesMap ?? this.analysesMap,
-      reasonsMap: reasonsMap ?? this.reasonsMap,
       valuationsMap: valuationsMap ?? this.valuationsMap,
       institutionalMap: institutionalMap ?? this.institutionalMap,
       epsMap: epsMap ?? this.epsMap,
@@ -160,9 +156,6 @@ class ComparisonNotifier extends Notifier<ComparisonState> {
     )..remove(symbol);
     final newAnalyses = Map<String, DailyAnalysisEntry>.from(state.analysesMap)
       ..remove(symbol);
-    final newReasons = Map<String, List<DailyReasonEntry>>.from(
-      state.reasonsMap,
-    )..remove(symbol);
     final newValuations = Map<String, StockValuationEntry>.from(
       state.valuationsMap,
     )..remove(symbol);
@@ -183,7 +176,6 @@ class ComparisonNotifier extends Notifier<ComparisonState> {
       latestPricesMap: newPrices,
       priceHistoriesMap: newHistories,
       analysesMap: newAnalyses,
-      reasonsMap: newReasons,
       valuationsMap: newValuations,
       institutionalMap: newInst,
       epsMap: newEps,
@@ -285,7 +277,6 @@ class ComparisonNotifier extends Notifier<ComparisonState> {
         latestPricesMap: coreData.latestPrices,
         priceHistoriesMap: coreData.priceHistories,
         analysesMap: coreData.analyses,
-        reasonsMap: coreData.reasons,
         valuationsMap: valuations,
         institutionalMap: institutional,
         epsMap: eps,

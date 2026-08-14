@@ -108,7 +108,7 @@ class MarketDataUpdater {
 
     // 從 TWSE/TPEX 批次同步融資融券資料
     try {
-      marginCount = await _tradingRepo.syncAllMarginTradingFromTwse(date: date);
+      marginCount = await _tradingRepo.syncAllMarginTrading(date: date);
     } on RateLimitException {
       rethrow;
     } on NetworkException {

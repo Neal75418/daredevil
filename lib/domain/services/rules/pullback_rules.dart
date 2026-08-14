@@ -16,7 +16,7 @@
 // 設計原則：
 // - 每條 rule 用 MA stack（ma5 > ma20 > ma60）自驗多頭排列，不依賴
 //   `context.trendState`（避免耦合）
-// - 過去強勢確認用 `_wasStrongOverPeriod`（20 日累積漲幅 ≥ 5%）
+// - 過去強勢確認用 `wasStrongOverPeriod`（20 日累積漲幅 ≥ 5%）
 // - 跌停日（pct ≤ -9.5%）一律 short-circuit return null（避免恐慌下殺誤判）
 
 import 'package:daredevil/core/constants/reason_type.dart';
@@ -24,6 +24,7 @@ import 'package:daredevil/core/constants/stock_patterns.dart';
 import 'package:daredevil/core/constants/rule_params_pullback.dart';
 import 'package:daredevil/core/constants/rule_scores.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
+import 'package:daredevil/domain/models/technical_indicators.dart';
 import 'package:daredevil/domain/models/triggered_reason.dart';
 import 'package:daredevil/domain/services/rules/candlestick_rules.dart'
     show isHammerShape;
@@ -82,6 +83,27 @@ bool hasRecentBullishCandle(
   return false;
 }
 
+/// 四條 pullback rule 的共同 prologue(2026-08-15 抽共用)。
+///
+/// 曾是四份逐字手抄,漂移實錄:KD 規則漏抄 minHistoryDays guard(被
+/// wasStrongOverPeriod 遮蔽未釀禍,但手抄漂移已是現行犯)。收斂成單一
+/// 出口後,四條規則的資格判定不可能再各自漂移。
+///
+/// - ETF guard:走勢平滑、淺回檔幾乎天天成立 = 雜訊(與 mode tab 的
+///   ETF 過濾同一判斷、下放到源頭:假訊號不灌分數、不污染校準樣本)
+/// - Regime gate:空頭 regime 的回檔是接刀不是機會(2026-07-10 回放
+///   分段實證:60D 均報酬 多頭 +6.5% vs 空頭 -0.7%~+1.3%)。
+///   null(regime 未知)不擋 — permissive 與其他 null 語意一致
+/// - 歷史長度與 indicators 必備
+///
+/// 回傳 null 表示被 guard 擋下;否則回傳非空 indicators。
+TechnicalIndicators? pullbackPrologue(AnalysisContext context, StockData data) {
+  if (StockPatterns.isEtfCode(data.symbol)) return null;
+  if (context.isMarketUptrend == false) return null;
+  if (data.prices.length < PullbackParams.minHistoryDays) return null;
+  return context.indicators;
+}
+
 // ============================================
 // Rule A: PULLBACK_TO_MA20 — 強勢回檔至 MA20 (量縮)
 // ============================================
@@ -97,18 +119,8 @@ class HealthyPullbackToMa20Rule extends StockRule {
 
   @override
   TriggeredReason? evaluate(AnalysisContext context, StockData data) {
-    // ETF guard：走勢平滑、淺回檔幾乎天天成立 = 雜訊（與 mode tab 的
-    // ETF 過濾同一判斷、下放到源頭：假訊號不灌分數、不污染校準樣本）
-    if (StockPatterns.isEtfCode(data.symbol)) return null;
-
-    // Regime gate：空頭 regime 的回檔是接刀不是機會（2026-07-10 回放
-    // 分段實證：60D 均報酬 多頭 +6.5% vs 空頭 -0.7%~+1.3%）。
-    // null（regime 未知）不擋 — permissive 與其他 null 語意一致。
-    if (context.isMarketUptrend == false) return null;
-
-    // ---- Step 1: history / indicators 必備 ----
-    if (data.prices.length < PullbackParams.minHistoryDays) return null;
-    final ind = context.indicators;
+    // 共同資格判定(ETF/Regime/歷史長度/indicators)見 [pullbackPrologue]
+    final ind = pullbackPrologue(context, data);
     if (ind == null) return null;
     final ma5 = ind.ma5;
     final ma20 = ind.ma20;
@@ -218,18 +230,8 @@ class HealthyPullbackToMa10Rule extends StockRule {
 
   @override
   TriggeredReason? evaluate(AnalysisContext context, StockData data) {
-    // ETF guard：走勢平滑、淺回檔幾乎天天成立 = 雜訊（與 mode tab 的
-    // ETF 過濾同一判斷、下放到源頭：假訊號不灌分數、不污染校準樣本）
-    if (StockPatterns.isEtfCode(data.symbol)) return null;
-
-    // Regime gate：空頭 regime 的回檔是接刀不是機會（2026-07-10 回放
-    // 分段實證：60D 均報酬 多頭 +6.5% vs 空頭 -0.7%~+1.3%）。
-    // null（regime 未知）不擋 — permissive 與其他 null 語意一致。
-    if (context.isMarketUptrend == false) return null;
-
-    // ---- Step 1: history / indicators 必備 ----
-    if (data.prices.length < PullbackParams.minHistoryDays) return null;
-    final ind = context.indicators;
+    // 共同資格判定(ETF/Regime/歷史長度/indicators)見 [pullbackPrologue]
+    final ind = pullbackPrologue(context, data);
     if (ind == null) return null;
     final ma10 = ind.ma10;
     final ma20 = ind.ma20;
@@ -325,18 +327,8 @@ class HammerAtSupportRule extends StockRule {
 
   @override
   TriggeredReason? evaluate(AnalysisContext context, StockData data) {
-    // ETF guard：走勢平滑、淺回檔幾乎天天成立 = 雜訊（與 mode tab 的
-    // ETF 過濾同一判斷、下放到源頭：假訊號不灌分數、不污染校準樣本）
-    if (StockPatterns.isEtfCode(data.symbol)) return null;
-
-    // Regime gate：空頭 regime 的回檔是接刀不是機會（2026-07-10 回放
-    // 分段實證：60D 均報酬 多頭 +6.5% vs 空頭 -0.7%~+1.3%）。
-    // null（regime 未知）不擋 — permissive 與其他 null 語意一致。
-    if (context.isMarketUptrend == false) return null;
-
-    // ---- Step 1: history / indicators 必備 ----
-    if (data.prices.length < PullbackParams.minHistoryDays) return null;
-    final ind = context.indicators;
+    // 共同資格判定(ETF/Regime/歷史長度/indicators)見 [pullbackPrologue]
+    final ind = pullbackPrologue(context, data);
     if (ind == null) return null;
     final ma20 = ind.ma20;
     final ma60 = ind.ma60;
@@ -358,8 +350,10 @@ class HammerAtSupportRule extends StockRule {
     // ---- Step 3: 錘子形狀 ----
     if (!isHammerShape(today)) return null;
 
-    // ---- Step 4: body 非零（排除 doji-like）----
-    if ((close - open).abs() == 0) return null;
+    // (原 Step 4「body 非零」已刪:isHammerShape 通過者必有
+    // body >= hammerBodyMinRatio(5%) * range > 0,該 guard 恆假——
+    // 2026-08-15 審計推導,前提為 high >= low(真實 OHLC 恆成立;
+    // isHammerShape 僅擋 range==0)。Step 編號保留不重排)
 
     // ---- Step 5: 下影線觸及支撐 (MA20 或 MA60) ----
     //
@@ -452,17 +446,10 @@ class KdHighLevelPullbackRule extends StockRule {
 
   @override
   TriggeredReason? evaluate(AnalysisContext context, StockData data) {
-    // ETF guard：走勢平滑、淺回檔幾乎天天成立 = 雜訊（與 mode tab 的
-    // ETF 過濾同一判斷、下放到源頭：假訊號不灌分數、不污染校準樣本）
-    if (StockPatterns.isEtfCode(data.symbol)) return null;
-
-    // Regime gate：空頭 regime 的回檔是接刀不是機會（2026-07-10 回放
-    // 分段實證：60D 均報酬 多頭 +6.5% vs 空頭 -0.7%~+1.3%）。
-    // null（regime 未知）不擋 — permissive 與其他 null 語意一致。
-    if (context.isMarketUptrend == false) return null;
-
-    // ---- Step 1: indicators 必備 ----
-    final ind = context.indicators;
+    // 共同資格判定見 [pullbackPrologue]——本規則因此補齊 minHistoryDays
+    // guard(原四份手抄中唯一漏抄的;被 Step 4 wasStrongOverPeriod 遮蔽
+    // 故無行為變化,特徵化測試釘住此契約)
+    final ind = pullbackPrologue(context, data);
     if (ind == null) return null;
     final kdK = ind.kdK;
     final kdD = ind.kdD;

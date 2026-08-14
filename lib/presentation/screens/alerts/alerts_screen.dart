@@ -434,7 +434,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
             child: Text('common.delete'.tr()),
           ),
         ],

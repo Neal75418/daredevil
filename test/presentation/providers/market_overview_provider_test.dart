@@ -55,9 +55,6 @@ void main() {
     when(() => mockDb.getLatestDataDate()).thenAnswer((_) async => testDate);
     when(() => mockTwse.getMarketIndices()).thenAnswer((_) async => []);
     when(
-      () => mockDb.getAdvanceDeclineCounts(any()),
-    ).thenAnswer((_) async => (advance: 0, decline: 0, unchanged: 0));
-    when(
       () => mockTwse.getInstitutionalAmounts(date: any(named: 'date')),
     ).thenAnswer((_) async => null);
     when(
@@ -158,7 +155,6 @@ void main() {
 
       expect(state.indices, isEmpty);
       expect(state.indexHistory, isEmpty);
-      expect(state.advanceDecline.total, 0);
       expect(state.isLoading, isFalse);
       expect(state.error, isNull);
       expect(state.dataDate, isNull);
@@ -181,9 +177,11 @@ void main() {
       expect(state.hasData, isTrue);
     });
 
-    test('hasData returns true when advanceDecline has data', () {
+    test('hasData returns true when advanceDeclineByMarket has data', () {
       const state = MarketOverviewState(
-        advanceDecline: AdvanceDecline(advance: 500, decline: 300),
+        advanceDeclineByMarket: {
+          'TWSE': AdvanceDecline(advance: 500, decline: 300),
+        },
       );
 
       expect(state.hasData, isTrue);
@@ -242,9 +240,9 @@ void main() {
         ],
       );
 
-      when(
-        () => mockDb.getAdvanceDeclineCounts(any()),
-      ).thenAnswer((_) async => (advance: 500, decline: 300, unchanged: 200));
+      when(() => mockDb.getAdvanceDeclineCountsByMarket(any())).thenAnswer(
+        (_) async => {'TWSE': (advance: 500, decline: 300, unchanged: 200)},
+      );
 
       final notifier = container.read(marketOverviewProvider.notifier);
       final loadFuture = notifier.loadData();
@@ -258,9 +256,9 @@ void main() {
       expect(state.isLoading, isFalse);
       expect(state.error, isNull);
       expect(state.dataDate, testDate);
-      expect(state.advanceDecline.advance, 500);
-      expect(state.advanceDecline.decline, 300);
-      expect(state.advanceDecline.unchanged, 200);
+      expect(state.advanceDeclineByMarket['TWSE']!.advance, 500);
+      expect(state.advanceDeclineByMarket['TWSE']!.decline, 300);
+      expect(state.advanceDeclineByMarket['TWSE']!.unchanged, 200);
 
       // Verify indices are filtered to dashboardIndices only
       expect(state.indices.length, 1);
@@ -429,9 +427,9 @@ void main() {
         () => mockTwse.getMarketIndices(),
       ).thenThrow(Exception('Network error'));
 
-      when(
-        () => mockDb.getAdvanceDeclineCounts(any()),
-      ).thenAnswer((_) async => (advance: 100, decline: 50, unchanged: 20));
+      when(() => mockDb.getAdvanceDeclineCountsByMarket(any())).thenAnswer(
+        (_) async => {'TWSE': (advance: 100, decline: 50, unchanged: 20)},
+      );
 
       final notifier = container.read(marketOverviewProvider.notifier);
       await notifier.loadData();
@@ -439,7 +437,10 @@ void main() {
       final state = container.read(marketOverviewProvider);
       expect(state.error, isNull); // no top-level error
       expect(state.indices, isEmpty); // indices failed gracefully
-      expect(state.advanceDecline.advance, 100); // DB data loaded
+      expect(
+        state.advanceDeclineByMarket['TWSE']!.advance,
+        100,
+      ); // DB data loaded
     });
 
     test('loadData uses DateTime.now() when no data date in DB', () async {

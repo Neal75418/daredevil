@@ -56,7 +56,6 @@ void main() {
       expect(state.latestPricesMap, isEmpty);
       expect(state.priceHistoriesMap, isEmpty);
       expect(state.analysesMap, isEmpty);
-      expect(state.reasonsMap, isEmpty);
       expect(state.valuationsMap, isEmpty);
       expect(state.institutionalMap, isEmpty);
       expect(state.epsMap, isEmpty);

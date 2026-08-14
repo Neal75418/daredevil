@@ -80,7 +80,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
     // 使用 selector 只監聽 watchlist 的 symbols，避免不必要的重建
     final watchlistSymbols = ref.watch(
-      watchlistProvider.select((s) => s.items.map((i) => i.symbol).toSet()),
+      watchlistProvider.select((s) => s.watchedSymbols),
     );
 
     return Scaffold(

@@ -126,40 +126,6 @@ void main() {
         expect(result.contains('CCC'), isTrue);
       });
     });
-
-    group('getActiveAttentionStocks', () {
-      test('delegates to database with ATTENTION type', () async {
-        final warnings = [
-          _createWarning(symbol: 'TEST', warningType: 'ATTENTION'),
-        ];
-
-        when(
-          () => mockDb.getActiveWarningsByType('ATTENTION'),
-        ).thenAnswer((_) async => warnings);
-
-        final result = await repository.getActiveAttentionStocks();
-
-        expect(result, equals(warnings));
-        verify(() => mockDb.getActiveWarningsByType('ATTENTION')).called(1);
-      });
-    });
-
-    group('getActiveDisposalStocks', () {
-      test('delegates to database with DISPOSAL type', () async {
-        final warnings = [
-          _createWarning(symbol: 'TEST', warningType: 'DISPOSAL'),
-        ];
-
-        when(
-          () => mockDb.getActiveWarningsByType('DISPOSAL'),
-        ).thenAnswer((_) async => warnings);
-
-        final result = await repository.getActiveDisposalStocks();
-
-        expect(result, equals(warnings));
-        verify(() => mockDb.getActiveWarningsByType('DISPOSAL')).called(1);
-      });
-    });
   });
 
   group('syncAllMarketWarnings 接線層（HIGH bug 的實際住所）', () {

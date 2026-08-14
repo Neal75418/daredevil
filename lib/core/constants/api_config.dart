@@ -40,9 +40,6 @@ abstract final class ApiConfig {
   /// 價格資料請求間延遲（毫秒）
   static const int priceRequestDelayMs = 200;
 
-  /// 更新服務批次延遲（毫秒）
-  static const int updateBatchDelayMs = 200;
-
   /// Syncer 批次操作間延遲（毫秒），避免觸發 API rate limit
   static const int syncerBatchDelayMs = 500;
 
@@ -326,9 +323,6 @@ abstract final class ApiConfig {
   /// 超過此時間後先顯示 DB 快取資料，API 回應後再更新。
   static const int marketOverviewLoadTimeoutSec = 20;
 
-  /// 分享匯出檔案保留時間（分鐘）
-  static const int shareExportRetentionMinutes = 5;
-
   /// 更新操作超時（分鐘）
   static const int updateTimeoutMin = 60;
 
@@ -338,9 +332,6 @@ abstract final class ApiConfig {
 
 /// 快取設定常數
 abstract final class CacheConfig {
-  /// 預設 LRU 快取最大容量
-  static const int defaultMaxSize = 100;
-
   /// 批次查詢快取最大容量
   static const int batchQueryMaxSize = 50;
 

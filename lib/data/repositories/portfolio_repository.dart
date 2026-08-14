@@ -19,13 +19,6 @@ class PortfolioRepository {
   static const double transactionTaxRate = AnalysisParams.transactionTaxRate;
 
   // ==================================================
-  // 持倉查詢
-  // ==================================================
-
-  Future<List<PortfolioPositionEntry>> getPositions() =>
-      _db.getPortfolioPositions();
-
-  // ==================================================
   // 交易操作
   // ==================================================
 

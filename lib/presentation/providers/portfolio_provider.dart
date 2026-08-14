@@ -39,7 +39,6 @@ enum TransactionType {
 
 class PortfolioPositionData {
   const PortfolioPositionData({
-    required this.positionId,
     required this.symbol,
     this.stockName,
     this.market,
@@ -50,7 +49,6 @@ class PortfolioPositionData {
     this.currentPrice,
   });
 
-  final int positionId;
   final String symbol;
   final String? stockName;
   final String? market;
@@ -251,7 +249,6 @@ class PortfolioNotifier extends Notifier<PortfolioState> {
 
         positionData.add(
           PortfolioPositionData(
-            positionId: pos.id,
             symbol: pos.symbol,
             stockName: stock?.name,
             market: stock?.market,

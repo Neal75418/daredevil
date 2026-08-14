@@ -103,7 +103,8 @@ class RevenueMomGrowthRule extends StockRule with FundamentalTechnicalFilter {
       return null;
     }
 
-    // 檢查連續月增長
+    // 連續月增計數(revenueMomConsecutiveMonths 現值=1 → 實際只看當月;
+    // 迴圈機制保留供調參)
     int consecutiveMonths = 0;
     final growthRates = <double>[];
 
@@ -134,6 +135,8 @@ class RevenueMomGrowthRule extends StockRule with FundamentalTechnicalFilter {
     if (filter == null) return null;
 
     final avgGrowth = growthRates.reduce((a, b) => a + b) / growthRates.length;
+    // 註:revenueMomConsecutiveMonths 現值=1,else 分支現行不觸發——這是
+    // config-dead 不是結構死碼,調高參數即活,機制刻意保留(2026-08-15 審計)
     final description = consecutiveMonths == 1
         ? '本月營收月增 ${avgGrowth.toStringAsFixed(1)}% (站上月線)'
         : '營收月增連續 $consecutiveMonths 個月 (站上月線)';

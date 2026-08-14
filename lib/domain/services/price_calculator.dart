@@ -207,13 +207,18 @@ class PriceCalculator {
   /// [days] 計算的天數（預設 5）
   /// [skipLast] 是否跳過最後一筆（今日），預設 false
   /// [filterZero] 是否過濾停牌日（成交量為 0），預設 false
+  /// [minValidDays] 過濾後的最低有效日數,不足回 null(預設 1 = 舊行為)
   ///
-  /// 回傳平均成交量，資料不足時回傳 null
+  /// 回傳平均成交量。**注意退化語意**(2026-08-15 審計修正 doc):資料
+  /// 短於 [days] 時是「有幾筆算幾筆」的短均量、不回 null——只有輸入為
+  /// 空/全被濾/有效日不足 [minValidDays] 才回 null。呼叫端要求「必須
+  /// 滿 N 個有效日」時請傳 [minValidDays]。
   static double? calculateAverageVolume(
     List<DailyPriceEntry> prices, {
     int days = 5,
     bool skipLast = false,
     bool filterZero = false,
+    int minValidDays = 1,
   }) {
     if (prices.isEmpty) return null;
 
@@ -229,7 +234,7 @@ class PriceCalculator {
         .where((v) => !filterZero || v > 0)
         .toList();
 
-    if (volumes.isEmpty) return null;
+    if (volumes.isEmpty || volumes.length < minValidDays) return null;
 
     return volumes.reduce((a, b) => a + b) / volumes.length;
   }

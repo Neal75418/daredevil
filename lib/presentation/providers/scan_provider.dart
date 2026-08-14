@@ -163,7 +163,7 @@ class ScanNotifier extends Notifier<ScanState> {
 
     // 監聽 watchlistProvider 變更，同步自選狀態
     ref.listen(
-      watchlistProvider.select((s) => s.items.map((i) => i.symbol).toSet()),
+      watchlistProvider.select((s) => s.watchedSymbols),
       (prev, next) => _syncWatchlistSymbols(next),
     );
 
@@ -549,7 +549,11 @@ class ScanNotifier extends Notifier<ScanState> {
 
   /// 從 watchlistProvider 同步自選清單狀態到 scan 畫面
   void _syncWatchlistSymbols(Set<String> symbols) {
-    _watchlistSymbols = symbols;
+    // 複本必要(2026-08-15 終審 must-fix):傳入的是 WatchlistState 的
+    // watchedSymbols 快取本尊(unmodifiable),而 toggleWatchlist 會就地
+    // add/remove——直接持有會 mutate 共享實例、且 identity 不變導致
+    // select 永不再 emit(正是 select 修復要根治的失效模式的鏡像)
+    _watchlistSymbols = {...symbols};
     if (state.stocks.isEmpty) return;
 
     final updated = state.stocks.map((s) {

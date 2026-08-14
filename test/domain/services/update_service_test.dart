@@ -459,7 +459,7 @@ void main() {
         () => trading.syncAllDayTradingFromTwse(date: any(named: 'date')),
       ).thenAnswer((_) async => 0);
       when(
-        () => trading.syncAllMarginTradingFromTwse(date: any(named: 'date')),
+        () => trading.syncAllMarginTrading(date: any(named: 'date')),
       ).thenAnswer((_) async => 0);
       when(
         () => shareholding.syncShareholding(

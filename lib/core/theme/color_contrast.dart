@@ -4,8 +4,10 @@ import 'package:flutter/painting.dart'; // Color, HSLColor
 
 /// WCAG 2.1 對比度與色相計算。
 ///
-/// 生產碼與守門測試共用同一份實作——若測試自行實作一套公式，
-/// 兩邊出現分歧時會出現「測試綠但實際不合格」的假安全。
+/// **消費者現況(2026-08-15 審計)**:執行期生產碼不 import 本檔——它是
+/// 色彩守門測試的公式庫(semantic_colors_test 等 10+ 檔),留在 lib/ 是
+/// 為了與色彩宣告同住、且未來生產碼要算對比度時直接可用。守門測試與
+/// 未來的生產消費者共用同一份公式,避免「測試綠但實際不合格」的假安全。
 abstract final class ColorContrast {
   /// sRGB 分量線性化（WCAG 2.1 定義）。
   static double _linearize(double channel) {

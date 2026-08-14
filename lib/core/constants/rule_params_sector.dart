@@ -24,9 +24,6 @@ abstract final class SectorParams {
   /// 股票不足此數視為資料不足（fresh DB / 回補中），不做 regime 判定。
   static const int regimeMinEligibleStocks = 50;
 
-  /// 「強產業」evidence chip 門檻：產業強弱百分位 ≥ 此值（前 20% 族群）視為強產業。
-  static const double strongSectorChipThreshold = 0.8;
-
   // ── 族群轉向(2026-08-11)────────────────────────────────────────────
   //
   // 既有排行只有 20日/5日 兩個**水準值**,而資金轉向是**變化率**。

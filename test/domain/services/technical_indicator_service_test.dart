@@ -890,35 +890,4 @@ void main() {
       expect(result.volumeMA, closeTo(1000.0, 0.001));
     });
   });
-
-  group('latestOBV', () {
-    test('returns accumulated OBV value', () {
-      final prices = generateUptrendPrices(
-        days: 10,
-        startPrice: 100.0,
-        dailyGain: 1.0,
-      );
-      final result = TechnicalIndicatorService.latestOBV(prices);
-      expect(result, isNotNull);
-    });
-
-    test('returns null for single price', () {
-      final prices = generateFlatPrices(days: 1, basePrice: 100.0);
-      expect(TechnicalIndicatorService.latestOBV(prices), isNull);
-    });
-  });
-
-  group('latestATR', () {
-    test('returns value for sufficient data', () {
-      final prices = generateSwingPrices(days: 20, basePrice: 100.0);
-      final result = TechnicalIndicatorService.latestATR(prices);
-      expect(result, isNotNull);
-      expect(result!, greaterThan(0.0));
-    });
-
-    test('returns null when insufficient data', () {
-      final prices = generateFlatPrices(days: 5, basePrice: 100.0);
-      expect(TechnicalIndicatorService.latestATR(prices), isNull);
-    });
-  });
 }

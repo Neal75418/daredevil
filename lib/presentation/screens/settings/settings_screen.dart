@@ -79,7 +79,7 @@ class SettingsScreen extends ConsumerWidget {
               context,
               settings.disposalUrgentAlerts,
               Icons.dangerous_rounded,
-              Colors.red,
+              AppTheme.errorColor,
               'settings.disposalUrgentAlerts'.tr(),
               (v) => ref
                   .read(settingsProvider.notifier)
@@ -415,7 +415,10 @@ class SettingsScreen extends ConsumerWidget {
     SettingsState settings,
   ) {
     return SwitchListTile(
-      secondary: _buildIconContainer(Colors.green, Icons.sync_rounded),
+      secondary: _buildIconContainer(
+        DesignTokens.successColor(theme),
+        Icons.sync_rounded,
+      ),
       title: Text('settings.autoUpdate'.tr()),
       subtitle: Text(
         'settings.autoUpdateDesc'.tr(),

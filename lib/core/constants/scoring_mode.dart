@@ -56,19 +56,6 @@ enum ScoringMode {
     ScoringMode.neutral => 'scoringMode.neutral',
   };
 
-  /// Tab 圖示
-  ///
-  /// 不直接 import Material — 由 UI 層 mapping，這個檔保持 pure Dart。
-  ///
-  /// **2026-06-19 v2**：weaknessObserve 從 `warning` 改 `south_east`（向下回檔
-  /// 感、觀察機會、不再是警示）— 對應 Mode C 從「弱勢警示」改為「回檔進場」語意。
-  String get iconKey => switch (this) {
-    ScoringMode.momentumEntry => 'trending_up', // Icons.trending_up
-    ScoringMode.strengthObserve => 'bolt', // Icons.bolt
-    ScoringMode.weaknessObserve => 'south_east', // Icons.south_east
-    ScoringMode.neutral => 'circle_outlined',
-  };
-
   /// Mode routing priority — eligibility-first assignment 時的優先順序
   ///
   /// **2026-06-19 v2 audit 引入**：當一檔股票對多個 mode 都 eligible（罕見、但

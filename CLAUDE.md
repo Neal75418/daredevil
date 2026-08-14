@@ -68,7 +68,7 @@ dart format .                                                  # 格式化 (pre-
 | `lib/domain/services/rule_accuracy_service.dart` | 推薦績效回測引擎 (多週期驗證)                               |
 | `lib/domain/services/thesis/`                    | 釘選論點失效（timeStop；hardStop/trendBreak 被 gate 砍）  |
 | `lib/core/theme/semantic_colors.dart`            | 色彩語意分類（紅綠專屬股價，見守門測試）              |
-| `lib/core/theme/color_contrast.dart`             | WCAG 對比度／色相／疊色計算，`semantic_colors.dart` 與其守門測試共用同一份公式來源 |
+| `lib/core/theme/color_contrast.dart`             | WCAG 對比度／色相／疊色計算——**色彩守門測試專用公式庫**（執行期生產碼不 import；留在 lib/ 是為與色彩宣告同住、供未來生產消費者直接取用） |
 
 ---
 

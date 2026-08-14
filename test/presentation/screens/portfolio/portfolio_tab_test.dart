@@ -62,7 +62,6 @@ class FakePortfolioNotifier extends PortfolioNotifier {
 // ==========================================
 
 PortfolioPositionData createPosition({
-  int positionId = 1,
   String symbol = '2330',
   String? stockName = '台積電',
   double quantity = 1000,
@@ -72,7 +71,6 @@ PortfolioPositionData createPosition({
   double? currentPrice = 600.0,
 }) {
   return PortfolioPositionData(
-    positionId: positionId,
     symbol: symbol,
     stockName: stockName,
     quantity: quantity,
@@ -160,8 +158,8 @@ void main() {
     testWidgets('shows positions list', (tester) async {
       widenViewport(tester);
       final positions = [
-        createPosition(positionId: 1, symbol: '2330', stockName: '台積電'),
-        createPosition(positionId: 2, symbol: '2317', stockName: '鴻海'),
+        createPosition(symbol: '2330', stockName: '台積電'),
+        createPosition(symbol: '2317', stockName: '鴻海'),
       ];
       await tester.pumpWidget(
         buildTestWidget(portfolioState: PortfolioState(positions: positions)),

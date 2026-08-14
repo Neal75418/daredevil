@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/widgets/alert_type_icon.dart';
@@ -345,7 +346,9 @@ class _AlertsTabState extends ConsumerState<AlertsTab> {
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.errorColor,
+                ),
                 child: Text('common.delete'.tr()),
               ),
             ],

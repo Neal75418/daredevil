@@ -23,13 +23,9 @@ void main() {
   }) {
     return StockDividendInfo(
       symbol: symbol,
-      shares: 1000,
-      avgCost: 500,
-      currentPrice: 600,
       estimatedDividendPerShare: 12.5,
       expectedYearlyAmount: 12500,
       personalYield: personalYield,
-      marketYield: 3.8,
       trend: trend,
     );
   }

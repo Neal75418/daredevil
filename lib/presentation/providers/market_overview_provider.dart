@@ -52,7 +52,6 @@ class MarketOverviewState {
     this.indices = const [],
     this.indexHistory = const {},
     this.indexStageHistory = const {},
-    this.advanceDecline = const AdvanceDecline(),
     // 依市場分組的統計（預設空 Map）
     this.advanceDeclineByMarket = const {},
     this.institutionalByMarket = const {},
@@ -76,7 +75,6 @@ class MarketOverviewState {
   });
 
   // Section key 常數（供 sectionDates 使用）
-  static const kSectionIndex = 'index';
   static const kSectionInstitutional = 'institutional';
   static const kSectionMargin = 'margin';
 
@@ -90,7 +88,6 @@ class MarketOverviewState {
   /// 與 [indexHistory] 分離：sparkline 維持 30 點不變，位階計算需 ≥60
   /// 個交易日才能算出 MA60，因此另載入較長窗口（見 [_loadIndexStageHistory]）。
   final Map<String, List<double>> indexStageHistory;
-  final AdvanceDecline advanceDecline;
 
   /// 漲跌家數（依市場分組）
   /// Key: 'TWSE' / 'TPEx'
@@ -153,7 +150,7 @@ class MarketOverviewState {
 
   /// 各區塊實際資料日期
   ///
-  /// Key: section 常數（[kSectionIndex]、[kSectionInstitutional]、[kSectionMargin]）
+  /// Key: section 常數（[kSectionInstitutional]、[kSectionMargin]）
   /// Value: 該區塊資料的實際日期
   /// 僅在與 [dataDate] 不同時才有意義，UI 可據此顯示差異標示。
   final Map<String, DateTime> sectionDates;
@@ -172,13 +169,14 @@ class MarketOverviewState {
   final Map<String, double> marginIndexChangePercent;
 
   /// 是否有任何有效資料
-  bool get hasData => indices.isNotEmpty || advanceDecline.total > 0;
+  bool get hasData =>
+      indices.isNotEmpty ||
+      advanceDeclineByMarket.values.any((a) => a.total > 0);
 
   MarketOverviewState copyWith({
     List<TwseMarketIndex>? indices,
     Map<String, List<double>>? indexHistory,
     Map<String, List<double>>? indexStageHistory,
-    AdvanceDecline? advanceDecline,
     Map<String, AdvanceDecline>? advanceDeclineByMarket,
     Map<String, InstitutionalTotals>? institutionalByMarket,
     Map<String, MarginTradingTotals>? marginByMarket,
@@ -203,7 +201,6 @@ class MarketOverviewState {
       indices: indices ?? this.indices,
       indexHistory: indexHistory ?? this.indexHistory,
       indexStageHistory: indexStageHistory ?? this.indexStageHistory,
-      advanceDecline: advanceDecline ?? this.advanceDecline,
       advanceDeclineByMarket:
           advanceDeclineByMarket ?? this.advanceDeclineByMarket,
       institutionalByMarket:
@@ -248,7 +245,6 @@ class MarketOverviewState {
 typedef _OverviewSnapshot = (
   (
     List<TwseMarketIndex>,
-    AdvanceDecline,
     Map<String, List<double>>,
     ({Map<String, AdvanceDecline> data, Map<String, DateTime> staleDates}),
     ({Map<String, InstitutionalTotals> data, DateTime dataDate}),
@@ -329,7 +325,6 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       final allTasks = (
         (
           _loadIndices(),
-          _loadAdvanceDecline(dataDate),
           _loadIndexHistory(),
           _loadAdvanceDeclineByMarket(dataDate, fallbackDate: fallbackDate),
           _loadInstitutionalByMarket(dataDate, fallbackDate: fallbackDate),
@@ -417,7 +412,6 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     final (
       (
         indices,
-        advanceDecline,
         rawHistory,
         advDecResult,
         instResult,
@@ -480,14 +474,6 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     // 建構各區塊實際資料日期（僅在與 dataDate 不同時加入）
     final sectionDates = <String, DateTime>{};
 
-    // 指數日期：取首個指數的日期
-    if (indices.isNotEmpty) {
-      final indexDate = indices.first.date;
-      if (_isDifferentDay(indexDate, dataDate)) {
-        sectionDates[MarketOverviewState.kSectionIndex] = indexDate;
-      }
-    }
-
     // 法人日期
     if (_isDifferentDay(instResult.dataDate, dataDate)) {
       sectionDates[MarketOverviewState.kSectionInstitutional] =
@@ -506,7 +492,6 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
 
     return MarketOverviewState(
       indices: indices,
-      advanceDecline: advanceDecline,
       indexHistory: indexHistory,
       indexStageHistory: indexStageHistory,
       marginIndexChangePercent: marginIndexChange,
@@ -758,20 +743,6 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入指數位階歷史失敗', e);
       return {};
-    }
-  }
-
-  Future<AdvanceDecline> _loadAdvanceDecline(DateTime date) async {
-    try {
-      final counts = await _db.getAdvanceDeclineCounts(date);
-      return AdvanceDecline(
-        advance: counts.advance,
-        decline: counts.decline,
-        unchanged: counts.unchanged,
-      );
-    } catch (e) {
-      AppLogger.warning('MarketOverviewNotifier', '載入漲跌家數失敗', e);
-      return const AdvanceDecline();
     }
   }
 

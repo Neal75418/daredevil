@@ -70,15 +70,6 @@ mixin InstitutionalDaoMixin on $AppDatabase {
     return query.get();
   }
 
-  /// 取得股票的最新法人資料
-  Future<DailyInstitutionalEntry?> getLatestInstitutional(String symbol) {
-    return (select(dailyInstitutional)
-          ..where((t) => t.symbol.equals(symbol))
-          ..orderBy([(t) => OrderingTerm.desc(t.date)])
-          ..limit(1))
-        .getSingleOrNull();
-  }
-
   /// 批次新增法人資料
   Future<void> insertInstitutionalData(
     List<DailyInstitutionalCompanion> entries,

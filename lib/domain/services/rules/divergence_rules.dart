@@ -1,4 +1,5 @@
 import 'package:daredevil/core/constants/rule_params.dart';
+import 'package:daredevil/domain/services/price_calculator.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/domain/models/models.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
@@ -25,8 +26,6 @@ class PriceVolumeWeakRallyRule extends StockRule {
     const lookback = TrendParams.priceVolumeLookbackDays;
     final recentPrices = data.prices.reversed.take(lookback + 1).toList();
 
-    if (recentPrices.length < lookback + 1) return null;
-
     final todayClose = recentPrices[0].close;
     final pastClose = recentPrices[lookback].close;
     final todayVolume = recentPrices[0].volume;
@@ -38,18 +37,15 @@ class PriceVolumeWeakRallyRule extends StockRule {
       return null;
     }
 
-    // 計算回溯期間的平均成交量
-    double volumeSum = 0;
-    int volumeCount = 0;
-    for (int i = 1; i <= lookback; i++) {
-      final vol = recentPrices[i].volume;
-      if (vol != null && vol > 0) {
-        volumeSum += vol;
-        volumeCount++;
-      }
-    }
-    if (volumeCount == 0) return null;
-    final avgVolume = volumeSum / volumeCount;
+    // 回溯期均量:接現成 helper(2026-08-15 審計——skipLast+filterZero
+    // 與原 inline 迴圈逐位元等價:排除今日、取 lookback 日、濾停牌)
+    final avgVolume = PriceCalculator.calculateAverageVolume(
+      data.prices,
+      days: lookback,
+      skipLast: true,
+      filterZero: true,
+    );
+    if (avgVolume == null) return null;
 
     // 檢查背離
     final priceChange = (todayClose - pastClose) / pastClose * 100;
@@ -100,8 +96,6 @@ class PriceVolumeBearishDivergenceRule extends StockRule {
     const lookback = TrendParams.priceVolumeLookbackDays;
     final recentPrices = data.prices.reversed.take(lookback + 1).toList();
 
-    if (recentPrices.length < lookback + 1) return null;
-
     final todayClose = recentPrices[0].close;
     final pastClose = recentPrices[lookback].close;
     final todayVolume = recentPrices[0].volume;
@@ -113,17 +107,15 @@ class PriceVolumeBearishDivergenceRule extends StockRule {
       return null;
     }
 
-    double volumeSum = 0;
-    int volumeCount = 0;
-    for (int i = 1; i <= lookback; i++) {
-      final vol = recentPrices[i].volume;
-      if (vol != null && vol > 0) {
-        volumeSum += vol;
-        volumeCount++;
-      }
-    }
-    if (volumeCount == 0) return null;
-    final avgVolume = volumeSum / volumeCount;
+    // 回溯期均量:接現成 helper(2026-08-15 審計——skipLast+filterZero
+    // 與原 inline 迴圈逐位元等價:排除今日、取 lookback 日、濾停牌)
+    final avgVolume = PriceCalculator.calculateAverageVolume(
+      data.prices,
+      days: lookback,
+      skipLast: true,
+      filterZero: true,
+    );
+    if (avgVolume == null) return null;
 
     final priceChange = (todayClose - pastClose) / pastClose * 100;
     final volumeChange = (todayVolume - avgVolume) / avgVolume * 100;

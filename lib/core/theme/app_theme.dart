@@ -50,13 +50,6 @@ class AppTheme {
   /// 平盤 - 灰色（深色主題用）。淺色主題請走 [getPriceColor]／[getFlatColor]。
   static const neutralColor = PriceColors.flat;
 
-  // 漲跌標記符號（UI 統一使用）
-  /// 上漲標記
-  static const upSymbol = '▲';
-
-  /// 下跌標記
-  static const downSymbol = '▼';
-
   /// 錯誤色 - 使用較深的紅橘色，與上漲顏色區分
   static const errorColor = Color(0xFFE74C3C);
 
@@ -95,8 +88,10 @@ class AppTheme {
   static const _cardDark = SemanticColors.darkSurface; // Zinc 800
   static const _cardDarkSurface = SemanticColors.darkElevated; // Zinc 700
 
-  // 淺色主題表面顏色
-  static const _surfaceLight = Color(0xFFF8F9FA);
+  // 淺色主題表面顏色——引用 SemanticColors 單一來源(2026-08-15 審計:
+  // 原為獨立字面量,與守門測試驗的 lightSurface 可各自漂移;深色系
+  // 本來就這樣寫,對齊之)
+  static const _surfaceLight = SemanticColors.lightSurface;
   static const _backgroundLight = Color(0xFFFFFFFF);
   static const _cardLight = Color(0xFFFFFFFF);
   static const _inputFillLight = Color(0xFFEFF1F5); // 輸入框底色，與白色背景區隔

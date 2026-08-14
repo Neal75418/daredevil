@@ -12,10 +12,10 @@ import 'package:daredevil/presentation/providers/stock_browsing_context_provider
 import 'package:daredevil/presentation/providers/stock_detail_provider.dart';
 import 'package:daredevil/presentation/widgets/stock_nav_bar.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/alerts_tab.dart';
-import 'package:daredevil/presentation/screens/stock_detail/tabs/chip_tab.dart';
-import 'package:daredevil/presentation/screens/stock_detail/tabs/fundamentals_tab.dart';
+import 'package:daredevil/presentation/screens/stock_detail/tabs/chip/chip_tab.dart';
+import 'package:daredevil/presentation/screens/stock_detail/tabs/fundamentals/fundamentals_tab.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/insider_tab.dart';
-import 'package:daredevil/presentation/screens/stock_detail/tabs/technical_tab.dart';
+import 'package:daredevil/presentation/screens/stock_detail/tabs/technical/technical_tab.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/ai_summary_card.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/stock_detail_header.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';

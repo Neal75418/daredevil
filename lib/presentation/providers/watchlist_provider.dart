@@ -45,6 +45,7 @@ class WatchlistState {
     this.hasMore = true,
     this.displayedCount = kPageSize,
   }) : _filteredItems = _computeFilteredItems(items, searchQuery),
+       watchedSymbols = Set.unmodifiable({for (final i in items) i.symbol}),
        _groupedByStatus = null,
        _groupedByTrend = null,
        _groupedByCategory = null;
@@ -62,12 +63,24 @@ class WatchlistState {
     required this.hasMore,
     required this.displayedCount,
     required List<WatchlistItemData> filteredItems,
+    required this.watchedSymbols,
   }) : _filteredItems = filteredItems,
        _groupedByStatus = null,
        _groupedByTrend = null,
        _groupedByCategory = null;
 
   final List<WatchlistItemData> items;
+
+  /// 自選代碼集(items 的派生快取,2026-08-15 select 修復)。
+  ///
+  /// 只要 symbol 集的消費端一律 `select((s) => s.watchedSymbols)`,不要
+  /// 自己 `items.map(...).toSet()`——那會每次 emit 生新 Set(identity ==),
+  /// select 的相等性比較永遠判「已變」,searchQuery 每打一字全頁 rebuild。
+  /// 本欄位只在 items 變更時重建,無關變更保留同一實例;內容 unmodifiable,
+  /// 要 mutate 請自持副本 `{...symbols}`(見 scan_provider)。
+  /// 已知例外:兩個 filing entry 需要 (symbol, name) 對,本欄位餵不了,
+  /// 仍屬不穩定 select(輕量列,rebuild 成本可忽略,未修)。
+  final Set<String> watchedSymbols;
 
   /// 使用者自訂分組清單（依 sortOrder 排序），供管理分組 / picker 使用
   final List<WatchlistGroupEntry> groups;
@@ -211,28 +224,13 @@ class WatchlistState {
     final newSearchQuery = searchQuery ?? this.searchQuery;
     final newError = error == sentinel ? this.error : error as String?;
 
-    // 若 items 或 searchQuery 變更，需重新計算 filteredItems
-    final needsRecompute =
-        items != null ||
-        (searchQuery != null && searchQuery != this.searchQuery);
-
-    if (needsRecompute) {
-      return WatchlistState(
-        items: newItems,
-        groups: newGroups,
-        isLoading: isLoading ?? this.isLoading,
-        error: newError,
-        sort: sort ?? this.sort,
-        group: group ?? this.group,
-        searchQuery: newSearchQuery,
-        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-        hasMore: hasMore ?? this.hasMore,
-        displayedCount: displayedCount ?? this.displayedCount,
-      );
-    }
-
-    // 若只是 isLoading/error/sort/group/groups 變更，保留現有 filteredItems 快取
+    // 兩個派生快取各自精確依賴,無關變更保留原實例(select 穩定性的關鍵):
+    // - filteredItems 依賴 items + searchQuery
+    // - watchedSymbols 只依賴 items
     // （groups 變更只影響 groupedByCategory，內部建構子的該快取本就重置）
+    final itemsChanged = items != null;
+    final searchChanged =
+        searchQuery != null && searchQuery != this.searchQuery;
     return WatchlistState._internal(
       items: newItems,
       groups: newGroups,
@@ -244,7 +242,12 @@ class WatchlistState {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       hasMore: hasMore ?? this.hasMore,
       displayedCount: displayedCount ?? this.displayedCount,
-      filteredItems: _filteredItems,
+      filteredItems: (itemsChanged || searchChanged)
+          ? _computeFilteredItems(newItems, newSearchQuery)
+          : _filteredItems,
+      watchedSymbols: itemsChanged
+          ? Set.unmodifiable({for (final i in newItems) i.symbol})
+          : watchedSymbols,
     );
   }
 }

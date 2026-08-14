@@ -38,16 +38,6 @@ class WarningRepository {
     return _db.getAllActiveWarnings();
   }
 
-  /// 取得所有目前生效的注意股票
-  Future<List<TradingWarningEntry>> getActiveAttentionStocks() {
-    return _db.getActiveWarningsByType('ATTENTION');
-  }
-
-  /// 取得所有目前生效的處置股票
-  Future<List<TradingWarningEntry>> getActiveDisposalStocks() {
-    return _db.getActiveWarningsByType('DISPOSAL');
-  }
-
   /// 批次檢查多檔股票是否為處置股
   Future<Set<String>> getDisposalStocksBatch(List<String> symbols) {
     return _db.getDisposalStocksBatch(symbols);

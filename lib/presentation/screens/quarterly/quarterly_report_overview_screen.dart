@@ -51,7 +51,7 @@ class _QuarterlyReportOverviewScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(quarterlyReportOverviewProvider);
     final watchlistSymbols = ref.watch(
-      watchlistProvider.select((s) => s.items.map((i) => i.symbol).toSet()),
+      watchlistProvider.select((s) => s.watchedSymbols),
     );
     final theme = Theme.of(context);
     final overview = state.overview;

@@ -117,7 +117,6 @@ void main() {
   group('PortfolioPositionData', () {
     test('marketValue uses currentPrice when available', () {
       const pos = PortfolioPositionData(
-        positionId: 1,
         symbol: '2330',
         quantity: 1000,
         avgCost: 500,
@@ -131,7 +130,6 @@ void main() {
 
     test('marketValue falls back to avgCost when no currentPrice', () {
       const pos = PortfolioPositionData(
-        positionId: 1,
         symbol: '2330',
         quantity: 1000,
         avgCost: 500,
@@ -144,7 +142,6 @@ void main() {
 
     test('unrealizedPnl calculates correctly', () {
       const pos = PortfolioPositionData(
-        positionId: 1,
         symbol: '2330',
         quantity: 1000,
         avgCost: 500,
@@ -158,7 +155,6 @@ void main() {
 
     test('unrealizedPnl is zero when no currentPrice', () {
       const pos = PortfolioPositionData(
-        positionId: 1,
         symbol: '2330',
         quantity: 1000,
         avgCost: 500,
@@ -171,7 +167,6 @@ void main() {
 
     test('unrealizedPnlPct calculates correctly', () {
       const pos = PortfolioPositionData(
-        positionId: 1,
         symbol: '2330',
         quantity: 1000,
         avgCost: 500,
@@ -185,7 +180,6 @@ void main() {
 
     test('unrealizedPnlPct is zero when avgCost is zero', () {
       const pos = PortfolioPositionData(
-        positionId: 1,
         symbol: '2330',
         quantity: 1000,
         avgCost: 0, // e.g. from stock dividend
@@ -199,7 +193,6 @@ void main() {
 
     test('totalPnl includes realized + unrealized + dividends', () {
       const pos = PortfolioPositionData(
-        positionId: 1,
         symbol: '2330',
         quantity: 1000,
         avgCost: 500,
@@ -214,7 +207,6 @@ void main() {
 
     test('costBasis is quantity * avgCost', () {
       const pos = PortfolioPositionData(
-        positionId: 1,
         symbol: '2330',
         quantity: 1000,
         avgCost: 500,
@@ -271,7 +263,6 @@ void main() {
       const state = PortfolioState(
         positions: [
           PortfolioPositionData(
-            positionId: 1,
             symbol: '2330',
             quantity: 1000,
             avgCost: 500,
@@ -280,7 +271,6 @@ void main() {
             currentPrice: 600,
           ),
           PortfolioPositionData(
-            positionId: 2,
             symbol: '2317',
             quantity: 500,
             avgCost: 100,
@@ -302,7 +292,6 @@ void main() {
       const state = PortfolioState(
         positions: [
           PortfolioPositionData(
-            positionId: 1,
             symbol: '2330',
             quantity: 1000,
             avgCost: 500,
@@ -310,7 +299,6 @@ void main() {
             totalDividendReceived: 0,
           ),
           PortfolioPositionData(
-            positionId: 2,
             symbol: '2317',
             quantity: 0, // sold all
             avgCost: 100,
@@ -327,7 +315,6 @@ void main() {
       const state = PortfolioState(
         positions: [
           PortfolioPositionData(
-            positionId: 1,
             symbol: '2330',
             quantity: 1000,
             avgCost: 500,
@@ -336,7 +323,6 @@ void main() {
             currentPrice: 600,
           ),
           PortfolioPositionData(
-            positionId: 2,
             symbol: '2317',
             quantity: 1000,
             avgCost: 100,
@@ -358,7 +344,6 @@ void main() {
       const state = PortfolioState(
         positions: [
           PortfolioPositionData(
-            positionId: 1,
             symbol: '2330',
             quantity: 0,
             avgCost: 500,

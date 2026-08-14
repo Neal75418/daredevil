@@ -110,6 +110,59 @@ void main() {
       expect(state.displayedCount, kPageSize);
     });
 
+    // 2026-08-15 審計修復:7 處不穩定 select 中的 5 處(symbol 集)改走
+    // 本快取(另 2 處 filing entry 需 (symbol,name) 對,見 provider doc);
+    // 原樣式每次 recompute 回傳新 Set(identity ==)→ select 實質失效,
+    // 搜尋框每打一字大頁全量 rebuild。派生欄位契約:
+    // 只依賴 items,無關變更(searchQuery 等)必須保留**同一個實例**
+    group('watchedSymbols 快取(select 穩定性)', () {
+      final items = [
+        WatchlistItemData(symbol: '2330', stockName: '台積電'),
+        WatchlistItemData(symbol: '2317', stockName: '鴻海'),
+      ];
+
+      test('🚨 無關欄位 copyWith 保留同一實例(identical)', () {
+        final state = WatchlistState(items: items);
+        expect(
+          identical(
+            state.copyWith(searchQuery: 'x').watchedSymbols,
+            state.watchedSymbols,
+          ),
+          isTrue,
+          reason: 'searchQuery 變更不得換掉 watchedSymbols 實例,否則 select 白廢',
+        );
+        expect(
+          identical(
+            state.copyWith(isLoading: true).watchedSymbols,
+            state.watchedSymbols,
+          ),
+          isTrue,
+        );
+      });
+
+      test('🚨 watchedSymbols 不可變(共享實例防原地汙染)', () {
+        // 終審實測過的失效模式:消費端存下本尊後 .add()——內容被汙染、
+        // identity 不變 → select 永不再 emit。unmodifiable 讓誤用大聲
+        // 炸而不是靜默汙染;消費端要 mutate 請自持副本 {...symbols}
+        final state = WatchlistState(items: items);
+        expect(() => state.watchedSymbols.add('9999'), throwsUnsupportedError);
+        expect(
+          () => state.copyWith(items: items).watchedSymbols.remove('2330'),
+          throwsUnsupportedError,
+          reason: 'copyWith 重算路徑也必須是 unmodifiable',
+        );
+      });
+
+      test('items 變更 → 重算內容', () {
+        final state = WatchlistState(items: items);
+        expect(state.watchedSymbols, {'2330', '2317'});
+        final next = state.copyWith(
+          items: [WatchlistItemData(symbol: '2454', stockName: '聯發科')],
+        );
+        expect(next.watchedSymbols, {'2454'});
+      });
+    });
+
     test('copyWith preserves unset values', () {
       final state = WatchlistState(
         isLoading: true,

@@ -80,7 +80,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   _OnboardingPage(
                     icon: Icons.notifications_active_outlined,
-                    iconColor: Colors.green,
+                    // 主題感知(終審實測:theme-invariant 版對淺色自身
+                    // tint 底僅 2.34:1,successLight 5.74:1)
+                    iconColor: DesignTokens.successColor(theme),
                     title: 'onboarding.step3Title'.tr(),
                     description: 'onboarding.step3Desc'.tr(),
                   ),

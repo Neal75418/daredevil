@@ -93,7 +93,8 @@ class ChipAnomalyRow extends StatelessWidget {
                   label: 'marketOverview.disposalCount'.tr(
                     namedArgs: {'count': '${warnings.disposal}'},
                   ),
-                  color: Colors.red,
+                  // AppTheme.errorColor(#E74C3C)屬 ErrorColors onTint 實測家族
+                  color: AppTheme.errorColor,
                   textColor: ErrorColors.onTintFor(theme.brightness),
                 ),
             ],

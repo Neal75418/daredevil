@@ -84,7 +84,7 @@ class _InstitutionalRankingScreenState
     final theme = Theme.of(context);
     final rows = state.visibleRows;
     final watchlistSymbols = ref.watch(
-      watchlistProvider.select((s) => s.items.map((i) => i.symbol).toSet()),
+      watchlistProvider.select((s) => s.watchedSymbols),
     );
 
     return ThemedRefreshIndicator(

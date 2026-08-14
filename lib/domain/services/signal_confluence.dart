@@ -7,14 +7,10 @@ import 'package:daredevil/domain/models/signal_names.dart';
 /// 而非獨立列出每條訊號。
 class SignalConfluence {
   const SignalConfluence({
-    required this.id,
     required this.signalGroups,
     required this.summaryKey,
     this.isBullish = true,
   });
-
-  /// 模式識別 ID
-  final String id;
 
   /// 訊號群組：每個群組中至少須匹配一個 reasonType
   ///
@@ -103,7 +99,6 @@ class SignalConfluenceDetector {
   static const _bullishPatterns = [
     // 量價齊揚：突破 + 量能放大
     SignalConfluence(
-      id: 'volume_price_breakout',
       signalGroups: [
         {SignalName.techBreakout, SignalName.highVolumeBreakout},
         {SignalName.volumeSpike},
@@ -113,7 +108,6 @@ class SignalConfluenceDetector {
 
     // 法人認同：法人買超 + 技術面轉強
     SignalConfluence(
-      id: 'institutional_confirmation',
       signalGroups: [
         {SignalName.institutionalBuy, SignalName.institutionalBuyStreak},
         {
@@ -127,7 +121,6 @@ class SignalConfluenceDetector {
 
     // 底部反轉：弱轉強 + KD 黃金交叉
     SignalConfluence(
-      id: 'bottom_reversal',
       signalGroups: [
         {SignalName.reversalW2S},
         {
@@ -142,7 +135,6 @@ class SignalConfluenceDetector {
 
     // 基本面+技術面共振
     SignalConfluence(
-      id: 'fundamental_technical',
       signalGroups: [
         {
           SignalName.revenueYoySurge,
@@ -160,7 +152,6 @@ class SignalConfluenceDetector {
 
     // 高殖利率價值投資：低估 + 高殖利率
     SignalConfluence(
-      id: 'value_investment',
       signalGroups: [
         {SignalName.peUndervalued, SignalName.pbrUndervalued},
         {SignalName.highDividendYield},
@@ -169,10 +160,9 @@ class SignalConfluenceDetector {
     ),
 
     // 動能突破：突破 + 均線多頭排列
-    // 排在 volume_price_breakout 之後：當同時有 VOLUME_SPIKE 時，
-    // 量價齊揚優先消耗 TECH_BREAKOUT，此模式作為無量能放大時的 fallback。
+    // 排在「量價齊揚」模式之後：當同時有 VOLUME_SPIKE 時，量價齊揚
+    // 優先消耗 TECH_BREAKOUT，此模式作為無量能放大時的 fallback。
     SignalConfluence(
-      id: 'momentum_breakout',
       signalGroups: [
         {SignalName.techBreakout, SignalName.highVolumeBreakout},
         {SignalName.maAlignmentBullish},
@@ -188,7 +178,6 @@ class SignalConfluenceDetector {
   static const _bearishPatterns = [
     // 頭部反轉：強轉弱 + KD 死亡交叉
     SignalConfluence(
-      id: 'top_reversal',
       signalGroups: [
         {SignalName.reversalS2W},
         {
@@ -204,7 +193,6 @@ class SignalConfluenceDetector {
 
     // 技術面崩跌：跌破支撐 + 空頭排列
     SignalConfluence(
-      id: 'bearish_breakdown',
       signalGroups: [
         {SignalName.techBreakdown},
         {SignalName.maAlignmentBearish, SignalName.kdDeathCross},
@@ -215,7 +203,6 @@ class SignalConfluenceDetector {
 
     // 低估陷阱：估值偏低但趨勢轉弱
     SignalConfluence(
-      id: 'value_trap',
       signalGroups: [
         {SignalName.peUndervalued, SignalName.pbrUndervalued},
         {
@@ -231,7 +218,6 @@ class SignalConfluenceDetector {
 
     // 法人棄守：法人賣超 + 外資減持
     SignalConfluence(
-      id: 'institutional_exit',
       signalGroups: [
         {SignalName.institutionalSell, SignalName.institutionalSellStreak},
         {SignalName.foreignExodus, SignalName.foreignShareholdingDecreasing},

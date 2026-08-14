@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
+import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/widgets/stock_card.dart';
@@ -74,7 +75,7 @@ class WatchlistStockItem extends StatelessWidget {
                 HapticFeedback.mediumImpact();
                 onRemove();
               },
-              backgroundColor: Colors.red.shade400,
+              backgroundColor: AppTheme.errorColor,
               foregroundColor: Colors.white,
               icon: Icons.delete_outline,
               label: 'watchlist.remove'.tr(),

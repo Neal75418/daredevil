@@ -327,23 +327,6 @@ mixin UserDaoMixin on $AppDatabase {
     )..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).get();
   }
 
-  /// 取得股票的所有提醒
-  Future<List<PriceAlertEntry>> getAlertsForSymbol(String symbol) {
-    return (select(priceAlert)
-          ..where((t) => t.symbol.equals(symbol))
-          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
-        .get();
-  }
-
-  /// 取得股票的啟用中提醒
-  Future<List<PriceAlertEntry>> getActiveAlertsForSymbol(String symbol) {
-    return (select(priceAlert)
-          ..where((t) => t.symbol.equals(symbol))
-          ..where((t) => t.isActive.equals(true))
-          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
-        .get();
-  }
-
   /// 依 ID 取得單一提醒
   Future<PriceAlertEntry?> getAlertById(int id) {
     return (select(
@@ -481,6 +464,9 @@ mixin UserDaoMixin on $AppDatabase {
     return affected > 0;
   }
 
+  /// **僅測試 seeding 使用**(2026-08-15 稽核):production 觸發一律走
+  /// [claimAlertTrigger]+[consumeAlertClaim] 的併發 claim 機制——此方法
+  /// 直接寫 triggeredAt 會繞過 claim 保護,誤用即重演併發重複觸發 bug
   Future<void> triggerAlert(int id, {DateTime? now}) {
     return (update(priceAlert)..where((t) => t.id.equals(id))).write(
       PriceAlertCompanion(
@@ -493,11 +479,6 @@ mixin UserDaoMixin on $AppDatabase {
   /// 刪除股價提醒
   Future<void> deletePriceAlert(int id) {
     return (delete(priceAlert)..where((t) => t.id.equals(id))).go();
-  }
-
-  /// 刪除股票的所有提醒
-  Future<void> deleteAlertsForSymbol(String symbol) {
-    return (delete(priceAlert)..where((t) => t.symbol.equals(symbol))).go();
   }
 
   /// 比對提醒與當前價格，回傳已觸發的提醒
@@ -690,16 +671,6 @@ mixin UserDaoMixin on $AppDatabase {
               ..where((t) => t.warningType.isNotValue('DISPOSAL')))
             .get();
     return results.map((r) => r.symbol).toSet();
-  }
-
-  /// 取得指定股票的所有有效警示（不含處置）
-  Future<List<TradingWarningEntry>> getActiveWarningsForSymbol(
-    String symbol,
-  ) async {
-    return (select(tradingWarning)
-          ..where((t) => t.symbol.equals(symbol))
-          ..where((t) => t.warningType.isNotValue('DISPOSAL')))
-        .get();
   }
 
   // ==================================================

@@ -113,24 +113,6 @@ void main() {
     });
   });
 
-  group('severityOfCode — DB code 查詢', () {
-    test('已知警訊 code 正確分級', () {
-      expect(
-        RiskWarnings.severityOfCode('TRADING_WARNING_DISPOSAL'),
-        RiskSeverity.severe,
-      );
-      expect(
-        RiskWarnings.severityOfCode('DAY_TRADING_HIGH'),
-        RiskSeverity.moderate,
-      );
-    });
-
-    test('未知 / 非警訊 code → null', () {
-      expect(RiskWarnings.severityOfCode('NOT_A_REAL_CODE'), isNull);
-      expect(RiskWarnings.severityOfCode('WEEK_52_HIGH'), isNull); // 強勢非警訊
-    });
-  });
-
   group('topSeverity — 取最高嚴重度', () {
     test('含任一 severe → severe', () {
       expect(
