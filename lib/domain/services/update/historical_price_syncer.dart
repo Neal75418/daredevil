@@ -101,7 +101,8 @@ class HistoricalPriceSyncer {
     // 會卡在 220-240 天區間永遠不被同步，52w rule 永久無法觸發。
     final priorityLocked = <String>{...watchlistSymbols, ...popularStocks};
 
-    final backoff = await _loadBackoff();
+    final loadedBackoff = await _loadBackoff();
+    final backoff = loadedBackoff ?? <String, DateTime>{};
     final symbolsNeedingData = _findSymbolsNeedingData(
       symbolsForHistory,
       coverageBatch,
@@ -164,6 +165,9 @@ class HistoricalPriceSyncer {
       preCoverage: coverageBatch,
       historyStartDate: historyStartDate,
       date: date,
+      // 讀取失敗那輪不寫回:fail-open 的空表若被整表覆寫,一次讀取故障
+      // 就抹掉全部既有標記,配額洩漏全面回歸
+      persist: loadedBackoff != null,
     );
     return HistoricalPriceSyncResult(
       syncedCount: batchResult.syncedCount,
@@ -314,12 +318,16 @@ class HistoricalPriceSyncer {
   /// 與下游 52w high/low rule 的硬性需求對齊；non-priority 股維持 180
   /// 早退避免無效追打。
   /// 讀退避表(壞 JSON 一律當空表,fail-open——退避只是省配額,不是正確性)
-  Future<Map<String, DateTime>> _loadBackoff() async {
-    final raw = await _db.getSetting(
-      DataFreshness.historicalBackfillBackoffKey,
-    );
-    if (raw == null || raw.isEmpty) return {};
+  /// 讀退避表。null=讀取失敗(與「表不存在」的 {} 區分:失敗那輪
+  /// 不得寫回,否則整表被空表覆寫、既有標記全滅)
+  Future<Map<String, DateTime>?> _loadBackoff() async {
+    // 整段防禦(含 getSetting 本身):退避是配額優化不是正確性,任何
+    // 失敗都不得毀掉歷史同步本體——fail-open 回 null,跳過行為退回無退避
     try {
+      final raw = await _db.getSetting(
+        DataFreshness.historicalBackfillBackoffKey,
+      );
+      if (raw == null || raw.isEmpty) return {};
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       return {
         for (final e in decoded.entries)
@@ -327,7 +335,7 @@ class HistoricalPriceSyncer {
             e.key: DateTime.parse(e.value as String),
       };
     } catch (_) {
-      return {};
+      return null;
     }
   }
 
@@ -341,37 +349,59 @@ class HistoricalPriceSyncer {
     required Map<String, PriceCoverage> preCoverage,
     required DateTime historyStartDate,
     required DateTime date,
+    required bool persist,
   }) async {
     if (succeeded.isEmpty) return;
-    final post = await _db.getPriceCoverageBatch(
-      succeeded,
-      startDate: historyStartDate,
-      endDate: date,
-    );
-    var changed = false;
-    for (final symbol in succeeded) {
-      final pre = preCoverage[symbol]?.count ?? 0;
-      final now = post[symbol]?.count ?? 0;
-      if (now > pre) {
-        if (backoff.remove(symbol) != null) changed = true;
-      } else {
-        backoff[symbol] = date;
-        changed = true;
-        AppLogger.debug(
-          'HistoricalPriceSyncer',
-          '$symbol: 抓取成功但覆蓋無成長($pre→$now),退避 '
-              '${DataFreshness.historicalBackfillBackoffDays} 天',
+    if (!persist) {
+      AppLogger.warning('HistoricalPriceSyncer', '退避表讀取失敗,本輪不記帳(避免整表覆寫)');
+      return;
+    }
+    try {
+      final post = await _db.getPriceCoverageBatch(
+        succeeded,
+        startDate: historyStartDate,
+        endDate: date,
+      );
+      var changed = false;
+      for (final symbol in succeeded) {
+        final pre = preCoverage[symbol]?.count ?? 0;
+        final now = post[symbol]?.count ?? 0;
+        if (now > pre) {
+          if (backoff.remove(symbol) != null) changed = true;
+        } else {
+          backoff[symbol] = date;
+          changed = true;
+          AppLogger.debug(
+            'HistoricalPriceSyncer',
+            // 措辭刻意不寫「抓取成功」:monthsToFetch 為空時根本沒打 API,
+            // 只保證「這輪同步沒失敗且覆蓋沒變」——正是結構性補不滿的樣態
+            '$symbol: 同步完成但覆蓋無成長($pre→$now),退避 '
+                '${DataFreshness.historicalBackfillBackoffDays} 天',
+          );
+        }
+      }
+      // 寫回時 prune 已過期標記:過期標記與不存在行為完全等價(期滿即重試),
+      // 清掉是零語意風險的上界——否則下市股殘留,表只增不減
+      final pruned = backoff.entries
+          .where(
+            (e) =>
+                !e.value.isAfter(date) &&
+                date.difference(e.value).inDays <
+                    DataFreshness.historicalBackfillBackoffDays,
+          )
+          .toList();
+      if (changed || pruned.length != backoff.length) {
+        await _db.setSetting(
+          DataFreshness.historicalBackfillBackoffKey,
+          jsonEncode({
+            for (final e in pruned)
+              e.key: e.value.toIso8601String().substring(0, 10),
+          }),
         );
       }
-    }
-    if (changed) {
-      await _db.setSetting(
-        DataFreshness.historicalBackfillBackoffKey,
-        jsonEncode({
-          for (final e in backoff.entries)
-            e.key: e.value.toIso8601String().substring(0, 10),
-        }),
-      );
+    } catch (e) {
+      // 記帳失敗只代表下次可能多打一次 API——比讓同步整段失敗好
+      AppLogger.warning('HistoricalPriceSyncer', '退避記帳失敗(忽略)', e);
     }
   }
 
@@ -389,6 +419,9 @@ class HistoricalPriceSyncer {
     bool inBackoff(String symbol) {
       final marked = backoff[symbol];
       if (marked == null) return false;
+      // 標記日在未來(時鐘回撥/髒資料)→ difference 為負永遠 <30,
+      // 不防護會把該股鎖到未來那天——視同無標記
+      if (marked.isAfter(date)) return false;
       return date.difference(marked).inDays <
           DataFreshness.historicalBackfillBackoffDays;
     }

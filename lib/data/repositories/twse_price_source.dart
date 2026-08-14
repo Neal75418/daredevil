@@ -35,6 +35,12 @@ class TwsePriceSource {
   }) async {
     final allPrices = <TwseDailyPrice>[];
     var consecutiveEmpty = 0;
+    // 全滅偵測:單月失敗換部分資料是划算的,但「所有月份都失敗」再回空清單
+    // 就會被上游(HistoricalPriceSyncer 退避記帳)誤讀成「成功但已無資料」,
+    // 蓋下 30 天凍結——TWSE 格式變更的一個晚上可凍住整批上市股
+    // (2026-06 STOCK_DAY_ALL 改 CSV 靜默失效有前科)。全滅必須拋錯。
+    var anyMonthSucceeded = false;
+    Object? lastError;
 
     // 從最新月份往回遍歷
     for (var i = months.length - 1; i >= 0; i--) {
@@ -45,6 +51,7 @@ class TwsePriceSource {
           year: month.year,
           month: month.month,
         );
+        anyMonthSucceeded = true;
         if (monthData.isEmpty) {
           consecutiveEmpty++;
           if (consecutiveEmpty >= _maxConsecutiveEmptyMonths) {
@@ -66,6 +73,7 @@ class TwsePriceSource {
       } catch (e) {
         // 網路錯誤是不確定狀態（該月可能有資料），重置計數器避免誤判
         consecutiveEmpty = 0;
+        lastError = e;
         AppLogger.warning(
           'TwsePriceSource',
           '$symbol: ${month.year}-${month.month} 月份價格取得失敗',
@@ -78,6 +86,10 @@ class TwsePriceSource {
           const Duration(milliseconds: ApiConfig.priceBatchQueryDelayMs),
         );
       }
+    }
+
+    if (!anyMonthSucceeded && lastError != null) {
+      throw DatabaseException('$symbol: 所有月份價格取得皆失敗', lastError);
     }
 
     // 過濾至請求的日期範圍

@@ -1237,6 +1237,88 @@ void main() {
       );
     });
 
+    test('🚨 標記日在未來(時鐘回撥)→ 視同無標記重試,不得永久封鎖', () async {
+      // date.difference(未來標記) 為負 → 永遠 < 30 → 若不防護該股被鎖到未來
+      when(
+        () => mockDb.getSetting(DataFreshness.historicalBackfillBackoffKey),
+      ).thenAnswer((_) async => '{"8291":"2025-06-01"}'); // testDate 之後
+      setupSufficientDataSymbols([]);
+      setupPriceHistoryBatch({'8291': thinStock()});
+      setupSyncSuccess('8291', count: 124);
+
+      await syncer.syncHistoricalPrices(
+        date: testDate,
+        watchlistSymbols: [],
+        popularStocks: [],
+        marketCandidates: ['8291'],
+      );
+
+      verify(
+        () => mockPriceRepo.syncStockPrices(
+          '8291',
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).called(1);
+    });
+
+    test('寫回時 prune 已過期標記(下市股不會在表裡永久殘留)', () async {
+      // 9999 的標記早已期滿且本輪不在候選內(如已下市)——過期標記與
+      // 不存在行為等價,寫回時順手清掉,表大小以「近 30 天內停滯股」為界
+      when(
+        () => mockDb.getSetting(DataFreshness.historicalBackfillBackoffKey),
+      ).thenAnswer((_) async => '{"9999":"2024-01-01"}');
+      setupSufficientDataSymbols([]);
+      setupPriceHistoryBatch({'8291': thinStock()});
+      setupSyncSuccess('8291', count: 124);
+
+      await syncer.syncHistoricalPrices(
+        date: testDate,
+        watchlistSymbols: [],
+        popularStocks: [],
+        marketCandidates: ['8291'],
+      );
+
+      final captured = verify(
+        () => mockDb.setSetting(
+          DataFreshness.historicalBackfillBackoffKey,
+          captureAny(),
+        ),
+      ).captured;
+      expect(captured.last as String, contains('8291'));
+      expect(
+        captured.last as String,
+        isNot(contains('9999')),
+        reason: '過期標記必須被 prune,否則表只增不減',
+      );
+    });
+
+    test('🚨 退避表讀取失敗 → 本輪不寫回(不得把整表洗成空)', () async {
+      // fail-open 回空表只該影響「跳過」判斷;若接著整表覆寫,一次讀取
+      // 故障就會抹掉全部既有標記,配額洩漏全面回歸
+      when(
+        () => mockDb.getSetting(DataFreshness.historicalBackfillBackoffKey),
+      ).thenThrow(Exception('模擬 settings 讀取故障'));
+      setupSufficientDataSymbols([]);
+      setupPriceHistoryBatch({'8291': thinStock()});
+      setupSyncSuccess('8291', count: 124);
+
+      final result = await syncer.syncHistoricalPrices(
+        date: testDate,
+        watchlistSymbols: [],
+        popularStocks: [],
+        marketCandidates: ['8291'],
+      );
+
+      expect(result.succeededSymbols, ['8291'], reason: '同步本體不得受退避故障影響');
+      verifyNever(
+        () => mockDb.setSetting(
+          DataFreshness.historicalBackfillBackoffKey,
+          any(),
+        ),
+      );
+    });
+
     test('退避期滿 → 重試一次(FinMind 可能有新資料)', () async {
       when(
         () => mockDb.getSetting(DataFreshness.historicalBackfillBackoffKey),
