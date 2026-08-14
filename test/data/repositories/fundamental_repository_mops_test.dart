@@ -82,13 +82,11 @@ void main() {
   setUp(() {
     db = MockAppDatabase();
     mops = MockMopsClient();
-    repo = FundamentalRepository(
-      db: db,
-      finMind: MockFinMindClient(),
-      twse: MockTwseClient(),
-      tpex: MockTpexClient(),
-      mops: mops,
-    );
+    // 預設時鐘固定在公布窗口內(2026-08-15 踩到:未注入 clock 吃真實
+    // 日期,每月 15 日起窗口關閉,三個依賴預設 repo 的測試半個月紅、
+    // 「MOPS 掛掉」則因窗外早退而綠得毫無意義)。需要窗外行為的測試
+    // 自行 buildRepo 覆寫。
+    repo = buildRepo(DateTime(2026, 8, 4));
     when(
       () => db.getAllActiveStocks(),
     ).thenAnswer((_) async => [_stock('2408', 'TWSE'), _stock('6538', 'TPEx')]);
