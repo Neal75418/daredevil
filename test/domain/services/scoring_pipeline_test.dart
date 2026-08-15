@@ -274,8 +274,14 @@ void main() {
       expect(result!.scoreShort, 25);
       expect(result.scoreLong, 0);
       expect(result.topReasons, reasons);
-      // mutex 應套三次：short scoring、long scoring、UI 顯示
-      verify(() => engine.applyMutexGroups(any(), any())).called(3);
+      // mutex 只套兩次:short scoring、long scoring(2026-08-15 數值稽核)。
+      //
+      // 原本有第三次——用 hardcoded 分數再跑一次當「UI/落庫顯示」來源。
+      // 那正是稽核第 01 條的病灶:calibration 把某條規則歸零時,兩條路徑
+      // 選出**不同的 mutex 贏家**,於是落庫的 reason 不是實際貢獻分數的
+      // 那份;而 mode tab 的分數與排名全是對落庫那份做 SUM。
+      // 落庫改用 mutedShort 後,第三次呼叫消失。
+      verify(() => engine.applyMutexGroups(any(), any())).called(2);
     });
 
     test('兩 horizon 都低於 observationScoreThreshold → null（過濾）', () {

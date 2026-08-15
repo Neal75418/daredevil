@@ -160,8 +160,20 @@ scoreReasonsDualHorizon({
   final scoreShort = rawShort < 0 ? 0 : rawShort;
   final scoreLong = rawLong < 0 ? 0 : rawLong;
 
-  final mutedForUi = ruleEngine.applyMutexGroups(reasons, (r) => r.score);
-  final topReasons = ruleEngine.getTopReasons(mutedForUi);
+  // 落庫用 **short 的 mutex 結果**,與 [scoreShort] 同一份(2026-08-15
+  // 數值稽核第 01 條)。
+  //
+  // 舊行為另外用 hardcoded 分數再跑一次 mutex(mutedForUi)當落庫來源,
+  // 於是 calibration 把某條規則歸零時兩邊選出**不同贏家**——落庫的那份
+  // 不是實際貢獻分數的那份。而 `analysis_dao.getModeStockScores` 是對
+  // daily_reason 做 `SUM(rule_score_short)`,所以三個 mode tab 的分數、
+  // 排名、`modeCMinScore` / `minRoutedAbsScore` 門檻**全都建在錯的那份上**。
+  // 真實資料實測(2026-08-14,455 檔):69 檔落庫加總 ≠ 總分,最大差 30 分。
+  //
+  // 選 short 而非 long:mode tab 只消費 short(getModeStockScores)。
+  // long 的加總仍可能不等於 scoreLong——long horizon 幾乎未校準
+  // (JSON 40 條僅 1 條非零),兩者實務上選出同一批贏家,故不另外落庫。
+  final topReasons = ruleEngine.getTopReasons(mutedShort);
 
   return (
     scoreShort: scoreShort,
