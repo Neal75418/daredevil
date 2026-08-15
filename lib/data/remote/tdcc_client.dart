@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import 'package:daredevil/core/utils/tw_parse_utils.dart';
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/api_endpoints.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
@@ -148,16 +149,10 @@ class TdccClient {
       final level = int.tryParse(clean['持股分級']?.toString() ?? '');
       if (level == null) return null;
 
-      final shareholders =
-          int.tryParse(clean['人數']?.toString().replaceAll(',', '') ?? '') ?? 0;
-      final shares =
-          double.tryParse(clean['股數']?.toString().replaceAll(',', '') ?? '') ??
-          0;
+      final shareholders = TwParseUtils.parseFormattedInt(clean['人數']) ?? 0;
+      final shares = TwParseUtils.parseFormattedDouble(clean['股數']) ?? 0;
       final percent =
-          double.tryParse(
-            clean['占集保庫存數比例%']?.toString().replaceAll(',', '') ?? '',
-          ) ??
-          0;
+          TwParseUtils.parseFormattedDouble(clean['占集保庫存數比例%']) ?? 0;
 
       return TdccHoldingLevel(
         date: DateTime(year, month, day),

@@ -1,3 +1,4 @@
+import 'package:daredevil/core/utils/tw_parse_utils.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/constants/api_config.dart';
 
@@ -39,17 +40,16 @@ class TpexIndustryEps {
     }
 
     final epsStr = json['基本每股盈餘']?.toString().trim() ?? '0';
-    final eps = double.tryParse(epsStr.replaceAll(',', '')) ?? 0;
+    final eps = TwParseUtils.parseFormattedDouble(epsStr) ?? 0;
 
     final revenueStr = json['營業收入']?.toString().trim() ?? '0';
-    final revenue = double.tryParse(revenueStr.replaceAll(',', '')) ?? 0;
+    final revenue = TwParseUtils.parseFormattedDouble(revenueStr) ?? 0;
 
     final opProfitStr = json['營業利益']?.toString().trim() ?? '0';
-    final operatingProfit =
-        double.tryParse(opProfitStr.replaceAll(',', '')) ?? 0;
+    final operatingProfit = TwParseUtils.parseFormattedDouble(opProfitStr) ?? 0;
 
     final netIncomeStr = json['稅後淨利']?.toString().trim() ?? '0';
-    final netIncome = double.tryParse(netIncomeStr.replaceAll(',', '')) ?? 0;
+    final netIncome = TwParseUtils.parseFormattedDouble(netIncomeStr) ?? 0;
 
     return TpexIndustryEps(
       symbol: symbol,

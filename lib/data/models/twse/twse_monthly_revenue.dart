@@ -1,3 +1,4 @@
+import 'package:daredevil/core/utils/tw_parse_utils.dart';
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/data/models/shared/ytd_yoy_parser.dart';
 
@@ -32,12 +33,12 @@ class TwseMonthlyRevenue {
     double parseVal(String? key) {
       if (key == null) return 0.0;
       final val = json[key]?.toString() ?? '';
-      return double.tryParse(val.replaceAll(',', '')) ?? 0.0;
+      return TwParseUtils.parseFormattedDouble(val) ?? 0.0;
     }
 
     double? parseNullable(String key) {
       final val = json[key]?.toString() ?? '';
-      return double.tryParse(val.replaceAll(',', ''));
+      return TwParseUtils.parseFormattedDouble(val);
     }
 
     return TwseMonthlyRevenue(

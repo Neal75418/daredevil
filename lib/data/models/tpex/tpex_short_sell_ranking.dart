@@ -1,3 +1,4 @@
+import 'package:daredevil/core/utils/tw_parse_utils.dart';
 import 'package:daredevil/core/utils/logger.dart';
 
 /// TPEX 融券賣出排行資料（來源：櫃買中心 short_sell API）
@@ -64,6 +65,6 @@ class TpexShortSellRanking {
 
   static int _parseIntField(Map<String, dynamic> json, String key) {
     final str = json[key]?.toString().trim() ?? '0';
-    return int.tryParse(str.replaceAll(',', '')) ?? 0;
+    return TwParseUtils.parseFormattedInt(str) ?? 0;
   }
 }

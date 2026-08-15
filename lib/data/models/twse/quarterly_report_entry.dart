@@ -1,3 +1,4 @@
+import 'package:daredevil/core/utils/tw_parse_utils.dart';
 import 'package:daredevil/core/utils/logger.dart';
 
 /// 季度綜合損益表快照(TWSE t187ap06_L_* / TPEx mopsfin_t187ap06_O_*,
@@ -46,7 +47,7 @@ class QuarterlyReportEntry {
     double? parseNum(String key) {
       final s = json[key]?.toString().trim() ?? '';
       if (s.isEmpty) return null;
-      return double.tryParse(s.replaceAll(',', ''));
+      return TwParseUtils.parseFormattedDouble(s);
     }
 
     final eps = parseNum('基本每股盈餘（元）');

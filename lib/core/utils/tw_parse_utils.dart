@@ -12,6 +12,18 @@ abstract final class TwParseUtils {
   /// - "1,234,567" → 1234567.0
   /// - "--" / "X" / "---" → null
   /// - null / 空字串 → null
+  /// [parseFormattedDouble] 的整數版——千分位、哨兵(`--`/`X`/`---`)、
+  /// 前後空白一併處理。
+  ///
+  /// 2026-08-15 數值稽核:19 處土製 `replaceAll(',','')+tryParse` 中只有
+  /// 2 處先 trim,其餘遇到帶空白的欄位會整個 parse 失敗、靜靜落 0。
+  static int? parseFormattedInt(dynamic value) {
+    if (value == null) return null;
+    final str = value.toString().replaceAll(',', '').trim();
+    if (str.isEmpty || str == '--' || str == 'X' || str == '---') return null;
+    return int.tryParse(str);
+  }
+
   static double? parseFormattedDouble(dynamic value) {
     if (value == null) return null;
     final str = value.toString().replaceAll(',', '').trim();

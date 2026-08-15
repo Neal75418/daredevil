@@ -283,4 +283,27 @@ void main() {
       });
     });
   });
+
+  group('parseFormattedInt(2026-08-15 稽核:19 處土製解析只有 2 處 trim)', () {
+    test('千分位、空白、哨兵一併處理', () {
+      expect(TwParseUtils.parseFormattedInt('1,234'), 1234);
+      expect(TwParseUtils.parseFormattedInt(' 5,678 '), 5678);
+      expect(TwParseUtils.parseFormattedInt('--'), isNull);
+      expect(TwParseUtils.parseFormattedInt('X'), isNull);
+      expect(TwParseUtils.parseFormattedInt('---'), isNull);
+      expect(TwParseUtils.parseFormattedInt(''), isNull);
+      expect(TwParseUtils.parseFormattedInt(null), isNull);
+    });
+
+    test('🚨 帶空白的數字:土製版會 parse 失敗落 0,canonical 正確解析', () {
+      // 這是下沉的實質價值——19 處中 17 處沒 trim
+      expect(TwParseUtils.parseFormattedInt(' 1,000'), 1000);
+      expect(TwParseUtils.parseFormattedDouble('  12.5  '), 12.5);
+    });
+
+    test('0 仍是合法值(不與缺值混淆)', () {
+      expect(TwParseUtils.parseFormattedInt('0'), 0);
+      expect(TwParseUtils.parseFormattedDouble('0.00'), 0.0);
+    });
+  });
 }

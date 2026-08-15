@@ -47,12 +47,12 @@ class TpexInsiderTransfer {
         ? methodSpecificSharesStr
         : totalOwnSharesStr;
     final transferShares =
-        int.tryParse(transferSharesStr.replaceAll(',', '')) ?? 0;
+        TwParseUtils.parseFormattedInt(transferSharesStr) ?? 0;
 
     // 目前持有採「自有持股」（另有「保留運用決定權信託股數」未計入）
     final currentHoldingStr = json['目前持有股數-自有持股']?.toString().trim() ?? '';
     final currentHolding =
-        int.tryParse(currentHoldingStr.replaceAll(',', '')) ?? 0;
+        TwParseUtils.parseFormattedInt(currentHoldingStr) ?? 0;
 
     final validPeriodStr = json['有效轉讓期間']?.toString().trim() ?? '';
     final (validPeriodStart, validPeriodEnd) = _parseValidPeriod(
@@ -100,10 +100,10 @@ class TpexInsiderTransfer {
         ? methodSpecificShares
         : totalOwnShares;
     final transferShares =
-        int.tryParse(transferSharesStr.replaceAll(',', '')) ?? 0;
+        TwParseUtils.parseFormattedInt(transferSharesStr) ?? 0;
 
     final currentHolding =
-        int.tryParse(field('目前持有股數-自有持股').replaceAll(',', '')) ?? 0;
+        TwParseUtils.parseFormattedInt(field('目前持有股數-自有持股')) ?? 0;
 
     final (validPeriodStart, validPeriodEnd) = _parseValidPeriod(
       field('有效轉讓期間'),
