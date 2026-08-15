@@ -1,0 +1,56 @@
+#!/bin/bash
+# Post-commit hook — 讓 launchd 的 CLI 產物跟著 source 走(2026-08-15)
+#
+# 為什麼需要:launchd 跑的是 AOT 編譯產物,不是 source(`dart run` 會在
+# 執行期跑 build hooks 抓網路,2026-08-10 開盤時因此連續 7 輪死在 main()
+# 之前)。代價是產物不會自動更新,而落後時**三個訊號全部正常**:exit
+# code 0、update_run 記 SUCCESS、日誌無異常——2026-08-15 實測落後 3 天,
+# 期間 lib/ 有 14 個 commit,包含當天才修的運維可見性(修了沒生效)。
+#
+# 重編實測 4.3s/支,便宜到不該由人來記得。
+#
+# **不碰 launchd**:走 `install.sh --cli-only`。plist 指向固定路徑,換掉
+# binary 下一輪喚醒就是新的;反而 bootout/bootstrap 可能打斷盤中那一輪。
+#
+# **失敗必須被下一次 commit 撞見**:背景執行的東西沒人看日誌,那只是把
+# 靜默失效換個位置。失敗寫標記檔,pre-commit 開頭會檢查並大聲講。
+set -uo pipefail
+
+REPO="$(git rev-parse --show-toplevel)"
+[ -x "$REPO/ops/launchd/install.sh" ] || exit 0
+
+# CLI 的編譯閉包涵蓋整個 lib/(domain + data + core),不是只有 tool/。
+# 靠人工判斷「這次算不算重大改動」本身就是不可靠的判準,所以範圍取寬。
+git diff-tree --no-commit-id --name-only -r HEAD \
+  | grep -qE '^(lib|bin|tool|ops/launchd)/|^pubspec\.(yaml|lock)$' || exit 0
+
+LOG="$HOME/Library/Logs/daredevil-cli-rebuild.log"
+PENDING="$REPO/.git/cli-rebuild-pending"
+LOCK="$HOME/.daredevil/cli/.rebuild.lock"
+mkdir -p "$HOME/.daredevil/cli" "$HOME/Library/Logs"
+
+# 就地截斷(同 LogRotation 的精神:不放未版控的 newsyslog 設定檔)
+[ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 1048576 ] && : > "$LOG"
+
+(
+  # mkdir 是原子的——連續 commit 時避免兩個 install.sh 同時 rm -rf 同一
+  # 個 bundle。搶不到就留 pending 標記,由下次 commit 的 pre-commit 提醒,
+  # 不靜默放過(否則後一個 commit 的改動永遠不會進產物)。
+  if ! mkdir "$LOCK" 2>/dev/null; then
+    date '+%F %T 另一輪重編進行中,留待下次' >> "$LOG"
+    touch "$PENDING"
+    exit 0
+  fi
+  trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+
+  sha="$(git -C "$REPO" rev-parse --short HEAD)"
+  echo "=== $(date '+%F %T') rebuild for $sha ===" >> "$LOG"
+  if "$REPO/ops/launchd/install.sh" --cli-only >> "$LOG" 2>&1; then
+    rm -f "$PENDING"
+  else
+    echo "❌ 重編失敗" >> "$LOG"
+    touch "$PENDING"
+  fi
+) &
+
+exit 0

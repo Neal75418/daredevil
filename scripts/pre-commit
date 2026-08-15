@@ -7,6 +7,27 @@ set -e
 
 echo "🔍 Running pre-commit CI checks..."
 
+# 0. 補上次沒做完的 CLI 重編(2026-08-15)
+#
+# post-commit 在背景重編 launchd 的 CLI 產物;失敗或搶不到 lock 時留下
+# 這個標記。背景失敗沒人看日誌——那只是把靜默失效換個位置,所以在「下
+# 次 commit」這條必經之路上把它撿起來。
+#
+# 這裡**同步補做**而不是印警告:警告會被忽略,而產物落後的後果是每日
+# 自動更新與盤中提醒跑舊邏輯(2026-08-15 實測落後 3 天無人察覺)。
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+if [ -f "$REPO_ROOT/.git/cli-rebuild-pending" ]; then
+    echo "🔧 上次 CLI 重編未完成,補做中(約 9s)..."
+    if "$REPO_ROOT/ops/launchd/install.sh" --cli-only > /dev/null 2>&1; then
+        rm -f "$REPO_ROOT/.git/cli-rebuild-pending"
+        echo "✅ CLI 已補上"
+    else
+        echo "❌ CLI 重編失敗——launchd 的每日更新與盤中提醒會跑舊邏輯"
+        echo "   手動查看:ops/launchd/install.sh --cli-only"
+        exit 1
+    fi
+fi
+
 # 1. Auto-format staged .dart files
 STAGED_DART=$(git diff --cached --name-only --diff-filter=ACMR -- '*.dart')
 if [ -n "$STAGED_DART" ]; then

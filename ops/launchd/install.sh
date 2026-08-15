@@ -8,6 +8,15 @@
 # 用法:ops/launchd/install.sh   (從任何位置皆可)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+
+# --cli-only:只重編/替換 CLI binary,不碰 launchd。給 post-commit hook 用。
+#
+# 為什麼可以不 bootout/bootstrap:plist 的 ProgramArguments 指向**固定
+# 路徑**,launchd 每次喚醒都重新 exec 那個檔案——換掉檔案,下一輪就是
+# 新的。反過來說,在盤中對 intraday job 做 bootout/bootstrap 反而可能
+# 打斷正在執行的那一輪。
+CLI_ONLY=0
+[ "${1:-}" = "--cli-only" ] && CLI_ONLY=1
 # 🚨 必須解析到**原生執行檔**,不能用 PATH 上的 dart(2026-08-10 實機):
 # `/opt/homebrew/bin/dart` → symlink → `.../flutter/bin/dart`(一支 **bash 腳本**)
 # → `.../cache/dart-sdk/bin/dart`(真正的 Mach-O)。中間隔著腳本會讓
@@ -92,6 +101,11 @@ for target in intraday_alert_check daily_update; do
   fi
   echo "  ✅ $CLI_DIR/$target/bin/$target"
 done
+if [ "$CLI_ONLY" = 1 ]; then
+  echo "✅ CLI 已更新至 $BUILD_SHA(--cli-only,未動 launchd)"
+  exit 0
+fi
+
 UID_NUM="$(id -u)"
 
 # 路徑含空白或 shell 特殊字元會產生「plutil 過但 job 永遠死」的假成功

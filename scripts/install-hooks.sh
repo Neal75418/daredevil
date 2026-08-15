@@ -5,7 +5,10 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOKS_DIR="$(git rev-parse --show-toplevel)/.git/hooks"
 
-cp "$SCRIPT_DIR/pre-commit" "$HOOKS_DIR/pre-commit"
-chmod +x "$HOOKS_DIR/pre-commit"
+for hook in pre-commit post-commit; do
+  cp "$SCRIPT_DIR/$hook" "$HOOKS_DIR/$hook"
+  chmod +x "$HOOKS_DIR/$hook"
+  echo "  ✅ $hook"
+done
 
 echo "✅ Git hooks installed successfully"
