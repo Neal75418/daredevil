@@ -109,6 +109,39 @@ class TwseClient {
   /// row 佈局：[代號, 名稱, 成交股數, 成交筆數, 成交金額, 開, 高, 低, 收,
   /// 漲跌(+/-)(html), 漲跌價差, ...]。漲跌號從 html 取正負、乘上價差。
   /// 回應日期 ≠ [requestedDate] → 回空（端點失效防護）。public 供測試。
+  /// 解析 BWIBBU 估值列。public 供測試(主方法自建 Dio、不可注入)。
+  ///
+  /// **缺值一律回 null,不得寫 0**(2026-08-15 數值稽核):端點對「無法
+  /// 計算」的欄位回 `-`——虧損公司無本益比、未配息無殖利率。舊實作
+  /// `?? 0.0` 把它落庫成 0,與「本益比 0」(極度便宜)語意完全相反。
+  /// 實測 production 每日 213–246 檔(約 20%)per=0,其中 38 檔明明獲利;
+  /// 而同欄位的 TPEX 路徑寫的是 NULL,兩市場語意不一致會讓跨市場的
+  /// 排序/分位數/平均本益比統計全部不成立。
+  ///
+  /// 注意:交易所明確回的 `0.00`(如確定不配息)**是資訊**,照常保留;
+  /// 只有解析不出數值時才回 null。
+  static List<TwseValuation> parseValuationRows(
+    List<dynamic> data,
+    DateTime resDate,
+  ) {
+    return data.map((item) {
+      final map = item as Map<String, dynamic>;
+      double? num(String key) {
+        final raw = map[key]?.toString().replaceAll(',', '');
+        if (raw == null || raw.isEmpty) return null;
+        return double.tryParse(raw);
+      }
+
+      return TwseValuation(
+        code: map['Code']?.toString() ?? '',
+        date: resDate,
+        per: num('PEratio'),
+        pbr: num('PBratio'),
+        dividendYield: num('DividendYield'),
+      );
+    }).toList();
+  }
+
   static List<TwseDailyPrice> parseMiIndexDailyPrices(
     Map<dynamic, dynamic> json,
     DateTime requestedDate,
@@ -729,27 +762,7 @@ class TwseClient {
       // 正規化到當日 00:00（同 daily_price 口徑），同日多次同步即可去重。
       final resDate = DateContext.normalize(date ?? DateTime.now());
 
-      final results = data.map((item) {
-        final map = item as Map<String, dynamic>;
-
-        final code = map['Code']?.toString() ?? '';
-
-        final peStr = map['PEratio']?.toString().replaceAll(',', '');
-        final yieldStr = map['DividendYield']?.toString().replaceAll(',', '');
-        final pbrStr = map['PBratio']?.toString().replaceAll(',', '');
-
-        final pe = double.tryParse(peStr ?? '') ?? 0.0;
-        final pbr = double.tryParse(pbrStr ?? '') ?? 0.0;
-        final yieldVal = double.tryParse(yieldStr ?? '') ?? 0.0;
-
-        return TwseValuation(
-          code: code,
-          date: resDate,
-          per: pe,
-          pbr: pbr,
-          dividendYield: yieldVal,
-        );
-      }).toList();
+      final results = parseValuationRows(data, resDate);
 
       AppLogger.info(_tag, '估值資料: ${results.length} 筆');
       _cache.put(cacheKey, results);
