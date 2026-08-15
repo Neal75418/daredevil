@@ -110,23 +110,29 @@ class InsiderTransferSyncer {
       for (final c in companions) {
         final pk =
             '${c.symbol.value}|${c.reportDate.value}'
-            '|${c.identity.value}|${c.name.value}';
+            '|${c.identity.value}|${c.name.value}|${c.transferMethod.value}';
         if (!pkSeen.add(pk)) {
           AppLogger.warning(
             'InsiderTransferSyncer',
-            'PK 碰撞:$pk 同人同日多筆申報將塌縮成一筆(低報)——'
-                '如反覆出現需為 PK 補 transferMethod 欄',
+            'PK 碰撞:$pk 完全相同的申報重複出現,將塌縮成一筆——'
+                '轉讓方式已納入 PK(2026-08-16),此處剩下的碰撞代表上游資料重複',
           );
         }
       }
 
       await _db.insertInsiderTransfers(companions);
 
+      // 報**實際寫入列數**而非輸入陣列長度(2026-08-16):insertOrReplace 會
+      // 把同 PK 的多筆併成一列,而 `pkSeen` 正是去重後的 PK 集合。2026-08-14
+      // 實機收到 7 筆、DB 只有 5 筆,日誌卻報 7 —— 資料少了兩筆而宣稱完整,
+      // 那比少兩筆本身更危險。回傳值同樣要修:UpdateService 也吃這個數字。
       AppLogger.info(
         'InsiderTransferSyncer',
-        '同步完成: ${companions.length} 筆轉讓申報',
+        '同步完成: ${pkSeen.length} 筆轉讓申報'
+            '${pkSeen.length == companions.length ? '' : '(來源 ${companions.length} 筆,'
+                      '去重 ${companions.length - pkSeen.length} 筆)'}',
       );
-      return companions.length;
+      return pkSeen.length;
     } on RateLimitException {
       rethrow;
     } on NetworkException {

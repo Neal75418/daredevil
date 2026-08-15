@@ -6814,13 +6814,17 @@ class HoldingDistributionEntry extends i0.DataClass
   /// 持股級距（如 "1-999"、"1000-5000"）
   final String level;
 
-  /// 該級距股東人數
+  /// 該級距股東人數——**已備料未消費**(2026-08-15 健檢)
+  ///
+  /// TDCC 每週寫入、目前僅 level/percent 有讀取端。刻意保留:與 percent
+  /// 同在一列回應內(零額外請求),而「股東人數變化」是無法從現有欄位
+  /// 推導的獨立訊號(人數減少=籌碼集中),停寫等於放棄未來的回溯基準。
   final int? shareholders;
 
   /// 佔總股數比例（%）
   final double? percent;
 
-  /// 持股數（股）
+  /// 持股數（股）——已備料未消費(同 [shareholders] 的保留理由)
   final double? shares;
   const HoldingDistributionEntry({
     required this.symbol,
@@ -8718,19 +8722,19 @@ class MarginTradingEntry extends i0.DataClass
   /// 交易日期
   final DateTime date;
 
-  /// 融資買進（張）
+  /// 融資買進（張）——已備料未消費
   final double? marginBuy;
 
-  /// 融資賣出（張）
+  /// 融資賣出（張）——已備料未消費
   final double? marginSell;
 
   /// 融資餘額（張）
   final double? marginBalance;
 
-  /// 融券買進/回補（張）
+  /// 融券買進/回補（張）——已備料未消費
   final double? shortBuy;
 
-  /// 融券賣出（張）
+  /// 融券賣出（張）——已備料未消費
   final double? shortSell;
 
   /// 融券餘額（張）
@@ -10377,6 +10381,7 @@ class $InsiderTransferTable extends i2.InsiderTransfer
     reportDate,
     identity,
     name,
+    transferMethod,
   };
   @override
   i1.InsiderTransferEntry map(

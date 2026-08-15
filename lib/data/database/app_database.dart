@@ -212,6 +212,7 @@ class AppDatabase extends $AppDatabase
       await _ensurePinnedThesisSchema();
       await _ensureQuarterlyReportSchema();
       await _ensureRetiredSchemaDropped();
+      await ensureInsiderTransferPk();
       await _ensureIndexHygiene();
       // 歷史零價列收斂(2026-07-30):TWSE STOCK_DAY_ALL 對「無成交」
       // 用 0.00 表達,parser 修正(TwParseUtils.parsePrice)前已有 41 列
@@ -229,6 +230,76 @@ class AppDatabase extends $AppDatabase
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  /// Pre-launch idempotent PK 升級:`insider_transfer` 的 PK 補 `transfer_method`。
+  ///
+  /// **為什麼要動**:2026-08-14 實機,2442 一位「經理人未成年子女」同日以
+  /// 多種方式申報。PK={symbol, report_date, identity, name} 不含轉讓方式,
+  /// `insertOrReplace` 把它們塌縮成一筆——當日 syncer 收到 7 筆、DB 只有
+  /// 5 筆,轉讓總量低報。syncer 的碰撞哨(2026-08-05)當時註明「live 未見
+  /// 樣本…觀察到實例再議 migration」,現在有實例了。
+  ///
+  /// **不 bump [appSchemaFingerprint]**:指紋是手寫常數,不動它就不會進入
+  /// wipe 路徑(`insider_transfer` 不在使用者輸入表 whitelist,一旦 wipe 就
+  /// 沒了)。沿用 [_ensureDealerSelfNetColumn] / [_ensureRetiredSchemaDropped]
+  /// 的先例:偵測現況 → 就地 DDL → 既有資料 `INSERT SELECT` 完整搬移。
+  ///
+  /// SQLite 不支援 `ALTER TABLE ... ALTER PRIMARY KEY`,只能重建。順序刻意
+  /// 為「建新表 → 搬資料 → drop 舊表 → rename」,任一步失敗都不會讓舊資料
+  /// 先消失。呼叫點在 `PRAGMA foreign_keys = ON` **之前**(beforeOpen 的
+  /// `_ensure*` 區段),`DROP TABLE` 不會觸發 CASCADE 連鎖。
+  ///
+  /// idempotent:PK 已含該欄即 no-op(全新安裝由 createAll 直接建好)。
+  @visibleForTesting
+  Future<void> ensureInsiderTransferPk() async {
+    final info = await customSelect(
+      "PRAGMA table_info('insider_transfer')",
+    ).get();
+    if (info.isEmpty) return; // 表還不存在(createAll 尚未跑)
+    final pkColumns = info
+        .where((row) => row.read<int>('pk') > 0)
+        .map((row) => row.read<String>('name'))
+        .toSet();
+    if (pkColumns.contains('transfer_method')) return;
+
+    await customStatement('''
+      CREATE TABLE insider_transfer_new (
+        symbol TEXT NOT NULL REFERENCES stock_master (symbol) ON DELETE CASCADE,
+        report_date TEXT NOT NULL,
+        identity TEXT NOT NULL,
+        name TEXT NOT NULL,
+        transfer_method TEXT NOT NULL,
+        transfer_shares INTEGER NOT NULL,
+        current_holding INTEGER NOT NULL,
+        valid_period_start TEXT NULL,
+        valid_period_end TEXT NULL,
+        PRIMARY KEY (symbol, report_date, identity, name, transfer_method)
+      )
+    ''');
+    // 欄位顯式列出而非 `SELECT *`:欄序若因任何原因不同,`*` 會靜默錯位
+    await customStatement('''
+      INSERT INTO insider_transfer_new
+        (symbol, report_date, identity, name, transfer_method,
+         transfer_shares, current_holding, valid_period_start, valid_period_end)
+      SELECT symbol, report_date, identity, name, transfer_method,
+             transfer_shares, current_holding, valid_period_start, valid_period_end
+      FROM insider_transfer
+    ''');
+    await customStatement('DROP TABLE insider_transfer');
+    await customStatement(
+      'ALTER TABLE insider_transfer_new RENAME TO insider_transfer',
+    );
+    // index 隨著 DROP TABLE 一併消失,必須重建(宣告在 @TableIndex,但那只
+    // 在 createAll 時生效,既有 DB 走不到)
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_insider_transfer_date '
+      'ON insider_transfer (report_date)',
+    );
+    AppLogger.info(
+      'AppDatabase',
+      'insider_transfer PK 已補 transfer_method(idempotent 重建,資料保留)',
+    );
+  }
 
   /// 歷史零價列 NULL 化(2026-07-30,冪等)。
   ///

@@ -408,6 +408,16 @@ class InsiderTransfer extends Table {
   /// 有效轉讓期間結束日
   DateTimeColumn get validPeriodEnd => dateTime().nullable()();
 
+  /// PK 含 [transferMethod](2026-08-16):同人同日以多種方式申報是實際
+  /// 存在的形態(2026-08-14 實機 2442 一位經理人未成年子女三筆),PK 不含
+  /// 轉讓方式時 `insertOrReplace` 會塌縮、轉讓總量低報。既有 DB 由
+  /// `AppDatabase.ensureInsiderTransferPk()` 以 idempotent DDL 升級。
   @override
-  Set<Column> get primaryKey => {symbol, reportDate, identity, name};
+  Set<Column> get primaryKey => {
+    symbol,
+    reportDate,
+    identity,
+    name,
+    transferMethod,
+  };
 }
