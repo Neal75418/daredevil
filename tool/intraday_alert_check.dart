@@ -14,6 +14,7 @@
 import 'dart:io';
 
 import 'package:daredevil/core/utils/log_rotation.dart';
+import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/taiwan_time.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/intraday_quote_client.dart';
@@ -32,7 +33,11 @@ String _offsetLabel(Duration d) {
       : '$sign${a.inHours}:${m.toString().padLeft(2, '0')}';
 }
 
+/// 報價覆蓋率低於此值視為本輪不可信(部分失敗不得以 ok 收場)
+const double _minQuoteCoverage = 0.8;
+
 Future<void> main(List<String> args) async {
+  AppLogger.forceOutput = true; // CLI:繞過 assert gate
   // 日誌自輪替(2026-08-08):不用 newsyslog——那要在 /etc 放一個未版控、
   // 換機就消失的設定檔,正是今天咬過我們兩次的那類東西
   //
@@ -147,6 +152,24 @@ Future<void> main(List<String> args) async {
       exit(1);
     }
     if (fired.isEmpty) {
+      // 部分失敗不得以 ok 收場(2026-08-15 稽核):47/50 檔 timeout 時
+      // 那 47 檔的提醒根本沒被評估,印 ok 會讓人理解成「今天沒到價」。
+      // 門檻取 minQuoteCoverage——低於此視為本輪不可信。
+      final covered = result.symbolsWanted == 0
+          ? 1.0
+          : result.quotesFetched / result.symbolsWanted;
+      if (covered < _minQuoteCoverage) {
+        beat(
+          'PARTIAL(報價僅 ${result.quotesFetched}/${result.symbolsWanted},'
+          '未達 ${(_minQuoteCoverage * 100).toStringAsFixed(0)}% 覆蓋,本輪不可信'
+          '${errorKinds.isEmpty ? '' : ': ${errorKinds.take(2).join(' | ')}'})',
+        );
+        stderr.writeln(
+          '[intraday_alert] 報價覆蓋不足,${result.symbolsWanted - result.quotesFetched} '
+          '檔未被評估',
+        );
+        exit(1);
+      }
       beat(
         'ok(無觸價,報價 ${result.quotesFetched}/${result.symbolsWanted}'
         '${errorKinds.isEmpty ? '' : ',批次錯誤 ${errorKinds.length} 種'})',

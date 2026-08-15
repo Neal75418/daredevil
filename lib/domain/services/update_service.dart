@@ -1209,7 +1209,13 @@ class UpdateService {
     );
 
     result.success = true;
-    result.message = '更新完成';
+    // message 與 update_run 用同一份(2026-08-15 稽核):CLI 只印 message 與
+    // exit code,若這裡無條件寫「更新完成」,20 個 recordError 的內容對維運
+    // 完全不可見——本專案有「自動更新靜默斷 13 天」的前科。
+    // success 語意維持「主流程完成」不變(輔助資料失敗不算主流程失敗)。
+    result.message = result.errors.isEmpty
+        ? '更新完成'
+        : _partialRunMessage(result.errors);
 
     // 擷取警示價格資料
     await _fetchAlertPrices(ctx, result);
@@ -1357,6 +1363,10 @@ class UpdateResult {
   int stocksAnalyzed = 0;
   List<String> errors = [];
   bool hasRateLimitError = false;
+
+  /// 是否有任何失敗項。與 [success] 語意不同:[success] 表「主流程完成」,
+  /// 本旗標表「過程中有東西壞掉」——CLI 的 exit code 應該看這個。
+  bool get hasErrors => errors.isNotEmpty;
   Map<String, double> currentPrices = {};
   Map<String, double> priceChanges = {};
 

@@ -50,6 +50,10 @@ abstract final class AppLogger {
 
   /// 由 Flutter app 在 startup 呼叫一次，注入 Sentry bridging closures。
   /// CLI 環境不需呼叫；所有 Sentry 段自動 no-op。
+  /// CLI 強制輸出開關。app 不得設定(release 應維持靜默);
+  /// `tool/` 下的 CLI 在 main 開頭設 true,讓錯誤進得了 launchd 日誌。
+  static bool forceOutput = false;
+
   static void setSentryDelegates({
     SentryBreadcrumbFn? breadcrumb,
     SentryCaptureFn? capture,
@@ -119,7 +123,10 @@ abstract final class AppLogger {
       isDebug = true;
       return true;
     }());
-    if (!isDebug) return;
+    // [forceOutput] 讓 CLI 繞過 assert gate——實測 `dart run`(launchd 兩支
+    // CLI 的執行方式)下 assert **未啟用**,否則這 600+ 個呼叫點在生產環境
+    // 輸出零位元組(2026-08-15 稽核;本專案有靜默斷 13 天的前科)。
+    if (!isDebug && !forceOutput) return;
 
     final prefix = switch (level) {
       LogLevel.debug => '[D]',

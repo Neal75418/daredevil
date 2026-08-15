@@ -48,6 +48,7 @@ import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
 
 Future<void> main(List<String> args) async {
+  AppLogger.forceOutput = true; // CLI:繞過 assert gate,否則日誌全滅
   // stderr 也要輪替:故障訊息落在那裡,而它曾長到 153 MB(見 intraday 註解)
   for (final name in [
     'daredevil-daily-update.stdout.log',
@@ -108,7 +109,14 @@ Future<void> main(List<String> args) async {
       'message=${result.message}',
     );
     print('[daily_update] summary: ${result.summary}');
-    exit(result.success ? 0 : 1);
+    // 逐條印出失敗項(2026-08-15 稽核):過去只印 message 與 exit 0,
+    // 20 個 recordError 的內容對維運完全不可見
+    for (final err in result.errors) {
+      stderr.writeln('[daily_update] ERROR: $err');
+    }
+    // exit code 看 hasErrors 而非 success——success 的語意是「主流程完成」,
+    // 部分失敗時仍為 true,拿它當退出碼等於把故障報成成功
+    exit(result.hasErrors ? 1 : 0);
   } catch (e, s) {
     AppLogger.error('daily_update', 'unhandled exception', e, s);
     print('[daily_update] FAILED: $e');

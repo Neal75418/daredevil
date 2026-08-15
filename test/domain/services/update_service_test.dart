@@ -312,6 +312,50 @@ void main() {
     });
   });
 
+  group('部分失敗的對外可見性(2026-08-15 稽核)', () {
+    // 稽核發現:result.success 無條件為 true(它的語意是「主流程完成」,
+    // 這點正確且被 TDCC 測試釘住),但 result.message 也無條件是「更新完成」
+    // ——CLI 只印 message 與 exit code,於是 20 個 recordError 呼叫點的內容
+    // 對維運完全不可見。專案有「自動更新靜默斷 13 天」的前科。
+    test('🚨 有 errors 時 message 必須反映 partial,不得謊報「更新完成」', () async {
+      when(
+        () => mockTdcc.getAllHoldingDistribution(),
+      ).thenThrow(Exception('unexpected payload'));
+
+      final result = await buildService().runDailyUpdate(forDate: tradingDay);
+
+      expect(result.errors, isNotEmpty, reason: '前提:確實有記錄到錯誤');
+      expect(
+        result.message ?? '',
+        isNot('更新完成'),
+        reason: '有失敗項卻說「更新完成」= 維運看不到問題',
+      );
+      expect(
+        result.message ?? '',
+        contains('TDCC'),
+        reason: 'message 應帶出實際失敗內容供 CLI 直接輸出',
+      );
+    });
+
+    test('🚨 hasErrors 提供 CLI 判斷 exit code 的依據', () async {
+      when(
+        () => mockTdcc.getAllHoldingDistribution(),
+      ).thenThrow(Exception('unexpected payload'));
+
+      final result = await buildService().runDailyUpdate(forDate: tradingDay);
+      expect(result.hasErrors, isTrue);
+      expect(result.success, isTrue, reason: '主流程仍完成——兩者語意不同');
+    });
+
+    test('全數成功時 message 維持「更新完成」、hasErrors 為 false', () async {
+      final result = await buildService().runDailyUpdate(forDate: tradingDay);
+      if (result.errors.isEmpty) {
+        expect(result.message, '更新完成');
+        expect(result.hasErrors, isFalse);
+      }
+    });
+  });
+
   group('UpdateService 輔助資料同步失敗的可見性', () {
     test('TDCC generic 同步失敗應記錄到 result.errors（partial 警告可見）', () async {
       // TDCC client 拋出 generic exception（模擬 API 格式變更等非限流故障）
