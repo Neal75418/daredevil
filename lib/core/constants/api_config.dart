@@ -64,6 +64,16 @@ abstract final class ApiConfig {
   /// 規模、遠低於全市場快照,兩者之間有數量級的差距,不需要精細校準。
   static const double foreignShareholdingMinCoverageRatio = 0.5;
 
+  /// 財報「歷史已完整」的最少季數(當期 + 前四季)
+  ///
+  /// 2026-08-16 迴歸修復:接入免費資產負債表後,新鮮度檢查若只看「最新一季
+  /// 有沒有」,官方端點一寫入就對每一檔成立,FinMind 的 per-symbol 路徑
+  /// ——**歷史 Equity 的唯一來源**——永遠不再執行。實測正式 DB:有 Q2 的
+  /// 1,830 檔中 529 檔缺 Q1,ROE 的平均權益分母因此算不出來且補不到。
+  ///
+  /// 5 = 對齊 `_findEquityAboutOneYearBefore` 需要的「一年前那季」。
+  static const int financialHistoryMinQuarters = 5;
+
   static const int twseOfficialListSanityFloor = 1000;
 
   /// 名冊縮水警報門檻:本輪家數低於「DB 既有存活家數 × 此比例」即警告

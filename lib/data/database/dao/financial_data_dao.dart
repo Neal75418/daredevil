@@ -6,6 +6,26 @@ import 'package:daredevil/data/database/tables/market_data_tables.drift.dart';
 /// 財務報表操作
 mixin FinancialDataDaoMixin on $AppDatabase {
   /// 批次新增財務資料
+  /// 某檔在指定財報類型下已有幾個「季別」(distinct date)
+  ///
+  /// 給 `_syncFinancialStatement` 的新鮮度檢查用。**只看最新一季會漏掉歷史**:
+  /// 2026-08-16 接入免費資產負債表後,官方端點把當季寫進全市場,若檢查只問
+  /// 「最新一季有沒有」就對每一檔成立,FinMind 的 per-symbol 路徑——歷史
+  /// Equity 的唯一來源——永遠不再執行(實測 529 檔缺 Q1,ROE 因此算不出來)。
+  Future<int> countFinancialDataQuarters(
+    String symbol,
+    String statementType,
+  ) async {
+    final expr = financialData.date.count(distinct: true);
+    final query = selectOnly(financialData)
+      ..addColumns([expr])
+      ..where(
+        financialData.symbol.equals(symbol) &
+            financialData.statementType.equals(statementType),
+      );
+    return (await query.getSingle()).read(expr) ?? 0;
+  }
+
   Future<void> insertFinancialData(List<FinancialDataCompanion> entries) async {
     await batch((b) {
       for (final entry in entries) {

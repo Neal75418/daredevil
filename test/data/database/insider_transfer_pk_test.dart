@@ -198,5 +198,33 @@ void main() {
       expect(rows, hasLength(1), reason: '重跑不得複製或清空資料');
       expect(await pkColumns(), contains('transfer_method'));
     });
+
+    test('🚨 殘留的 temp table 不得讓下次開啟炸掉(2026-08-16 code review)', () async {
+      // 原實作是裸的 CREATE/INSERT/DROP/RENAME:任一步失敗(beforeOpen 的
+      // lock timeout 是本專案有記載的失效模式)會留下 insider_transfer_new,
+      // 下次開啟的 CREATE 就撞「table already exists」→ DB 對 GUI 與兩支 CLI
+      // 全部開不了。這比它要修的低報嚴重得多。
+      await downgradeToOldSchema();
+      await db.insertInsiderTransfers([transfer('盤後定價交易', 243844)]);
+      // 模擬上次中斷:temp table 殘留
+      await db.customStatement(
+        'CREATE TABLE insider_transfer_new (symbol TEXT NOT NULL)',
+      );
+
+      await db.ensureInsiderTransferPk();
+
+      expect(await pkColumns(), contains('transfer_method'));
+      final rows = await db
+          .customSelect('SELECT * FROM insider_transfer')
+          .get();
+      expect(rows, hasLength(1), reason: '資料仍在');
+      final leftover = await db
+          .customSelect(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name='insider_transfer_new'",
+          )
+          .get();
+      expect(leftover, isEmpty, reason: 'temp table 不得殘留');
+    });
   });
 }

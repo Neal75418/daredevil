@@ -262,6 +262,12 @@ class AppDatabase extends $AppDatabase
         .toSet();
     if (pkColumns.contains('transfer_method')) return;
 
+    // 先清掉上次中斷留下的 temp table(2026-08-16 code review):
+    // 裸的 CREATE 撞到殘留就丟「table already exists」,而這段在 beforeOpen,
+    // 於是 **DB 對 GUI 與兩支 CLI 全部開不了**——比它要修的低報嚴重得多。
+    // lock timeout 中途失敗是本專案有記載的失效模式,不是假想情境。
+    await customStatement('DROP TABLE IF EXISTS insider_transfer_new');
+
     await customStatement('''
       CREATE TABLE insider_transfer_new (
         symbol TEXT NOT NULL REFERENCES stock_master (symbol) ON DELETE CASCADE,

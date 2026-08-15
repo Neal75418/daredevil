@@ -155,25 +155,29 @@ Future<void> main(List<String> args) async {
       stderr.writeln('[intraday_alert] 報價全數失敗,本輪判定不可信');
       exit(1);
     }
+    // 覆蓋率閘門必須在 fired 判斷**之前**(2026-08-16 code review)。
+    //
+    // 原本它包在 `if (fired.isEmpty)` 裡:3/50 報價但剛好有 1 檔觸價時,
+    // 照樣印 ok + exit 0,把 47 檔未被評估的提醒藏起來——那正是這道閘門
+    // 要防的事,只是條件寫錯了位置。有觸價**不代表**本輪可信。
+    final covered = result.symbolsWanted == 0
+        ? 1.0
+        : result.quotesFetched / result.symbolsWanted;
+    if (covered < _minQuoteCoverage) {
+      beat(
+        'PARTIAL(報價僅 ${result.quotesFetched}/${result.symbolsWanted},'
+        '未達 ${(_minQuoteCoverage * 100).toStringAsFixed(0)}% 覆蓋,本輪不可信'
+        '${fired.isEmpty ? '' : ',另有 ${fired.length} 筆觸價已處理'}'
+        '${errorKinds.isEmpty ? '' : ': ${errorKinds.take(2).join(' | ')}'})',
+      );
+      stderr.writeln(
+        '[intraday_alert] 報價覆蓋不足,${result.symbolsWanted - result.quotesFetched} '
+        '檔未被評估',
+      );
+      exit(1);
+    }
+
     if (fired.isEmpty) {
-      // 部分失敗不得以 ok 收場(2026-08-15 稽核):47/50 檔 timeout 時
-      // 那 47 檔的提醒根本沒被評估,印 ok 會讓人理解成「今天沒到價」。
-      // 門檻取 minQuoteCoverage——低於此視為本輪不可信。
-      final covered = result.symbolsWanted == 0
-          ? 1.0
-          : result.quotesFetched / result.symbolsWanted;
-      if (covered < _minQuoteCoverage) {
-        beat(
-          'PARTIAL(報價僅 ${result.quotesFetched}/${result.symbolsWanted},'
-          '未達 ${(_minQuoteCoverage * 100).toStringAsFixed(0)}% 覆蓋,本輪不可信'
-          '${errorKinds.isEmpty ? '' : ': ${errorKinds.take(2).join(' | ')}'})',
-        );
-        stderr.writeln(
-          '[intraday_alert] 報價覆蓋不足,${result.symbolsWanted - result.quotesFetched} '
-          '檔未被評估',
-        );
-        exit(1);
-      }
       beat(
         'ok(無觸價,報價 ${result.quotesFetched}/${result.symbolsWanted}'
         '${errorKinds.isEmpty ? '' : ',批次錯誤 ${errorKinds.length} 種'})',

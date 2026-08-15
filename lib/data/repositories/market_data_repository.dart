@@ -6,6 +6,7 @@ import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
@@ -174,7 +175,18 @@ class MarketDataRepository {
       );
       final expectedQuarter = _getExpectedLatestQuarter();
       if (latestDate != null && !latestDate.isBefore(expectedQuarter)) {
-        return 0;
+        // ⚠️ 只看「最新一季有沒有」會讓歷史永遠補不到(2026-08-16 迴歸修復)。
+        //
+        // 接入免費資產負債表後,官方端點把當季寫進全市場 1,827 檔,這個
+        // 檢查對每一檔都成立 → FinMind 的 per-symbol 路徑不再執行,而那是
+        // **歷史 Equity 的唯一來源**(官方端點只給當季)。實測正式 DB:有 Q2
+        // 的 1,830 檔中 529 檔缺 Q1,ROE 的「當期與去年同期平均權益」因此
+        // 算不出來,而且再也補不到——正好打到這次改動想解決的回填佇列。
+        final quarters = await _db.countFinancialDataQuarters(
+          symbol,
+          statementType,
+        );
+        if (quarters >= ApiConfig.financialHistoryMinQuarters) return 0;
       }
 
       final data = await fetchFn(

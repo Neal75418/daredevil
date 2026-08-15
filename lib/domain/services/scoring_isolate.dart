@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:isolate';
 
+import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/constants/calibrated_scores/calibrated_score_context.dart';
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
 import 'package:daredevil/core/constants/rule_params_sector.dart';
@@ -464,9 +465,16 @@ class ScoringBatchResult {
 Future<ScoringBatchResult> evaluateStocksInIsolate(
   ScoringIsolateInput input,
 ) async {
-  final resultMap = await Isolate.run(
-    () => _evaluateStocksIsolated(input.toMap()),
-  );
+  // static 是 **per-isolate** 的:主 isolate 設的 AppLogger.forceOutput 不會
+  // 跟著過去,於是規則/評分裡所有 warning 與 error 在 AOT CLI 中完全沉默
+  // ——那正是 2026-08-15 那個「運維可見性」修復想解決的問題,當時只修到
+  // 主 isolate 那一半(2026-08-16 code review 發現)。closure 捕捉的值會被
+  // 複製過去,所以在 isolate 內重設一次即可。
+  final forceOutput = AppLogger.forceOutput;
+  final resultMap = await Isolate.run(() {
+    AppLogger.forceOutput = forceOutput;
+    return _evaluateStocksIsolated(input.toMap());
+  });
   return ScoringBatchResult.fromMap(resultMap);
 }
 
