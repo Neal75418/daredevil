@@ -230,4 +230,62 @@ void main() {
       expect(result, isFalse);
     });
   });
+
+  // ==========================================
+  // x 軸壓縮(2026-08-15 數值稽核)
+  // ==========================================
+  //
+  // 舊實作 `closes = prices.map(close).whereType<double>()` 把停牌日
+  // (close=null)整個剔除,再用**陣列位置**當迴歸的 x —— 於是 20 天裡
+  // 有 8 天停牌時,剩下的 12 個點被當成「連續 12 天」,斜率被放大約
+  // 20/12 ≈ 1.67 倍;資料點下限 5 時可放大 4 倍。
+  //
+  // 而趨勢門檻是每日 0.08%,放大後會被輕易穿越 → TrendState 誤判 →
+  // 連鎖影響所有讀 trendState 的規則與弱轉強/強轉弱的前置 gate。
+  group('停牌日不得壓縮迴歸 x 軸', () {
+    /// 20 天窗口漲 [totalPct]%,其中 [gapCount] 天停牌(close=null)。
+    ///
+    /// 數字刻意落在門檻兩側:trendUpThreshold = 0.08%/交易日。
+    /// 20 天漲 1.0% → 每交易日 1.0/19 = 0.053% < 0.08% → 應判 range。
+    /// 若 x 軸被壓縮成 12 個點 → 1.0/11 = 0.091% > 0.08% → 誤判 up。
+    List<DailyPriceEntry> gapped({
+      required int gapCount,
+      double totalPct = 1.0,
+    }) {
+      final now = DateTime.now();
+      return List.generate(20, (i) {
+        final isGap = i > 0 && i <= gapCount;
+        return createTestPrice(
+          date: now.subtract(Duration(days: 20 - i)),
+          close: isGap ? null : 100 * (1 + totalPct / 100 * i / 19),
+          volume: 1000,
+        );
+      });
+    }
+
+    test('🚨 停牌天數不得改變趨勢判定(實際漲幅相同)', () {
+      final noGap = service.detectTrendState(gapped(gapCount: 0));
+      // gapCount=12(剩 8 個有效點)是實測的臨界:1.0/7 = 0.143% 跨過
+      // 0.08% 門檻;gap≤8 時壓縮幅度還不足以改判
+      final withGap = service.detectTrendState(gapped(gapCount: 12));
+      expect(withGap, noGap, reason: '真實漲幅相同、只因停牌天數不同就改判 = 迴歸的 x 軸被壓縮');
+    });
+
+    test('🚨 停牌不得把「盤整」放大成「上升」', () {
+      // 20 天僅漲 1.0%(每交易日 0.053%,低於 0.08% 門檻)
+      expect(
+        service.detectTrendState(gapped(gapCount: 12, totalPct: 1.0)),
+        isNot(TrendState.up),
+        reason: '壓縮後 8 個點涵蓋 20 天的漲幅,斜率被放大 2.7 倍',
+      );
+    });
+
+    test('真實的上升趨勢仍要判得出來(確認不是把功能關掉)', () {
+      // 20 天漲 5%(每交易日 0.26%,遠超門檻)
+      expect(
+        service.detectTrendState(gapped(gapCount: 0, totalPct: 5.0)),
+        TrendState.up,
+      );
+    });
+  });
 }

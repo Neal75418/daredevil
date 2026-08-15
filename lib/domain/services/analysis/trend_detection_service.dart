@@ -21,18 +21,26 @@ class TrendDetectionService {
     // 取得近期價格進行趨勢分析
     final recentPrices = lastN(prices, RuleParams.swingWindow);
 
-    // 使用收盤價計算簡易趨勢
-    final closes = recentPrices
-        .map((p) => p.close)
-        .whereType<double>()
-        .toList();
+    // 使用收盤價計算簡易趨勢。
+    //
+    // **保留原始位置當 x**(2026-08-15 數值稽核):舊實作先
+    // `whereType<double>()` 剔除停牌日再用陣列位置當 x,於是剩下的點被
+    // 當成連續交易日——20 天窗口有 12 天停牌時,8 個點涵蓋 20 天的漲幅,
+    // 斜率被放大約 2.7 倍(實測臨界:同樣 +1.0% 的漲幅,無停牌判 range、
+    // 12 天停牌判 up)。而門檻是每交易日 0.08%,放大後輕易穿越 →
+    // TrendState 誤判 → 連鎖影響所有讀 trendState 的規則與轉折判定。
+    final points = <({double x, double y})>[];
+    for (var i = 0; i < recentPrices.length; i++) {
+      final close = recentPrices[i].close;
+      if (close != null) points.add((x: i.toDouble(), y: close));
+    }
 
-    if (closes.length < TrendParams.minTrendDataPoints) return TrendState.range;
+    if (points.length < TrendParams.minTrendDataPoints) return TrendState.range;
 
-    // 線性迴歸斜率
-    // 注意：closes 是由 lastN() 得來，順序為新到舊（newest-first），
+    // 注意：recentPrices 由 lastN() 得來，順序為新到舊（newest-first），
     // 因此需取負值才是時間正向的斜率
-    final slope = -_calculateSlope(closes);
+    final slope = -_calculateSlope(points);
+    final closes = [for (final p in points) p.y];
 
     // 依平均價格標準化斜率（防止除以零）
     final avgPrice = closes.reduce((a, b) => a + b) / closes.length;
@@ -263,8 +271,10 @@ class TrendDetectionService {
   }
 
   /// 計算線性迴歸斜率
-  double _calculateSlope(List<double> values) {
-    final n = values.length;
+  /// 最小平方法斜率。[points] 的 x 是**在原始窗口中的位置**,不是
+  /// 陣列索引——停牌日被剔除後仍要保留時間間隔(見 detectTrendState)。
+  double _calculateSlope(List<({double x, double y})> points) {
+    final n = points.length;
     if (n < 2) return 0;
 
     double sumX = 0;
@@ -272,11 +282,11 @@ class TrendDetectionService {
     double sumXY = 0;
     double sumX2 = 0;
 
-    for (var i = 0; i < n; i++) {
-      sumX += i;
-      sumY += values[i];
-      sumXY += i * values[i];
-      sumX2 += i * i;
+    for (final p in points) {
+      sumX += p.x;
+      sumY += p.y;
+      sumXY += p.x * p.y;
+      sumX2 += p.x * p.x;
     }
 
     final denominator = n * sumX2 - sumX * sumX;
