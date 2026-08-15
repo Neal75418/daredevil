@@ -74,11 +74,20 @@ dart format .                                                  # 格式化 (pre-
 
 ## 開發工作流程
 
-### Pre-commit Hook
+### Git Hooks
 
-提交時自動執行（`.git/hooks/pre-commit`）：
-1. **Auto-format** — 格式化 staged `.dart` 檔案並重新 stage
-2. **Analyze** — `flutter analyze --no-fatal-infos lib/`
+**版控在 `scripts/`,用 `./scripts/install-hooks.sh` 安裝**（只放 `.git/hooks/` 就是未版控、換機消失——本專案已為此吃過兩次虧）。
+
+`pre-commit`：
+1. **補做 CLI 重編** — 若上次 post-commit 留下 `.git/cli-rebuild-pending` 就同步補上（失敗則擋下 commit）
+2. **Auto-format** — 格式化 staged `.dart` 檔案並重新 stage
+3. **Analyze** — `flutter analyze --no-fatal-infos lib/`
+
+`post-commit`：動到 `lib/`、`bin/`、`tool/`、`ops/launchd/`、`pubspec` 時**背景重編 launchd 的 CLI 產物**（`install.sh --cli-only`，約 9s）。
+
+> **🚨 為什麼需要它（2026-08-15 實機）**：launchd 跑的是 **AOT 編譯產物**，不是 source——GUI 點 IDEA 箭頭每次重編所以永遠最新，但 CLI 不會。產物落後時**三個訊號全部正常**：exit code 0、`update_run` 記 SUCCESS、日誌無異常。實測落後 3 天（binary 編於 8/12，期間 `lib/` 有 14 個 commit，其中包含當天才修的運維可見性——修了但一行都沒生效），是靠 `ls -la` 看檔案時間戳才撞見的。CLI 的編譯閉包涵蓋整個 `lib/`，**任何規則/評分/syncer 改動都算**，靠人工判斷「算不算重大改動」不可靠。
+>
+> 佐證層：兩支 CLI 每次執行都印 `[build=<sha> compiled=<time>]`（`lib/core/utils/build_stamp.dart` 讀 bundle 根的 `BUILD_INFO`，由 `install.sh` 寫入、dirty 會標記）。hook 只在本機、只在正常 commit 路徑有效；rebase／cherry-pick／換機時，**日誌裡那行 SHA 是唯一能事後驗證的證據**。
 
 ### 資料庫變更流程
 
