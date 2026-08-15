@@ -101,11 +101,11 @@ class InsiderTransferSyncer {
         return 0;
       }
 
-      // PK 碰撞偵測哨(2026-08-05 複審 Low):表 PK={symbol, reportDate,
-      // identity, name} 不含轉讓方式——同人同日以兩種方式各申報一筆會
-      // insertOrReplace 塌縮成一筆(SUM 低報)。pre-existing 設計且 live
-      // 未見樣本,不動 schema;此哨把「無實證」變成「發生即留痕」,
-      // 觀察到實例再議 migration。
+      // PK 碰撞偵測哨(2026-08-05 加,2026-08-16 更新語意):原本 PK 不含
+      // 轉讓方式,此哨把「無實證」變成「發生即留痕」——2026-08-14 留到痕了
+      // (2442 一位經理人未成年子女同日三筆,7 筆進 5 筆出),於是 PK 補上
+      // transfer_method。哨子保留:現在它偵測的是**完全相同的重複申報**,
+      // 那代表上游資料本身有問題,不再是 schema 的鍋。
       final pkSeen = <String>{};
       for (final c in companions) {
         final pk =
