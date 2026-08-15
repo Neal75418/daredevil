@@ -122,4 +122,38 @@ void main() {
         .getSingle();
     expect(r.read<double>('r'), 88.88, reason: 'force 必須真的重抓並覆蓋');
   });
+
+  test('🚨 API 回的日期 ≠ 請求日期時整批丟棄(端點失效防護)', () async {
+    // TWSE 對非交易日/無資料日會回「最近有資料的那天」——client 用回應
+    // 自帶的日期落庫,而新鮮度檢查用的是**請求日期**。少了這道守衛,
+    // 回補 6 天時每一輪都可能寫成同一天,用 insertOrReplace 蓋掉當日快照,
+    // 而被跳過的日子因為始終查不到而永遠重抓。
+    // 同款守衛見 trading_repository 的 `keep()`(2026-08-16 code review)。
+    when(
+      () => twse.getAllForeignShareholding(date: any(named: 'date')),
+    ).thenAnswer(
+      (_) async => [
+        TwseForeignShareholding(
+          symbol: '2330',
+          date: DateTime.utc(2026, 8, 7), // 回的是別天
+          foreignSharesRatio: 69.17,
+        ),
+      ],
+    );
+
+    expect(
+      await repo.syncAllMarketShareholding(date: date), // 請求 8/14
+      0,
+      reason: '日期不符整批丟棄,不得寫進 DB',
+    );
+    final rows = await db.customSelect('SELECT * FROM shareholding').get();
+    expect(rows, isEmpty);
+  });
+
+  test('日期相符時照常寫入(確認不是把功能關掉)', () async {
+    when(
+      () => twse.getAllForeignShareholding(date: any(named: 'date')),
+    ).thenAnswer((_) async => [row('2330', 69.17)]);
+    expect(await repo.syncAllMarketShareholding(date: date), 1);
+  });
 }

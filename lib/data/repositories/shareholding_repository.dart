@@ -70,9 +70,18 @@ class ShareholdingRepository {
       final known = (await _db.getAllActiveStocks())
           .map((s) => s.symbol)
           .toSet();
+
+      // 端點失效防護(2026-08-16 code review):只留「entry 自身日期 ==
+      // 請求日期」的列。TWSE 對非交易日/無資料日會回**最近有資料的那天**,
+      // 而 client 用回應自帶的日期落庫、新鮮度檢查卻用請求日期——少了這道
+      // 守衛,回補 6 天時每一輪都可能寫成同一天,用 insertOrReplace 蓋掉
+      // 當日快照,而被跳過的日子因為始終查不到而永遠重抓。
+      // 同款守衛見 trading_repository 的 `keep()`。
+      final targetDate = DateContext.normalize(date);
       final entries = [
         for (final item in data)
-          if (known.contains(item.symbol))
+          if (known.contains(item.symbol) &&
+              DateContext.normalize(item.date) == targetDate)
             ShareholdingCompanion.insert(
               symbol: item.symbol,
               date: item.date,
