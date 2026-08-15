@@ -74,10 +74,8 @@ void main() {
     'idx_news_stock_map_news_id': 'news_stock_map (news_id)',
     'idx_news_mention_daily_date': 'news_mention_daily (date)',
     'idx_daily_institutional_symbol_date': 'daily_institutional (symbol, date)',
-    'idx_daily_recommendation_date_horizon':
-        'daily_recommendation (date, horizon)',
-    'idx_daily_recommendation_date_horizon_symbol':
-        'daily_recommendation (date, horizon, symbol)',
+    // (daily_recommendation 兩條已隨表退役刪除,2026-08-15 健檢:
+    // 表被 DROP 時索引一併消失,fixture 無法也無需再建)
   };
 
   test('不變量:drop 清單與現行宣告索引零交集(分類錯誤即紅)', () async {

@@ -124,25 +124,6 @@ class PriceAlert extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
-/// 自訂選股策略 Table
-@DataClassName('ScreeningStrategyEntry')
-class ScreeningStrategyTable extends Table {
-  /// 自動遞增 ID
-  IntColumn get id => integer().autoIncrement()();
-
-  /// 策略名稱
-  TextColumn get name => text().withLength(min: 1, max: 100)();
-
-  /// 篩選條件（JSON array）
-  TextColumn get conditionsJson => text()();
-
-  /// 建立時間
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-
-  /// 最後更新時間
-  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
-}
-
 /// 釘選論點 Table（出場層，評分改進 #3 Phase 2）
 ///
 /// 把「推薦」升級為可追蹤的「論點」：釘選當日快照 + 每日失效檢查。

@@ -143,13 +143,17 @@ class HoldingDistribution extends Table {
   /// 持股級距（如 "1-999"、"1000-5000"）
   TextColumn get level => text()();
 
-  /// 該級距股東人數
+  /// 該級距股東人數——**已備料未消費**(2026-08-15 健檢)
+  ///
+  /// TDCC 每週寫入、目前僅 level/percent 有讀取端。刻意保留:與 percent
+  /// 同在一列回應內(零額外請求),而「股東人數變化」是無法從現有欄位
+  /// 推導的獨立訊號(人數減少=籌碼集中),停寫等於放棄未來的回溯基準。
   IntColumn get shareholders => integer().nullable()();
 
   /// 佔總股數比例（%）
   RealColumn get percent => real().nullable()();
 
-  /// 持股數（股）
+  /// 持股數（股）——已備料未消費(同 [shareholders] 的保留理由)
   RealColumn get shares => real().nullable()();
 
   @override
@@ -263,19 +267,30 @@ class MarginTrading extends Table {
   /// 交易日期
   DateTimeColumn get date => dateTime()();
 
-  /// 融資買進（張）
+  // ── 已備料未消費(2026-08-15 健檢盤點)────────────────────────────
+  // 下列四欄(marginBuy/marginSell/shortBuy/shortSell)每日全市場寫入但
+  // 目前無讀取端——消費端只用 marginBalance/shortBalance 兩個「存量」。
+  //
+  // **刻意保留不停抓**:它們與餘額欄同在一列 API 回應內(twse_client
+  // `row[2]`/`row[3]`、tpex_client 同),解析它們不需額外請求 → API 成本
+  // 為零,只多約 21 MB/年儲存;而一旦停寫,未來要做「當日買賣超流量」
+  // 分析時歷史補不回來(TWSE 明細不保證回溯)。備料成本 << 斷層代價。
+  //
+  // 要開消費請從這裡找:融資買賣超 = 散戶當日進出強度(餘額只看得到淨變化)。
+
+  /// 融資買進（張）——已備料未消費
   RealColumn get marginBuy => real().nullable()();
 
-  /// 融資賣出（張）
+  /// 融資賣出（張）——已備料未消費
   RealColumn get marginSell => real().nullable()();
 
   /// 融資餘額（張）
   RealColumn get marginBalance => real().nullable()();
 
-  /// 融券買進/回補（張）
+  /// 融券買進/回補（張）——已備料未消費
   RealColumn get shortBuy => real().nullable()();
 
-  /// 融券賣出（張）
+  /// 融券賣出（張）——已備料未消費
   RealColumn get shortSell => real().nullable()();
 
   /// 融券餘額（張）
@@ -341,15 +356,6 @@ class InsiderHolding extends Table {
 
   /// 報告日期（月報）
   DateTimeColumn get date => dateTime()();
-
-  /// 董事持股總數（股）
-  RealColumn get directorShares => real().nullable()();
-
-  /// 監察人持股總數（股）
-  RealColumn get supervisorShares => real().nullable()();
-
-  /// 經理人持股總數（股）
-  RealColumn get managerShares => real().nullable()();
 
   /// 董監持股比例（%）
   RealColumn get insiderRatio => real().nullable()();

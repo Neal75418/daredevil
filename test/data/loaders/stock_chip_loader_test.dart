@@ -56,17 +56,11 @@ void main() {
         InsiderHoldingEntry(
           symbol: '2330',
           date: DateTime(2026, 1, 1),
-          directorShares: 1000,
-          supervisorShares: 500,
-          managerShares: 200,
           pledgeRatio: 0.0,
         ),
         InsiderHoldingEntry(
           symbol: '2330',
           date: DateTime(2026, 2, 1),
-          directorShares: 1100,
-          supervisorShares: 500,
-          managerShares: 200,
           pledgeRatio: 0.0,
         ),
       ];
@@ -159,9 +153,6 @@ void main() {
         InsiderHoldingEntry(
           symbol: '2330',
           date: DateTime(2026, 2, 1),
-          directorShares: 1000,
-          supervisorShares: 500,
-          managerShares: 200,
           pledgeRatio: 0.0,
         ),
       ];

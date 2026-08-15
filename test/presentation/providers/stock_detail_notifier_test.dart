@@ -519,9 +519,6 @@ void main() {
         InsiderHoldingEntry(
           symbol: _testSymbol,
           date: _defaultDate,
-          directorShares: 1000000,
-          supervisorShares: 500000,
-          managerShares: 200000,
           pledgeRatio: 5.0,
         ),
       ];
@@ -555,9 +552,6 @@ void main() {
         InsiderHoldingEntry(
           symbol: _testSymbol,
           date: _defaultDate,
-          directorShares: 1000000,
-          supervisorShares: 500000,
-          managerShares: 200000,
           pledgeRatio: 5.0,
         ),
       ];

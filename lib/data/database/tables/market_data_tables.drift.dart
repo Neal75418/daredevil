@@ -3945,9 +3945,6 @@ typedef $$InsiderHoldingTableCreateCompanionBuilder =
     i1.InsiderHoldingCompanion Function({
       required String symbol,
       required DateTime date,
-      i0.Value<double?> directorShares,
-      i0.Value<double?> supervisorShares,
-      i0.Value<double?> managerShares,
       i0.Value<double?> insiderRatio,
       i0.Value<double?> pledgeRatio,
       i0.Value<double?> sharesChange,
@@ -3958,9 +3955,6 @@ typedef $$InsiderHoldingTableUpdateCompanionBuilder =
     i1.InsiderHoldingCompanion Function({
       i0.Value<String> symbol,
       i0.Value<DateTime> date,
-      i0.Value<double?> directorShares,
-      i0.Value<double?> supervisorShares,
-      i0.Value<double?> managerShares,
       i0.Value<double?> insiderRatio,
       i0.Value<double?> pledgeRatio,
       i0.Value<double?> sharesChange,
@@ -4028,21 +4022,6 @@ class $$InsiderHoldingTableFilterComposer
     builder: (column) => i0.ColumnFilters(column),
   );
 
-  i0.ColumnFilters<double> get directorShares => $composableBuilder(
-    column: $table.directorShares,
-    builder: (column) => i0.ColumnFilters(column),
-  );
-
-  i0.ColumnFilters<double> get supervisorShares => $composableBuilder(
-    column: $table.supervisorShares,
-    builder: (column) => i0.ColumnFilters(column),
-  );
-
-  i0.ColumnFilters<double> get managerShares => $composableBuilder(
-    column: $table.managerShares,
-    builder: (column) => i0.ColumnFilters(column),
-  );
-
   i0.ColumnFilters<double> get insiderRatio => $composableBuilder(
     column: $table.insiderRatio,
     builder: (column) => i0.ColumnFilters(column),
@@ -4105,21 +4084,6 @@ class $$InsiderHoldingTableOrderingComposer
     builder: (column) => i0.ColumnOrderings(column),
   );
 
-  i0.ColumnOrderings<double> get directorShares => $composableBuilder(
-    column: $table.directorShares,
-    builder: (column) => i0.ColumnOrderings(column),
-  );
-
-  i0.ColumnOrderings<double> get supervisorShares => $composableBuilder(
-    column: $table.supervisorShares,
-    builder: (column) => i0.ColumnOrderings(column),
-  );
-
-  i0.ColumnOrderings<double> get managerShares => $composableBuilder(
-    column: $table.managerShares,
-    builder: (column) => i0.ColumnOrderings(column),
-  );
-
   i0.ColumnOrderings<double> get insiderRatio => $composableBuilder(
     column: $table.insiderRatio,
     builder: (column) => i0.ColumnOrderings(column),
@@ -4179,21 +4143,6 @@ class $$InsiderHoldingTableAnnotationComposer
   });
   i0.GeneratedColumn<DateTime> get date =>
       $composableBuilder(column: $table.date, builder: (column) => column);
-
-  i0.GeneratedColumn<double> get directorShares => $composableBuilder(
-    column: $table.directorShares,
-    builder: (column) => column,
-  );
-
-  i0.GeneratedColumn<double> get supervisorShares => $composableBuilder(
-    column: $table.supervisorShares,
-    builder: (column) => column,
-  );
-
-  i0.GeneratedColumn<double> get managerShares => $composableBuilder(
-    column: $table.managerShares,
-    builder: (column) => column,
-  );
 
   i0.GeneratedColumn<double> get insiderRatio => $composableBuilder(
     column: $table.insiderRatio,
@@ -4275,9 +4224,6 @@ class $$InsiderHoldingTableTableManager
               ({
                 i0.Value<String> symbol = const i0.Value.absent(),
                 i0.Value<DateTime> date = const i0.Value.absent(),
-                i0.Value<double?> directorShares = const i0.Value.absent(),
-                i0.Value<double?> supervisorShares = const i0.Value.absent(),
-                i0.Value<double?> managerShares = const i0.Value.absent(),
                 i0.Value<double?> insiderRatio = const i0.Value.absent(),
                 i0.Value<double?> pledgeRatio = const i0.Value.absent(),
                 i0.Value<double?> sharesChange = const i0.Value.absent(),
@@ -4286,9 +4232,6 @@ class $$InsiderHoldingTableTableManager
               }) => i1.InsiderHoldingCompanion(
                 symbol: symbol,
                 date: date,
-                directorShares: directorShares,
-                supervisorShares: supervisorShares,
-                managerShares: managerShares,
                 insiderRatio: insiderRatio,
                 pledgeRatio: pledgeRatio,
                 sharesChange: sharesChange,
@@ -4299,9 +4242,6 @@ class $$InsiderHoldingTableTableManager
               ({
                 required String symbol,
                 required DateTime date,
-                i0.Value<double?> directorShares = const i0.Value.absent(),
-                i0.Value<double?> supervisorShares = const i0.Value.absent(),
-                i0.Value<double?> managerShares = const i0.Value.absent(),
                 i0.Value<double?> insiderRatio = const i0.Value.absent(),
                 i0.Value<double?> pledgeRatio = const i0.Value.absent(),
                 i0.Value<double?> sharesChange = const i0.Value.absent(),
@@ -4310,9 +4250,6 @@ class $$InsiderHoldingTableTableManager
               }) => i1.InsiderHoldingCompanion.insert(
                 symbol: symbol,
                 date: date,
-                directorShares: directorShares,
-                supervisorShares: supervisorShares,
-                managerShares: managerShares,
                 insiderRatio: insiderRatio,
                 pledgeRatio: pledgeRatio,
                 sharesChange: sharesChange,
@@ -9781,39 +9718,6 @@ class $InsiderHoldingTable extends i2.InsiderHolding
     type: i0.DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
-  static const i0.VerificationMeta _directorSharesMeta =
-      const i0.VerificationMeta('directorShares');
-  @override
-  late final i0.GeneratedColumn<double> directorShares =
-      i0.GeneratedColumn<double>(
-        'director_shares',
-        aliasedName,
-        true,
-        type: i0.DriftSqlType.double,
-        requiredDuringInsert: false,
-      );
-  static const i0.VerificationMeta _supervisorSharesMeta =
-      const i0.VerificationMeta('supervisorShares');
-  @override
-  late final i0.GeneratedColumn<double> supervisorShares =
-      i0.GeneratedColumn<double>(
-        'supervisor_shares',
-        aliasedName,
-        true,
-        type: i0.DriftSqlType.double,
-        requiredDuringInsert: false,
-      );
-  static const i0.VerificationMeta _managerSharesMeta =
-      const i0.VerificationMeta('managerShares');
-  @override
-  late final i0.GeneratedColumn<double> managerShares =
-      i0.GeneratedColumn<double>(
-        'manager_shares',
-        aliasedName,
-        true,
-        type: i0.DriftSqlType.double,
-        requiredDuringInsert: false,
-      );
   static const i0.VerificationMeta _insiderRatioMeta =
       const i0.VerificationMeta('insiderRatio');
   @override
@@ -9863,9 +9767,6 @@ class $InsiderHoldingTable extends i2.InsiderHolding
   List<i0.GeneratedColumn> get $columns => [
     symbol,
     date,
-    directorShares,
-    supervisorShares,
-    managerShares,
     insiderRatio,
     pledgeRatio,
     sharesChange,
@@ -9898,33 +9799,6 @@ class $InsiderHoldingTable extends i2.InsiderHolding
       );
     } else if (isInserting) {
       context.missing(_dateMeta);
-    }
-    if (data.containsKey('director_shares')) {
-      context.handle(
-        _directorSharesMeta,
-        directorShares.isAcceptableOrUnknown(
-          data['director_shares']!,
-          _directorSharesMeta,
-        ),
-      );
-    }
-    if (data.containsKey('supervisor_shares')) {
-      context.handle(
-        _supervisorSharesMeta,
-        supervisorShares.isAcceptableOrUnknown(
-          data['supervisor_shares']!,
-          _supervisorSharesMeta,
-        ),
-      );
-    }
-    if (data.containsKey('manager_shares')) {
-      context.handle(
-        _managerSharesMeta,
-        managerShares.isAcceptableOrUnknown(
-          data['manager_shares']!,
-          _managerSharesMeta,
-        ),
-      );
     }
     if (data.containsKey('insider_ratio')) {
       context.handle(
@@ -9979,18 +9853,6 @@ class $InsiderHoldingTable extends i2.InsiderHolding
         i0.DriftSqlType.dateTime,
         data['${effectivePrefix}date'],
       )!,
-      directorShares: attachedDatabase.typeMapping.read(
-        i0.DriftSqlType.double,
-        data['${effectivePrefix}director_shares'],
-      ),
-      supervisorShares: attachedDatabase.typeMapping.read(
-        i0.DriftSqlType.double,
-        data['${effectivePrefix}supervisor_shares'],
-      ),
-      managerShares: attachedDatabase.typeMapping.read(
-        i0.DriftSqlType.double,
-        data['${effectivePrefix}manager_shares'],
-      ),
       insiderRatio: attachedDatabase.typeMapping.read(
         i0.DriftSqlType.double,
         data['${effectivePrefix}insider_ratio'],
@@ -10024,15 +9886,6 @@ class InsiderHoldingEntry extends i0.DataClass
   /// 報告日期（月報）
   final DateTime date;
 
-  /// 董事持股總數（股）
-  final double? directorShares;
-
-  /// 監察人持股總數（股）
-  final double? supervisorShares;
-
-  /// 經理人持股總數（股）
-  final double? managerShares;
-
   /// 董監持股比例（%）
   final double? insiderRatio;
 
@@ -10047,9 +9900,6 @@ class InsiderHoldingEntry extends i0.DataClass
   const InsiderHoldingEntry({
     required this.symbol,
     required this.date,
-    this.directorShares,
-    this.supervisorShares,
-    this.managerShares,
     this.insiderRatio,
     this.pledgeRatio,
     this.sharesChange,
@@ -10060,15 +9910,6 @@ class InsiderHoldingEntry extends i0.DataClass
     final map = <String, i0.Expression>{};
     map['symbol'] = i0.Variable<String>(symbol);
     map['date'] = i0.Variable<DateTime>(date);
-    if (!nullToAbsent || directorShares != null) {
-      map['director_shares'] = i0.Variable<double>(directorShares);
-    }
-    if (!nullToAbsent || supervisorShares != null) {
-      map['supervisor_shares'] = i0.Variable<double>(supervisorShares);
-    }
-    if (!nullToAbsent || managerShares != null) {
-      map['manager_shares'] = i0.Variable<double>(managerShares);
-    }
     if (!nullToAbsent || insiderRatio != null) {
       map['insider_ratio'] = i0.Variable<double>(insiderRatio);
     }
@@ -10088,15 +9929,6 @@ class InsiderHoldingEntry extends i0.DataClass
     return i1.InsiderHoldingCompanion(
       symbol: i0.Value(symbol),
       date: i0.Value(date),
-      directorShares: directorShares == null && nullToAbsent
-          ? const i0.Value.absent()
-          : i0.Value(directorShares),
-      supervisorShares: supervisorShares == null && nullToAbsent
-          ? const i0.Value.absent()
-          : i0.Value(supervisorShares),
-      managerShares: managerShares == null && nullToAbsent
-          ? const i0.Value.absent()
-          : i0.Value(managerShares),
       insiderRatio: insiderRatio == null && nullToAbsent
           ? const i0.Value.absent()
           : i0.Value(insiderRatio),
@@ -10120,9 +9952,6 @@ class InsiderHoldingEntry extends i0.DataClass
     return InsiderHoldingEntry(
       symbol: serializer.fromJson<String>(json['symbol']),
       date: serializer.fromJson<DateTime>(json['date']),
-      directorShares: serializer.fromJson<double?>(json['directorShares']),
-      supervisorShares: serializer.fromJson<double?>(json['supervisorShares']),
-      managerShares: serializer.fromJson<double?>(json['managerShares']),
       insiderRatio: serializer.fromJson<double?>(json['insiderRatio']),
       pledgeRatio: serializer.fromJson<double?>(json['pledgeRatio']),
       sharesChange: serializer.fromJson<double?>(json['sharesChange']),
@@ -10135,9 +9964,6 @@ class InsiderHoldingEntry extends i0.DataClass
     return <String, dynamic>{
       'symbol': serializer.toJson<String>(symbol),
       'date': serializer.toJson<DateTime>(date),
-      'directorShares': serializer.toJson<double?>(directorShares),
-      'supervisorShares': serializer.toJson<double?>(supervisorShares),
-      'managerShares': serializer.toJson<double?>(managerShares),
       'insiderRatio': serializer.toJson<double?>(insiderRatio),
       'pledgeRatio': serializer.toJson<double?>(pledgeRatio),
       'sharesChange': serializer.toJson<double?>(sharesChange),
@@ -10148,9 +9974,6 @@ class InsiderHoldingEntry extends i0.DataClass
   i1.InsiderHoldingEntry copyWith({
     String? symbol,
     DateTime? date,
-    i0.Value<double?> directorShares = const i0.Value.absent(),
-    i0.Value<double?> supervisorShares = const i0.Value.absent(),
-    i0.Value<double?> managerShares = const i0.Value.absent(),
     i0.Value<double?> insiderRatio = const i0.Value.absent(),
     i0.Value<double?> pledgeRatio = const i0.Value.absent(),
     i0.Value<double?> sharesChange = const i0.Value.absent(),
@@ -10158,15 +9981,6 @@ class InsiderHoldingEntry extends i0.DataClass
   }) => i1.InsiderHoldingEntry(
     symbol: symbol ?? this.symbol,
     date: date ?? this.date,
-    directorShares: directorShares.present
-        ? directorShares.value
-        : this.directorShares,
-    supervisorShares: supervisorShares.present
-        ? supervisorShares.value
-        : this.supervisorShares,
-    managerShares: managerShares.present
-        ? managerShares.value
-        : this.managerShares,
     insiderRatio: insiderRatio.present ? insiderRatio.value : this.insiderRatio,
     pledgeRatio: pledgeRatio.present ? pledgeRatio.value : this.pledgeRatio,
     sharesChange: sharesChange.present ? sharesChange.value : this.sharesChange,
@@ -10176,15 +9990,6 @@ class InsiderHoldingEntry extends i0.DataClass
     return InsiderHoldingEntry(
       symbol: data.symbol.present ? data.symbol.value : this.symbol,
       date: data.date.present ? data.date.value : this.date,
-      directorShares: data.directorShares.present
-          ? data.directorShares.value
-          : this.directorShares,
-      supervisorShares: data.supervisorShares.present
-          ? data.supervisorShares.value
-          : this.supervisorShares,
-      managerShares: data.managerShares.present
-          ? data.managerShares.value
-          : this.managerShares,
       insiderRatio: data.insiderRatio.present
           ? data.insiderRatio.value
           : this.insiderRatio,
@@ -10205,9 +10010,6 @@ class InsiderHoldingEntry extends i0.DataClass
     return (StringBuffer('InsiderHoldingEntry(')
           ..write('symbol: $symbol, ')
           ..write('date: $date, ')
-          ..write('directorShares: $directorShares, ')
-          ..write('supervisorShares: $supervisorShares, ')
-          ..write('managerShares: $managerShares, ')
           ..write('insiderRatio: $insiderRatio, ')
           ..write('pledgeRatio: $pledgeRatio, ')
           ..write('sharesChange: $sharesChange, ')
@@ -10220,9 +10022,6 @@ class InsiderHoldingEntry extends i0.DataClass
   int get hashCode => Object.hash(
     symbol,
     date,
-    directorShares,
-    supervisorShares,
-    managerShares,
     insiderRatio,
     pledgeRatio,
     sharesChange,
@@ -10234,9 +10033,6 @@ class InsiderHoldingEntry extends i0.DataClass
       (other is i1.InsiderHoldingEntry &&
           other.symbol == this.symbol &&
           other.date == this.date &&
-          other.directorShares == this.directorShares &&
-          other.supervisorShares == this.supervisorShares &&
-          other.managerShares == this.managerShares &&
           other.insiderRatio == this.insiderRatio &&
           other.pledgeRatio == this.pledgeRatio &&
           other.sharesChange == this.sharesChange &&
@@ -10247,9 +10043,6 @@ class InsiderHoldingCompanion
     extends i0.UpdateCompanion<i1.InsiderHoldingEntry> {
   final i0.Value<String> symbol;
   final i0.Value<DateTime> date;
-  final i0.Value<double?> directorShares;
-  final i0.Value<double?> supervisorShares;
-  final i0.Value<double?> managerShares;
   final i0.Value<double?> insiderRatio;
   final i0.Value<double?> pledgeRatio;
   final i0.Value<double?> sharesChange;
@@ -10258,9 +10051,6 @@ class InsiderHoldingCompanion
   const InsiderHoldingCompanion({
     this.symbol = const i0.Value.absent(),
     this.date = const i0.Value.absent(),
-    this.directorShares = const i0.Value.absent(),
-    this.supervisorShares = const i0.Value.absent(),
-    this.managerShares = const i0.Value.absent(),
     this.insiderRatio = const i0.Value.absent(),
     this.pledgeRatio = const i0.Value.absent(),
     this.sharesChange = const i0.Value.absent(),
@@ -10270,9 +10060,6 @@ class InsiderHoldingCompanion
   InsiderHoldingCompanion.insert({
     required String symbol,
     required DateTime date,
-    this.directorShares = const i0.Value.absent(),
-    this.supervisorShares = const i0.Value.absent(),
-    this.managerShares = const i0.Value.absent(),
     this.insiderRatio = const i0.Value.absent(),
     this.pledgeRatio = const i0.Value.absent(),
     this.sharesChange = const i0.Value.absent(),
@@ -10283,9 +10070,6 @@ class InsiderHoldingCompanion
   static i0.Insertable<i1.InsiderHoldingEntry> custom({
     i0.Expression<String>? symbol,
     i0.Expression<DateTime>? date,
-    i0.Expression<double>? directorShares,
-    i0.Expression<double>? supervisorShares,
-    i0.Expression<double>? managerShares,
     i0.Expression<double>? insiderRatio,
     i0.Expression<double>? pledgeRatio,
     i0.Expression<double>? sharesChange,
@@ -10295,9 +10079,6 @@ class InsiderHoldingCompanion
     return i0.RawValuesInsertable({
       if (symbol != null) 'symbol': symbol,
       if (date != null) 'date': date,
-      if (directorShares != null) 'director_shares': directorShares,
-      if (supervisorShares != null) 'supervisor_shares': supervisorShares,
-      if (managerShares != null) 'manager_shares': managerShares,
       if (insiderRatio != null) 'insider_ratio': insiderRatio,
       if (pledgeRatio != null) 'pledge_ratio': pledgeRatio,
       if (sharesChange != null) 'shares_change': sharesChange,
@@ -10309,9 +10090,6 @@ class InsiderHoldingCompanion
   i1.InsiderHoldingCompanion copyWith({
     i0.Value<String>? symbol,
     i0.Value<DateTime>? date,
-    i0.Value<double?>? directorShares,
-    i0.Value<double?>? supervisorShares,
-    i0.Value<double?>? managerShares,
     i0.Value<double?>? insiderRatio,
     i0.Value<double?>? pledgeRatio,
     i0.Value<double?>? sharesChange,
@@ -10321,9 +10099,6 @@ class InsiderHoldingCompanion
     return i1.InsiderHoldingCompanion(
       symbol: symbol ?? this.symbol,
       date: date ?? this.date,
-      directorShares: directorShares ?? this.directorShares,
-      supervisorShares: supervisorShares ?? this.supervisorShares,
-      managerShares: managerShares ?? this.managerShares,
       insiderRatio: insiderRatio ?? this.insiderRatio,
       pledgeRatio: pledgeRatio ?? this.pledgeRatio,
       sharesChange: sharesChange ?? this.sharesChange,
@@ -10340,15 +10115,6 @@ class InsiderHoldingCompanion
     }
     if (date.present) {
       map['date'] = i0.Variable<DateTime>(date.value);
-    }
-    if (directorShares.present) {
-      map['director_shares'] = i0.Variable<double>(directorShares.value);
-    }
-    if (supervisorShares.present) {
-      map['supervisor_shares'] = i0.Variable<double>(supervisorShares.value);
-    }
-    if (managerShares.present) {
-      map['manager_shares'] = i0.Variable<double>(managerShares.value);
     }
     if (insiderRatio.present) {
       map['insider_ratio'] = i0.Variable<double>(insiderRatio.value);
@@ -10373,9 +10139,6 @@ class InsiderHoldingCompanion
     return (StringBuffer('InsiderHoldingCompanion(')
           ..write('symbol: $symbol, ')
           ..write('date: $date, ')
-          ..write('directorShares: $directorShares, ')
-          ..write('supervisorShares: $supervisorShares, ')
-          ..write('managerShares: $managerShares, ')
           ..write('insiderRatio: $insiderRatio, ')
           ..write('pledgeRatio: $pledgeRatio, ')
           ..write('sharesChange: $sharesChange, ')

@@ -32,11 +32,7 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
     this,
   );
   late final i5.$DailyReasonTable dailyReason = i5.$DailyReasonTable(this);
-  late final i5.$DailyRecommendationTable dailyRecommendation = i5
-      .$DailyRecommendationTable(this);
   late final i5.$RuleAccuracyTable ruleAccuracy = i5.$RuleAccuracyTable(this);
-  late final i5.$RecommendationValidationTable recommendationValidation = i5
-      .$RecommendationValidationTable(this);
   late final i6.$WatchlistGroupsTable watchlistGroups = i6
       .$WatchlistGroupsTable(this);
   late final i6.$WatchlistTable watchlist = i6.$WatchlistTable(this);
@@ -70,8 +66,6 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
   );
   late final i7.$InsiderTransferTable insiderTransfer = i7
       .$InsiderTransferTable(this);
-  late final i6.$ScreeningStrategyTableTable screeningStrategyTable = i6
-      .$ScreeningStrategyTableTable(this);
   late final i8.$PortfolioPositionTable portfolioPosition = i8
       .$PortfolioPositionTable(this);
   late final i8.$PortfolioTransactionTable portfolioTransaction = i8
@@ -93,9 +87,7 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
     newsMentionDaily,
     dailyAnalysis,
     dailyReason,
-    dailyRecommendation,
     ruleAccuracy,
-    recommendationValidation,
     watchlistGroups,
     watchlist,
     updateRun,
@@ -113,7 +105,6 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
     tradingWarning,
     insiderHolding,
     insiderTransfer,
-    screeningStrategyTable,
     portfolioPosition,
     portfolioTransaction,
     stockEvent,
@@ -131,9 +122,6 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
     i5.idxDailyAnalysisDateScoreShort,
     i5.idxDailyAnalysisDateScoreLong,
     i5.idxDailyReasonDate,
-    i5.idxDailyRecommendationSymbol,
-    i5.idxRecValidationDate,
-    i5.idxRecValidationSymbol,
     i7.idxShareholdingDate,
     i7.idxDayTradingDate,
     i7.idxFinancialDataDate,
@@ -200,15 +188,6 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
         limitUpdateKind: i0.UpdateKind.delete,
       ),
       result: [i0.TableUpdate('daily_reason', kind: i0.UpdateKind.delete)],
-    ),
-    i0.WritePropagation(
-      on: i0.TableUpdateQuery.onTableName(
-        'stock_master',
-        limitUpdateKind: i0.UpdateKind.delete,
-      ),
-      result: [
-        i0.TableUpdate('daily_recommendation', kind: i0.UpdateKind.delete),
-      ],
     ),
     i0.WritePropagation(
       on: i0.TableUpdateQuery.onTableName(
@@ -360,15 +339,8 @@ class $AppDatabaseManager {
       i5.$$DailyAnalysisTableTableManager(_db, _db.dailyAnalysis);
   i5.$$DailyReasonTableTableManager get dailyReason =>
       i5.$$DailyReasonTableTableManager(_db, _db.dailyReason);
-  i5.$$DailyRecommendationTableTableManager get dailyRecommendation =>
-      i5.$$DailyRecommendationTableTableManager(_db, _db.dailyRecommendation);
   i5.$$RuleAccuracyTableTableManager get ruleAccuracy =>
       i5.$$RuleAccuracyTableTableManager(_db, _db.ruleAccuracy);
-  i5.$$RecommendationValidationTableTableManager get recommendationValidation =>
-      i5.$$RecommendationValidationTableTableManager(
-        _db,
-        _db.recommendationValidation,
-      );
   i6.$$WatchlistGroupsTableTableManager get watchlistGroups =>
       i6.$$WatchlistGroupsTableTableManager(_db, _db.watchlistGroups);
   i6.$$WatchlistTableTableManager get watchlist =>
@@ -403,11 +375,6 @@ class $AppDatabaseManager {
       i7.$$InsiderHoldingTableTableManager(_db, _db.insiderHolding);
   i7.$$InsiderTransferTableTableManager get insiderTransfer =>
       i7.$$InsiderTransferTableTableManager(_db, _db.insiderTransfer);
-  i6.$$ScreeningStrategyTableTableTableManager get screeningStrategyTable =>
-      i6.$$ScreeningStrategyTableTableTableManager(
-        _db,
-        _db.screeningStrategyTable,
-      );
   i8.$$PortfolioPositionTableTableManager get portfolioPosition =>
       i8.$$PortfolioPositionTableTableManager(_db, _db.portfolioPosition);
   i8.$$PortfolioTransactionTableTableManager get portfolioTransaction =>

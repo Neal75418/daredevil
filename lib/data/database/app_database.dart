@@ -76,10 +76,8 @@ import 'package:daredevil/data/database/dao/valuation_dao.dart';
     // 分析結果
     DailyAnalysis,
     DailyReason,
-    DailyRecommendation,
     // 規則準確度追蹤
     RuleAccuracy,
-    RecommendationValidation,
     // 使用者資料
     // WatchlistGroups 必須排在 Watchlist 之前：Watchlist.groupId 以 FK 參照
     // WatchlistGroups，createAll 依序建表時 parent 必須先存在。
@@ -107,7 +105,6 @@ import 'package:daredevil/data/database/dao/valuation_dao.dart';
     // 內部人股權轉讓（Feature 4）
     InsiderTransfer,
     // 自訂選股策略（Phase 2.2）
-    ScreeningStrategyTable,
     // 投資組合（Phase 4.4）
     PortfolioPosition,
     PortfolioTransaction,
@@ -214,6 +211,7 @@ class AppDatabase extends $AppDatabase
       await _ensureWatchlistGroupsSchema();
       await _ensurePinnedThesisSchema();
       await _ensureQuarterlyReportSchema();
+      await _ensureRetiredSchemaDropped();
       await _ensureIndexHygiene();
       // 歷史零價列收斂(2026-07-30):TWSE STOCK_DAY_ALL 對「無成交」
       // 用 0.00 表達,parser 修正(TwParseUtils.parsePrice)前已有 41 列
@@ -331,8 +329,8 @@ class AppDatabase extends $AppDatabase
     // 2026-07-29 審查後自 schema 宣告除役的三條(annotation 已移除,
     // 既有 DB 由此清除;誤殺教訓見 _ensureIndexHygiene doc)
     'idx_daily_institutional_symbol_date', // = PK,雙重冗餘
-    'idx_daily_recommendation_date_horizon', // PK 左前綴,且表已退役停寫
-    'idx_daily_recommendation_date_horizon_symbol', // = uniqueKeys autoindex,表已退役
+    // daily_recommendation 兩條已無須列管(2026-08-15 健檢:整張表 DROP,
+    // 索引隨表消失;見 _ensureRetiredSchemaDropped)
   ];
 
   /// Pre-launch idempotent 加欄：在「不」bump schema fingerprint（不 wipe 既有
@@ -373,6 +371,49 @@ class AppDatabase extends $AppDatabase
       'AppDatabase',
       'rule_accuracy.distinct_dates 欄位已補上（idempotent ALTER，未 wipe）',
     );
+  }
+
+  /// Pre-launch idempotent 退役清理(2026-08-15 全專案健檢):三張零讀零寫的
+  /// 殭屍表與 `insider_holding` 三個 production 永遠 NULL 的欄位,已自 schema
+  /// 宣告移除;此路徑清掉既有 DB 的殘留。
+  ///
+  /// 沿 [_ensureDealerSelfNetColumn] 先例:**不 bump fingerprint**——指紋變更
+  /// 會 wipe 全部非白名單表(59.7 萬列價格),而這裡刪的東西實測零價值。
+  ///
+  /// **彩排實證**(2026-08-15,真實 DDL 跑 production 副本):三表各 0 列、
+  /// 三欄非 NULL 列數 0、DDL 後六項基準指標(價格/自選/警示/事件/新聞/設定)
+  /// 逐項一致、`integrity_check` ok、FK 無違規。
+  ///
+  /// **fail-soft**:清理是整潔工作不是正確性——殘留欄位無人讀取(Drift 以
+  /// 具名欄位查詢,多餘欄位不影響),但啟動失敗是災難。捆綁 SQLite 實測
+  /// 3.52.0 支援 `DROP COLUMN`(3.35+),仍全段防禦以防其他平台版本落後。
+  Future<void> _ensureRetiredSchemaDropped() async {
+    try {
+      for (final table in const [
+        'daily_recommendation',
+        'recommendation_validation',
+        'screening_strategy_table',
+      ]) {
+        await customStatement('DROP TABLE IF EXISTS $table');
+      }
+
+      final columns = await customSelect(
+        "PRAGMA table_info('insider_holding')",
+      ).get();
+      final existing = columns.map((row) => row.read<String>('name')).toSet();
+      for (final column in const [
+        'director_shares',
+        'supervisor_shares',
+        'manager_shares',
+      ]) {
+        if (!existing.contains(column)) continue;
+        await customStatement(
+          'ALTER TABLE insider_holding DROP COLUMN $column',
+        );
+      }
+    } catch (e) {
+      AppLogger.warning('AppDatabase', '退役 schema 清理失敗(忽略,殘留無害)', e);
+    }
   }
 
   Future<void> _ensureDealerSelfNetColumn() async {
@@ -542,7 +583,6 @@ class AppDatabase extends $AppDatabase
     'watchlist',
     'watchlist_groups',
     'price_alert',
-    'screening_strategy_table',
     'stock_event',
     'app_settings',
     'news_mention_daily', // 熱度快照：歷史不可重建，fingerprint reset 不得 wipe

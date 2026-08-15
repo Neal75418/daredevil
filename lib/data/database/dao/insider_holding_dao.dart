@@ -84,9 +84,6 @@ mixin InsiderHoldingDaoMixin on $AppDatabase {
       final entry = InsiderHoldingEntry(
         symbol: row.read<String>('symbol'),
         date: row.read<DateTime>('date'),
-        directorShares: row.readNullable<double>('director_shares'),
-        supervisorShares: row.readNullable<double>('supervisor_shares'),
-        managerShares: row.readNullable<double>('manager_shares'),
         insiderRatio: row.readNullable<double>('insider_ratio'),
         pledgeRatio: row.readNullable<double>('pledge_ratio'),
         sharesChange: row.readNullable<double>('shares_change'),
@@ -144,9 +141,6 @@ mixin InsiderHoldingDaoMixin on $AppDatabase {
       final entry = InsiderHoldingEntry(
         symbol: row.read<String>('symbol'),
         date: row.read<DateTime>('date'),
-        directorShares: row.readNullable<double>('director_shares'),
-        supervisorShares: row.readNullable<double>('supervisor_shares'),
-        managerShares: row.readNullable<double>('manager_shares'),
         insiderRatio: row.readNullable<double>('insider_ratio'),
         pledgeRatio: row.readNullable<double>('pledge_ratio'),
         sharesChange: row.readNullable<double>('shares_change'),

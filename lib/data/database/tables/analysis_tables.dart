@@ -86,43 +86,6 @@ class DailyReason extends Table {
   Set<Column> get primaryKey => {symbol, date, rank};
 }
 
-/// 每日推薦股票 Table（Top N）
-///
-/// Dual-horizon: 加入 `horizon` pivot column，PK 改為
-/// `(date, horizon, rank)`，每天最多 40 rows（20 短 + 20 長）。
-/// 同一檔股票若在兩個 horizon 都上榜會有兩 rows，各自帶 per-horizon
-/// 的 rank 與 score。
-// 2026-07-29 索引衛生:移除兩條冗餘宣告——date_horizon 是 PK (date,horizon,
-// rank) 左前綴;date_horizon_symbol 與下方 uniqueKeys {date,horizon,symbol}
-// 生成的 UNIQUE autoindex 完全重複。既有 DB 由 _ensureIndexHygiene 清除。
-@DataClassName('DailyRecommendationEntry')
-@TableIndex(name: 'idx_daily_recommendation_symbol', columns: {#symbol})
-class DailyRecommendation extends Table {
-  /// 推薦日期
-  DateTimeColumn get date => dateTime()();
-
-  /// Horizon pivot：'short' 或 'long'（對應 `Horizon.name`）
-  TextColumn get horizon => text()();
-
-  /// 此 horizon 內的排名（1..dailyTopN）
-  IntColumn get rank => integer()();
-
-  /// 股票代碼
-  TextColumn get symbol =>
-      text().references(StockMaster, #symbol, onDelete: KeyAction.cascade)();
-
-  /// 此 horizon 的分數
-  RealColumn get score => real()();
-
-  @override
-  Set<Column> get primaryKey => {date, horizon, rank};
-
-  @override
-  List<Set<Column>> get uniqueKeys => [
-    {date, horizon, symbol},
-  ];
-}
-
 /// 規則準確度追蹤表
 ///
 /// 記錄每條規則的歷史表現，用於計算命中率和平均報酬率。
@@ -157,47 +120,4 @@ class RuleAccuracy extends Table {
 
   @override
   Set<Column> get primaryKey => {ruleId, period};
-}
-
-/// 推薦驗證記錄表
-///
-/// 記錄每次推薦的後續表現，用於回溯驗證。
-@DataClassName('RecommendationValidationEntry')
-@TableIndex(name: 'idx_rec_validation_date', columns: {#recommendationDate})
-@TableIndex(name: 'idx_rec_validation_symbol', columns: {#symbol})
-class RecommendationValidation extends Table {
-  /// 自增 ID
-  IntColumn get id => integer().autoIncrement()();
-
-  /// 推薦日期
-  DateTimeColumn get recommendationDate => dateTime()();
-
-  /// 股票代碼
-  TextColumn get symbol => text()();
-
-  /// 主要觸發規則
-  TextColumn get primaryRuleId => text()();
-
-  /// 推薦當日收盤價
-  RealColumn get entryPrice => real()();
-
-  /// N 日後收盤價
-  RealColumn get exitPrice => real().nullable()();
-
-  /// N 日後報酬率（%）
-  RealColumn get returnRate => real().nullable()();
-
-  /// 是否成功（報酬 > 0）
-  BoolColumn get isSuccess => boolean().nullable()();
-
-  /// 驗證日期（N 日後的日期）
-  DateTimeColumn get validationDate => dateTime().nullable()();
-
-  /// 驗證天數（預設 5 日）
-  IntColumn get holdingDays => integer().withDefault(const Constant(5))();
-
-  @override
-  List<Set<Column>> get uniqueKeys => [
-    {recommendationDate, symbol, holdingDays},
-  ];
 }

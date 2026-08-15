@@ -47,9 +47,6 @@ InsiderHoldingEntry createHolding({
     date: date,
     insiderRatio: insiderRatio,
     pledgeRatio: pledgeRatio,
-    directorShares: directorShares,
-    supervisorShares: supervisorShares,
-    managerShares: managerShares,
   );
 }
 
@@ -92,19 +89,16 @@ void main() {
       date: DateTime(2026, 2),
       insiderRatio: 25.0,
       pledgeRatio: 10.0,
-      directorShares: 1000000,
     ),
     createHolding(
       date: DateTime(2026, 1),
       insiderRatio: 23.5,
       pledgeRatio: 10.0,
-      directorShares: 950000,
     ),
     createHolding(
       date: DateTime(2025, 12),
       insiderRatio: 24.0,
       pledgeRatio: 9.0,
-      directorShares: 960000,
     ),
   ];
 
