@@ -446,18 +446,25 @@ class EPSConsecutiveGrowthRule extends StockRule
       return null;
     }
 
-    // 檢查連續季增
+    // 檢查連續**同季 YoY** 成長(2026-08-15 數值稽核:原為 QoQ)
+    //
+    // 台股單季 EPS 有強季節性——實測 2023 年起全市場,Q1 財報的 QoQ 跌幅
+    // ≥20% 者佔 32.5%、Q3 僅 12.6%,相差 2.6 倍。用 QoQ 等於把季節性當成
+    // 經營趨勢(quarterly_report_dao 註解記載的 2454 就是實例:2025 四季
+    // 18.43→17.5→15.84→14.4 純遞減卻是正常經營)。
+    //
+    // 語意不變——仍是「連續 N 季成長」,只把基準從上一季換成去年同季。
     int consecutive = 0;
     final growthRates = <double>[];
 
-    for (int i = 0; i < eps.length - 1; i++) {
+    for (int i = 0; i < eps.length; i++) {
       final current = eps[i].value;
-      final previous = eps[i + 1].value;
-      if (current == null || previous == null) break;
-      // 前一季 EPS <= 0 時無法計算有意義的成長率，中斷連續序列
-      if (previous <= 0) break;
+      if (current == null) break;
+      final yearAgo = _findEpsAboutOneYearBefore(eps, eps[i].date);
+      // 缺去年同季就停——不用相鄰季頂替(那正是舊實作的錯誤)
+      if (yearAgo == null || yearAgo <= 0) break;
 
-      final growth = (current - previous) / previous * 100;
+      final growth = (current - yearAgo) / yearAgo * 100;
       if (growth >= FundamentalParams.epsGrowthThreshold) {
         consecutive++;
         growthRates.add(growth);
@@ -566,10 +573,14 @@ class EPSDeclineWarningRule extends StockRule {
     int declineCount = 0;
     final declineRates = <double>[];
 
-    for (int i = 0; i < eps.length - 1 && declineCount < 2; i++) {
+    // 與 EPSConsecutiveGrowthRule 對稱:比較基準是**去年同季**而非上一季
+    // (2026-08-15 數值稽核)。兩條規則若一條看 YoY、一條看 QoQ,同一檔
+    // 股票會同時被判成長與衰退。
+    for (int i = 0; i < eps.length && declineCount < 2; i++) {
       final current = eps[i].value;
-      final previous = eps[i + 1].value;
-      if (current == null || previous == null) break;
+      if (current == null) break;
+      final previous = _findEpsAboutOneYearBefore(eps, eps[i].date);
+      if (previous == null) break;
 
       // previous <= 0 時無法計算百分比衰退率
       // 仍判斷是否持續惡化，但不加入 declineRates 避免混用單位
@@ -765,4 +776,27 @@ class ROEDecliningRule extends StockRule {
       },
     );
   }
+}
+
+/// 在 [eps](新到舊)中找 [asOf] 約一年前的同季值(350~380 天容差)。
+///
+/// 用日期比對而非固定位移 index+4:財報序列可能跳季,位移會拿到錯的基期。
+/// 同 financial_data_dao 的 ROE 平均權益作法。
+double? _findEpsAboutOneYearBefore(
+  List<FinancialDataEntry> eps,
+  DateTime asOf,
+) {
+  double? best;
+  int? bestDelta;
+  for (final e in eps) {
+    if (e.value == null) continue;
+    final days = asOf.difference(e.date).inDays;
+    if (days < 350 || days > 380) continue;
+    final delta = (days - 365).abs();
+    if (bestDelta == null || delta < bestDelta) {
+      bestDelta = delta;
+      best = e.value;
+    }
+  }
+  return best;
 }
