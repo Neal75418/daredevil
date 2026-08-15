@@ -75,6 +75,22 @@ class RuleEngine {
       ReasonType.patternEveningStar,
       ReasonType.patternThreeBlackCrows,
     },
+    // 2026-08-15 數值稽核新增(DB 實證共現率 100% / 23%):
+    // - oversold_indecision:DojiRule 的多方分支本身要求 rsi ≤ 30
+    //   (rsiExtremeOversold 的觸發條件),兩者是子集關係、必然同時觸發。
+    //   兩條 short 分數皆 +10 → 「RSI≤30 加一根小實體 K」這**一個**條件
+    //   曾貢獻 Mode A +20 分,超過 12 分的成立門檻、直接佔用 Top-30 席位。
+    // - pullback_at_support:HammerAtSupport 的位置上界(close ≤ ma20×1.06)
+    //   完全包含 PullbackToMa20 的回檔帶([ma20×0.985, ma20×1.03]),
+    //   是 2026-07-18 修 MA10×MA20 時沒 sweep 到的 sibling。
+    'oversold_indecision': {
+      ReasonType.patternDoji,
+      ReasonType.rsiExtremeOversold,
+    },
+    'pullback_at_support': {
+      ReasonType.hammerAtSupport,
+      ReasonType.pullbackToMa20,
+    },
   };
 
   /// Reverse lookup — `ReasonType → group name`，由 [_mutexGroups] 展開建構。

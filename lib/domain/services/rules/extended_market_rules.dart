@@ -56,6 +56,15 @@ class ForeignShareholdingDecreasingRule extends StockRule {
     final change = marketData.foreignSharesRatioChange;
     if (change == null) return null;
 
+    // 加速流出(≤ foreignExodusThreshold)由 ForeignExodusRule(−20)代表,
+    // 本規則只負責「顯著但未加速」那一段——兩條讀同一個
+    // foreignSharesRatioChange、門檻是包含關係,不設上界會讓同一個量測被
+    // 扣兩次(2026-08-15 稽核實測共現率 52/52 = 100%,實扣 −32 而非 −20)。
+    // 走條件互斥而非 mutex group:mutex 取「分數最高」,對負分會選中扣得
+    // 最少的那條(−12 勝過 −20),方向相反;此修法沿用 2026-07-18
+    // PULLBACK_MA10 × MA20 的既有慣例。
+    if (change <= FundamentalParams.foreignExodusThreshold) return null;
+
     // 當外資持股減少達到門檻時觸發
     if (change <= -InstitutionalParams.foreignShareholdingIncreaseThreshold) {
       return TriggeredReason(

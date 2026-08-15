@@ -105,4 +105,39 @@ void main() {
       );
     });
   });
+
+  // 舊行為:未傳 filterZero,0 量被當有效觀測稀釋分母 → 1.5 倍門檻在含
+  // 1 個停牌日時實質降到 1.2 倍、2 個停牌日降到 0.9 倍(低於平均量也算
+  // 「量增」)。影響 KD 金叉/死叉、多空吞噬共 4 條規則的量能確認。
+  group('isVolumeAboveAverage 濾停牌日', () {
+    test('🚨 5 日窗含 1 個停牌日:1.25 倍真實均量不得通過 1.5 倍門檻', () {
+      // 前 5 日:1000,1000,0(停牌),1000,1000 → 真實均量 1000
+      // 今日 1250 = 真實均量的 1.25 倍,不該過關
+      final prices = [
+        entry(0, 1000),
+        entry(1, 1000),
+        entry(2, 0),
+        entry(3, 1000),
+        entry(4, 1000),
+        entry(5, 1250), // 今日
+      ];
+      expect(
+        PriceCalculator.isVolumeAboveAverage(prices),
+        isFalse,
+        reason: '未濾停牌日時分母變 800、門檻降成 1200,這筆會誤判為量增',
+      );
+    });
+
+    test('真實達 1.5 倍仍要通過(不得矯枉過正)', () {
+      final prices = [
+        entry(0, 1000),
+        entry(1, 1000),
+        entry(2, 0),
+        entry(3, 1000),
+        entry(4, 1000),
+        entry(5, 1500),
+      ];
+      expect(PriceCalculator.isVolumeAboveAverage(prices), isTrue);
+    });
+  });
 }

@@ -246,6 +246,11 @@ class PriceCalculator {
   /// [days] 計算平均的天數（預設 5）
   ///
   /// 回傳 true 表示今日成交量超過平均量的指定倍數
+  /// 今日量是否達近 [days] 日均量的 [multiplier] 倍。
+  ///
+  /// **停牌日必須濾除**(2026-08-15 稽核):0 量被當有效觀測會稀釋分母——
+  /// 5 日窗含 1 個停牌日時 1.5 倍門檻實質降到 1.2 倍、2 個停牌日降到 0.9 倍
+  /// (低於平均量也算「量增」)。實測近 5 日窗含停牌日的股票有 34 檔。
   static bool isVolumeAboveAverage(
     List<DailyPriceEntry> prices, {
     double multiplier = 1.5,
@@ -260,6 +265,7 @@ class PriceCalculator {
       prices,
       days: days,
       skipLast: true,
+      filterZero: true,
     );
 
     if (avgVolume == null || avgVolume <= 0) return false;
