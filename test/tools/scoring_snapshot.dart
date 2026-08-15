@@ -26,6 +26,7 @@ import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/constants/rule_params_institutional.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
+import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/data/repositories/shareholding_repository.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/scoring_batch_data.dart';
@@ -113,6 +114,7 @@ void main() {
     final shareholdingRepo = ShareholdingRepository(
       database: db,
       finMindClient: FinMindClient(),
+      twseClient: TwseClient(),
     );
     final concentrationMap = await shareholdingRepo.getConcentrationRatioBatch(
       symbols,

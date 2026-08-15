@@ -27,6 +27,13 @@ abstract final class ApiEndpoints {
   /// 融資融券餘額
   static const String twseMarginTrading = '/rwd/zh/marginTrading/MI_MARGN';
 
+  /// 外資及陸資投資持股統計(全市場,免費,支援歷史日期)
+  ///
+  /// 2026-08-16 接入:補上市股外資持股的覆蓋缺口——原本只靠 FinMind
+  /// 逐檔且只同步自選+熱門約 48 檔,實測上市候選僅 24% 有資料,造成
+  /// 上櫃股拿到外資訊號的機會是上市股的 4 倍。
+  static const String twseForeignShareholding = '/rwd/zh/fund/MI_QFIIS';
+
   /// 當沖交易標的
   static const String twseDayTrading = '/exchangeReport/TWTB4U';
 

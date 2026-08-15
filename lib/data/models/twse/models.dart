@@ -15,3 +15,4 @@ export 'twse_monthly_revenue.dart';
 export 'twse_short_suspension.dart';
 export 'twse_trading_warning.dart';
 export 'twse_valuation.dart';
+export 'twse_foreign_shareholding.dart';

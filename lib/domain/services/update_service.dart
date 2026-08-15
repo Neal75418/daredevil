@@ -781,7 +781,9 @@ class UpdateService {
       AppLogger.info(
         'UpdateService',
         '步驟 4.5: 當沖=${marketResult.dayTradingCount}, '
-            '融資=$marginLabel, 持股=$syncedCount$backfillLabel',
+            '融資=$marginLabel, '
+            '外資持股(全市場)=${marketResult.foreignShareholdingCount}, '
+            '持股(自選+熱門)=$syncedCount$backfillLabel',
       );
     } on RateLimitException catch (e) {
       ctx.rateLimitedAbort = true;

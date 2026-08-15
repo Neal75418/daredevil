@@ -369,6 +369,65 @@ class TwseClient {
     });
   }
 
+  /// 全市場外資及陸資持股(MI_QFIIS,免費、支援歷史日期)
+  ///
+  /// 端點: /rwd/zh/fund/MI_QFIIS。2026-08-16 接入,補上市股外資持股覆蓋
+  /// ——原本只靠 FinMind 逐檔、且只同步自選+熱門約 48 檔,實測上市候選
+  /// 344 檔僅 82 檔有資料,而上櫃因有輪替機制是 100%。
+  Future<List<TwseForeignShareholding>> getAllForeignShareholding({
+    DateTime? date,
+  }) {
+    return MarketClientMixin.executeRequest(_tag, '外資持股', () async {
+      final cacheKey = date != null
+          ? 'foreignShareholding:${TwParseUtils.formatDateCompact(date)}'
+          : 'foreignShareholding';
+      final cached = _cache.get(cacheKey) as List<TwseForeignShareholding>?;
+      if (cached != null) return cached;
+
+      final queryParams = <String, dynamic>{
+        'response': 'json',
+        'selectType': 'ALLBUT0999',
+        if (date != null) 'date': TwParseUtils.formatDateCompact(date),
+      };
+
+      final response = await _dio.get(
+        ApiEndpoints.twseForeignShareholding,
+        queryParameters: queryParams,
+      );
+      if (response.statusCode != 200) {
+        throw ApiException(
+          '$_tag API error: ${response.statusCode}',
+          response.statusCode,
+        );
+      }
+
+      final data = MarketClientMixin.decodeResponseData(
+        response.data,
+        _tag,
+        '外資持股',
+      );
+      if (data == null) return [];
+      final rows = MarketClientMixin.validateTwseStat(data, _tag, '外資持股');
+      if (rows == null) return [];
+
+      // 回應自帶日期:非交易日查詢時 TWSE 會回最近有資料的那天,
+      // 用 request date 落庫會把資料標成錯的日子
+      final parsedDate = TwParseUtils.parseAdDate(
+        data['date']?.toString() ?? '',
+      );
+
+      final result = MarketClientMixin.parseRows(
+        rows: rows,
+        parser: (row) => TwseForeignShareholding.fromRow(row, parsedDate),
+        tag: _tag,
+        operation: '外資持股',
+        date: parsedDate,
+      );
+      _cache.put(cacheKey, result);
+      return result;
+    });
+  }
+
   /// 解析法人資料列
   ///
   /// T86（selectType=ALLBUT0999）回傳 19 欄陣列（已對 live API 驗證）：

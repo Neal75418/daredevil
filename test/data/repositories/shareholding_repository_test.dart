@@ -1,6 +1,7 @@
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
+import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/data/repositories/shareholding_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -8,6 +9,8 @@ import 'package:mocktail/mocktail.dart';
 class MockAppDatabase extends Mock implements AppDatabase {}
 
 class MockFinMindClient extends Mock implements FinMindClient {}
+
+class MockTwseClient extends Mock implements TwseClient {}
 
 void main() {
   late MockAppDatabase mockDb;
@@ -17,7 +20,11 @@ void main() {
   setUp(() {
     mockDb = MockAppDatabase();
     mockClient = MockFinMindClient();
-    repo = ShareholdingRepository(database: mockDb, finMindClient: mockClient);
+    repo = ShareholdingRepository(
+      database: mockDb,
+      finMindClient: mockClient,
+      twseClient: MockTwseClient(),
+    );
   });
 
   // ==========================================

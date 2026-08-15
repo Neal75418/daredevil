@@ -91,6 +91,7 @@ class MarketDataUpdater {
   }) async {
     var twseDayTradingCount = 0;
     int? marginCount = 0;
+    var foreignShareholdingCount = 0;
 
     // 從 TWSE 批次同步上市當沖資料（無 TPEX 對等：上櫃端點被 Cloudflare 擋）
     try {
@@ -125,12 +126,30 @@ class MarketDataUpdater {
       AppLogger.warning('MarketDataUpdater', '融資融券資料同步失敗', e);
     }
 
+    // 全市場外資持股(2026-08-16 接入 MI_QFIIS)
+    //
+    // 放在這一層而非 syncSymbolsMarketData:後者走 FinMind 逐檔、受配額
+    // 限制,且只餵「自選 + 熱門」約 48 檔——實測上市候選 344 檔僅 82 檔
+    // 有資料,而上櫃因有輪替機制是 100%,造成上櫃股拿到 FOREIGN_* 加分的
+    // 機會是上市股的 4 倍。MI_QFIIS 免費、一次全市場,與當沖/融資融券同性質。
+    try {
+      foreignShareholdingCount = await _shareholdingRepo
+          .syncAllMarketShareholding(date: date, force: force);
+    } on RateLimitException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e) {
+      AppLogger.warning('MarketDataUpdater', '全市場外資持股同步失敗', e);
+    }
+
     // 回補缺漏日（今日同步完才跑，確保當日資料不被回補預算排擠）
     final backfilledDays = await _backfillMissingTradingDays(date);
 
     return MarketDataSyncResult(
       dayTradingCount: twseDayTradingCount,
       marginCount: marginCount,
+      foreignShareholdingCount: foreignShareholdingCount,
       backfilledDays: backfilledDays,
     );
   }
@@ -617,6 +636,7 @@ class MarketDataSyncResult {
   const MarketDataSyncResult({
     required this.dayTradingCount,
     required this.marginCount,
+    this.foreignShareholdingCount = 0,
     this.backfilledDays = 0,
   });
 
@@ -624,6 +644,9 @@ class MarketDataSyncResult {
 
   /// 融資融券同步筆數。null 表示已快取（跳過同步）。
   final int? marginCount;
+
+  /// 全市場外資持股同步筆數(MI_QFIIS,2026-08-16)
+  final int foreignShareholdingCount;
 
   /// 回補成功的缺漏交易日天數（當沖或融資任一**跨過缺漏偵測門檻**才計
   /// 1 天——與收斂設計第 2 條一致，非「有寫入列」即計）

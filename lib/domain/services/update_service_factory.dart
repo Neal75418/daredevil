@@ -101,6 +101,7 @@ class UpdateServiceFactory {
     final shareholdingRepo = ShareholdingRepository(
       database: database,
       finMindClient: finMindClient,
+      twseClient: twseClient,
       clock: clock,
     );
     final fundamentalRepo = FundamentalRepository(
