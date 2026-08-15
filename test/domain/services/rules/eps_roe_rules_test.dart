@@ -200,11 +200,12 @@ void main() {
 
     test('triggers with >= 2 consecutive quarterly growth and MA20', () {
       final prices = _generatePricesAboveMA(maPeriod: 20);
-      // EPS: 2.0, 1.5, 1.0 (descending order = newest first)
-      // Growth: (2.0-1.5)/1.5 = 33%, (1.5-1.0)/1.0 = 50%
-      // Both >= 10% → consecutive = 2
+      // 2026-08-15:比較基準由 QoQ 改為**同季 YoY**,fixture 需 6 季
+      // (最新兩季各要有去年同季當基期)。
+      // 等差序列 baseEps=1.0、每季 +0.5 → 6 季為 3.5,3.0,2.5,2.0,1.5,1.0
+      // 最新季 3.5 vs 去年同季 1.5 = +133%;次新 3.0 vs 1.0 = +200% → 連續 2 季
       final epsHistory = generateEpsHistory(
-        quarters: 3,
+        quarters: 6,
         baseEps: 1.0,
         quarterlyGrowth: 0.5,
       );
@@ -394,8 +395,9 @@ void main() {
 
     test('triggers with 2 consecutive quarters of decline >= 20%', () {
       final now = DateTime(2025, 6, 1);
-      // EPS (newest first): 0.5, 1.0, 2.0
-      // Decline: (1.0-0.5)/1.0 = 50% >= 20%, (2.0-1.0)/2.0 = 50% >= 20%
+      // 2026-08-15:比較基準由 QoQ 改為**同季 YoY**,fixture 需含去年同季。
+      // 最新季 0.5 vs 去年同季 2.0 → 衰退 75%;
+      // 次新季 1.0 vs 去年同季 2.5 → 衰退 60%。連續 2 季 ≥ 20% → 觸發。
       final epsHistory = [
         createTestFinancialData(
           date: DateTime(now.year, now.month, 1),
@@ -410,7 +412,22 @@ void main() {
         createTestFinancialData(
           date: DateTime(now.year, now.month - 6, 1),
           dataType: 'EPS',
+          value: 1.5,
+        ),
+        createTestFinancialData(
+          date: DateTime(now.year, now.month - 9, 1),
+          dataType: 'EPS',
+          value: 2.2,
+        ),
+        createTestFinancialData(
+          date: DateTime(now.year - 1, now.month, 1),
+          dataType: 'EPS',
           value: 2.0,
+        ),
+        createTestFinancialData(
+          date: DateTime(now.year - 1, now.month - 3, 1),
+          dataType: 'EPS',
+          value: 2.5,
         ),
       ];
       final data = createTestStockData(epsHistory: epsHistory);
