@@ -195,6 +195,17 @@ abstract final class ApiEndpoints {
   static const String tpexInsiderTransfer =
       '$tpexOpenApiBaseUrl/v1/mopsfin_t187ap12_O';
 
+  /// 上市資產負債表(t187ap07_L_業別;後綴同季報)
+  ///
+  /// 2026-08-16 接入:取代 FinMind 逐檔的 BalanceSheet——那是額度的唯一
+  /// 瓶頸(129 檔 × 2 = 258 次/輪)。⚠️ 金額單位是**千元**,FinMind 是元。
+  static String twseBalanceSheet(String suffix) =>
+      '$twseOpenDataBaseUrl/v1/opendata/t187ap07_L_$suffix';
+
+  /// 上櫃資產負債表(mopsfin_t187ap07_O_業別)
+  static String tpexBalanceSheet(String suffix) =>
+      '$tpexOpenApiBaseUrl/v1/mopsfin_t187ap07_O_$suffix';
+
   /// 上櫃綜合損益表(季報,mopsfin_t187ap06_O_業別;後綴同上市)
   static String tpexQuarterlyReport(String suffix) =>
       '$tpexOpenApiBaseUrl/v1/mopsfin_t187ap06_O_$suffix';

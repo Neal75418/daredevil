@@ -90,6 +90,8 @@ class UpdateServiceFactory {
     final marketDataRepo = MarketDataRepository(
       database: database,
       finMindClient: finMindClient,
+      twseClient: twseClient,
+      tpexClient: tpexClient,
       clock: clock,
     );
     final tradingRepo = TradingRepository(

@@ -1062,6 +1062,63 @@ class TwseClient {
     });
   }
 
+  /// 上市全市場資產負債表(t187ap07_L_*,六業別合併)
+  ///
+  /// 2026-08-16 接入,取代 FinMind 逐檔的 `getBalanceSheet`——那是額度
+  /// 的唯一瓶頸(實測 129 檔待回填 = 258 次呼叫,佔小時額度 43%,當天
+  /// 因額度保留只跑了 10 檔)。本端點免費、一次全市場。
+  ///
+  /// 六業別 per-variant 隔離,與 [getQuarterlyReports] 同設計:單一業別
+  /// 失敗記 warning、其餘照收,全滅才拋。
+  Future<List<MarketWideFinancial>> getAllBalanceSheets() {
+    return MarketClientMixin.executeRequest(_tag, '資產負債表', () async {
+      const cacheKey = 'balanceSheets';
+      final cached = _cache.get(cacheKey) as List<MarketWideFinancial>?;
+      if (cached != null) return cached;
+
+      final results = <MarketWideFinancial>[];
+      var okVariants = 0;
+      Object? firstError;
+      for (final suffix in ApiEndpoints.quarterlyReportIndustrySuffixes) {
+        try {
+          final response = await _dio.get(
+            ApiEndpoints.twseBalanceSheet(suffix),
+          );
+          if (response.statusCode != 200) {
+            throw ApiException(
+              '$_tag OpenData API error: ${response.statusCode}',
+              response.statusCode,
+            );
+          }
+          final data = response.data;
+          if (data is! List) {
+            AppLogger.warning(_tag, '資產負債表($suffix): 非預期資料型別');
+            continue;
+          }
+          for (final item in data) {
+            if (item is! Map<String, dynamic>) continue;
+            results.addAll(MarketWideFinancial.parseBalance(item));
+          }
+          okVariants++;
+        } on RateLimitException {
+          rethrow;
+        } catch (e) {
+          AppLogger.warning(_tag, '資產負債表($suffix)失敗,其餘業別照收', e);
+          firstError ??= e;
+        }
+      }
+      if (okVariants == 0 && firstError != null) throw firstError;
+
+      AppLogger.info(
+        _tag,
+        '資產負債表: ${results.length} 筆'
+        '($okVariants/${ApiEndpoints.quarterlyReportIndustrySuffixes.length} 業別)',
+      );
+      _cache.put(cacheKey, results);
+      return results;
+    });
+  }
+
   /// 取得所有股票的月營收（最新月份）
   ///
   /// 來源: TWSE Open Data API (t187ap05_L)

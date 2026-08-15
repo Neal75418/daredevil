@@ -878,6 +878,19 @@ class UpdateService {
     if (fundamentalSyncer == null) return;
 
     try {
+      // 全市場資產負債表先跑(2026-08-16):免費官方端點一次拿上市 968 +
+      // 上櫃 859 檔,寫入後下面 syncBalanceSheets 的 per-statementType 新鮮度
+      // 檢查會提早 return、不打 FinMind。財報是額度的唯一瓶頸(129 檔 × 2
+      // = 258 次/輪,實測當天因額度保留只跑了 10 檔),這一步砍掉其中一半。
+      var marketWideBs = 0;
+      try {
+        marketWideBs = await fundamentalSyncer.syncMarketWideBalanceSheets();
+      } on RateLimitException {
+        rethrow;
+      } catch (e) {
+        AppLogger.warning('UpdateService', '全市場資產負債表同步失敗,退回逐檔', e);
+      }
+
       // 兩市場統一額度配額(2026-08-05 季報季修復):上市佇列原無額度
       // 守衛——「重跑 needy 為空」在季報季破產(全市場同時變 needy),
       // 單輪 488 次呼叫吃掉 82% 小時額度。額度感知從上櫃推廣到全財報:
@@ -927,7 +940,8 @@ class UpdateService {
         final bsLabel = bsCount == null ? '已快取' : '$bsCount';
         AppLogger.info(
           'UpdateService',
-          '步驟 4.7: 損益=$epsCount, 資負=$bsLabel '
+          '步驟 4.7: 損益=$epsCount, 資負=$bsLabel, '
+              '全市場資負(免費)=$marketWideBs '
               '(${allTargets.length} 檔，其中上櫃回填 ${otcBacklog.length})',
         );
       }

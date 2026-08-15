@@ -493,6 +493,17 @@ class FundamentalSyncer {
   /// 每批 10 檔並行，批間延遲 500ms 避免超過 FinMind 配額。
   /// 需要 MarketDataRepository 才能使用。
   /// ETF（代碼以 00 開頭）無財報資料，自動過濾以避免無效 API 呼叫。
+  /// 全市場資產負債表(免費官方端點,2026-08-16)
+  ///
+  /// **必須在 [syncBalanceSheets] 之前呼叫**:寫入最新一季之後,後者的
+  /// per-statementType 新鮮度檢查會提早 return、不打 FinMind——財報是
+  /// 額度的唯一瓶頸(129 檔 × 2 = 258 次/輪),這一步直接砍掉其中一半。
+  Future<int> syncMarketWideBalanceSheets() async {
+    final repo = _marketDataRepo;
+    if (repo == null) return 0;
+    return repo.syncMarketWideBalanceSheets();
+  }
+
   Future<int?> syncBalanceSheets({required List<String> symbols}) async {
     final marketDataRepo = _marketDataRepo;
     // 過濾 ETF：00 開頭的代碼（0050、00636、006205 等）沒有資產負債表資料

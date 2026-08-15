@@ -10,6 +10,7 @@ import 'package:daredevil/core/utils/lru_cache.dart';
 import 'package:daredevil/core/utils/tw_parse_utils.dart';
 import 'package:daredevil/data/models/tpex/models.dart';
 import 'package:daredevil/data/models/twse/exright_preannouncement.dart';
+import 'package:daredevil/data/models/twse/market_wide_financial.dart';
 import 'package:daredevil/data/models/twse/quarterly_report_entry.dart';
 import 'package:daredevil/data/models/twse/twse_market_index.dart';
 import 'package:daredevil/data/remote/insider_holding_aggregator.dart';
@@ -1070,6 +1071,59 @@ class TpexClient {
 
   /// 取得上櫃最新一季綜合損益表(mopsfin_t187ap06_O_*,六業別合併)。
   ///
+  /// 上櫃全市場資產負債表(mopsfin_t187ap07_O_*,六業別合併)
+  ///
+  /// 與 [TwseClient.getAllBalanceSheets] 同構。2026-08-16 接入,取代
+  /// FinMind 逐檔的 BalanceSheet。⚠️ 金額單位千元,由 model 轉成元。
+  Future<List<MarketWideFinancial>> getAllBalanceSheets() {
+    return MarketClientMixin.executeRequest(_tag, '資產負債表', () async {
+      const cacheKey = 'balanceSheets';
+      final cached = _cache.get(cacheKey) as List<MarketWideFinancial>?;
+      if (cached != null) return cached;
+
+      final results = <MarketWideFinancial>[];
+      var okVariants = 0;
+      Object? firstError;
+      for (final suffix in ApiEndpoints.quarterlyReportIndustrySuffixes) {
+        try {
+          final response = await _dio.get(
+            ApiEndpoints.tpexBalanceSheet(suffix),
+          );
+          if (response.statusCode != 200) {
+            throw ApiException(
+              '$_tag OpenData API error: ${response.statusCode}',
+              response.statusCode,
+            );
+          }
+          final data = response.data;
+          if (data is! List) {
+            AppLogger.warning(_tag, '資產負債表($suffix): 非預期資料型別');
+            continue;
+          }
+          for (final item in data) {
+            if (item is! Map<String, dynamic>) continue;
+            results.addAll(MarketWideFinancial.parseBalance(item));
+          }
+          okVariants++;
+        } on RateLimitException {
+          rethrow;
+        } catch (e) {
+          AppLogger.warning(_tag, '資產負債表($suffix)失敗,其餘業別照收', e);
+          firstError ??= e;
+        }
+      }
+      if (okVariants == 0 && firstError != null) throw firstError;
+
+      AppLogger.info(
+        _tag,
+        '資產負債表: ${results.length} 筆'
+        '($okVariants/${ApiEndpoints.quarterlyReportIndustrySuffixes.length} 業別)',
+      );
+      _cache.put(cacheKey, results);
+      return results;
+    });
+  }
+
   /// 語意與 [TwseClient.getQuarterlyReports] 完全同構(欄名差異由
   /// QuarterlyReportEntry 的雙 key fallback 吸收);per-variant 隔離
   /// 同款:單業別失敗照收其餘、全滅才拋、RateLimit 直接 rethrow。
