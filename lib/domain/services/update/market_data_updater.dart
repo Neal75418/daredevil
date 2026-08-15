@@ -3,6 +3,7 @@ import 'package:meta/meta.dart' show visibleForTesting;
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
+import 'package:daredevil/core/constants/rule_params_institutional.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/logger.dart';
@@ -141,6 +142,20 @@ class MarketDataUpdater {
       rethrow;
     } catch (e) {
       AppLogger.warning('MarketDataUpdater', '全市場外資持股同步失敗', e);
+    }
+
+    // 外資持股歷史回補:變化量規則要比 foreignShareholdingLookbackDays 個
+    // 交易日前的水位,只有當日一筆時規則仍然沉默——覆蓋補上了、訊號沒有,
+    // 只是換個原因。MI_QFIIS 支援 date 參數,補幾天就能讓規則立刻生效。
+    try {
+      await _shareholdingRepo.backfillForeignShareholding(
+        asOf: date,
+        days: InstitutionalParams.foreignShareholdingLookbackDays + 1,
+      );
+    } on RateLimitException {
+      rethrow;
+    } catch (e) {
+      AppLogger.warning('MarketDataUpdater', '外資持股回補失敗', e);
     }
 
     // 回補缺漏日（今日同步完才跑，確保當日資料不被回補預算排擠）

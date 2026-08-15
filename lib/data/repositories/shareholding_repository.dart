@@ -1,10 +1,13 @@
 import 'package:drift/drift.dart';
 
+import 'package:daredevil/core/constants/api_config.dart';
+import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/chip_scoring_params.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/logger.dart';
+import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
@@ -46,11 +49,17 @@ class ShareholdingRepository {
     bool force = false,
   }) async {
     try {
-      // 新鮮度檢查:當日已有資料就跳過(force 繞過)。門檻用「有沒有那天的
-      // 列」而非筆數——全市場一次寫入,不會有寫一半的中間態
+      // 新鮮度檢查用**覆蓋率**而非「有沒有列」(2026-08-16 實機修正)。
+      //
+      // 正式 DB 的 8/13 只有 213 筆——那是 FinMind 逐檔留下的零星結果,
+      // 而全市場應有 1,200+ 筆。用 `> 0` 判斷會把這種半殘的日子永遠跳過:
+      // 覆蓋看起來補了,實際上那天還是缺一千多檔,而且**再也不會被重抓**。
       if (!force) {
         final existing = await _db.countShareholdingForDate(date);
-        if (existing > 0) return 0;
+        final listed = await _db.countStocksByMarket(MarketCode.twse);
+        final threshold =
+            listed * ApiConfig.foreignShareholdingMinCoverageRatio;
+        if (existing >= threshold) return 0;
       }
 
       final data = await _twse.getAllForeignShareholding(date: date);
@@ -89,6 +98,50 @@ class ShareholdingRepository {
     } catch (e) {
       throw DatabaseException('Failed to sync market-wide shareholding', e);
     }
+  }
+
+  /// 回補外資持股的歷史交易日(MI_QFIIS 支援 date 參數)
+  ///
+  /// **為什麼需要**:全市場同步補上了覆蓋,但 FOREIGN_SHAREHOLDING_
+  /// INCREASING / DECREASING 讀的是**變化量**([InstitutionalParams.
+  /// foreignShareholdingLookbackDays] 個交易日前的水位差)。新覆蓋的股票
+  /// 只有當日一筆時,那些規則仍然不會觸發——覆蓋補上了、訊號還是沉默,
+  /// 只是換了個原因。回補幾次呼叫就能讓規則立刻生效,不必等一週。
+  ///
+  /// **只補缺的日子**:已有資料的交易日直接跳過,所以重跑不會把整個窗口
+  /// 重打一遍(回補迴圈收斂設計的第一條)。單日失敗不中斷其餘日子——
+  /// 交易所對個別歷史日回空是常態,不該讓一天拖垮整輪。
+  Future<int> backfillForeignShareholding({
+    required DateTime asOf,
+    int days = 5,
+  }) async {
+    var filled = 0;
+    // ⚠️ 用 subtractTradingDays 而非 getPreviousTradingDay:後者的語意是
+    // 「取得**含當天**的最近交易日」——傳一個交易日進去會原封不動回傳,
+    // 游標永遠卡在同一天(2026-08-16 debug 探針實測)。
+    final start = TaiwanCalendar.getPreviousTradingDay(
+      DateContext.normalize(asOf),
+    );
+    for (var i = 0; i < days; i++) {
+      final day = i == 0 ? start : TaiwanCalendar.subtractTradingDays(start, i);
+      try {
+        final written = await syncAllMarketShareholding(date: day);
+        if (written > 0) filled++;
+      } on RateLimitException {
+        rethrow;
+      } catch (e) {
+        // 單日失敗不中斷:交易所對個別歷史日回空/異常是常態
+        AppLogger.warning(
+          'ShareholdingRepo',
+          '外資持股回補 ${DateContext.formatYmd(day)} 失敗,續補其餘日子',
+          e,
+        );
+      }
+    }
+    if (filled > 0) {
+      AppLogger.info('ShareholdingRepo', '外資持股回補: $filled 個交易日');
+    }
+    return filled;
   }
 
   /// 取得外資持股歷史資料

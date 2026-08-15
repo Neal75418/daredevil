@@ -56,6 +56,14 @@ abstract final class ApiConfig {
   /// isActive=true)分鐘級救回——此救援依賴為顯式設計,見
   /// stock_repository 的三態註解。若未來上市家數縮水逼近 floor,
   /// syncStockList 會記警報(見該處),屆時再行下調。
+  /// 外資持股「當日資料算完整」的覆蓋率門檻(相對於上市股數)
+  ///
+  /// 2026-08-16 實機:正式 DB 的 8/13 只有 213 筆——FinMind 逐檔留下的
+  /// 零星結果,而 MI_QFIIS 全市場是 1,200+ 筆。新鮮度檢查若用「有沒有列」,
+  /// 這種半殘的日子會被永遠跳過、再也不會被重抓。0.5 遠高於零星資料的
+  /// 規模、遠低於全市場快照,兩者之間有數量級的差距,不需要精細校準。
+  static const double foreignShareholdingMinCoverageRatio = 0.5;
+
   static const int twseOfficialListSanityFloor = 1000;
 
   /// 名冊縮水警報門檻:本輪家數低於「DB 既有存活家數 × 此比例」即警告
