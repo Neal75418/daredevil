@@ -46,6 +46,19 @@ echo "dart 執行檔:$DART"
 CLI_DIR="$HOME/.daredevil/cli"
 echo "編譯 CLI(執行期不再需要網路)..."
 mkdir -p "$CLI_DIR"
+
+# 建置標記(2026-08-15):產物落後 source 時,exit code、update_run、日誌
+# 三個訊號全部正常,跑的卻是舊邏輯——實測落後 3 天,是靠檔案時間戳才撞
+# 見的。把 SHA 寫進 bundle,讓每次執行的日誌自己就能回答「跑的是哪一版」。
+#
+# **dirty 一定要標**:working tree 有未 commit 的改動時,SHA 指的那份
+# source 與實際編進去的**不是同一份**——不標記等於給出一個看起來精確、
+# 實際錯誤的答案,比 unknown 更糟。
+BUILD_SHA="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+if [ -n "$(git -C "$REPO" status --porcelain 2>/dev/null)" ]; then
+  BUILD_SHA="$BUILD_SHA-dirty"
+fi
+echo "建置標記:$BUILD_SHA"
 for target in intraday_alert_check daily_update; do
   "$DART" build cli --target="bin/$target.dart" -o "build/cli/$target" >/dev/null 2>&1 || {
     echo "❌ 編譯 $target 失敗——請手動跑一次看錯誤:" >&2
@@ -55,6 +68,8 @@ for target in intraday_alert_check daily_update; do
   rm -rf "$CLI_DIR/$target"
   cp -R "build/cli/$target/bundle" "$CLI_DIR/$target"
   [ -x "$CLI_DIR/$target/bin/$target" ] || { echo "❌ $target 產物不可執行" >&2; exit 1; }
+  # 標記檔放 bundle 根,CLI 執行時由 buildStamp() 沿 resolvedExecutable 往上找
+  echo "$BUILD_SHA" > "$CLI_DIR/$target/BUILD_INFO"
 
   # 用穩定身分簽章(2026-08-10 實機):`dart build cli` 的產物是 **ad-hoc**
   # 簽章,TCC 對它是按 cdhash 記授權——**每次重新編譯 cdhash 就變**,

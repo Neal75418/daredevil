@@ -16,6 +16,7 @@ import 'dart:io';
 import 'package:daredevil/core/utils/log_rotation.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/taiwan_time.dart';
+import 'package:daredevil/core/utils/build_stamp.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/intraday_quote_client.dart';
 import 'package:daredevil/domain/services/alert/intraday_alert_monitor.dart';
@@ -78,7 +79,10 @@ Future<void> main(List<String> args) async {
     // 時區不符時每一行都帶警告——只印一次會被埋在 55 行裡面
     '${tzMismatch ? ' ⚠️TZ(本地 UTC'
               '${_offsetLabel(localOffset)},台北 UTC+8'
-              '——launchd 依本地時間喚醒,喚醒時段已與台股盤中錯開)' : ''}',
+              '——launchd 依本地時間喚醒,喚醒時段已與台股盤中錯開)' : ''}'
+    // 每行都帶版本,而不是啟動時印一次:heartbeat 的用途就是事後翻任
+    // 一行都能還原當時狀態,版本正是其中一項(2026-08-15 CLI 落後 3 天)
+    ' [${buildStamp()}]',
   );
 
   if (!force && !IntradayPollSchedule.isMarketHours(now)) {

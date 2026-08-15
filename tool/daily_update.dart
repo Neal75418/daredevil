@@ -44,6 +44,7 @@ import 'package:daredevil/core/utils/log_rotation.dart';
 import 'package:daredevil/app/headless_update_runner.dart';
 import 'package:daredevil/data/remote/file_api_budget_store.dart';
 import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_registry.dart';
+import 'package:daredevil/core/utils/build_stamp.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
 
@@ -59,7 +60,14 @@ Future<void> main(List<String> args) async {
     );
   }
   final start = DateTime.now();
-  print('[daily_update] started at ${start.toIso8601String()}');
+  // build stamp:launchd 跑的是 AOT 產物,落後 source 時三個訊號(exit
+  // code、update_run、日誌)全部正常,跑的卻是舊邏輯。2026-08-15 實測
+  // 落後 3 天,是靠檔案時間戳撞見的——這行讓日誌自己就能回答「跑的是
+  // 哪一版」。
+  print(
+    '[daily_update] started at ${start.toIso8601String()} '
+    '[${buildStamp()}]',
+  );
 
   // CLI 跑在純 Dart context — 沒有 Flutter binding，rootBundle 不可用。
   // 用 dart:io 直接讀 assets 目錄（CLI 從 repo root 跑時 assets/ 就是
