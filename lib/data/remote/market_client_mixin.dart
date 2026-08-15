@@ -129,14 +129,19 @@ abstract final class MarketClientMixin {
         if (attempt <= _maxRetries) {
           AppLogger.info(
             tag,
-            '$operation: 重試 $attempt/$_maxRetries (${e.type.name})',
+            '$operation: 重試 $attempt/$_maxRetries (${_errorLabel(e)})',
           );
           await _delay(attempt);
           continue;
         }
 
         // 重試耗盡
-        AppLogger.warning(tag, '$operation: 重試 $_maxRetries 次後仍失敗', e, stack);
+        AppLogger.warning(
+          tag,
+          '$operation: 重試 $_maxRetries 次後仍失敗 (${_errorLabel(e)})',
+          e,
+          stack,
+        );
         throw NetworkException(
           '$tag request failed after $_maxRetries retries',
           e,
@@ -167,6 +172,22 @@ abstract final class MarketClientMixin {
   /// 連線逾時、發送逾時、連線錯誤、5xx、SocketException、HttpException 可重試。
   /// receiveTimeout 不重試：伺服器已接受連線但不回應，通常是限流，重試無意義。
   /// 4xx 等客戶端錯誤不重試。
+  /// 錯誤標籤:具體型別直接用,`unknown` 補上底層原因。
+  ///
+  /// `DioExceptionType.unknown` 涵蓋所有「不是 timeout、不是 4xx/5xx」的
+  /// 底層錯誤——socket 重置、DNS 失敗、IO 錯誤全都長這樣。2026-08-16 實機:
+  /// TPEx 董監持股卡了 85 秒(前一輪同段只花 0.4 秒),日誌只留下
+  /// `重試 1/2 (unknown)`,分不出是網路重置還是對方限流。原因其實就在
+  /// `e.error` 裡——[_isRetryable] 的 default 分支正是靠它判斷可重試。
+  ///
+  /// 同 intraday「報價全滅四個字分不出 timeout/DNS/連線重置/限流」的教訓,
+  /// 那邊 2026-08-12 修了、這條共用路徑沒修。
+  static String _errorLabel(DioException e) {
+    if (e.type != DioExceptionType.unknown) return e.type.name;
+    final cause = e.error ?? e.message;
+    return cause == null ? e.type.name : '${e.type.name}: $cause';
+  }
+
   static bool _isRetryable(DioException e) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
