@@ -1,4 +1,5 @@
 import 'package:daredevil/core/utils/clock.dart';
+import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/services/dividend_intelligence_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -9,7 +10,91 @@ class _FakeClock implements AppClock {
   DateTime now() => DateTime(2025, 6, 15);
 }
 
+/// 稽核測試用:固定在 2026-08-15(對齊 production 觀察到的資料窗口)
+class _Clock2026 implements AppClock {
+  @override
+  DateTime now() => DateTime(2026, 8, 15);
+}
+
 void main() {
+  group('股利口徑(2026-08-15 數值稽核)', () {
+    DividendHistoryEntry div(int year, double cash, [double stock = 0]) =>
+        DividendHistoryEntry(
+          symbol: '1111',
+          year: year,
+          cashDividend: cash,
+          stockDividend: stock,
+        );
+
+    test('🚨 「最近三年」必須用年度過濾,不是 take(3) 取最近三筆', () {
+      // 實測:745 檔的完整歷史只有 2018-2020,take(3) 會拿六到八年前的
+      // 配息當「最近三年平均」餵進殖利率
+      final svc = DividendIntelligenceService(clock: _Clock2026());
+      final result = svc.analyzeDividends(
+        positions: [
+          createTestPortfolioPosition(
+            symbol: '1111',
+            quantity: 1000,
+            avgCost: 50.0,
+          ),
+        ],
+        dividendHistories: {
+          '1111': [div(2020, 6.0), div(2019, 6.0), div(2018, 6.0)],
+        },
+        currentPrices: {'1111': 60},
+      );
+      expect(
+        result.stockDividends.first.estimatedDividendPerShare,
+        0,
+        reason: '2018-2020 全部超出「最近三年」(2023-2026)窗口,應視為無可用基期',
+      );
+    });
+
+    test('🚨 現金與股票股利不得相加(面額 vs 市價,單位不同)', () {
+      final svc = DividendIntelligenceService(clock: _Clock2026());
+      final result = svc.analyzeDividends(
+        positions: [
+          createTestPortfolioPosition(
+            symbol: '1111',
+            quantity: 1000,
+            avgCost: 50.0,
+          ),
+        ],
+        dividendHistories: {
+          '1111': [div(2025, 10.0, 20.0)], // 現金 10 元 + 股票 20 元(=配 2 股)
+        },
+        currentPrices: {'1111': 60},
+      );
+      expect(
+        result.stockDividends.first.estimatedDividendPerShare,
+        10.0,
+        reason: '殖利率的標準定義是現金殖利率;股票股利是面額元不可直接相加',
+      );
+    });
+
+    test('當年度已建列但金額為 0(尚未宣告)→ 退回平均而非回傳 0', () {
+      final svc = DividendIntelligenceService(clock: _Clock2026());
+      final result = svc.analyzeDividends(
+        positions: [
+          createTestPortfolioPosition(
+            symbol: '1111',
+            quantity: 1000,
+            avgCost: 50.0,
+          ),
+        ],
+        dividendHistories: {
+          '1111': [div(2026, 0.0), div(2025, 8.0), div(2024, 8.0)],
+        },
+        currentPrices: {'1111': 60},
+      );
+      expect(
+        result.stockDividends.first.estimatedDividendPerShare,
+        closeTo(8.0, 0.01),
+        reason: '0 是「還沒宣告」不是「決定不配」',
+      );
+    });
+  });
+
   final service = DividendIntelligenceService(clock: _FakeClock());
   const currentYear = 2025;
 
@@ -237,10 +322,14 @@ void main() {
         currentPrices: {'A': 100.0},
       );
 
-      // Should use current year: 8 + 2 = 10
+      // 2026-08-15 數值稽核更正:原斷言 8+2=10(現金加股票)。股票股利
+      // 的單位是**面額元**(配 2 元 = 每股配 0.2 股),與現金元不同幣值,
+      // 相加無意義;殖利率的標準定義即現金殖利率,且交易所給的
+      // stock_valuation.dividend_yield 也是純現金——兩者現在口徑一致。
       expect(
         result.stockDividends.first.estimatedDividendPerShare,
-        equals(10.0),
+        equals(8.0),
+        reason: '只採計當年度現金股利 8.0,不加股票股利 2.0',
       );
     });
 
@@ -303,7 +392,7 @@ void main() {
       );
     });
 
-    test('includes stock dividend in estimation', () {
+    test('股票股利不計入預期股利(面額元 ≠ 現金元,2026-08-15 更正)', () {
       final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
       final histories = {
         'A': [
@@ -324,7 +413,8 @@ void main() {
 
       expect(
         result.stockDividends.first.estimatedDividendPerShare,
-        equals(4.5),
+        equals(3.0),
+        reason: '現金 3.0;股票股利 1.5 是面額元(每股配 0.15 股),不相加',
       );
     });
 

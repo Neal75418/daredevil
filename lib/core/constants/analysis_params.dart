@@ -47,6 +47,14 @@ abstract final class AnalysisParams {
   /// （嚴格 5.5）。摘要側 4.0 較寬鬆，覆蓋台股平均 4-6% 的合理區間。
   static const double dividendYieldSummaryLabelThreshold = 4.0;
 
+  /// 預期年度股利的回溯**年度**窗口(2026-08-15 數值稽核)。
+  ///
+  /// 舊實作用 `history.take(3)` 取「最近 3 筆」——但實測 dividend_history
+  /// 的年度分布有大空洞(2021–2024 幾乎無資料),**745 檔的完整歷史只有
+  /// 2018–2020**,於是六到八年前的配息被當成「最近三年平均」餵進殖利率。
+  /// 改以年度過濾:只採計 `year >= 今年 - dividendLookbackYears`。
+  static const int dividendLookbackYears = 3;
+
   /// 營收年增率顯著變動門檻（正負皆適用）
   static const double revenueYoySignificantThreshold = 20.0;
 

@@ -1,3 +1,4 @@
+import 'package:daredevil/core/constants/analysis_params.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/database/app_database.dart';
 
@@ -96,23 +97,28 @@ class DividendIntelligenceService {
 
     final currentYear = _clock.now().year;
 
-    // 嘗試找當年度資料
-    final thisYearData = history.where((h) => h.year == currentYear).toList();
-    if (thisYearData.isNotEmpty) {
-      final entry = thisYearData.first;
-      return entry.cashDividend + entry.stockDividend;
+    // 只採計「最近 N 個**年度**」——不是 take(N) 取最近 N 筆
+    // (2026-08-15 稽核:年度分布有 2021–2024 空洞,745 檔的歷史只有
+    // 2018–2020,take(3) 會拿六到八年前的配息當最近三年)
+    final windowStart = currentYear - AnalysisParams.dividendLookbackYears;
+    final inWindow = history.where((h) => h.year >= windowStart);
+
+    // **只算現金股利**:股票股利的單位是面額元(配 2 元 = 每股配 0.2 股),
+    // 與現金不同幣值,相加沒有意義;而殖利率的標準定義本就是現金殖利率。
+    final declaredThisYear = inWindow
+        .where((h) => h.year == currentYear && h.cashDividend > 0)
+        .toList();
+    if (declaredThisYear.isNotEmpty) {
+      return declaredThisYear.first.cashDividend;
     }
 
-    // 計算最近 3 年平均
-    final recentYears = history.take(3).toList();
-    if (recentYears.isEmpty) return 0;
+    // 當年度可能已建列但金額為 0(尚未宣告)——那是「還沒公布」不是
+    // 「決定不配」,要退回窗口內平均而非回傳 0
+    final valid = inWindow.where((h) => h.cashDividend > 0).toList();
+    if (valid.isEmpty) return 0;
 
-    double totalDividend = 0;
-    for (final entry in recentYears) {
-      totalDividend += entry.cashDividend + entry.stockDividend;
-    }
-
-    return totalDividend / recentYears.length;
+    final total = valid.fold<double>(0, (sum, h) => sum + h.cashDividend);
+    return total / valid.length;
   }
 
   /// 分析股利趨勢

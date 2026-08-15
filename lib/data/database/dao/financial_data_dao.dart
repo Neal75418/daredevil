@@ -172,23 +172,58 @@ mixin FinancialDataDaoMixin on $AppDatabase {
       }
     }
 
-    // 4. Join 計算年化 ROE（季度 IncomeAfterTaxes × 4 / Equity × 100）
-    final result = <String, List<FinancialDataEntry>>{};
+    // 4. 計算 ROE = **近四季淨利合計 ÷ 平均權益**（2026-08-15 數值稽核修正）
+    //
+    // 舊口徑是「單季淨利 × 4 ÷ 期末權益」，拿去比 15% 這個**年度**門檻。
+    // 全市場實測：舊法通過 405 檔、標準法 339 檔，其中 114 檔只有舊法會過
+    // （占實際觸發量 28%）、48 檔被漏掉；偏差方向隨季節走——Q4 旺季股必過、
+    // Q1 淡季股必漏，量到的是台股獲利季節性而不是股東權益報酬率。
+    //
+    // 資料不齊（缺季、季度不連續）時**不產生該季 ROE**，不用可得資料湊
+    // ×4 頂替——那正是舊口徑的錯誤本身。
+    final bySymbol = <String, List<FinancialDataEntry>>{};
     for (final ni in netIncomeEntries) {
-      if (ni.value == null) continue;
-      final equity = equityMap[(ni.symbol, ni.date)];
-      if (equity == null || equity == 0) continue;
+      bySymbol.putIfAbsent(ni.symbol, () => []).add(ni);
+    }
 
-      final roe = ni.value! * 4 / equity * 100;
-      final roeEntry = FinancialDataEntry(
-        symbol: ni.symbol,
-        date: ni.date,
-        statementType: 'ROE',
-        dataType: 'ROE',
-        value: roe,
-        originName: null,
-      );
-      result.putIfAbsent(ni.symbol, () => []).add(roeEntry);
+    final result = <String, List<FinancialDataEntry>>{};
+    for (final entry in bySymbol.entries) {
+      final list = entry.value; // 已由查詢按 date DESC 排序
+      for (var i = 0; i + 3 < list.length; i++) {
+        final window = list.sublist(i, i + 4);
+        if (window.any((e) => e.value == null)) continue;
+        if (!_isConsecutiveQuarters(window)) continue;
+
+        final ttmNet = window.fold<double>(0, (sum, e) => sum + e.value!);
+        final asOf = window.first.date;
+        final equityNow = equityMap[(entry.key, asOf)];
+        if (equityNow == null || equityNow <= 0) continue;
+
+        // 平均權益需要去年同季期末；查無時退回期末權益（分子仍是四季合計，
+        // 不會退化成舊口徑）。日期用容差比對——實際落庫日有 ±1 天漂移。
+        final equityYearAgo = _findEquityAboutOneYearBefore(
+          equityEntries,
+          entry.key,
+          asOf,
+        );
+        final avgEquity = equityYearAgo == null
+            ? equityNow
+            : (equityNow + equityYearAgo) / 2;
+        if (avgEquity <= 0) continue;
+
+        result
+            .putIfAbsent(entry.key, () => [])
+            .add(
+              FinancialDataEntry(
+                symbol: entry.key,
+                date: asOf,
+                statementType: 'ROE',
+                dataType: 'ROE',
+                value: ttmNet / avgEquity * 100,
+                originName: null,
+              ),
+            );
+      }
     }
 
     // 5. 每檔只保留最近 8 季
@@ -198,5 +233,38 @@ mixin FinancialDataDaoMixin on $AppDatabase {
       }
     }
     return result;
+  }
+
+  /// 四筆財報日是否為連續四季（相鄰間隔約一季）。
+  ///
+  /// 用日數容差而非季號運算：實際落庫日有 ±1 天漂移（2026-06-29 vs 06-30），
+  /// 精確比對會把正常資料判成跳季。
+  static bool _isConsecutiveQuarters(List<FinancialDataEntry> descByDate) {
+    for (var i = 0; i < descByDate.length - 1; i++) {
+      final gap = descByDate[i].date.difference(descByDate[i + 1].date).inDays;
+      if (gap < 80 || gap > 100) return false;
+    }
+    return true;
+  }
+
+  /// 找 [symbol] 在 [asOf] 約一年前的權益（350~380 天容差，取最接近者）。
+  static double? _findEquityAboutOneYearBefore(
+    List<FinancialDataEntry> equityEntries,
+    String symbol,
+    DateTime asOf,
+  ) {
+    double? best;
+    int? bestDelta;
+    for (final e in equityEntries) {
+      if (e.symbol != symbol || e.value == null || e.value! <= 0) continue;
+      final days = asOf.difference(e.date).inDays;
+      if (days < 350 || days > 380) continue;
+      final delta = (days - 365).abs();
+      if (bestDelta == null || delta < bestDelta) {
+        bestDelta = delta;
+        best = e.value;
+      }
+    }
+    return best;
   }
 }
