@@ -5,6 +5,10 @@ import 'dart:io';
 /// 舊邏輯(2026-08-15 實測落後 3 天)。這個字串印在每次執行的開頭,讓
 /// 「它到底跑的是哪一版」在日誌裡有據可查,而不是事後靠檔案時間戳推。
 ///
+/// **只有 CLI 需要這個**:GUI 由 IDEA 的 `flutter run` 啟動,每次啟動都
+/// 重新編譯 dart code,所以永遠是當下 source。落後只會發生在 launchd 這
+/// 條路徑上——它沒辦法「點箭頭」,只能執行固定路徑的那個檔案。
+///
 /// 為什麼不用 `String.fromEnvironment`:`dart build cli` 不支援 `--define`
 /// (2026-08-15 實測,只有 -o / -t / --verbosity),編譯期注入這條路不通。
 /// 改由 `ops/launchd/install.sh` 在 bundle 根寫 `BUILD_INFO`。
