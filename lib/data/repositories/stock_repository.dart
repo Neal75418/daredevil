@@ -113,15 +113,23 @@ class StockRepository implements IStockRepository {
       // 重上市自癒:回到名單即恢復 active(upsert 覆寫)。
       final officialUsable =
           officialCodes.length >= ApiConfig.twseOfficialListSanityFloor;
-      // floor 漂移警報:名冊規模若逐年縮向 floor,守衛會先於失效前
-      // 在此留下訊號(距 floor <10% 即警告),避免靜默進入永久跳過。
-      if (officialUsable &&
-          officialCodes.length < ApiConfig.twseOfficialListSanityFloor * 1.1) {
-        AppLogger.warning(
-          'StockRepo',
-          '官方名冊 ${officialCodes.length} 家已逼近 sanity floor '
-              '(${ApiConfig.twseOfficialListSanityFloor})，floor 需重新校準',
-        );
+      // 名冊縮水警報(2026-08-15 改參考點):比對**DB 既有的存活規模**,
+      // 而非絕對 floor。floor 是災難下限,不是正常值——拿它當參考點會
+      // (1) 在 floor 貼近實際家數後必然響、噪音化;(2) 對上面註解自承的
+      // 「floor 過了但名單仍缺漏」盲區完全無感,而那才是缺席者被誤判
+      // 下市的實際成因。DB 本身就是上一輪的結果,不必另外持久化 state。
+      if (officialUsable) {
+        final known = await _db.countActiveOfficialUniverse();
+        final threshold = known * ApiConfig.twseOfficialRosterShrinkWarnRatio;
+        if (known > 0 && officialCodes.length < threshold) {
+          final shrink = (1 - officialCodes.length / known) * 100;
+          AppLogger.warning(
+            'StockRepo',
+            '官方名冊 ${officialCodes.length} 家，較既有 $known 家縮水 '
+                '${shrink.toStringAsFixed(1)}% —— 名單雖過 sanity floor '
+                '(${ApiConfig.twseOfficialListSanityFloor})，缺席者仍會被判下市',
+          );
+        }
       }
       final officialCoversDr = officialCodes.keys.any(
         (s) => s.startsWith('91'),

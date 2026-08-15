@@ -58,6 +58,18 @@ abstract final class ApiConfig {
   /// syncStockList 會記警報(見該處),屆時再行下調。
   static const int twseOfficialListSanityFloor = 1000;
 
+  /// 名冊縮水警報門檻:本輪家數低於「DB 既有存活家數 × 此比例」即警告
+  ///
+  /// 2026-08-15 改用相對比較,取代原本的 `floor × 1.1`。原因:floor 是**災難
+  /// 下限**不是正常值,拿它當參考點有兩個後果——(1) floor 調升到貼近實際
+  /// 家數後(1000 vs ~1,095),警告從那天起必然響,噪音化等同沒有警告;
+  /// (2) 真正該抓的是上面註解自承的「floor 過了但名單仍缺漏」盲區(~93 檔),
+  /// 而那種情況家數遠高於 floor,絕對門檻完全看不見。
+  ///
+  /// 0.98 ≈ 22 家:遠高於上市家數的週級自然波動(個位數),遠低於盲區上限。
+  /// 相對比較也讓「上市家數漂移就要重新校準 floor」這件人工待辦永遠不必發生。
+  static const double twseOfficialRosterShrinkWarnRatio = 0.98;
+
   /// MOPS(公開資訊觀測站,舊版)base URL——月營收公布期漸進 CSV 來源。
   /// 新版 MOPS 已下架靜態頁,只有舊版過渡站有;關站風險由呼叫端 fail-soft
   /// 承接(退回等 openapi 月批,零下行)。

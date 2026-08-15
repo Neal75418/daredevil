@@ -41,6 +41,9 @@ void main() {
     when(
       () => mockTwse.fetchIndustryCodes(),
     ).thenAnswer((_) async => <String, String>{});
+    // 名冊縮水警報的基準(2026-08-15):0 = 無既有規模可比,不觸發警告。
+    // 本檔測的是清理判定,警報行為由 stock_roster_shrink_warning_test 專測。
+    when(() => mockDb.countActiveOfficialUniverse()).thenAnswer((_) async => 0);
     repository = StockRepository(
       database: mockDb,
       finMindClient: mockClient,

@@ -141,6 +141,28 @@ mixin StockDaoMixin on $AppDatabase {
     return {for (final stock in results) stock.symbol: stock};
   }
 
+  /// 官方權威範圍(上市四碼非 ETF)內仍存活的股票數
+  ///
+  /// 給 `syncStockList` 當「上一輪的既有規模」基準用:sanity floor 是絕對
+  /// 下限,擋災難性的部分回應;floor 通過之後仍可能缺漏(`api_config` 自承
+  /// 「1000 縮盲區至 ~93 檔」),那段盲區只能靠與既有規模比才看得出來。
+  /// DB 本身就是上一輪的結果,不必另外持久化 state。
+  ///
+  /// ⚠️ 範圍必須與 `stock_repository` 的 `inOfficialUniverse` 一致——
+  /// 兩邊算的若不是同一個母體,比例比較就沒有意義。
+  Future<int> countActiveOfficialUniverse() async {
+    final total = stockMaster.symbol.count();
+    final query = selectOnly(stockMaster)
+      ..addColumns([total])
+      ..where(
+        stockMaster.isActive.equals(true) &
+            stockMaster.market.equals('TWSE') &
+            stockMaster.symbol.length.equals(4) &
+            stockMaster.symbol.like('00%').not(),
+      );
+    return (await query.getSingle()).read(total) ?? 0;
+  }
+
   /// 將不在指定清單中的股票標記為下市（isActive = false）
   ///
   /// 回傳被標記為下市的股票數量
