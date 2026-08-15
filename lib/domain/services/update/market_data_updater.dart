@@ -107,8 +107,16 @@ class MarketDataUpdater {
     }
 
     // 從 TWSE/TPEX 批次同步融資融券資料
+    //
+    // force 必須傳(2026-08-16):漏傳時 trading_repository 的
+    // `if (!force)` 新鮮度檢查永遠生效,強制更新對融資融券完全無感——
+    // 實機兩次強制更新都印「已快取,跳過同步」。上面的當沖有傳、這裡沒傳,
+    // 兩行相隔四行,肉眼掃過去像是一致的。
     try {
-      marginCount = await _tradingRepo.syncAllMarginTrading(date: date);
+      marginCount = await _tradingRepo.syncAllMarginTrading(
+        date: date,
+        force: force,
+      );
     } on RateLimitException {
       rethrow;
     } on NetworkException {
