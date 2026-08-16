@@ -1,10 +1,8 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
@@ -246,10 +244,13 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                 }),
               ],
             ),
-          ).animate().fadeIn(
-            delay: Duration(milliseconds: 50 * index),
-            duration: AnimDurations.normal,
           );
+          // 這裡刻意沒有 entrance 動畫：ListView.builder 的 item 是捲進畫面
+          // 才建構的，把 `.animate().fadeIn(delay: 50ms * index)` 寫在
+          // itemBuilder 裡等於**每次捲動都重播一次淡入**，而且越後面延遲越長
+          // （第 36 筆 1750ms）——實機回報「下捲很不順暢」。自選股清單沒有
+          // 這個寫法，所以只有警示頁卡。守門：alerts_screen_test 的
+          // 「清單項目不得有 entrance 動畫」。
         },
       ),
     );
@@ -387,6 +388,33 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                     ),
                   ),
                 ),
+                // 自動維護標示：使用者看不出哪些會被每日重算改寫、哪些是
+                // 自己設的（實機提問「他又是怎麼判斷誰是手動的」）。用中性
+                // outline 而非狀態色——它是來源標註，不該與啟用/已觸發競爭。
+                if (alert.managedBy != null) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(
+                        DesignTokens.radiusXs,
+                      ),
+                      border: Border.all(
+                        color: theme.colorScheme.outline.withValues(alpha: 0.4),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      'alert.trailingManaged'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
                 if (wasTriggered && alert.triggeredAt != null) ...[
                   const SizedBox(width: 8),
                   Text(
@@ -422,12 +450,19 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
     final primaryColor = theme.colorScheme.primary;
     final downColor = PriceColors.downFor(theme.brightness);
     return switch (type) {
-      AlertType.above ||
+      // above/below 走中性色(2026-08-16)：它們表達的是「提醒會在跌破還是
+      // 突破時響」，不是股價漲跌。原本借用 upColor/downColor，與自選股卡片的
+      // 趨勢箭頭撞成同一種視覺語言——均線階梯讓每檔強勢股都掛 BELOW 之後，
+      // 「一片綠」變成常態而那些其實多在上漲。紅綠是股價語意保留區
+      // (`semantic_colors.dart`)，守門測試在 alerts_screen_test。
+      //
+      // 其餘型別不動：week52High/Low 等本來就是股價事件，紅綠用得其所；
+      // crossAboveMa/crossBelowMa 共用 timeline 圖示，顏色是唯一的方向線索。
+      AlertType.above || AlertType.below => primaryColor,
       AlertType.breakResistance ||
       AlertType.week52High ||
       AlertType.kdGoldenCross ||
       AlertType.crossAboveMa => AppTheme.upColor,
-      AlertType.below ||
       AlertType.breakSupport ||
       AlertType.week52Low ||
       AlertType.kdDeathCross ||

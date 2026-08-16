@@ -230,7 +230,11 @@ void main() {
       );
       await tester.pump(const Duration(seconds: 1));
 
-      expect(find.byIcon(Icons.trending_up), findsAtLeastNWidgets(1));
+      // 2026-08-16:above/below 改用「穿越門檻線」的中性圖示——趨勢箭頭
+      // (trending_*) 是股價趨勢專用,兩者共用視覺語言會讓同一檔股票在
+      // 自選股頁與警示頁顯示相反方向(實機:仁寶漲停卻是綠色下箭頭)。
+      expect(find.byIcon(Icons.vertical_align_top), findsAtLeastNWidgets(1));
+      expect(find.byIcon(Icons.trending_up), findsNothing);
     });
 
     testWidgets('shows correct icon for below alert type', (tester) async {
@@ -241,7 +245,8 @@ void main() {
       );
       await tester.pump(const Duration(seconds: 1));
 
-      expect(find.byIcon(Icons.trending_down), findsAtLeastNWidgets(1));
+      expect(find.byIcon(Icons.vertical_align_bottom), findsAtLeastNWidgets(1));
+      expect(find.byIcon(Icons.trending_down), findsNothing);
     });
 
     testWidgets('filters alerts by symbol', (tester) async {
@@ -354,8 +359,8 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       expect(find.byType(Switch), findsNWidgets(3));
-      expect(find.byIcon(Icons.trending_up), findsAtLeastNWidgets(1));
-      expect(find.byIcon(Icons.trending_down), findsAtLeastNWidgets(1));
+      expect(find.byIcon(Icons.vertical_align_top), findsAtLeastNWidgets(1));
+      expect(find.byIcon(Icons.vertical_align_bottom), findsAtLeastNWidgets(1));
       expect(find.byIcon(Icons.percent), findsAtLeastNWidgets(1));
     });
 

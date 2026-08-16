@@ -9,8 +9,18 @@ import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 /// percent（百分比語意較準確），其餘沿用全域警示頁版本。
 extension AlertTypeIcon on AlertType {
   IconData get icon => switch (this) {
-    AlertType.above => Icons.trending_up,
-    AlertType.below => Icons.trending_down,
+    // 2026-08-16：`above`/`below` 原本是 trending_up / trending_down，而自選股
+    // 卡片的**趨勢狀態**用 trending_up_rounded / trending_down_rounded
+    // （`trend_state_extension.dart`）——20px 下分不出來的兩個圖示，表達的卻是
+    // 完全不同的事：這裡是「提醒會在跌破還是突破時響」，那裡是「這檔股票現在
+    // 多頭還空頭」。均線階梯上線後每檔強勢股都掛 BELOW，矛盾天天出現（實機：
+    // 仁寶漲停 +9.92%，自選股頁紅色上箭頭、警示頁綠色下箭頭）。
+    //
+    // 改用 vertical_align_*：箭頭 + 一條線，正是「價格穿越門檻」的語意，而且
+    // 不再與趨勢共用視覺語言。顏色同步改中性（見 alerts_screen 的
+    // `_getAlertColor`）——紅綠是股價語意保留區（`semantic_colors.dart`）。
+    AlertType.above => Icons.vertical_align_top,
+    AlertType.below => Icons.vertical_align_bottom,
     AlertType.changePct => Icons.percent,
     AlertType.volumeSpike || AlertType.volumeAbove => Icons.bar_chart,
     AlertType.rsiOverbought => Icons.arrow_upward,

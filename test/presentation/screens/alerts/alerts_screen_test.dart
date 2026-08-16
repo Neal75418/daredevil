@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/theme/semantic_colors.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/price_alert_provider.dart';
@@ -50,6 +54,7 @@ PriceAlertEntry createAlert({
   bool isActive = true,
   DateTime? triggeredAt,
   String? note,
+  String? managedBy,
 }) {
   return PriceAlertEntry(
     id: id,
@@ -59,6 +64,7 @@ PriceAlertEntry createAlert({
     isActive: isActive,
     triggeredAt: triggeredAt,
     note: note,
+    managedBy: managedBy,
     createdAt: DateTime(2026, 2, 13),
   );
 }
@@ -96,6 +102,61 @@ void main() {
   }
 
   group('AlertsScreen', () {
+    testWidgets('🚨 清單項目不得有 entrance 動畫——捲動會重播(2026-08-16 實機)', (tester) async {
+      // ListView.builder 的 itemBuilder 在項目捲進畫面時才建構,把
+      // `.animate().fadeIn(delay: 50ms * index)` 寫在裡面等於**每次捲動都
+      // 重跑一次淡入**,而且越後面延遲越長(第 36 筆是 1750ms)。使用者實機
+      // 回報「下捲很不順暢」。自選股清單沒有這個寫法,所以只有警示頁會卡。
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          alertState: PriceAlertState(
+            alerts: [
+              for (var i = 0; i < 12; i++)
+                createAlert(
+                  id: i + 1,
+                  symbol: '23${i.toString().padLeft(2, '0')}',
+                ),
+            ],
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(
+        find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Animate),
+        ),
+        findsNothing,
+        reason: '捲動清單的 item 不該有進場動畫——builder 重建即重播',
+      );
+    });
+
+    testWidgets('自動維護的提醒要標示出來,手動的不標', (tester) async {
+      // 使用者問「他又是怎麼判斷誰是手動的」——那正是因為畫面上看不出來
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          alertState: PriceAlertState(
+            alerts: [
+              createAlert(id: 1, symbol: '2330', managedBy: 'TRAILING_MA'),
+              createAlert(id: 2, symbol: '2317'),
+            ],
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      // setupTestLocalization 不載入翻譯檔,`.tr()` 回傳原始 key
+      // ——既有測試因此一律避開翻譯後文字的斷言
+      expect(
+        find.text('alert.trailingManaged'),
+        findsOneWidget,
+        reason: '兩筆裡只有一筆是自動的,手動那筆不得有標示',
+      );
+    });
+
     testWidgets('shows shimmer loading state', (tester) async {
       widenViewport(tester);
       await tester.pumpWidget(
@@ -226,7 +287,15 @@ void main() {
       expect(find.byType(Card), findsNWidgets(2));
     });
 
-    testWidgets('shows trending_up icon for ABOVE alert', (tester) async {
+    // 圖示語意(2026-08-16 實機):`above`/`below` 原本是 Icons.trending_up /
+    // trending_down 配股價紅綠,而自選股卡片的**趨勢狀態**用的是
+    // Icons.trending_up_rounded 配同一組紅綠——兩個 20px 下分不出來的圖示,
+    // 表達的卻是完全不同的事(提醒方向 vs 股票趨勢)。
+    //
+    // 均線階梯上線後矛盾天天出現:每檔強勢股都掛 BELOW,於是仁寶漲停 +9.92%
+    // 在自選股頁是紅色上箭頭、在警示頁是綠色下箭頭。改用「穿越門檻線」的
+    // 中性圖示 + 中性色,把紅綠趨勢箭頭留給股價專用。
+    testWidgets('ABOVE 用穿越門檻線的中性圖示,不得借用趨勢箭頭', (tester) async {
       widenViewport(tester);
       final alerts = [createAlert(alertType: 'ABOVE')];
       await tester.pumpWidget(
@@ -234,10 +303,53 @@ void main() {
       );
       await tester.pump(const Duration(seconds: 1));
 
-      expect(find.byIcon(Icons.trending_up), findsOneWidget);
+      expect(find.byIcon(Icons.vertical_align_top), findsOneWidget);
+      expect(
+        find.byIcon(Icons.trending_up),
+        findsNothing,
+        reason: '趨勢箭頭是股價趨勢專用,不得用來表達提醒方向',
+      );
     });
 
-    testWidgets('shows trending_down icon for BELOW alert', (tester) async {
+    testWidgets('🚨 提醒圖示不得使用股價紅綠(專案色彩規則:紅綠專屬股價)', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          alertState: PriceAlertState(
+            alerts: [
+              createAlert(id: 1, symbol: '2330', alertType: 'ABOVE'),
+              createAlert(id: 2, symbol: '2317', alertType: 'BELOW'),
+            ],
+          ),
+          brightness: Brightness.dark,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      final icons = tester
+          .widgetList<Icon>(find.byType(Icon))
+          .where(
+            (i) =>
+                i.icon == Icons.vertical_align_top ||
+                i.icon == Icons.vertical_align_bottom,
+          )
+          .toList();
+      expect(icons, hasLength(2), reason: '前提:兩筆提醒的圖示都找得到');
+      for (final icon in icons) {
+        expect(
+          icon.color,
+          isNot(AppTheme.upColor),
+          reason: '${icon.icon} 用了股價漲色',
+        );
+        expect(
+          icon.color,
+          isNot(PriceColors.downFor(Brightness.dark)),
+          reason: '${icon.icon} 用了股價跌色',
+        );
+      }
+    });
+
+    testWidgets('BELOW 用穿越門檻線的中性圖示,不得借用趨勢箭頭', (tester) async {
       widenViewport(tester);
       final alerts = [createAlert(alertType: 'BELOW')];
       await tester.pumpWidget(
@@ -245,7 +357,12 @@ void main() {
       );
       await tester.pump(const Duration(seconds: 1));
 
-      expect(find.byIcon(Icons.trending_down), findsOneWidget);
+      expect(find.byIcon(Icons.vertical_align_bottom), findsOneWidget);
+      expect(
+        find.byIcon(Icons.trending_down),
+        findsNothing,
+        reason: '趨勢箭頭是股價趨勢專用,不得用來表達提醒方向',
+      );
     });
 
     testWidgets(
