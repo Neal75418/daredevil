@@ -334,12 +334,39 @@ mixin UserDaoMixin on $AppDatabase {
     )..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
+  /// 取得由 [managedBy] 自動維護的提醒，依 symbol 分組（ID 由小到大）。
+  ///
+  /// **手動提醒（`managed_by IS NULL`）不會出現在結果中**——自動維護流程
+  /// 只准改寫或刪除自己標記過的列，這道過濾就是那條保證的實作點
+  /// （見 `PriceAlert.managedBy` 與 `TrailingMaAlertService`）。
+  ///
+  /// 回傳**清單**而非單筆：GUI 與 launchd CLI 是兩個 process 共用同一個
+  /// SQLite，同時 refresh 可能各插一筆。呼叫端必須把多出來的收斂掉——
+  /// 清理迴圈只掃「已非自選股」的列，重複提醒否則會靜默留存並每天各自通知。
+  Future<Map<String, List<PriceAlertEntry>>> getManagedAlerts(
+    String managedBy,
+  ) async {
+    final rows =
+        await (select(priceAlert)
+              ..where((t) => t.managedBy.equals(managedBy))
+              ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+            .get();
+    final grouped = <String, List<PriceAlertEntry>>{};
+    for (final r in rows) {
+      grouped.putIfAbsent(r.symbol, () => []).add(r);
+    }
+    return grouped;
+  }
+
   /// 建立新的股價提醒
+  ///
+  /// [managedBy] 留空 = 使用者手動設定，自動維護流程不會碰它。
   Future<int> createPriceAlert({
     required String symbol,
     required String alertType,
     required double targetValue,
     String? note,
+    String? managedBy,
   }) {
     return into(priceAlert).insert(
       PriceAlertCompanion.insert(
@@ -347,6 +374,7 @@ mixin UserDaoMixin on $AppDatabase {
         alertType: alertType,
         targetValue: targetValue,
         note: Value(note),
+        managedBy: Value(managedBy),
       ),
     );
   }

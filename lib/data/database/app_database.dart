@@ -211,6 +211,7 @@ class AppDatabase extends $AppDatabase
       await _ensureWatchlistGroupsSchema();
       await _ensurePinnedThesisSchema();
       await _ensureQuarterlyReportSchema();
+      await ensurePriceAlertManagedByColumn();
       await _ensureRetiredSchemaDropped();
       await ensureInsiderTransferPk();
       await _ensureIndexHygiene();
@@ -344,6 +345,36 @@ class AppDatabase extends $AppDatabase
   /// 既有 DB 冪等補建、新裝機由 createAll 先建好此處 no-op,零資料損失。
   Future<void> _ensureQuarterlyReportSchema() async {
     await Migrator(this).createTable(quarterlyReport);
+  }
+
+  /// `price_alert` 補 `managed_by` 欄（2026-08-16）。
+  ///
+  /// **為什麼要加**：均線階梯提醒（`TrailingMaAlertService`）每日重算並改寫
+  /// 提醒價位。沒有這欄就分不出「自動維護的」與「使用者手動設的」——重算
+  /// 會把使用者特地設的關鍵價位一起洗掉。
+  ///
+  /// **升級語意**：既存列補進來是 `NULL`（= 手動），自動流程因此**不會回頭
+  /// 改寫任何升級前就存在的提醒**，那是刻意的保守預設。
+  ///
+  /// **不 bump [appSchemaFingerprint] / [schemaVersion]**：沿用
+  /// [_ensureDealerSelfNetColumn]、[_ensureMonthlyRevenueYtdColumn] 先例
+  /// ——nullable 欄位用 `ALTER TABLE ADD COLUMN` 就地補，既有資料原封不動。
+  /// 守門測試：`test/data/database/price_alert_managed_by_test.dart`。
+  @visibleForTesting
+  Future<void> ensurePriceAlertManagedByColumn() async {
+    final columns = await customSelect(
+      "PRAGMA table_info('price_alert')",
+    ).get();
+    final hasColumn = columns.any(
+      (row) => row.read<String>('name') == 'managed_by',
+    );
+    if (hasColumn) return;
+
+    await customStatement('ALTER TABLE price_alert ADD COLUMN managed_by TEXT');
+    AppLogger.info(
+      'AppDatabase',
+      '既有 DB 補上 price_alert.managed_by 欄（既有提醒保留為手動）',
+    );
   }
 
   /// 2026-07-29 索引衛生（多角色審查 Fix 1）：清除與複合 PK autoindex 完全

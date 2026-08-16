@@ -15,6 +15,25 @@ abstract final class AlertParams {
   /// 分組,否則使用者會以為所有類型都是即時的;而 `IntradayAlertMonitor`
   /// 也要用同一份,兩邊各自硬編碼必然漂移(2026-08-08)。
   static const Set<String> intradayMonitoredTypes = {typeAbove, typeBelow};
+
+  // --------------------------------------------------
+  // 均線階梯提醒（TrailingMaAlertService）
+  // --------------------------------------------------
+
+  /// `price_alert.managed_by` 的值：由均線階梯每日重算維護。
+  ///
+  /// `managed_by IS NULL` = 使用者手動設定，自動流程**不得改寫或刪除**。
+  static const String managedByTrailingMa = 'TRAILING_MA';
+
+  /// 均線階梯的三條均線（交易日）。
+  ///
+  /// 階梯語意：越強用越近的線監控「何時轉弱」，越弱用越遠的線等「何時轉強」。
+  /// 站上 5MA → 跌破 5MA 示警；破 5MA → 跌破月線；破月線 → 突破月線；
+  /// 破季線 → 突破季線。任何時候每檔只有一個提醒，且永遠釘在狀態邊界上。
+  static const int trailingMaShort = 5;
+  static const int trailingMaMedium = 20;
+  static const int trailingMaLong = 60;
+
   static const String typeChangePct = 'CHANGE_PCT';
   static const String typeVolumeSpike = 'VOLUME_SPIKE';
   static const String typeVolumeAbove = 'VOLUME_ABOVE';

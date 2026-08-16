@@ -120,6 +120,13 @@ class PriceAlert extends Table {
   /// 備註說明
   TextColumn get note => text().nullable()();
 
+  /// 自動維護者（`NULL` = 使用者手動設定，值域見 `AlertParams.managedBy*`）
+  ///
+  /// **NULL 是受保護的語意**：均線階梯([TrailingMaAlertService])每日重算並
+  /// 改寫提醒價位，沒有這欄就分不出自動與手動，重算會把使用者特地設的
+  /// 關鍵價位一起洗掉。自動流程只准動自己標記過的列。
+  TextColumn get managedBy => text().nullable()();
+
   /// 建立時間
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }

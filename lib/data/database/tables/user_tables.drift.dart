@@ -1168,6 +1168,7 @@ typedef $$PriceAlertTableCreateCompanionBuilder =
       i0.Value<bool> isActive,
       i0.Value<DateTime?> triggeredAt,
       i0.Value<String?> note,
+      i0.Value<String?> managedBy,
       i0.Value<DateTime> createdAt,
     });
 typedef $$PriceAlertTableUpdateCompanionBuilder =
@@ -1179,6 +1180,7 @@ typedef $$PriceAlertTableUpdateCompanionBuilder =
       i0.Value<bool> isActive,
       i0.Value<DateTime?> triggeredAt,
       i0.Value<String?> note,
+      i0.Value<String?> managedBy,
       i0.Value<DateTime> createdAt,
     });
 
@@ -1263,6 +1265,11 @@ class $$PriceAlertTableFilterComposer
     builder: (column) => i0.ColumnFilters(column),
   );
 
+  i0.ColumnFilters<String> get managedBy => $composableBuilder(
+    column: $table.managedBy,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
   i0.ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => i0.ColumnFilters(column),
@@ -1335,6 +1342,11 @@ class $$PriceAlertTableOrderingComposer
     builder: (column) => i0.ColumnOrderings(column),
   );
 
+  i0.ColumnOrderings<String> get managedBy => $composableBuilder(
+    column: $table.managedBy,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
   i0.ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => i0.ColumnOrderings(column),
@@ -1398,6 +1410,9 @@ class $$PriceAlertTableAnnotationComposer
 
   i0.GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  i0.GeneratedColumn<String> get managedBy =>
+      $composableBuilder(column: $table.managedBy, builder: (column) => column);
 
   i0.GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -1467,6 +1482,7 @@ class $$PriceAlertTableTableManager
                 i0.Value<bool> isActive = const i0.Value.absent(),
                 i0.Value<DateTime?> triggeredAt = const i0.Value.absent(),
                 i0.Value<String?> note = const i0.Value.absent(),
+                i0.Value<String?> managedBy = const i0.Value.absent(),
                 i0.Value<DateTime> createdAt = const i0.Value.absent(),
               }) => i1.PriceAlertCompanion(
                 id: id,
@@ -1476,6 +1492,7 @@ class $$PriceAlertTableTableManager
                 isActive: isActive,
                 triggeredAt: triggeredAt,
                 note: note,
+                managedBy: managedBy,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -1487,6 +1504,7 @@ class $$PriceAlertTableTableManager
                 i0.Value<bool> isActive = const i0.Value.absent(),
                 i0.Value<DateTime?> triggeredAt = const i0.Value.absent(),
                 i0.Value<String?> note = const i0.Value.absent(),
+                i0.Value<String?> managedBy = const i0.Value.absent(),
                 i0.Value<DateTime> createdAt = const i0.Value.absent(),
               }) => i1.PriceAlertCompanion.insert(
                 id: id,
@@ -1496,6 +1514,7 @@ class $$PriceAlertTableTableManager
                 isActive: isActive,
                 triggeredAt: triggeredAt,
                 note: note,
+                managedBy: managedBy,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -3535,6 +3554,17 @@ class $PriceAlertTable extends i2.PriceAlert
     type: i0.DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const i0.VerificationMeta _managedByMeta = const i0.VerificationMeta(
+    'managedBy',
+  );
+  @override
+  late final i0.GeneratedColumn<String> managedBy = i0.GeneratedColumn<String>(
+    'managed_by',
+    aliasedName,
+    true,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const i0.VerificationMeta _createdAtMeta = const i0.VerificationMeta(
     'createdAt',
   );
@@ -3557,6 +3587,7 @@ class $PriceAlertTable extends i2.PriceAlert
     isActive,
     triggeredAt,
     note,
+    managedBy,
     createdAt,
   ];
   @override
@@ -3622,6 +3653,12 @@ class $PriceAlertTable extends i2.PriceAlert
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
       );
     }
+    if (data.containsKey('managed_by')) {
+      context.handle(
+        _managedByMeta,
+        managedBy.isAcceptableOrUnknown(data['managed_by']!, _managedByMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -3665,6 +3702,10 @@ class $PriceAlertTable extends i2.PriceAlert
         i0.DriftSqlType.string,
         data['${effectivePrefix}note'],
       ),
+      managedBy: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}managed_by'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         i0.DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3701,6 +3742,13 @@ class PriceAlertEntry extends i0.DataClass
   /// 備註說明
   final String? note;
 
+  /// 自動維護者（`NULL` = 使用者手動設定，值域見 `AlertParams.managedBy*`）
+  ///
+  /// **NULL 是受保護的語意**：均線階梯([TrailingMaAlertService])每日重算並
+  /// 改寫提醒價位，沒有這欄就分不出自動與手動，重算會把使用者特地設的
+  /// 關鍵價位一起洗掉。自動流程只准動自己標記過的列。
+  final String? managedBy;
+
   /// 建立時間
   final DateTime createdAt;
   const PriceAlertEntry({
@@ -3711,6 +3759,7 @@ class PriceAlertEntry extends i0.DataClass
     required this.isActive,
     this.triggeredAt,
     this.note,
+    this.managedBy,
     required this.createdAt,
   });
   @override
@@ -3726,6 +3775,9 @@ class PriceAlertEntry extends i0.DataClass
     }
     if (!nullToAbsent || note != null) {
       map['note'] = i0.Variable<String>(note);
+    }
+    if (!nullToAbsent || managedBy != null) {
+      map['managed_by'] = i0.Variable<String>(managedBy);
     }
     map['created_at'] = i0.Variable<DateTime>(createdAt);
     return map;
@@ -3744,6 +3796,9 @@ class PriceAlertEntry extends i0.DataClass
       note: note == null && nullToAbsent
           ? const i0.Value.absent()
           : i0.Value(note),
+      managedBy: managedBy == null && nullToAbsent
+          ? const i0.Value.absent()
+          : i0.Value(managedBy),
       createdAt: i0.Value(createdAt),
     );
   }
@@ -3761,6 +3816,7 @@ class PriceAlertEntry extends i0.DataClass
       isActive: serializer.fromJson<bool>(json['isActive']),
       triggeredAt: serializer.fromJson<DateTime?>(json['triggeredAt']),
       note: serializer.fromJson<String?>(json['note']),
+      managedBy: serializer.fromJson<String?>(json['managedBy']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -3775,6 +3831,7 @@ class PriceAlertEntry extends i0.DataClass
       'isActive': serializer.toJson<bool>(isActive),
       'triggeredAt': serializer.toJson<DateTime?>(triggeredAt),
       'note': serializer.toJson<String?>(note),
+      'managedBy': serializer.toJson<String?>(managedBy),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -3787,6 +3844,7 @@ class PriceAlertEntry extends i0.DataClass
     bool? isActive,
     i0.Value<DateTime?> triggeredAt = const i0.Value.absent(),
     i0.Value<String?> note = const i0.Value.absent(),
+    i0.Value<String?> managedBy = const i0.Value.absent(),
     DateTime? createdAt,
   }) => i1.PriceAlertEntry(
     id: id ?? this.id,
@@ -3796,6 +3854,7 @@ class PriceAlertEntry extends i0.DataClass
     isActive: isActive ?? this.isActive,
     triggeredAt: triggeredAt.present ? triggeredAt.value : this.triggeredAt,
     note: note.present ? note.value : this.note,
+    managedBy: managedBy.present ? managedBy.value : this.managedBy,
     createdAt: createdAt ?? this.createdAt,
   );
   PriceAlertEntry copyWithCompanion(i1.PriceAlertCompanion data) {
@@ -3811,6 +3870,7 @@ class PriceAlertEntry extends i0.DataClass
           ? data.triggeredAt.value
           : this.triggeredAt,
       note: data.note.present ? data.note.value : this.note,
+      managedBy: data.managedBy.present ? data.managedBy.value : this.managedBy,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -3825,6 +3885,7 @@ class PriceAlertEntry extends i0.DataClass
           ..write('isActive: $isActive, ')
           ..write('triggeredAt: $triggeredAt, ')
           ..write('note: $note, ')
+          ..write('managedBy: $managedBy, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -3839,6 +3900,7 @@ class PriceAlertEntry extends i0.DataClass
     isActive,
     triggeredAt,
     note,
+    managedBy,
     createdAt,
   );
   @override
@@ -3852,6 +3914,7 @@ class PriceAlertEntry extends i0.DataClass
           other.isActive == this.isActive &&
           other.triggeredAt == this.triggeredAt &&
           other.note == this.note &&
+          other.managedBy == this.managedBy &&
           other.createdAt == this.createdAt);
 }
 
@@ -3863,6 +3926,7 @@ class PriceAlertCompanion extends i0.UpdateCompanion<i1.PriceAlertEntry> {
   final i0.Value<bool> isActive;
   final i0.Value<DateTime?> triggeredAt;
   final i0.Value<String?> note;
+  final i0.Value<String?> managedBy;
   final i0.Value<DateTime> createdAt;
   const PriceAlertCompanion({
     this.id = const i0.Value.absent(),
@@ -3872,6 +3936,7 @@ class PriceAlertCompanion extends i0.UpdateCompanion<i1.PriceAlertEntry> {
     this.isActive = const i0.Value.absent(),
     this.triggeredAt = const i0.Value.absent(),
     this.note = const i0.Value.absent(),
+    this.managedBy = const i0.Value.absent(),
     this.createdAt = const i0.Value.absent(),
   });
   PriceAlertCompanion.insert({
@@ -3882,6 +3947,7 @@ class PriceAlertCompanion extends i0.UpdateCompanion<i1.PriceAlertEntry> {
     this.isActive = const i0.Value.absent(),
     this.triggeredAt = const i0.Value.absent(),
     this.note = const i0.Value.absent(),
+    this.managedBy = const i0.Value.absent(),
     this.createdAt = const i0.Value.absent(),
   }) : symbol = i0.Value(symbol),
        alertType = i0.Value(alertType),
@@ -3894,6 +3960,7 @@ class PriceAlertCompanion extends i0.UpdateCompanion<i1.PriceAlertEntry> {
     i0.Expression<bool>? isActive,
     i0.Expression<DateTime>? triggeredAt,
     i0.Expression<String>? note,
+    i0.Expression<String>? managedBy,
     i0.Expression<DateTime>? createdAt,
   }) {
     return i0.RawValuesInsertable({
@@ -3904,6 +3971,7 @@ class PriceAlertCompanion extends i0.UpdateCompanion<i1.PriceAlertEntry> {
       if (isActive != null) 'is_active': isActive,
       if (triggeredAt != null) 'triggered_at': triggeredAt,
       if (note != null) 'note': note,
+      if (managedBy != null) 'managed_by': managedBy,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -3916,6 +3984,7 @@ class PriceAlertCompanion extends i0.UpdateCompanion<i1.PriceAlertEntry> {
     i0.Value<bool>? isActive,
     i0.Value<DateTime?>? triggeredAt,
     i0.Value<String?>? note,
+    i0.Value<String?>? managedBy,
     i0.Value<DateTime>? createdAt,
   }) {
     return i1.PriceAlertCompanion(
@@ -3926,6 +3995,7 @@ class PriceAlertCompanion extends i0.UpdateCompanion<i1.PriceAlertEntry> {
       isActive: isActive ?? this.isActive,
       triggeredAt: triggeredAt ?? this.triggeredAt,
       note: note ?? this.note,
+      managedBy: managedBy ?? this.managedBy,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -3954,6 +4024,9 @@ class PriceAlertCompanion extends i0.UpdateCompanion<i1.PriceAlertEntry> {
     if (note.present) {
       map['note'] = i0.Variable<String>(note.value);
     }
+    if (managedBy.present) {
+      map['managed_by'] = i0.Variable<String>(managedBy.value);
+    }
     if (createdAt.present) {
       map['created_at'] = i0.Variable<DateTime>(createdAt.value);
     }
@@ -3970,6 +4043,7 @@ class PriceAlertCompanion extends i0.UpdateCompanion<i1.PriceAlertEntry> {
           ..write('isActive: $isActive, ')
           ..write('triggeredAt: $triggeredAt, ')
           ..write('note: $note, ')
+          ..write('managedBy: $managedBy, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
