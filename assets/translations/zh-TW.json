@@ -928,7 +928,7 @@
     "trailingRefresh": "依均線階梯重算",
     "trailingRefreshDone": "已重算 {count} 檔自動提醒（手動設定的未更動）",
     "trailingRefreshEmpty": "沒有可設定的自選股（價格資料不足）",
-    "trailingManaged": "自動維護"
+    "trailingManaged": "每日自動"
   },
   "notification": {
     "title": "通知設定",

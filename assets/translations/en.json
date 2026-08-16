@@ -928,7 +928,7 @@
     "trailingRefresh": "Recompute MA ladder",
     "trailingRefreshDone": "Recomputed {count} auto alerts (manual ones untouched)",
     "trailingRefreshEmpty": "No watchlist stock has enough price history",
-    "trailingManaged": "Auto"
+    "trailingManaged": "Daily auto"
   },
   "notification": {
     "title": "Notification Settings",

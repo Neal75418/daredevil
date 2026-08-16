@@ -133,7 +133,7 @@ void main() {
       );
     });
 
-    testWidgets('自動維護的提醒要標示出來,手動的不標', (tester) async {
+    testWidgets('每日自動的提醒要標示出來,手動的不標', (tester) async {
       // 使用者問「他又是怎麼判斷誰是手動的」——那正是因為畫面上看不出來
       widenViewport(tester);
       await tester.pumpWidget(
