@@ -50,9 +50,23 @@ enum CandidateSkipReason { noData, insufficientData, lowLiquidity, staleBar }
 /// 無有效價格 bar」的有 0 列 —— 健康日此檢查是 no-op，只在故障路徑生效。
 ///
 /// [asOf] 省略時不做此檢查（向後相容；isolate 輸入的 date 可為 null）。
+/// [exemptFromLiquidity] 自選股專用：跳過**量能**門檻，但 `MISSING_DATA` 仍
+/// 擋（下游 `prices.last.close!` / `volume!` 依賴那道保證，放行會 null 崩潰）。
+///
+/// 為什麼需要：`LiquidityChecker.minCandidateVolumeShares` 是**股數**門檻
+/// （100 萬股）。2059 川湖股價 12,500 元、每天成交 23–46 萬股 = 成交額
+/// 29–56 **億**，流動性極佳卻過不了股數門檻——12,500 元的股票要成交 100 萬股
+/// 等於 125 億。8/10 那天量剛好 1,016,839 股越線所以有分析，之後連續四天
+/// 是空白卡（2026-08-16 實機）。
+///
+/// `CandidateSelector` 步驟 1 已寫明「自選清單優先（豁免流動性過濾 —
+/// 使用者主動追蹤）」，但那個豁免只作用在中位數成交額那道；本函式的單日
+/// 檢查原本沒對齊，於是上游給的豁免被下游吃掉。全市場行為不變（實測另有
+/// 232 檔同型標的維持原樣）。
 CandidateSkipReason? classifyCandidate(
   List<DailyPriceEntry>? prices, {
   DateTime? asOf,
+  bool exemptFromLiquidity = false,
 }) {
   if (prices == null || prices.isEmpty) return CandidateSkipReason.noData;
   if (prices.length < RuleParams.swingWindow) {
@@ -71,9 +85,10 @@ CandidateSkipReason? classifyCandidate(
   }
   final liquidity = LiquidityChecker.checkCandidateLiquidity(prices.last);
   if (liquidity != null) {
-    return liquidity == 'MISSING_DATA'
-        ? CandidateSkipReason.noData
-        : CandidateSkipReason.lowLiquidity;
+    // MISSING_DATA 永遠不豁免——它保證的是 close/volume 非 null，不是量能
+    if (liquidity == 'MISSING_DATA') return CandidateSkipReason.noData;
+    if (exemptFromLiquidity) return null;
+    return CandidateSkipReason.lowLiquidity;
   }
   return null;
 }

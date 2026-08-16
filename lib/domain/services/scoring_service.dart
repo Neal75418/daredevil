@@ -100,7 +100,12 @@ class ScoringService {
 
       // 資格檢查（共用 pipeline，與 isolate 路徑同一實作）
       final prices = batchData.pricesMap[symbol];
-      final skipReason = classifyCandidate(prices, asOf: date);
+      final skipReason = classifyCandidate(
+        prices,
+        asOf: date,
+        // 與 isolate 路徑逐字對應
+        exemptFromLiquidity: watchlistSet.contains(symbol),
+      );
       if (skipReason != null) {
         switch (skipReason) {
           case CandidateSkipReason.noData:

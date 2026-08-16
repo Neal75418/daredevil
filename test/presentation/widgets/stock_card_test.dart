@@ -2,9 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/presentation/widgets/stock_card.dart';
 
 import '../../helpers/widget_test_helpers.dart';
+
+/// 取趨勢箭頭的顏色（守門用：形狀可留，顏色不得是股價紅綠）
+Color? _trendIconColor(WidgetTester tester) {
+  final icons = tester
+      .widgetList<Icon>(find.byType(Icon))
+      .where(
+        (i) =>
+            i.icon == Icons.trending_up_rounded ||
+            i.icon == Icons.trending_down_rounded ||
+            i.icon == Icons.trending_flat_rounded,
+      );
+  return icons.single.color;
+}
 
 void main() {
   setUpAll(() async {
@@ -261,15 +275,15 @@ void main() {
         buildTestApp(const StockCard(symbol: '2330', trendState: 'UP')),
       );
 
-      // 2026-08-16:趨勢改文字標籤。原本用 trending_*_rounded 配股價紅綠,
-      // 與同一張卡右側的「當日漲跌」撞成同一種視覺語言——實測 36 檔自選股
-      // 有 13 檔兩者方向相反(仁寶趨勢 DOWN 卻漲停 +9.92%),使用者反覆誤讀。
-      // 紅綠箭頭自此全 app 只代表股價。
-      expect(find.text('trend.shortUp'), findsOneWidget);
+      // 2026-08-16:趨勢圖示**改色不改形**。原本配股價紅綠,與同一張卡右側的
+      // 「當日漲跌」撞成同一種視覺語言——實測 36 檔自選股有 13 檔兩者方向
+      // 相反(仁寶趨勢 DOWN 卻漲停 +9.92%)。中間曾改成文字標籤,但 24px 窄欄
+      // 擠兩個中文字實機很醜(使用者回報),故保留形狀、只去掉顏色。
+      expect(find.byIcon(Icons.trending_up_rounded), findsOneWidget);
       expect(
-        find.byIcon(Icons.trending_up_rounded),
-        findsNothing,
-        reason: '趨勢狀態不得再借用股價趨勢箭頭',
+        _trendIconColor(tester),
+        isNot(AppTheme.upColor),
+        reason: '形狀可以保留,顏色不得再宣稱漲跌',
       );
     });
 
@@ -278,11 +292,11 @@ void main() {
         buildTestApp(const StockCard(symbol: '2330', trendState: 'DOWN')),
       );
 
-      expect(find.text('trend.shortDown'), findsOneWidget);
+      expect(find.byIcon(Icons.trending_down_rounded), findsOneWidget);
       expect(
-        find.byIcon(Icons.trending_down_rounded),
-        findsNothing,
-        reason: '趨勢狀態不得再借用股價趨勢箭頭',
+        _trendIconColor(tester),
+        isNot(PriceColors.downFor(Brightness.light)),
+        reason: '形狀可以保留,顏色不得再宣稱漲跌',
       );
     });
 
@@ -458,12 +472,7 @@ void main() {
         ),
       );
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('trend.shortUp'), findsOneWidget);
-      expect(
-        find.byIcon(Icons.trending_up_rounded),
-        findsNothing,
-        reason: '趨勢狀態不得再借用股價趨勢箭頭',
-      );
+      expect(find.byIcon(Icons.trending_up_rounded), findsOneWidget);
     });
   });
 }

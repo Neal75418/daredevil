@@ -538,7 +538,13 @@ Map<String, dynamic> evaluateStocksIsolated(Map<String, dynamic> inputMap) {
     // 1-2. 資格檢查（共用 pipeline，與主執行緒路徑同一實作）
     final prices = input.pricesMap[symbol];
     // asOf 為 nullable：input.date 缺席時新鮮度檢查自動 no-op
-    final skipReason = classifyCandidate(prices, asOf: input.date);
+    final skipReason = classifyCandidate(
+      prices,
+      asOf: input.date,
+      // 自選股豁免量能門檻——上游 CandidateSelector 步驟 1 早已豁免中位數
+      // 成交額,這道單日檢查原本沒對齊(2026-08-16 川湖實機)
+      exemptFromLiquidity: watchlist.contains(symbol),
+    );
     if (skipReason != null) {
       switch (skipReason) {
         case CandidateSkipReason.noData:
