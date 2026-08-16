@@ -326,17 +326,21 @@ class _StockCardState extends State<StockCard> {
     );
   }
 
-  /// 趨勢狀態指示：箭頭圖示，但**中性色**
+  /// 趨勢狀態指示：紅漲綠跌的箭頭（台股慣例）
   ///
-  /// 2026-08-16：原本配股價紅綠，與同一張卡右側的「當日漲跌」撞成同一種
-  /// 視覺語言——但兩者講的是不同的事：這裡是多空結構（20MA vs 60MA），
-  /// 那裡是今天的走勢。實測 36 檔自選股有 13 檔（36%）方向相反（仁寶趨勢
-  /// DOWN 卻漲停 +9.92%）。
+  /// **2026-08-16 走了一圈又回到原點，把過程記下來免得有人再改一次**：
+  /// 曾因為「左側趨勢箭頭與右側當日漲跌在 36 檔中有 13 檔方向相反」而先改
+  /// 文字標籤、再改中性色。兩次都退回，原因是那個前提本身站不住：
   ///
-  /// 中間曾改成文字標籤（多頭／空頭／盤整），但 24px 的窄欄擠兩個中文字
-  /// 實機看起來很醜，使用者直接回報——**改色不改形**才是這裡的正解：形狀
-  /// 保留方向資訊與原本的緊湊度，去掉顏色就不再宣稱漲跌。紅綠自此在全 app
-  /// 只代表股價（同款修正見警示頁的 `AlertTypeIcon`）。
+  /// 1. 使用者真正遇到的矛盾是**跨頁**的（警示頁的提醒方向也用趨勢箭頭配
+  ///    紅綠），那個已由 `AlertTypeIcon` 改中性圖示解決；卡片內的「矛盾」
+  ///    是審查時自己提出的顧慮，不是實際困擾。
+  /// 2. 兩個顏色其實**都對**——多空結構與今日走勢是兩句都成立的話，只有
+  ///    把它們當同一件事才會覺得衝突。
+  /// 3. 36 張卡的網格靠顏色掃描；拿掉顏色等於要逐個看箭頭方向，是淨損失。
+  ///
+  /// 所以這裡刻意保留紅綠。真正該守的界線是「**不同概念不要都用趨勢箭頭**」
+  /// ——那條界線由警示頁那側守住即可。
   Widget _buildTrendIndicator({bool compact = false}) {
     final size = compact ? 18.0 : 24.0;
 
@@ -353,7 +357,7 @@ class _StockCardState extends State<StockCard> {
       child: Center(
         child: Icon(
           widget.trendState.trendIconData,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          color: widget.trendState.trendColorFor(Theme.of(context).brightness),
           size: size,
         ),
       ),

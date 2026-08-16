@@ -275,15 +275,16 @@ void main() {
         buildTestApp(const StockCard(symbol: '2330', trendState: 'UP')),
       );
 
-      // 2026-08-16:趨勢圖示**改色不改形**。原本配股價紅綠,與同一張卡右側的
-      // 「當日漲跌」撞成同一種視覺語言——實測 36 檔自選股有 13 檔兩者方向
-      // 相反(仁寶趨勢 DOWN 卻漲停 +9.92%)。中間曾改成文字標籤,但 24px 窄欄
-      // 擠兩個中文字實機很醜(使用者回報),故保留形狀、只去掉顏色。
+      // 趨勢箭頭**保留台股紅漲綠跌**(2026-08-16 走了一圈的結論,理由見
+      // stock_card._buildTrendIndicator 的 doc)。曾兩度改掉(文字標籤、
+      // 中性色)又退回:卡片內的「矛盾」是審查自提的顧慮而非實際困擾,
+      // 而 36 張卡的網格靠顏色掃描,拿掉是淨損失。真正該守的界線在警示頁
+      // ——不同概念不得都用趨勢箭頭。
       expect(find.byIcon(Icons.trending_up_rounded), findsOneWidget);
       expect(
         _trendIconColor(tester),
-        isNot(AppTheme.upColor),
-        reason: '形狀可以保留,顏色不得再宣稱漲跌',
+        AppTheme.upColor,
+        reason: '多頭結構著紅是台股慣例,不得再被「去顏色」改掉',
       );
     });
 
@@ -295,8 +296,8 @@ void main() {
       expect(find.byIcon(Icons.trending_down_rounded), findsOneWidget);
       expect(
         _trendIconColor(tester),
-        isNot(PriceColors.downFor(Brightness.light)),
-        reason: '形狀可以保留,顏色不得再宣稱漲跌',
+        PriceColors.downFor(Brightness.light),
+        reason: '空頭結構著綠是台股慣例',
       );
     });
 
