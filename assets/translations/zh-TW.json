@@ -924,7 +924,11 @@
       "intradayHint": "盤中每 5 分鐘檢查一次,觸價當下就通知",
       "daily": "收盤後檢查",
       "dailyHint": "⚠️ 每日更新後才評估;目前在 macOS 不會發出通知"
-    }
+    },
+    "trailingRefresh": "依均線階梯重算",
+    "trailingRefreshDone": "已重算 {count} 檔自動提醒（手動設定的未更動）",
+    "trailingRefreshEmpty": "沒有可設定的自選股（價格資料不足）",
+    "trailingManaged": "自動維護"
   },
   "notification": {
     "title": "通知設定",

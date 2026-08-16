@@ -44,7 +44,18 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text('alert.title'.tr())),
+      appBar: AppBar(
+        title: Text('alert.title'.tr()),
+        actions: [
+          // 每日更新已會自動重算（UpdateService._refreshTrailingAlertsFailSafe）；
+          // 這顆是手動入口——剛加完自選股、或想立刻看到結果時用。
+          IconButton(
+            icon: const Icon(Icons.stairs_outlined),
+            tooltip: 'alert.trailingRefresh'.tr(),
+            onPressed: state.isLoading ? null : _refreshTrailingAlerts,
+          ),
+        ],
+      ),
       // 論點失效 section（出場層 Phase 2）置頂：與價格警示獨立的資料源，
       // 價格警示空/載入中也要能看到失效通知；空狀態自身零噪音。
       body: Column(
@@ -57,6 +68,27 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
         onPressed: () => _showAddAlertDialog(context),
         tooltip: 'alert.create'.tr(),
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  /// 依均線階梯重算自動提醒（手動設定的不動，保證在 TrailingMaAlertService）
+  Future<void> _refreshTrailingAlerts() async {
+    final count = await ref
+        .read(priceAlertProvider.notifier)
+        .refreshTrailingAlerts();
+    if (!mounted) return;
+
+    // error 已由 notifier 寫進 state 並顯示，這裡不重複報一次
+    if (ref.read(priceAlertProvider).error != null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          count > 0
+              ? 'alert.trailingRefreshDone'.tr(namedArgs: {'count': '$count'})
+              : 'alert.trailingRefreshEmpty'.tr(),
+        ),
       ),
     );
   }

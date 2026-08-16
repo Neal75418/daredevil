@@ -19,6 +19,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/domain/repositories/analysis_repository.dart';
 import 'package:daredevil/domain/repositories/price_repository.dart';
+import 'package:daredevil/domain/services/alert/trailing_ma_alert_service.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/rule_accuracy_service.dart';
 import 'package:daredevil/domain/services/thesis/thesis_monitor_service.dart';
@@ -54,6 +55,10 @@ class UpdateService {
        _ruleAccuracyService = services.ruleAccuracy,
        _thesisMonitorService = services.thesisMonitor,
        _newsMentionSnapshotService = services.newsMentionSnapshot,
+       _trailingMaAlertService = TrailingMaAlertService(
+         database: database,
+         clock: clock,
+       ),
        _priceRepo = repositories.price,
        _analysisRepo = repositories.analysis,
        _analysisService = services.analysis ?? AnalysisService(),
@@ -150,6 +155,11 @@ class UpdateService {
   final RuleAccuracyService? _ruleAccuracyService;
   final ThesisMonitorService? _thesisMonitorService;
   final NewsMentionSnapshotService? _newsMentionSnapshotService;
+
+  /// 均線階梯提醒。**刻意不做成可選注入**：其餘 fail-safe service 為 null
+  /// 時整段靜默跳過，而本專案有「自動更新靜默斷 13 天」的前科——只依賴
+  /// AppDatabase 的東西沒有理由讓呼叫端有機會漏接。
+  final TrailingMaAlertService _trailingMaAlertService;
   final List<String> _popularStocks;
 
   // 專責 updater / loader
@@ -346,6 +356,9 @@ class UpdateService {
       await _snapshotNewsMentionsFailSafe(ctx);
       await _checkPinnedThesesFailSafe(ctx);
       await _reportZeroingImpactFailSafe(ctx);
+      // 在 _finishUpdate 之前：那裡的 _fetchAlertPrices 會為「有啟用中提醒」
+      // 的股票補價格資料，順序顛倒的話今天新設的那批會少一天的資料。
+      await _refreshTrailingAlertsFailSafe(ctx);
 
       await _finishUpdate(ctx, result);
 
@@ -1284,6 +1297,22 @@ class UpdateService {
     } catch (e, stack) {
       AppLogger.error('UpdateService', '釘選論點檢查失敗（fail-safe）', e, stack);
       ctx.result.recordError('釘選論點檢查失敗: $e', e);
+    }
+  }
+
+  /// 均線階梯提醒重算。**fail-safe**：失敗只 log、不影響 update result
+  /// （與 [_updateRuleAccuracyStatsFailSafe] 同模式）。
+  ///
+  /// 為什麼掛在每日更新而不是做成按鈕：提醒價位是死的、均線是活的，靠人
+  /// 記得按只會讓失效間隔變短而非消失（2026-08-16 重整 36 檔提醒時，手動
+  /// 設的價位全數落後於當時的 5MA）。
+  Future<void> _refreshTrailingAlertsFailSafe(_UpdateContext ctx) async {
+    try {
+      final n = await _trailingMaAlertService.refresh(asOf: ctx.normalizedDate);
+      AppLogger.info('UpdateService', '步驟 10+: 均線階梯提醒重算完成（$n 檔）');
+    } catch (e, stack) {
+      AppLogger.error('UpdateService', '均線階梯提醒重算失敗（fail-safe）', e, stack);
+      ctx.result.recordError('均線階梯提醒重算失敗: $e', e);
     }
   }
 

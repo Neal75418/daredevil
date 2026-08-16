@@ -8,6 +8,7 @@ import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/sentinel.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/services/alert/trailing_ma_alert_service.dart';
 import 'package:daredevil/domain/services/alert_evaluation_service.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 
@@ -316,6 +317,26 @@ class PriceAlertNotifier extends Notifier<PriceAlertState> {
     } catch (e) {
       AppLogger.warning('PriceAlertNotifier', '載入警示失敗', e);
       state = state.copyWith(isLoading: false, error: ErrorDisplay.message(e));
+    }
+  }
+
+  /// 依均線階梯重算所有自選股的自動提醒，回傳成功設定的檔數
+  ///
+  /// **手動設定的提醒（`managed_by IS NULL`）一列都不動**——保證在
+  /// [TrailingMaAlertService] 內，不在這層。
+  ///
+  /// 每日更新已會自動做這件事（`UpdateService._refreshTrailingAlertsFailSafe`），
+  /// 這裡只是手動觸發入口：剛加完自選股、或想立刻看到結果時用。
+  Future<int> refreshTrailingAlerts() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final count = await TrailingMaAlertService(database: _db).refresh();
+      await loadAlerts();
+      return count;
+    } catch (e) {
+      AppLogger.warning('PriceAlertNotifier', '均線階梯提醒重算失敗', e);
+      state = state.copyWith(isLoading: false, error: ErrorDisplay.message(e));
+      return 0;
     }
   }
 

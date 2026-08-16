@@ -924,7 +924,11 @@
       "intradayHint": "Checked every 5 minutes during market hours",
       "daily": "After close",
       "dailyHint": "⚠️ Evaluated once daily; currently does not notify on macOS"
-    }
+    },
+    "trailingRefresh": "Recompute MA ladder",
+    "trailingRefreshDone": "Recomputed {count} auto alerts (manual ones untouched)",
+    "trailingRefreshEmpty": "No watchlist stock has enough price history",
+    "trailingManaged": "Auto"
   },
   "notification": {
     "title": "Notification Settings",
