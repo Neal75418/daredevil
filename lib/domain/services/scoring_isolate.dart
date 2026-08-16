@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:isolate';
 
+// meta 而非 flutter/foundation:本檔在 CLI 的 import 閉包內,不可引入 dart:ui
+import 'package:meta/meta.dart' show visibleForTesting;
+
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/constants/calibrated_scores/calibrated_score_context.dart';
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
@@ -36,6 +39,7 @@ class ScoringIsolateInput {
     this.dividendHistoryMap,
     this.maxHistoricalRevenueMap,
     this.calibratedScores = CalibratedScoreContext.empty,
+    this.watchlistSymbols = const [],
   });
 
   final List<String> candidates;
@@ -81,6 +85,18 @@ class ScoringIsolateInput {
   /// `TriggeredReason.score`（Stage 5a 等效行為）。
   final CalibratedScoreContext calibratedScores;
 
+  /// 使用者自選股——**即使當日零訊號也要留下 `daily_analysis` 列**
+  ///
+  /// 為什麼特殊對待：自選股在畫面上一定看得到那張卡，沒有分析列就整張空白
+  /// （無評分、無標籤、無趨勢箭頭），使用者分不出「今日沒訊號」與「壞掉／
+  /// 沒被分析」。實機：2059 川湖 8/11 起零訊號，卡片連續四天全空，而資料量
+  /// 與有分析的對照組 3081 完全相同。
+  ///
+  /// 為什麼不對全市場開放：候選股是全市場可分析且流動的股票（見
+  /// `CandidateSelector` 步驟 4），全開會多寫上千列／日；自選股是 ≤36 檔。
+  /// 與該檔步驟 1「自選清單優先、豁免流動性過濾——使用者主動追蹤」同一原則。
+  final List<String> watchlistSymbols;
+
   Map<String, dynamic> toMap() => {
     'candidates': candidates,
     'pricesMap': pricesMap.map(
@@ -113,6 +129,7 @@ class ScoringIsolateInput {
     ),
     'maxHistoricalRevenueMap': maxHistoricalRevenueMap,
     'calibratedScores': calibratedScores.toMap(),
+    'watchlistSymbols': watchlistSymbols,
   };
 
   factory ScoringIsolateInput.fromMap(Map<String, dynamic> map) {
@@ -191,6 +208,10 @@ class ScoringIsolateInput {
               Map<String, dynamic>.from(map['calibratedScores'] as Map),
             )
           : CalibratedScoreContext.empty,
+      // 缺鍵時降級為「無自選股」而非爆炸——與 calibratedScores 同策略
+      watchlistSymbols: map['watchlistSymbols'] != null
+          ? List<String>.from(map['watchlistSymbols'] as List)
+          : const [],
     );
   }
 
@@ -473,15 +494,21 @@ Future<ScoringBatchResult> evaluateStocksInIsolate(
   final forceOutput = AppLogger.forceOutput;
   final resultMap = await Isolate.run(() {
     AppLogger.forceOutput = forceOutput;
-    return _evaluateStocksIsolated(input.toMap());
+    return evaluateStocksIsolated(input.toMap());
   });
   return ScoringBatchResult.fromMap(resultMap);
 }
 
 /// 在 Isolate 中執行的純運算函數
 ///
-/// 此函數不能存取資料庫或 Provider，只能使用傳入的資料
-Map<String, dynamic> _evaluateStocksIsolated(Map<String, dynamic> inputMap) {
+/// 此函數不能存取資料庫或 Provider，只能使用傳入的資料。
+///
+/// **公開給測試**：評分有此路徑與 [ScoringService.scoreStocks] 主執行緒
+/// fallback 兩份實作，本專案有複本分岔的前科。直接呼叫這個純函數（不 spawn
+/// isolate）才能用**同一份輸入**斷言兩條路徑結果相同——見
+/// `scoring_watchlist_zero_reason_test.dart`。
+@visibleForTesting
+Map<String, dynamic> evaluateStocksIsolated(Map<String, dynamic> inputMap) {
   final input = ScoringIsolateInput.fromMap(inputMap);
 
   // 在 Isolate 中建立服務（它們是無狀態的）
@@ -505,6 +532,7 @@ Map<String, dynamic> _evaluateStocksIsolated(Map<String, dynamic> inputMap) {
   var skippedNoAnalysis = 0;
   var skippedNoReasons = 0;
   var skippedLowScore = 0;
+  final watchlist = input.watchlistSymbols.toSet();
 
   for (final symbol in input.candidates) {
     // 1-2. 資格檢查（共用 pipeline，與主執行緒路徑同一實作）
@@ -584,9 +612,31 @@ Map<String, dynamic> _evaluateStocksIsolated(Map<String, dynamic> inputMap) {
     );
     final reasons = ruleEngine.evaluateStock(context, stockData);
 
-    // 無訊號是正常結果（多數股票屬此類），但仍須計數讓帳目平
+    // 無訊號是正常結果（多數股票屬此類），但仍須計數讓帳目平。
+    //
+    // 例外：自選股即使零訊號也要留下分析列。畫面上一定看得到那張卡，沒有列
+    // 就整張空白（無評分、無標籤、無趨勢），使用者分不出「今日沒訊號」與
+    // 「壞掉」。實機 2059 川湖連續四天全空。理由與範圍見
+    // [ScoringIsolateInput.watchlistSymbols]。
     if (reasons.isEmpty) {
-      skippedNoReasons++;
+      if (!watchlist.contains(symbol)) {
+        skippedNoReasons++;
+        continue;
+      }
+      outputs.add(
+        ScoringIsolateOutput(
+          symbol: symbol,
+          scoreShort: 0,
+          scoreLong: 0,
+          turnover: turnover,
+          trendState: analysisResult.trendState.code,
+          reversalState: analysisResult.reversalState.code,
+          supportLevel: analysisResult.supportLevel,
+          resistanceLevel: analysisResult.resistanceLevel,
+          // 沒有訊號就是沒有，不得偽造
+          reasons: const [],
+        ),
+      );
       continue;
     }
 

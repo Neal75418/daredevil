@@ -559,7 +559,10 @@
   "trend": {
     "up": "上升趨勢",
     "down": "下降趨勢",
-    "sideways": "盤整"
+    "sideways": "盤整",
+    "shortUp": "多頭",
+    "shortDown": "空頭",
+    "shortSideways": "盤整"
   },
   "price": {
     "up": "上漲",

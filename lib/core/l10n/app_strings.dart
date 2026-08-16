@@ -126,6 +126,26 @@ class S {
     };
   }
 
+  // 短版趨勢標籤（卡片上的窄欄位用）
+  // 由 [getTrendShortLabel] 裸名消費（傳遞性存活，同上）
+  static String get trendShortUp => 'trend.shortUp'.tr();
+  static String get trendShortDown => 'trend.shortDown'.tr();
+  static String get trendShortSideways => 'trend.shortSideways'.tr();
+
+  /// 卡片趨勢欄用的短標籤
+  ///
+  /// 2026-08-16：卡片原本用 `trending_up_rounded` 配股價紅綠表達趨勢狀態，
+  /// 與同一張卡右側的「當日漲跌」撞成同一種視覺語言——實測 36 檔自選股有
+  /// 13 檔兩者方向相反（仁寶趨勢 DOWN 卻漲停 +9.92%），使用者反覆誤讀。
+  /// 改文字後紅綠箭頭全 app 只剩「股價」一個意思。
+  static String getTrendShortLabel(String? trendState) {
+    return switch (trendState) {
+      'UP' => trendShortUp,
+      'DOWN' => trendShortDown,
+      _ => trendShortSideways,
+    };
+  }
+
   // ==================================================
   // 價格
   // ==================================================

@@ -1196,6 +1196,14 @@ class UpdateService {
       candidates,
     );
 
+    // 自選股即使當日零訊號也要留下分析列——畫面上一定看得到那張卡，沒有列
+    // 就整張空白（無評分、無標籤、無趨勢），使用者分不出「今日沒訊號」與
+    // 「壞掉」。實機 2059 川湖連續四天全空。理由與範圍見
+    // [ScoringIsolateInput.watchlistSymbols]。
+    final watchlistSymbols = (await _db.getWatchlist())
+        .map((w) => w.symbol)
+        .toList();
+
     // 當日舊資料的清除已移入 ScoringService 的寫入 transaction
     // （clear-then-write 原子化，避免中斷留下當日分析真空）
     ctx.reportProgress(7, 10, '分析中 (${candidates.length} 檔)');
@@ -1203,6 +1211,7 @@ class UpdateService {
       candidates: candidates,
       date: ctx.normalizedDate,
       batchData: batchData,
+      watchlistSymbols: watchlistSymbols,
     );
 
     AppLogger.info('UpdateService', '步驟 7-8: 評分 ${scoredStocks.length} 檔');

@@ -261,7 +261,16 @@ void main() {
         buildTestApp(const StockCard(symbol: '2330', trendState: 'UP')),
       );
 
-      expect(find.byIcon(Icons.trending_up_rounded), findsOneWidget);
+      // 2026-08-16:趨勢改文字標籤。原本用 trending_*_rounded 配股價紅綠,
+      // 與同一張卡右側的「當日漲跌」撞成同一種視覺語言——實測 36 檔自選股
+      // 有 13 檔兩者方向相反(仁寶趨勢 DOWN 卻漲停 +9.92%),使用者反覆誤讀。
+      // 紅綠箭頭自此全 app 只代表股價。
+      expect(find.text('trend.shortUp'), findsOneWidget);
+      expect(
+        find.byIcon(Icons.trending_up_rounded),
+        findsNothing,
+        reason: '趨勢狀態不得再借用股價趨勢箭頭',
+      );
     });
 
     testWidgets('shows trend icon for DOWN state', (tester) async {
@@ -269,7 +278,12 @@ void main() {
         buildTestApp(const StockCard(symbol: '2330', trendState: 'DOWN')),
       );
 
-      expect(find.byIcon(Icons.trending_down_rounded), findsOneWidget);
+      expect(find.text('trend.shortDown'), findsOneWidget);
+      expect(
+        find.byIcon(Icons.trending_down_rounded),
+        findsNothing,
+        reason: '趨勢狀態不得再借用股價趨勢箭頭',
+      );
     });
 
     testWidgets('null trendState 不顯示趨勢 icon(2026-08-01 語意翻轉:未評分不得宣稱持平)', (
@@ -444,7 +458,12 @@ void main() {
         ),
       );
       await tester.pump(const Duration(seconds: 1));
-      expect(find.byIcon(Icons.trending_up_rounded), findsOneWidget);
+      expect(find.text('trend.shortUp'), findsOneWidget);
+      expect(
+        find.byIcon(Icons.trending_up_rounded),
+        findsNothing,
+        reason: '趨勢狀態不得再借用股價趨勢箭頭',
+      );
     });
   });
 }

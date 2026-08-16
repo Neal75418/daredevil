@@ -5,7 +5,6 @@ import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/ui_constants.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
-import 'package:daredevil/core/extensions/trend_state_extension.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
@@ -326,26 +325,46 @@ class _StockCardState extends State<StockCard> {
     );
   }
 
+  /// 趨勢狀態指示：**文字標籤，不是紅綠箭頭**
+  ///
+  /// 2026-08-16：原本用 `trending_*_rounded` 配股價紅綠，與同一張卡右側的
+  /// 「當日漲跌」撞成同一種視覺語言——但兩者講的是不同的事：這裡是多空結構
+  /// （20MA vs 60MA），那裡是今天的走勢。實測 36 檔自選股有 **13 檔（36%）
+  /// 方向相反**（仁寶趨勢 DOWN 卻漲停 +9.92%），使用者反覆誤讀成矛盾。
+  ///
+  /// 改文字 + 中性色之後，紅綠箭頭在全 app 只剩「股價」一個意思。同款修正
+  /// 見警示頁的 `AlertTypeIcon`（提醒方向也曾借用趨勢箭頭）。
   Widget _buildTrendIndicator({bool compact = false}) {
+    // 寬度**刻意維持與原本圖示相同**(正方形)：這個 widget 用在自選/今日/
+    // 掃描/比較四個畫面，加寬 8px 就讓「極窄卡片不溢位」的守門測試翻紅
+    // (2026-08-16 實測)。文字由 FittedBox 縮到框內，版面足跡零變化。
+    final size = compact ? 18.0 : 24.0;
+    final height = size;
+    final width = size;
+
     // 未評分(trendState null)不得宣稱趨勢(2026-08-01 複審):d7a0f605 只
     // 修了 detail header,本卡片(自選/推薦高流量路徑)同型漏掃——nullable
-    // extension 的 _ 分支把 null 畫成「持平」icon,沒評分卻給確定趨勢。
+    // extension 的 _ 分支把 null 畫成「持平」,沒評分卻給確定趨勢。
     if (widget.trendState == null) {
-      final iconSize = compact ? 18.0 : 24.0;
-      return SizedBox(width: iconSize, height: iconSize);
+      return SizedBox(width: width, height: height);
     }
-    final trendColor = widget.trendState.trendColorFor(
-      Theme.of(context).brightness,
-    );
-    final icon = widget.trendState.trendIconData;
-    final iconSize = compact ? 18.0 : 24.0;
 
-    // 簡化設計：僅圖示，不加背景容器以減少色彩干擾
+    final theme = Theme.of(context);
     return SizedBox(
-      width: iconSize,
-      height: iconSize,
+      width: width,
+      height: height,
       child: Center(
-        child: Icon(icon, color: trendColor, size: iconSize),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            S.getTrendShortLabel(widget.trendState),
+            maxLines: 1,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }

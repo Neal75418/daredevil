@@ -199,6 +199,9 @@ void main() {
         candidates: any(named: 'candidates'),
         date: any(named: 'date'),
         batchData: any(named: 'batchData'),
+        // 自選股零訊號仍落庫(2026-08-16)——漏了這個 matcher 會讓整個 stub
+        // 不匹配、回傳 null,失敗訊息是無關的 'Null is not a subtype'
+        watchlistSymbols: any(named: 'watchlistSymbols'),
       ),
     ).thenAnswer((_) async => []);
     // 完成階段：警示價格

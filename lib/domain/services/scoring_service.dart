@@ -46,6 +46,7 @@ class ScoringService {
     required ScoringBatchData batchData,
     Future<MarketDataContext?> Function(String)? marketDataBuilder,
     void Function(int current, int total)? onProgress,
+    List<String> watchlistSymbols = const [],
   }) async {
     if (candidates.isEmpty) return [];
 
@@ -91,6 +92,7 @@ class ScoringService {
     var skippedNoReasons = 0;
     var skippedLowScore = 0;
     var stocksWithSufficientData = 0;
+    final watchlistSet = watchlistSymbols.toSet();
 
     for (var i = 0; i < candidates.length; i++) {
       final symbol = candidates[i];
@@ -169,9 +171,27 @@ class ScoringService {
       );
       final reasons = _ruleEngine.evaluateStock(context, stockData);
 
-      // 無訊號是正常結果，但仍須計數讓帳目平
+      // 無訊號是正常結果，但仍須計數讓帳目平。
+      //
+      // 例外：自選股即使零訊號也要落庫（與 isolate 路徑逐字對應，見
+      // [ScoringIsolateInput.watchlistSymbols]）。**刻意不進 scoredStocks**
+      // ——那份清單的語意是「有訊號、有分數的股票」，補這一列是為了畫面不
+      // 空白，不是為了讓它出現在排行裡。
       if (reasons.isEmpty) {
-        skippedNoReasons++;
+        if (!watchlistSet.contains(symbol)) {
+          skippedNoReasons++;
+          continue;
+        }
+        pendingPersists.add((
+          symbol: symbol,
+          trendState: analysisResult.trendState.code,
+          reversalState: analysisResult.reversalState.code,
+          supportLevel: analysisResult.supportLevel,
+          resistanceLevel: analysisResult.resistanceLevel,
+          scoreShort: 0.0,
+          scoreLong: 0.0,
+          reasons: const <ReasonData>[],
+        ));
         continue;
       }
 
@@ -288,6 +308,7 @@ class ScoringService {
     required List<String> candidates,
     required DateTime date,
     required ScoringBatchData batchData,
+    List<String> watchlistSymbols = const [],
   }) async {
     if (candidates.isEmpty) return [];
 
@@ -320,6 +341,7 @@ class ScoringService {
       dividendHistoryMap: batchData.dividendHistoryMap,
       maxHistoricalRevenueMap: batchData.maxHistoricalRevenueMap,
       calibratedScores: calibratedScores,
+      watchlistSymbols: watchlistSymbols,
     );
 
     // 在背景 Isolate 執行運算（含回退機制）
@@ -343,6 +365,9 @@ class ScoringService {
         candidates: candidates,
         date: date,
         batchData: batchData,
+        // 回退路徑也必須帶上——漏了這行,isolate 失敗那天自選股就悄悄少了
+        // 分析列,而三個訊號(exit code、update_run、日誌)全都正常
+        watchlistSymbols: watchlistSymbols,
         marketDataBuilder: (symbol) async {
           return _buildMarketDataFromMaps(
             symbol: symbol,
@@ -391,7 +416,10 @@ class ScoringService {
     });
 
     // 轉換為 ScoredStock 並排序（短線 horizon 當預設）
+    // 零訊號的自選股只補分析列,不列入「評分 N 檔」——那份清單的語意是
+    // 「有訊號、有分數的股票」(與主執行緒路徑對應)
     final scoredStocks = result.outputs
+        .where((o) => o.reasons.isNotEmpty)
         .map(
           (o) => ScoredStock(
             symbol: o.symbol,

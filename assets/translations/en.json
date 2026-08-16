@@ -559,7 +559,10 @@
   "trend": {
     "up": "Uptrend",
     "down": "Downtrend",
-    "sideways": "Sideways"
+    "sideways": "Sideways",
+    "shortUp": "Up",
+    "shortDown": "Down",
+    "shortSideways": "Flat"
   },
   "price": {
     "up": "Up",
