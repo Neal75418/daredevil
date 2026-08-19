@@ -654,7 +654,29 @@ Map<String, dynamic> evaluateStocksIsolated(Map<String, dynamic> inputMap) {
       calibratedScores: input.calibratedScores,
     );
     if (scored == null) {
-      skippedLowScore++;
+      // 分數低於觀察門檻。自選股同樣要留分析列——這是空白卡的**第二道**
+      // 閘門:8/16 只修了 reasons.isEmpty,8/19 實機 3711/3234/4931/6538
+      // 在 8/17 有分析、8/18 全部消失,正是掉進這裡(訊號存在但 |raw| <
+      // observationScoreThreshold)。語意與零訊號分支一致:低於門檻對卡片
+      // 而言等同「無可觀察訊號」,落庫 0 分、不寫 reasons——daily_reason
+      // 不新增列,掃描頁與三模式聚合不受影響。
+      if (!watchlist.contains(symbol)) {
+        skippedLowScore++;
+        continue;
+      }
+      outputs.add(
+        ScoringIsolateOutput(
+          symbol: symbol,
+          scoreShort: 0,
+          scoreLong: 0,
+          turnover: turnover,
+          trendState: analysisResult.trendState.code,
+          reversalState: analysisResult.reversalState.code,
+          supportLevel: analysisResult.supportLevel,
+          resistanceLevel: analysisResult.resistanceLevel,
+          reasons: const [],
+        ),
+      );
       continue;
     }
     outputs.add(

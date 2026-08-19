@@ -22,6 +22,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/repositories/analysis_repository.dart';
+import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/scoring_batch_data.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
@@ -82,13 +83,29 @@ void main() {
     symbol: symbol,
   );
 
+  /// 大量版:當沖規則有 `minDayTradingVolumeShares`(1000 萬股)的量門檻,
+  /// 低於它規則整個不觸發——分數不足的合成必須先過這道(前提測試會抓)。
+  List<DailyPriceEntry> flatHeavy(String symbol) => generateConstantPrices(
+    days: 60,
+    basePrice: 100,
+    volume: 20000000,
+    symbol: symbol,
+  );
+
   group('Isolate 路徑', () {
-    ScoringBatchResult run({required List<String> watchlist}) {
+    ScoringBatchResult run({
+      required List<String> watchlist,
+      Map<String, double>? dayTradingMap,
+      bool heavyVolume = false,
+    }) {
+      List<DailyPriceEntry> gen(String sym) =>
+          heavyVolume ? flatHeavy(sym) : flat(sym);
       final input = ScoringIsolateInput(
         candidates: const ['1111', '2222'],
-        pricesMap: {'1111': flat('1111'), '2222': flat('2222')},
+        pricesMap: {'1111': gen('1111'), '2222': gen('2222')},
         newsMap: const {},
         institutionalMap: const {},
+        dayTradingMap: dayTradingMap,
         watchlistSymbols: watchlist,
         // date 不可為 null:isolate 對此 fail-loud(比 silent now() fallback
         // 安全)。用今天是因為 generateConstantPrices 的最後一根就是今天,
@@ -135,6 +152,53 @@ void main() {
       );
     });
 
+    // ── 分數不足(scored == null):同症狀的第二道閘門 ──────────────
+    //
+    // 2026-08-19 實機:3711 日月光投控/3234 光環/4931 新盛力/6538 倉和在
+    // 8/17 都有分析、8/18 全部消失成空白卡——資料完整、量過門檻。8/16 修
+    // reasons.isEmpty 時只堵了一道閘門:訊號存在但 |raw| <
+    // observationScoreThreshold(8)時 scoreReasonsDualHorizon 回 null,
+    // 一樣整列不寫。這正是記憶裡「診斷要逐一走過每道閘門」的教訓再現。
+    //
+    // 合成法:當沖比例 50–70% 觸發 DayTradingHighRule(score **0**),
+    // 平盤價格保證它是唯一訊號 → raw 0 < 8 → 走進 scored == null。
+    test('🚨 前提:當沖 60% + 平盤價格確實落入「分數不足」', () {
+      final result = run(
+        watchlist: const [],
+        dayTradingMap: const {'1111': 60.0, '2222': 60.0},
+        heavyVolume: true,
+      );
+      expect(
+        result.skippedLowScore,
+        2,
+        reason: '兩檔都該因分數不足被跳過;若不是,合成訊號沒觸發或門檻變了',
+      );
+      expect(result.skippedNoReasons, 0, reason: '訊號存在,不是零訊號');
+      expect(result.outputs, isEmpty);
+    });
+
+    test('🚨 分數不足的自選股也要留分析列(3711 的空白卡)', () {
+      final result = run(
+        watchlist: const ['1111'],
+        dayTradingMap: const {'1111': 60.0, '2222': 60.0},
+        heavyVolume: true,
+      );
+      expect(result.outputs, hasLength(1));
+      expect(result.outputs.single.symbol, '1111');
+      expect(
+        result.outputs.single.scoreShort,
+        0,
+        reason: '低於觀察門檻對卡片而言等同無可觀察訊號,落庫 0 分',
+      );
+      expect(
+        result.outputs.single.reasons,
+        isEmpty,
+        reason: '不寫 daily_reason,掃描頁與三模式聚合的語意不變',
+      );
+      expect(result.skippedLowScore, 1, reason: '2222 非自選,維持跳過');
+      expect(result.accountingBalances, isTrue);
+    });
+
     test('watchlistSymbols 跨 isolate 邊界序列化', () {
       const input = ScoringIsolateInput(
         candidates: ['1111'],
@@ -172,15 +236,23 @@ void main() {
       );
     });
 
-    Future<List<ScoredStock>> run({required List<String> watchlist}) {
+    Future<List<ScoredStock>> run({
+      required List<String> watchlist,
+      double? dayTradingRatio,
+    }) {
+      List<DailyPriceEntry> gen(String sym) =>
+          dayTradingRatio != null ? flatHeavy(sym) : flat(sym);
       return service.scoreStocks(
         candidates: const ['1111', '2222'],
         date: today,
         batchData: ScoringBatchData(
-          pricesMap: {'1111': flat('1111'), '2222': flat('2222')},
+          pricesMap: {'1111': gen('1111'), '2222': gen('2222')},
           newsMap: const {},
           institutionalMap: const {},
         ),
+        marketDataBuilder: dayTradingRatio == null
+            ? null
+            : (_) async => MarketDataContext(dayTradingRatio: dayTradingRatio),
         watchlistSymbols: watchlist,
       );
     }
@@ -193,6 +265,12 @@ void main() {
     test('沒有自選股時兩檔都不落庫（前提:資料確實零訊號）', () async {
       await run(watchlist: const []);
       expect(repo.persisted, isEmpty);
+    });
+
+    test('🚨 分數不足的自選股也落庫(與 isolate 同結論)', () async {
+      final scored = await run(watchlist: const ['1111'], dayTradingRatio: 60);
+      expect(repo.persisted, ['1111']);
+      expect(scored, isEmpty, reason: '低於門檻不得混進「評分 N 檔」');
     });
 
     test('🚨 零訊號股不得混進「評分 N 檔」的回傳清單', () async {

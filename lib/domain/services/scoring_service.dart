@@ -207,7 +207,22 @@ class ScoringService {
         calibratedScores: calibratedScores,
       );
       if (scored == null) {
-        skippedLowScore++;
+        // 分數低於觀察門檻的自選股也要落庫(與 isolate 路徑逐字對應,
+        // 理由見該處)。同樣不進 scoredStocks——「評分 N 檔」語意不變。
+        if (!watchlistSet.contains(symbol)) {
+          skippedLowScore++;
+          continue;
+        }
+        pendingPersists.add((
+          symbol: symbol,
+          trendState: analysisResult.trendState.code,
+          reversalState: analysisResult.reversalState.code,
+          supportLevel: analysisResult.supportLevel,
+          resistanceLevel: analysisResult.resistanceLevel,
+          scoreShort: 0.0,
+          scoreLong: 0.0,
+          reasons: const <ReasonData>[],
+        ));
         continue;
       }
       final (:scoreShort, :scoreLong, :topReasons, :decayMultipliers) = scored;
