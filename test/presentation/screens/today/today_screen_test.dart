@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/scoring_mode.dart';
@@ -403,7 +404,18 @@ void main() {
       expect(find.text('today.watchlistMaReclaim'), findsOneWidget);
       // 用 _rounded 變體辨識:trending_up 在本頁 SectionHeader 已被佔用,
       // 拿它斷言會誤判(2026-08-21 寫測試時實際踩到)
-      expect(find.byIcon(Icons.trending_up_rounded), findsOneWidget);
+      final icon = tester.widget<Icon>(find.byIcon(Icons.trending_up_rounded));
+      // 🚨 站回條**不得是紅色**。第一版用了 AppTheme.upColor(= PriceColors.up
+      // #FF4757,台股「漲=紅」),結果與跌破條的 error 紅在畫面上撞成一模一樣
+      // ——使用者實機一眼就看出兩條都紅(2026-08-21)。這條 banner 表達的是
+      // 「事件好壞」不是股價漲跌,紅綠是股價保留區(semantic_colors.dart),
+      // 正向事件該走 successColor(品牌藍)。
+      expect(
+        icon.color,
+        isNot(AppTheme.upColor),
+        reason: '站回是正向事件,不得借用股價漲色——會與跌破紅條撞色',
+      );
+      expect(icon.color, AppTheme.successColor);
     });
 
     testWidgets('自選無站回:綠條不渲染(零噪音,與跌破條同標準)', (tester) async {

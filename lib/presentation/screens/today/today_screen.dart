@@ -708,7 +708,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           codes: SignalName.maStageReclaim,
           labelKey: 'today.watchlistMaReclaim',
           icon: Icons.trending_up_rounded,
-          color: AppTheme.upColor,
+          // successColor(品牌藍)而非 upColor:第一版用了股價漲色
+          // (PriceColors.up #FF4757,台股「漲=紅」),結果與上面跌破條的
+          // error 紅在畫面上撞成一模一樣,使用者實機一眼看出兩條都紅
+          // (2026-08-21)。這條表達的是「事件好壞」不是股價漲跌,而紅綠是
+          // 股價語意保留區(semantic_colors.dart)。守門測試釘住此色。
+          color: AppTheme.successColor,
         ),
 
         // 大盤總覽卡片（獨立 Consumer 隔離 market data rebuild）
