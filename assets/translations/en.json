@@ -81,7 +81,8 @@
     "watchlistMaBreak": "⚠ {count} watchlist stocks broke below MA: {names}",
     "trendGateCollapsed": "Uptrend unconfirmed ({count}) — tap to expand",
     "industryWindow1d": "1D",
-    "industryRankingScope": "Median member return · TWSE+TPEx combined · ≥5 members — breadth view, differs from cap-weighted official indices"
+    "industryRankingScope": "Median member return · TWSE+TPEx combined · ≥5 members — breadth view, differs from cap-weighted official indices",
+    "watchlistMaReclaim": "↗ {count} watchlist stock(s) reclaimed MA: {names}"
   },
   "news": {
     "title": "Market News",

@@ -15,6 +15,7 @@ import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/domain/models/signal_names.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
+import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/responsive_helper.dart';
@@ -275,6 +276,68 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   }
 
   /// 建立推薦卡片([browsingContext] = 詳情頁左右滑的清單,預設同渲染清單)
+  /// MA 階段警示條(跌破/站回共用)
+  ///
+  /// 兩條刻意走同一個 builder:2026-07-31 只做了跌破,站回那半漏了一個月才
+  /// 補上——分開寫就是讓其中一半悄悄落後的典型結構。無觸發時完全不渲染。
+  Widget _maStageBanner({
+    required ThemeData theme,
+    required Set<String> codes,
+    required String labelKey,
+    required IconData icon,
+    required Color color,
+  }) {
+    return SliverToBoxAdapter(
+      child: Consumer(
+        builder: (context, ref, _) {
+          final items = ref.watch(watchlistProvider).items;
+          final hit = items
+              .where((i) => i.reasons.any(codes.contains))
+              .toList();
+          if (hit.isEmpty) return const SizedBox.shrink();
+          final names = hit.map((i) => i.stockName ?? i.symbol).join('、');
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(
+              DesignTokens.spacing16,
+              DesignTokens.spacing4,
+              DesignTokens.spacing16,
+              DesignTokens.spacing4,
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: DesignTokens.spacing12,
+                vertical: DesignTokens.spacing8,
+              ),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, size: 16, color: color),
+                  const SizedBox(width: DesignTokens.spacing8),
+                  Expanded(
+                    child: Text(
+                      labelKey.tr(
+                        namedArgs: {'count': '${hit.length}', 'names': names},
+                      ),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildRecommendationCard(
     BuildContext context,
     List<ModeRecommendation> recommendations,
@@ -627,66 +690,25 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           },
         ),
 
-        // 自選跌破警示條(2026-07-31 四階段風控):自選股當日觸發跌破
-        // 月線/季線時,開 app 第一屏直接撞見——風控不能靠記得去掃描頁看。
-        // 無跌破時完全不渲染,零噪音。
-        SliverToBoxAdapter(
-          child: Consumer(
-            builder: (context, ref, _) {
-              final items = ref.watch(watchlistProvider).items;
-              final broken = items
-                  .where((i) => i.reasons.any(SignalName.maStageBreak.contains))
-                  .toList();
-              if (broken.isEmpty) return const SizedBox.shrink();
-              final names = broken
-                  .map((i) => i.stockName ?? i.symbol)
-                  .join('、');
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  DesignTokens.spacing16,
-                  DesignTokens.spacing4,
-                  DesignTokens.spacing16,
-                  DesignTokens.spacing4,
-                ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: DesignTokens.spacing12,
-                    vertical: DesignTokens.spacing8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.error.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.trending_down,
-                        size: 16,
-                        color: theme.colorScheme.error,
-                      ),
-                      const SizedBox(width: DesignTokens.spacing8),
-                      Expanded(
-                        child: Text(
-                          'today.watchlistMaBreak'.tr(
-                            namedArgs: {
-                              'count': '${broken.length}',
-                              'names': names,
-                            },
-                          ),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.error,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
+        // 自選 MA 階段警示條:跌破(紅,2026-07-31 四階段風控)與站回
+        // (綠,2026-08-21)。開 app 第一屏直接撞見——風控不能靠記得去掃描頁
+        // 看,機會也一樣。兩條各自獨立渲染,同日都發生時並存不互相吃掉。
+        //
+        // 站回這半補得晚:RECLAIM_MA20/60 訊號一直有算、有落庫、有分數,
+        // 卻沒有任何地方顯示。實機 2026-08-21 台積電站回季線,第一屏全無提示。
+        _maStageBanner(
+          theme: theme,
+          codes: SignalName.maStageBreak,
+          labelKey: 'today.watchlistMaBreak',
+          icon: Icons.trending_down,
+          color: theme.colorScheme.error,
+        ),
+        _maStageBanner(
+          theme: theme,
+          codes: SignalName.maStageReclaim,
+          labelKey: 'today.watchlistMaReclaim',
+          icon: Icons.trending_up_rounded,
+          color: AppTheme.upColor,
         ),
 
         // 大盤總覽卡片（獨立 Consumer 隔離 market data rebuild）

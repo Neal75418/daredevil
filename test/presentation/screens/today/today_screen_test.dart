@@ -378,6 +378,75 @@ void main() {
       expect(find.byIcon(Icons.trending_down), findsNothing);
     });
 
+    // ── 站回均線警示條(2026-08-21)────────────────────────────────
+    //
+    // 跌破那半 2026-07-31 就做了,站回這半的訊號(RECLAIM_MA20/60)一直有算、
+    // 有落庫、有分數,卻沒有任何地方顯示——實機 8/21 台積電站回季線,
+    // 使用者的第一屏完全沒提示。風控看跌破、找機會看站回,兩邊對稱才完整。
+    testWidgets('🚨 自選站回均線顯示綠條(對稱於跌破條)', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          watchlistState: WatchlistState(
+            items: [
+              const WatchlistItemData(symbol: '2317', stockName: '鴻海'),
+              const WatchlistItemData(
+                symbol: '2330',
+                stockName: '台積電',
+                reasons: ['RECLAIM_MA60'],
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('today.watchlistMaReclaim'), findsOneWidget);
+      // 用 _rounded 變體辨識:trending_up 在本頁 SectionHeader 已被佔用,
+      // 拿它斷言會誤判(2026-08-21 寫測試時實際踩到)
+      expect(find.byIcon(Icons.trending_up_rounded), findsOneWidget);
+    });
+
+    testWidgets('自選無站回:綠條不渲染(零噪音,與跌破條同標準)', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          watchlistState: WatchlistState(
+            items: [const WatchlistItemData(symbol: '2330', stockName: '台積電')],
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('today.watchlistMaReclaim'), findsNothing);
+      expect(find.byIcon(Icons.trending_up_rounded), findsNothing);
+    });
+
+    testWidgets('🚨 跌破與站回同時發生時兩條並存(不得互相吃掉)', (tester) async {
+      // 修復期的典型盤面:有人剛垮、有人剛回來。任一條被另一條蓋掉,
+      // 使用者就會漏看其中一半。
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          watchlistState: WatchlistState(
+            items: [
+              const WatchlistItemData(
+                symbol: '3711',
+                stockName: '日月光投控',
+                reasons: ['BREAK_MA20'],
+              ),
+              const WatchlistItemData(
+                symbol: '2330',
+                stockName: '台積電',
+                reasons: ['RECLAIM_MA60'],
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('today.watchlistMaBreak'), findsOneWidget);
+      expect(find.text('today.watchlistMaReclaim'), findsOneWidget);
+    });
+
     testWidgets('shows refresh icon when not updating', (tester) async {
       widenViewport(tester);
       await tester.pumpWidget(buildTestWidget());
