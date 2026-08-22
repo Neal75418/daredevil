@@ -31,8 +31,9 @@ CHANGED="$(git diff-tree --no-commit-id --name-only -r HEAD)"
 #
 # 不擋 commit、不自動跑(校準要十幾分鐘且需要 calibration.db),只提醒。
 if echo "$CHANGED" | grep -qE '^lib/(domain/services/(rules/|rule_registry)|core/constants/(rule_|reason_type))'; then
-  echo ""
-  echo "📐 這次 commit 動到規則集——既有的 replay 樣本不含新行為。"
+  # 顏色只在 tty 生效;IDE 的 Git console 或重導向時自動退化成純文字。
+  if [ -t 1 ]; then B=$'\033[1m'; R=$'\033[1;31m'; G=$'\033[32m'; Z=$'\033[0m'
+  else B=''; R=''; G=''; Z=''; fi
   # 直接把答案算出來(1 秒、唯讀、--dry-run 不寫任何檔),而不是叫人去打
   # 指令:診斷放在使用者不會主動去的地方等於不存在。
   # 缺 calibration.db(換機/新 clone)時工具會安靜退出,這裡也就不印。
@@ -41,16 +42,23 @@ if echo "$CHANGED" | grep -qE '^lib/(domain/services/(rules/|rule_registry)|core
       --db tool/calibration.db --dry-run 2>/dev/null \
       | grep -A2 '所需資料都在')"
     if [ -n "$COVERAGE" ]; then
+      # 需要動作:粗框 + 紅色,和「沒事」明顯不同
+      echo ""
+      echo "${R}╔══════════════════════════════════════════════════════════╗${Z}"
+      echo "${R}║  📐 規則集已變動,而校準樣本不含新行為——需要重跑           ║${Z}"
+      echo "${R}╚══════════════════════════════════════════════════════════╝${Z}"
       echo "$COVERAGE" | sed 's/^/   /'
-      echo "   → 重跑 Stage 2(約 12 分鐘):"
+      echo ""
+      echo "   ${B}重跑 Stage 2(約 12 分鐘):${Z}"
       echo "     CALIBRATION_DB=tool/calibration.db flutter test test/tool/run_replay.dart"
+      echo ""
     else
-      echo "   ✅ 查過了:目前沒有「資料都在但缺樣本」的規則,不用重跑。"
+      # 沒事:一行帶過,不佔版面
+      echo "${G}📐 規則集有變動,已自動查過——無缺樣本規則,不用重跑。${Z}"
     fi
   else
-    echo "   (找不到 tool/calibration.db,略過涵蓋檢查)"
+    echo "📐 規則集有變動,但找不到 tool/calibration.db,略過涵蓋檢查。"
   fi
-  echo ""
 fi
 
 echo "$CHANGED" \
