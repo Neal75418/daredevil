@@ -13,20 +13,19 @@
 > **命名邊界（2026-08-07 由 AfterClose 更名）**：對外名稱、repo、Dart package 皆為 `daredevil`；但 **bundle ID 仍是 `com.neo.afterclose`、DB 檔名仍是 `afterclose.sqlite`** —— 它們決定 macOS 容器路徑（`~/Library/Containers/com.neo.afterclose/Data/Documents/`），改動等同 App 換家、既有資料庫（約 58.7 萬列價格，2026-08-07 實測）會看似清空。**除非做容器遷移，否則不要動這兩個字串**；文件裡出現它們是實體事實，不是漏改。
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart LR
-    subgraph Input["每日輸入"]
+    subgraph Input["🌐 每日輸入"]
         API["公開 API"]
         RSS["RSS 新聞"]
     end
 
-    subgraph Process["本地處理"]
+    subgraph Process["⚙️ 本地處理"]
         Sync["資料同步"]
         Rules["70 條規則"]
         Score["評分引擎"]
     end
 
-    subgraph Output["產出"]
+    subgraph Output["📱 產出"]
         Modes["三模式選股<br/>起漲 / 強勢 / 回檔"]
         Alert["異常警示"]
     end
@@ -35,6 +34,14 @@ flowchart LR
     RSS --> Sync
     Sync --> Rules --> Score --> Modes
     Score --> Alert
+
+    classDef ext fill:#F59E0B,stroke:#78350F,stroke-width:2px,color:#FFFFFF
+    classDef dom fill:#10B981,stroke:#065F46,stroke-width:2px,color:#FFFFFF
+    classDef pres fill:#4F46E5,stroke:#312E81,stroke-width:2px,color:#FFFFFF
+
+    class API,RSS ext
+    class Sync,Rules,Score dom
+    class Modes,Alert pres
 ```
 
 ---

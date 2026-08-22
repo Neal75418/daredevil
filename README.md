@@ -88,41 +88,46 @@ _See what changed, without noise._
 ### 資料流
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart LR
-    subgraph External["External APIs"]
-        TWSE["TWSE"]
-        TPEX["TPEX"]
-        FM["FinMind"]
-        TDCC["TDCC"]
-        RSS["RSS"]
+    subgraph EXT["🌐 外部資料源"]
+        API["TWSE · TPEx<br/>FinMind · TDCC"]
+        RSS["RSS 新聞"]
     end
 
-    subgraph Data["Data Layer"]
-        Remote["API Clients"]
-        Repo["Repositories"]
+    subgraph DATA["📦 Data Layer"]
+        CLI["API Clients"]
+        REPO["Repositories"]
         DB[("SQLite")]
     end
 
-    subgraph Domain["Domain Layer"]
-        IF["Interfaces"]
-        Services["Analysis / Scoring"]
-        Rules["Rule Engine"]
-        Update["Update Services"]
+    subgraph DOM["⚙️ Domain Layer"]
+        UPD["Update Services"]
+        ANA["Analysis / Scoring"]
+        RULE["Rule Engine"]
     end
 
-    subgraph Presentation["Presentation"]
-        Provider["Riverpod Providers"]
+    subgraph PRES["📱 Presentation"]
+        PROV["Riverpod Providers"]
         UI["Screens"]
     end
 
-    TWSE & TPEX & FM & TDCC & RSS --> Remote
-    Remote --> Repo --> DB
-    IF -.->|abstracts| Repo
-    DB --> Services --> Rules
-    Rules --> DB
-    Update --> Repo
-    DB --> Provider --> UI
+    API --> CLI
+    RSS --> CLI
+    CLI --> REPO --> DB
+    UPD -.-> CLI
+    DB --> ANA --> RULE
+    RULE -->|訊號寫回| DB
+    DB --> PROV --> UI
+
+    classDef ext fill:#F59E0B,stroke:#78350F,stroke-width:2px,color:#FFFFFF
+    classDef data fill:#8B5CF6,stroke:#4C1D95,stroke-width:2px,color:#FFFFFF
+    classDef dom fill:#10B981,stroke:#065F46,stroke-width:2px,color:#FFFFFF
+    classDef pres fill:#4F46E5,stroke:#312E81,stroke-width:2px,color:#FFFFFF
+
+    class API,RSS ext
+    class CLI,REPO,DB data
+    class UPD,ANA,RULE dom
+    class PROV,UI pres
 ```
 
 ### 目錄結構
