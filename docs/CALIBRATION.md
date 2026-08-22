@@ -137,37 +137,35 @@ dart run tool/recalibrate.dart
 candidate 檔在 `.gitignore` 內（`assets/*_candidate.json`），**`git diff` 對它們
 永遠是空的**——不是「沒變動」，是 git 根本不追蹤。
 
-#### 先看 active/score 變動（promote 決策真正需要的東西）
+#### 先看有效分數變動（`recalibrate.dart` 會自己印）
 
-```bash
-for h in short long; do
-  echo "── $h ──"
-  jq -n --slurpfile a assets/rule_scores_calibrated_$h.json \
-        --slurpfile b assets/rule_scores_calibrated_${h}_candidate.json -r '
-    ($a[0].rules // $a[0]) as $old | ($b[0].rules // $b[0]) as $new |
-    (($old|keys) + ($new|keys) | unique) as $ids |
-    [ $ids[] | . as $id |
-      ($old[$id] // {active:false,score:0}) as $o |
-      ($new[$id] // {active:false,score:0}) as $n |
-      select(($o.active != $n.active) or ($o.score != $n.score)) |
-      { rule:$id,
-        from:(if $o.active then "on \($o.score)" else "off" end),
-        to:(if $n.active then "on \($n.score)" else "off" end) } ]
-    | if length==0 then "  (無 active/score 變動)"
-      else (.[] | "  \(.rule)：\(.from) → \(.to)") end'
-done
-```
-
-輸出長這樣（2026-07-13 那次的實際結果）：
+跑完 `recalibrate.dart` 的輸出尾端就是這段，不需要額外指令：
 
 ```
-── short ──
-  (無 active/score 變動)
-── long ──
-  EPS_CONSECUTIVE_GROWTH：on 22 → on 35
-  INSTITUTIONAL_BUY：off → on 10
-  WEEK_52_HIGH：off → on 19
+═══ Promote 影響(App 有效分數)═══
+  short（負證據歸零生效）:9 條有效分數變動
+    COILING_BELOW_MA60             8 → 0
+    MA_ALIGNMENT_BULLISH           0 → 22
+    PRICE_SPIKE                   15 → 0
+    RECLAIM_MA20                   8 → 0
+    REVERSAL_W2S                  35 → 0
+    ...
+  long（負證據歸零不套用）:3 條有效分數變動
+    EPS_CONSECUTIVE_GROWTH        22 → 35
+    INSTITUTIONAL_BUY             18 → 10
+    WEEK_52_HIGH                  28 → 27
 ```
+
+**為什麼不能自己拿 jq 比 `active`／`score`**（2026-08-22 實際踩到）：
+`active:false, score:0` 與「規則根本不在 JSON 裡」在 App 眼中是兩回事——
+前者可能被負證據歸零（`lookup` 回 0），後者 fallback 到 hardcoded 分。
+本檔曾放過一段這樣比的 jq，短線報「無變動」而實際有 9 條改變。
+同日 walk-forward gate 也栽在同一個坑（`parseCalibratedScores` 把 cut／
+缺席都當 0，導致 OLD arm 被低估、長線平均勝幅虛報成 +5.60，修正後是
+−0.048）。
+
+判讀時走 `CalibratedScoresTable.lookup` 是唯一正解，`recalibrate.dart` 的
+`diffEffectiveScores()` 就是這樣做的。
 
 #### 要細節再看全文 diff
 
