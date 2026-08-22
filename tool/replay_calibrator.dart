@@ -627,8 +627,12 @@ class ReplayCalibrator {
   /// 組裝特定日期 cut-off 的 [StockData]
   ///
   /// 所有 history list 都會被過濾成 `date <= currentDate`。非 backfillable
-  /// 的欄位（dividendHistory / news / marketData）傳 null，讓對應 rules
-  /// 自然 no-fire。
+  /// 的欄位（dividendHistory / news）傳 null，讓對應 rules 自然 no-fire。
+  ///
+  /// `marketData` 自 2026-08-22 起**部分**填入：當沖比率有 backfill phase
+  /// 所以接上了（見主迴圈）；外資持股／集保／質押／警示／內部人仍為 null，
+  /// 那些資料這條管線沒有 phase（見
+  /// `CalibrationThresholds.notBackfillableReasons`）。
   StockData _buildStockData({
     required String symbol,
     required _BackfilledData data,

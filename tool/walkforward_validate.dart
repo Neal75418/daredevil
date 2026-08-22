@@ -37,10 +37,6 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:daredevil/data/database/app_database.dart';
-import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_table.dart';
-import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
-import 'package:daredevil/core/constants/reason_type.dart';
-import 'package:daredevil/core/constants/scoring_mode.dart';
 
 import 'recalibrate.dart' as recal;
 import 'replay_calibrator.dart';
@@ -378,39 +374,21 @@ Map<String, int> parseCalibratedScores(String jsonStr) {
   return result;
 }
 
-/// App 實際使用的「規則 → 有效分數」，供 gate 的兩個 arm 共用。
+/// gate 的兩個 arm 共用 `recalibrate` 的 [recal.effectiveScores]。
 ///
-/// **為什麼不能用 [parseCalibratedScores]**（2026-08-22）：它只取 raw
-/// `score`，被 cut 或不在 JSON 裡的規則一律當 0。但 App 走
-/// [CalibratedScoresTable.lookup] 的三態語意——cut／缺席回 null、呼叫端
-/// fallback 到 hardcoded 分，只有「多方宣稱 + avg<0 + t≤−1.5」的負證據
-/// 規則才真的歸零（見 `calibrated_scores_registry.dart`）。
-///
-/// 差異不是理論上的：2026-08-22 長線實測，gate 眼中 OLD 只有
-/// `{EPS_CONSECUTIVE_GROWTH: 22}` 一條，App 同時還有 INSTITUTIONAL_BUY=18、
-/// WEEK_52_HIGH=28 在跑。於是「18 → 10」被記成 +10 的收益（實際 −8）、
-/// 「28 → 27」被記成 +27（實際 −1）——三條變動兩條方向相反。gate 若不
-/// 走這條路，量的就不是會上線的評分函式。
-///
-/// [applyZeroing] 對應 `registry` 的 `horizon == Horizon.short`。
+/// **刻意不在此重寫一份**（2026-08-22）：今天最大的那個 bug 正是
+/// walkforward 用自己的 `parseCalibratedScores` 重寫了 App 的 lookup 語意
+/// （cut／缺席當 0，而非 fallback 到 hardcoded），使 OLD arm 被低估、長線
+/// 平均勝幅虛報成 +5.60（實際 −0.048）。同一段語意存兩份，遲早再分岔一次。
 Map<String, int> effectiveScores(
   String jsonStr, {
   Map<String, int>? hardcodedScores,
   bool applyZeroing = false,
-}) {
-  final hard =
-      hardcodedScores ?? {for (final r in ReasonType.values) r.code: r.score};
-  final table = CalibratedScoresTable.parseJson(
-    jsonStr,
-    // horizon 只影響診斷字串，不影響 lookup 語意；歸零由 applyZeroing 控制
-    horizon: applyZeroing ? Horizon.short : Horizon.long,
-    knownRuleIds: hard.keys.toSet(),
-    hardcodedScores: hard,
-    applyNegativeEvidenceZeroing: applyZeroing,
-    structuralExemptions: ModeFilters.modeCRequiredAnyOf,
-  ).table;
-  return {for (final id in hard.keys) id: table.lookup(id) ?? hard[id] ?? 0};
-}
+}) => recal.effectiveScores(
+  jsonStr,
+  hardcodedScores: hardcodedScores,
+  applyZeroing: applyZeroing,
+);
 
 // ============================================================================
 // CLI entry
