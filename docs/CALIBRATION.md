@@ -134,9 +134,54 @@ dart run tool/recalibrate.dart
 
 ### 2. 看 diff
 
+candidate 檔在 `.gitignore` 內（`assets/*_candidate.json`），**`git diff` 對它們
+永遠是空的**——不是「沒變動」，是 git 根本不追蹤。
+
+#### 先看 active/score 變動（promote 決策真正需要的東西）
+
 ```bash
-git diff assets/rule_scores_calibrated_*_candidate.json
+for h in short long; do
+  echo "── $h ──"
+  jq -n --slurpfile a assets/rule_scores_calibrated_$h.json \
+        --slurpfile b assets/rule_scores_calibrated_${h}_candidate.json -r '
+    ($a[0].rules // $a[0]) as $old | ($b[0].rules // $b[0]) as $new |
+    (($old|keys) + ($new|keys) | unique) as $ids |
+    [ $ids[] | . as $id |
+      ($old[$id] // {active:false,score:0}) as $o |
+      ($new[$id] // {active:false,score:0}) as $n |
+      select(($o.active != $n.active) or ($o.score != $n.score)) |
+      { rule:$id,
+        from:(if $o.active then "on \($o.score)" else "off" end),
+        to:(if $n.active then "on \($n.score)" else "off" end) } ]
+    | if length==0 then "  (無 active/score 變動)"
+      else (.[] | "  \(.rule)：\(.from) → \(.to)") end'
+done
 ```
+
+輸出長這樣（2026-07-13 那次的實際結果）：
+
+```
+── short ──
+  (無 active/score 變動)
+── long ──
+  EPS_CONSECUTIVE_GROWTH：on 22 → on 35
+  INSTITUTIONAL_BUY：off → on 10
+  WEEK_52_HIGH：off → on 19
+```
+
+#### 要細節再看全文 diff
+
+```bash
+diff <(jq -S . assets/rule_scores_calibrated_long.json) \
+     <(jq -S . assets/rule_scores_calibrated_long_candidate.json)
+```
+
+`jq -S` 先排序 key，否則欄位順序變動會混進 diff。這份可能有數百行——某個
+horizon 隔了幾輪沒 promote 時，樣本數與 t_stat 全表都會動，所以先看上面的
+摘要、需要追問再展開。
+
+剛 promote 完兩檔會完全相同（promote＝把 candidate 複製成 production），
+此時空輸出是正確的。
 
 **檢查重點**：
 - 分數變動幅度是否合理？（突然大增減要查）
@@ -414,4 +459,5 @@ rate-limit retry 每輪從頭重抓推不動（commit 8a4debd 修復）。
 - **雙 horizon** 策略：短 5D + 長 60D，每條規則在兩個 horizon 各有獨立分數
 - Cut threshold **嚴格版**：t_stat<1.5 / hit_rate<55% / n<30
 - **月度人工 review gate**：絕不自動覆寫 production
+  （*節奏部分已於 2026-08-22 修訂為事件觸發，見上方「何時該跑 calibration」；「絕不自動覆寫」不變*）
 - Stage 2 只建 pipeline，**不消費** JSON（消費工作在 Stage 5，需真實資料驗證架構）
