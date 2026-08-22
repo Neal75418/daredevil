@@ -432,6 +432,7 @@ class RunMeta {
     required this.excessThreshold,
     this.baselineHit5,
     this.baselineHit60,
+    this.generatedAt,
   });
 
   final String returnMode;
@@ -439,7 +440,27 @@ class RunMeta {
   final double? baselineHit5;
   final double? baselineHit60;
 
+  /// replay 落檔時間（UTC）。舊 DB 或格式壞掉 → null，此時不做陳舊判定。
+  final DateTime? generatedAt;
+
   bool get isExcess => returnMode == 'excess';
+}
+
+/// replay 樣本相對於 [now] 的年齡。[generatedAt] 為 null → null（不知道就
+/// 不下結論，寧可不提示也不要提示錯的）。
+///
+/// 未來時間戳（時鐘偏移）會得到負數天且 `isStale == false`——那是時鐘問題，
+/// 不是資料過期，不該混為一談。
+({int days, bool isStale})? classifyReplayAge(
+  DateTime? generatedAt,
+  DateTime now,
+) {
+  if (generatedAt == null) return null;
+  final days = now.toUtc().difference(generatedAt.toUtc()).inDays;
+  return (
+    days: days,
+    isStale: days > CalibrationThresholds.staleReplayWarnDays,
+  );
 }
 
 /// 讀 `calibration_run_meta`。表不存在（舊 DB、replay 未重跑）→ null。
@@ -459,6 +480,8 @@ RunMeta? readRunMeta(Database db) {
         double.tryParse(map['excess_success_threshold'] ?? '') ?? 0.0,
     baselineHit5: double.tryParse(map['universe_baseline_hit_5d'] ?? ''),
     baselineHit60: double.tryParse(map['universe_baseline_hit_60d'] ?? ''),
+    // 一律轉 UTC：落庫是 UTC ISO8601，若被當成本地時間比較會差 8 小時。
+    generatedAt: DateTime.tryParse(map['generated_at'] ?? '')?.toUtc(),
   );
 }
 
@@ -507,6 +530,30 @@ final _thresholdLong =
 
 const _formulaVersion = 'linear_map_v1';
 
+/// 印出這份 DB 的 replay 落檔時間，過舊則示警。
+///
+/// 只跑本工具（= 三階段的最後一段）會拿舊 replay 樣本重算，而 exit code 0、
+/// candidate JSON 照常產出、無任何異常——把時間戳印出來是唯一能當場看見的
+/// 訊號。刻意只重算末段是合法用法，所以這裡不擋、只提示。
+void _printReplayFreshness(Database db) {
+  final generatedAt = readRunMeta(db)?.generatedAt;
+  final age = classifyReplayAge(generatedAt, DateTime.now().toUtc());
+  if (age == null) {
+    print('📅 replay 落檔時間：未知（舊 DB 無 generated_at）');
+    return;
+  }
+  final stamp = generatedAt!.toIso8601String();
+  print('📅 replay 落檔於 $stamp（${age.days} 天前）');
+  if (age.isStale) {
+    print(
+      '⚠️  超過 ${CalibrationThresholds.staleReplayWarnDays} 天——本次只重算'
+      '評分，不會重跑 backfill／replay。',
+    );
+    print('   若規則或資料在這段期間有變動，請改跑完整管線：');
+    print('   ./scripts/calibrate.sh（會限流時用 ./scripts/calibrate-retry.sh）');
+  }
+}
+
 Future<void> main(List<String> args) async {
   final config = _parseArgs(args);
   if (config == null) {
@@ -539,6 +586,7 @@ Future<void> main(List<String> args) async {
   }
 
   final db = sqlite3.open(dbPath, mode: OpenMode.readOnly);
+  _printReplayFreshness(db);
   final horizonResults = <String, HorizonOutput>{};
   try {
     for (final horizon in _horizonsToProcess(config.horizon)) {

@@ -189,4 +189,17 @@ abstract final class CalibrationThresholds {
   /// **30 天為保守閾值**：正常交易的股票最多幾天無成交（連假 + 緩衝），
   /// 30 天涵蓋任何可能的長假期，同時不會誤殺短暫停牌股。
   static const int stalePriceThresholdDays = 30;
+
+  /// replay 資料多久之後，recalibrate 該對使用者示警（天）。
+  ///
+  /// **為什麼需要這個警告**：完整校準是 backfill → replay → recalibrate 三
+  /// 階段（`scripts/calibrate.sh`），但只跑第三階段也會成功——exit code 0、
+  /// candidate JSON 照常產出、無任何異常訊息，拿到的卻是基於舊 replay 樣本
+  /// 的分數。與 launchd CLI 產物落後同屬「過期但三個訊號全正常」，同樣靠把
+  /// 時間戳印出來解決。
+  ///
+  /// **為什麼是 30 天**：規則與資料的改動節奏以月計；一個月內的 replay 樣本
+  /// 重算仍有意義，超過就該連 backfill 一起重跑。這是提示而非硬性阻擋——
+  /// 刻意只重算末段是合法用法，警告只負責讓它變成有意識的選擇。
+  static const int staleReplayWarnDays = 30;
 }
