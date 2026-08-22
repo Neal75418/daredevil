@@ -2,7 +2,10 @@
 
 > ← [Back to README](../README.md)
 
-Daredevil 推薦規則引擎 — **64 條異常偵測規則**（產生 66 種 reason type；2 條規則各發 2 種）
+Daredevil 推薦規則引擎 — **70 條異常偵測規則**（產生 72 種 reason type）
+
+> 權威數字：`RuleRegistry.defaultRules.length` 與 `ReasonType` enum。四份文件的規則數
+> 由 `test/docs/doc_rule_count_consistency_test.dart` 守住，新增規則時會提醒同步。
 
 ---
 

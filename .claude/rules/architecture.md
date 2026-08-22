@@ -28,7 +28,7 @@ flowchart TB
         RepoIF["repositories/ — 介面"]
         Services["services/ — Analysis, Scoring, Screening, etc."]
         Update["services/update/ — syncers + helpers + coordinator"]
-        Rules["services/rules/ — 64 rules"]
+        Rules["services/rules/ — 70 rules"]
     end
 
     subgraph Presentation["presentation/"]

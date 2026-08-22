@@ -46,7 +46,9 @@ _See what changed, without noise._
 | **Calendar**                   | 事件行事曆                            |
 | **Industry**                   | 產業概覽                             |
 | **Short Sell Ranking**         | 融券排行                             |
-| **Recommendation Performance** | 推薦績效追蹤與回測                        |
+| **Institutional**              | 法人買賣超                            |
+| **Quarterly**                  | 季報財務                             |
+| **Revenue**                    | 月營收                              |
 | **Settings**                   | 偏好設定                             |
 | **Onboarding**                 | 首次使用引導                           |
 
@@ -74,7 +76,7 @@ _See what changed, without noise._
 | 資料   | 來源                                    | 頻率 |
 |:-----|:--------------------------------------|:---|
 | 台股日價 | TWSE / TPEX Open Data (主)、FinMind (備) | 每日 |
-| 法人籌碼 | FinMind                               | 每日 |
+| 法人籌碼 | TWSE T86 / TPEX（免費全市場）              | 每日 |
 | 基本面  | TWSE / TPEX / FinMind                 | 每週 |
 | 集保分布 | TDCC                                  | 每週 |
 | 新聞   | 多源 RSS                                | 即時 |
@@ -96,22 +98,22 @@ flowchart LR
     end
 
     subgraph Data["Data Layer"]
-        Remote["API Clients (5)"]
-        Repo["Repositories (17)"]
+        Remote["API Clients"]
+        Repo["Repositories"]
         TDCC["TDCC"]
         DB[("SQLite")]
     end
 
     subgraph Domain["Domain Layer"]
-        IF["Interfaces (12)"]
+        IF["Interfaces"]
         Services["Analysis / Scoring"]
-        Rules["Rule Engine (64)"]
-        Update["Update Services (14)"]
+        Rules["Rule Engine"]
+        Update["Update Services"]
     end
 
     subgraph Presentation["Presentation"]
         Provider["Riverpod Providers"]
-        UI["13 Screens"]
+        UI["Screens"]
     end
 
     TWSE & TPEX & FM & TDCC & RSS --> Remote
@@ -142,13 +144,13 @@ lib/
 │   ├── models/          # Domain 模型
 │   ├── repositories/    # 抽象介面
 │   └── services/
-│       ├── rules/       # 64 條規則 (14 檔案)
-│       ├── update/      # 14 元件 (10 syncers + 3 helpers + coordinator)
+│       ├── rules/       # 規則引擎（權威數字見 RuleRegistry.defaultRules）
+│       ├── update/      # syncers + helpers + coordinator
 │       ├── analysis/    # 分析子服務
 │       └── ...          # Scoring / Screening / RuleAccuracy 等服務
 └── presentation/
     ├── providers/       # Riverpod Notifiers / Loaders / State
-    ├── screens/         # 13 screens
+    ├── screens/         # 各功能頁面
     ├── controllers/     # Business logic facades
     ├── mappers/         # DTO → UI model 轉換
     └── widgets/         # 共用 UI 元件
@@ -168,22 +170,23 @@ lib/
 
 ## 推薦系統
 
-64 條異常偵測規則（產生 66 種 reason type），涵蓋技術面、籌碼面、基本面。
+70 條異常偵測規則（產生 72 種 reason type），涵蓋技術面、籌碼面、基本面。
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
-pie showData title 依類別分佈（66 reason / 64 規則）
-    "技術型態 (21)" : 21
-    "價量訊號 (12)" : 12
-    "基本面 (15)" : 15
-    "籌碼面 (7)" : 7
-    "殺手級功能 (7)" : 7
-    "強股回檔 (4)" : 4
+pie showData title 規則依類別分佈
+    "技術型態" : 21
+    "價量訊號" : 12
+    "基本面" : 15
+    "籌碼面" : 7
+    "殺手級功能" : 7
+    "強股回檔" : 4
 ```
 
-- 每日掃描上市 + 上櫃約 **1,770 檔**，依「股票在趨勢中的階段」分流到**三個觀察模式**
+- 每日掃描上市 + 上櫃全市場，依「股票在趨勢中的階段」分流到**三個觀察模式**
+  （當前可交易檔數隨新股上市／下市浮動，更新日誌的 `CandidateSelector` 會印出實際候選數）
 - 每檔最多 **2 條理由**，分數上限 **80 分**
-- 200+ 可調參數分散於 8 個 typed param classes
+- 可調參數集中於 `lib/core/constants/rule_params_*.dart` 的 typed param classes
 
 詳見 [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)
 
@@ -240,7 +243,7 @@ flutter test test/domain/services/ # 測試特定目錄
 | [CLAUDE.md](CLAUDE.md)                                   | AI 開發指引         |
 | [RELEASE.md](RELEASE.md)                                 | 發布建置指南          |
 | [CHANGELOG.md](CHANGELOG.md)                             | 版本變更紀錄          |
-| [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)               | 規則引擎定義 (64 條規則) |
+| [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)               | 規則引擎定義 (70 條規則) |
 | [docs/PENDING_UPGRADES.md](docs/PENDING_UPGRADES.md)     | 依賴升級紀錄          |
 | [docs/TEST_COVERAGE_PLAN.md](docs/TEST_COVERAGE_PLAN.md) | 測試覆蓋率計劃         |
 
