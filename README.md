@@ -22,64 +22,64 @@ _See what changed, without noise._
 
 > 收盤後自動掃描全市場，找出「今天跟平常不一樣」的股票
 
-| 原則            | 說明                   | 優勢        |
-|:--------------|:---------------------|:----------|
-| **On-Device** | 所有運算在裝置端完成           | 隱私保護、離線可用 |
-| **零成本**       | 免費公開 API + 本地 SQLite | 無月費、無訂閱   |
-| **盤後批次**      | 收盤後一次更新              | 省電、省流量    |
-| **異常提示**      | 只說「發生什麼」不說「該怎麼做」     | 客觀、不帶立場   |
+| 原則          | 說明                             | 優勢               |
+|:--------------|:---------------------------------|:-------------------|
+| **On-Device** | 所有運算在裝置端完成             | 隱私保護、離線可用 |
+| **零成本**    | 免費公開 API + 本地 SQLite       | 無月費、無訂閱     |
+| **盤後批次**  | 收盤後一次更新                   | 省電、省流量       |
+| **異常提示**  | 只說「發生什麼」不說「該怎麼做」 | 客觀、不帶立場     |
 
 ---
 
 ## 功能
 
-| 頁面                             | 功能                               |
-|:-------------------------------|:---------------------------------|
-| **Today**                      | 市場摘要 + 三模式選股（起漲候選 / 強勢觀察 / 回檔觀察） |
-| **Scan**                       | 上市櫃全市場掃描，依評分排序                   |
-| **Watchlist**                  | 自選清單狀態追蹤 + 無限滾動分頁                |
-| **Stock Detail**               | 趨勢、關鍵價位、推薦理由、新聞                  |
-| **Comparison**                 | 多檔股票並列比較                         |
-| **Portfolio**                  | 持倉追蹤與損益計算                        |
-| **News**                       | 多源 RSS 新聞彙整                      |
-| **Alerts**                     | 23 種價格與技術指標警示                    |
-| **Calendar**                   | 事件行事曆                            |
-| **Industry**                   | 產業概覽                             |
-| **Short Sell Ranking**         | 融券排行                             |
-| **Institutional**              | 法人買賣超                            |
-| **Quarterly**                  | 季報財務                             |
-| **Revenue**                    | 月營收                              |
-| **Settings**                   | 偏好設定                             |
-| **Onboarding**                 | 首次使用引導                           |
+| 頁面                   | 功能                                                    |
+|:-----------------------|:--------------------------------------------------------|
+| **Today**              | 市場摘要 + 三模式選股（起漲候選 / 強勢觀察 / 回檔觀察） |
+| **Scan**               | 上市櫃全市場掃描，依評分排序                            |
+| **Watchlist**          | 自選清單狀態追蹤 + 無限滾動分頁                         |
+| **Stock Detail**       | 趨勢、關鍵價位、推薦理由、新聞                          |
+| **Comparison**         | 多檔股票並列比較                                        |
+| **Portfolio**          | 持倉追蹤與損益計算                                      |
+| **News**               | 多源 RSS 新聞彙整                                       |
+| **Alerts**             | 23 種價格與技術指標警示                                 |
+| **Calendar**           | 事件行事曆                                              |
+| **Industry**           | 產業概覽                                                |
+| **Short Sell Ranking** | 融券排行                                                |
+| **Institutional**      | 法人買賣超                                              |
+| **Quarterly**          | 季報財務                                                |
+| **Revenue**            | 月營收                                                  |
+| **Settings**           | 偏好設定                                                |
+| **Onboarding**         | 首次使用引導                                            |
 
 ---
 
 ## 技術棧
 
-| 類別              | 技術                                       | 版本                        |
-|:----------------|:-----------------------------------------|:--------------------------|
-| Framework       | Flutter + Dart                           | 3.38 / 3.10               |
-| State           | Riverpod                                 | 3.2.1                     |
-| Database        | Drift (SQLite)                           | 2.32                      |
-| Network         | Dio                                      | 5.9.2                     |
-| Navigation      | GoRouter                                 | 17.1.0                    |
-| Charts          | fl_chart + k_chart_plus                  | —                         |
-| Code Gen        | Drift Dev                                | —                         |
-| Testing         | Flutter Test + Mocktail                  | —                         |
-| CI/CD           | GitHub Actions + Codecov                 | —                         |
-| Crash Reporting | Sentry                                   | 9.15.0                    |
+| 類別 | 技術 |
+|:---|:---|
+| Framework | Flutter 3.38 + Dart 3.10 |
+| State | Riverpod 3.2.1 |
+| Database | Drift (SQLite) 2.32 |
+| Network | Dio 5.9.2 |
+| Navigation | GoRouter 17.1.0 |
+| Crash Reporting | Sentry 9.15.0 |
+| Charts | fl_chart + k_chart_plus |
+| Code Gen | Drift Dev |
+| Testing | Flutter Test + Mocktail |
+| CI/CD | GitHub Actions + Codecov |
 
 ---
 
 ## 資料來源
 
-| 資料   | 來源                                    | 頻率 |
-|:-----|:--------------------------------------|:---|
+| 資料     | 來源                                     | 頻率 |
+|:---------|:-----------------------------------------|:-----|
 | 台股日價 | TWSE / TPEX Open Data (主)、FinMind (備) | 每日 |
-| 法人籌碼 | TWSE T86 / TPEX（免費全市場）              | 每日 |
-| 基本面  | TWSE / TPEX / FinMind                 | 每週 |
-| 集保分布 | TDCC                                  | 每週 |
-| 新聞   | 多源 RSS                                | 即時 |
+| 法人籌碼 | TWSE T86 / TPEX（免費全市場）            | 每日 |
+| 基本面   | TWSE / TPEX / FinMind                    | 每週 |
+| 集保分布 | TDCC                                     | 每週 |
+| 新聞     | 多源 RSS                                 | 即時 |
 
 ---
 
@@ -232,14 +232,14 @@ flutter test test/domain/services/ # 測試特定目錄
 
 ## 文件
 
-| 文件                                                       | 說明              |
-|:---------------------------------------------------------|:----------------|
-| [CLAUDE.md](CLAUDE.md)                                   | AI 開發指引         |
-| [RELEASE.md](RELEASE.md)                                 | 發布建置指南          |
-| [CHANGELOG.md](CHANGELOG.md)                             | 版本變更紀錄          |
+| 文件                                                     | 說明                     |
+|:---------------------------------------------------------|:-------------------------|
+| [CLAUDE.md](CLAUDE.md)                                   | AI 開發指引              |
+| [RELEASE.md](RELEASE.md)                                 | 發布建置指南             |
+| [CHANGELOG.md](CHANGELOG.md)                             | 版本變更紀錄             |
 | [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)               | 規則引擎定義 (70 條規則) |
-| [docs/PENDING_UPGRADES.md](docs/PENDING_UPGRADES.md)     | 依賴升級紀錄          |
-| [docs/TEST_COVERAGE_PLAN.md](docs/TEST_COVERAGE_PLAN.md) | 測試覆蓋率計劃         |
+| [docs/PENDING_UPGRADES.md](docs/PENDING_UPGRADES.md)     | 依賴升級紀錄             |
+| [docs/TEST_COVERAGE_PLAN.md](docs/TEST_COVERAGE_PLAN.md) | 測試覆蓋率計劃           |
 
 ---
 

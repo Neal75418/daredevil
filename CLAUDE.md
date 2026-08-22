@@ -8,9 +8,14 @@
 
 **Daredevil** — 本地優先盤後台股掃描 App（Flutter / Dart 3）。所有運算在裝置端完成，無雲端依賴。
 
-> **⚠️ 更名的隱藏代價（2026-08-08 實機踩到）**：`PRODUCT_NAME` 改了會產生**新的 .app bundle 名**，而舊的 `afterclose.app` 仍留在 `build/` 且**與新 bundle 共用同一個 bundle ID**。LaunchServices 會把該 ID 解析到舊的那個 → 新 app 要求通知授權時系統當場回絕（`requestAuthorization` 4ms 回 false、無對話框、無系統日誌）。清法：`lsregister -u <舊.app>`、刪掉舊 bundle、`lsregister -f <新.app>`。另注意 `flutter run` 是由 dartvm 直接啟動、不走 LaunchServices，通知相關問題要用 `open <app>` 啟動才有代表性。
+> **⚠️ 更名的隱藏代價（2026-08-08 實機踩到）**：`PRODUCT_NAME` 改了會產生**新的 .app bundle 名**，而舊的 `afterclose.app` 仍留在 `build/` 且**與新 bundle 共用同一個 bundle ID**。
+> LaunchServices 會把該 ID 解析到舊的那個 → 新 app 要求通知授權時系統當場回絕（`requestAuthorization` 4ms 回 false、無對話框、無系統日誌）。
+> 清法：`lsregister -u <舊.app>`、刪掉舊 bundle、`lsregister -f <新.app>`。
+> 另注意 `flutter run` 是由 dartvm 直接啟動、不走 LaunchServices，通知相關問題要用 `open <app>` 啟動才有代表性。
 
-> **命名邊界（2026-08-07 由 AfterClose 更名）**：對外名稱、repo、Dart package 皆為 `daredevil`；但 **bundle ID 仍是 `com.neo.afterclose`、DB 檔名仍是 `afterclose.sqlite`** —— 它們決定 macOS 容器路徑（`~/Library/Containers/com.neo.afterclose/Data/Documents/`），改動等同 App 換家、既有資料庫（約 58.7 萬列價格，2026-08-07 實測）會看似清空。**除非做容器遷移，否則不要動這兩個字串**；文件裡出現它們是實體事實，不是漏改。
+> **命名邊界（2026-08-07 由 AfterClose 更名）**：對外名稱、repo、Dart package 皆為 `daredevil`；
+> 但 **bundle ID 仍是 `com.neo.afterclose`、DB 檔名仍是 `afterclose.sqlite`** —— 它們決定 macOS 容器路徑（`~/Library/Containers/com.neo.afterclose/Data/Documents/`），改動等同 App 換家、既有資料庫（約 58.7 萬列價格，2026-08-07 實測）會看似清空。
+> **除非做容器遷移，否則不要動這兩個字串**；文件裡出現它們是實體事實，不是漏改。
 
 ```mermaid
 flowchart LR
@@ -61,20 +66,20 @@ dart format .                                                  # 格式化 (pre-
 
 ## 關鍵路徑
 
-| 路徑                                               | 說明                                             |
-|:-------------------------------------------------|:-----------------------------------------------|
-| `lib/core/constants/rule_params.dart`            | 規則參數 barrel（8 domain param 檔 + enums + scores） |
-| `lib/core/constants/analysis_params.dart`        | 分析摘要 + 交易成本參數                                  |
-| `lib/core/exceptions/app_exception.dart`         | 例外階層 (sealed class)                            |
-| `lib/core/utils/request_deduplicator.dart`       | Request Deduplication 機制                       |
-| `lib/domain/services/rules/`                     | 70 條規則 (15 檔案，權威數字見 `RuleRegistry.defaultRules`) |
-| `lib/domain/services/scoring_isolate.dart`       | Isolate 評分 (typed DTO 序列化)                     |
-| `lib/domain/services/update/`                    | 更新元件 (10 syncers + 3 helpers + coordinator + 快照/歸零報告各 1) |
-| `lib/data/database/tables/`                      | Drift 資料表定義                                    |
-| `lib/data/database/dao/batch_query_mixin.dart`   | 批次查詢共享工具 (groupBySymbol)                       |
-| `lib/domain/services/rule_accuracy_service.dart` | 推薦績效回測引擎 (多週期驗證)                               |
-| `lib/domain/services/thesis/`                    | 釘選論點失效（timeStop；hardStop/trendBreak 被 gate 砍）  |
-| `lib/core/theme/semantic_colors.dart`            | 色彩語意分類（紅綠專屬股價，見守門測試）              |
+| 路徑                                             | 說明                                                                                                                                     |
+|:-------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------|
+| `lib/core/constants/rule_params.dart`            | 規則參數 barrel（8 domain param 檔 + enums + scores）                                                                                    |
+| `lib/core/constants/analysis_params.dart`        | 分析摘要 + 交易成本參數                                                                                                                  |
+| `lib/core/exceptions/app_exception.dart`         | 例外階層 (sealed class)                                                                                                                  |
+| `lib/core/utils/request_deduplicator.dart`       | Request Deduplication 機制                                                                                                               |
+| `lib/domain/services/rules/`                     | 70 條規則 (15 檔案，權威數字見 `RuleRegistry.defaultRules`)                                                                              |
+| `lib/domain/services/scoring_isolate.dart`       | Isolate 評分 (typed DTO 序列化)                                                                                                          |
+| `lib/domain/services/update/`                    | 更新元件 (10 syncers + 3 helpers + coordinator + 快照/歸零報告各 1)                                                                      |
+| `lib/data/database/tables/`                      | Drift 資料表定義                                                                                                                         |
+| `lib/data/database/dao/batch_query_mixin.dart`   | 批次查詢共享工具 (groupBySymbol)                                                                                                         |
+| `lib/domain/services/rule_accuracy_service.dart` | 推薦績效回測引擎 (多週期驗證)                                                                                                            |
+| `lib/domain/services/thesis/`                    | 釘選論點失效（timeStop；hardStop/trendBreak 被 gate 砍）                                                                                 |
+| `lib/core/theme/semantic_colors.dart`            | 色彩語意分類（紅綠專屬股價，見守門測試）                                                                                                 |
 | `lib/core/theme/color_contrast.dart`             | WCAG 對比度／色相／疊色計算——**色彩守門測試專用公式庫**（執行期生產碼不 import；留在 lib/ 是為與色彩宣告同住、供未來生產消費者直接取用） |
 
 ---
@@ -92,9 +97,13 @@ dart format .                                                  # 格式化 (pre-
 
 `post-commit`：動到 `lib/`、`bin/`、`tool/`、`ops/launchd/`、`pubspec` 時**背景重編 launchd 的 CLI 產物**（`install.sh --cli-only`，約 9s）。
 
-> **🚨 為什麼需要它（2026-08-15 實機）**：launchd 跑的是 **AOT 編譯產物**，不是 source——GUI 點 IDEA 箭頭每次重編所以永遠最新，但 CLI 不會。產物落後時**三個訊號全部正常**：exit code 0、`update_run` 記 SUCCESS、日誌無異常。實測落後 3 天（binary 編於 8/12，期間 `lib/` 有 14 個 commit，其中包含當天才修的運維可見性——修了但一行都沒生效），是靠 `ls -la` 看檔案時間戳才撞見的。CLI 的編譯閉包涵蓋整個 `lib/`，**任何規則/評分/syncer 改動都算**，靠人工判斷「算不算重大改動」不可靠。
+> **🚨 為什麼需要它（2026-08-15 實機）**：launchd 跑的是 **AOT 編譯產物**，不是 source——GUI 點 IDEA 箭頭每次重編所以永遠最新，但 CLI 不會。
+> 產物落後時**三個訊號全部正常**：exit code 0、`update_run` 記 SUCCESS、日誌無異常。
+> 實測落後 3 天（binary 編於 8/12，期間 `lib/` 有 14 個 commit，其中包含當天才修的運維可見性——修了但一行都沒生效），是靠 `ls -la` 看檔案時間戳才撞見的。
+> CLI 的編譯閉包涵蓋整個 `lib/`，**任何規則/評分/syncer 改動都算**，靠人工判斷「算不算重大改動」不可靠。
 >
-> 佐證層：兩支 CLI 每次執行都印 `[build=<sha> compiled=<time>]`（`lib/core/utils/build_stamp.dart` 讀 bundle 根的 `BUILD_INFO`，由 `install.sh` 寫入、dirty 會標記）。hook 只在本機、只在正常 commit 路徑有效；rebase／cherry-pick／換機時，**日誌裡那行 SHA 是唯一能事後驗證的證據**。
+> 佐證層：兩支 CLI 每次執行都印 `[build=<sha> compiled=<time>]`（`lib/core/utils/build_stamp.dart` 讀 bundle 根的 `BUILD_INFO`，由 `install.sh` 寫入、dirty 會標記）。
+> hook 只在本機、只在正常 commit 路徑有效；rebase／cherry-pick／換機時，**日誌裡那行 SHA 是唯一能事後驗證的證據**。
 
 ### 資料庫變更流程
 
@@ -109,10 +118,10 @@ flutter test
 ### 測試
 
 | Layer        | 覆蓋率目標 |
-|:-------------|:------|
-| Domain       | 85%+  |
-| Data         | 85%+  |
-| Presentation | 70%+  |
+|:-------------|:-----------|
+| Domain       | 85%+       |
+| Data         | 85%+       |
+| Presentation | 70%+       |
 
 ```bash
 flutter test                                          # 快速測試
@@ -153,37 +162,60 @@ void main() {
 
 ## 編碼標準
 
-| 原則                        | 說明                                                                                                      |
-|:--------------------------|:--------------------------------------------------------------------------------------------------------|
-| **Repository Pattern**    | Data 層提供實作；`domain/repositories/` 介面**僅保留有真消費者的 7 條**（3 條 lib 內以介面型別使用、4 條供 `tool/backfill` 測試注入）——新增介面前先確認有第二個實作或注入需求，單實作勿加儀式介面（2026-07-30 清除 5 條）|
-| **錯誤處理**                  | `RateLimitException` / `NetworkException` 必須 rethrow，其餘包裝為 `DatabaseException`。例外：`UpdateService`（頂層 orchestrator）改以 `rateLimitedAbort` 旗標 + `recordError` 終止流程，不再往上拋 |
-| **Request Deduplication** | Repository 層使用 `RequestDeduplicator` 避免重複 API 呼叫                                                        |
-| **狀態管理**                  | `AsyncNotifier` / `StateNotifier`，避免 `StateProvider`                                                    |
-| **Rule Engine**           | 純函數：輸入 `AnalysisContext` → 輸出 `TriggeredReason`                                                         |
-| **配置集中**                  | 所有閾值放 `lib/core/constants/`，禁止魔術數字                                                                      |
-| **路由**                    | 使用 `AppRoutes` 常數，禁止硬編碼路由字串                                                                             |
-| **Isolate 通訊**            | 使用 typed DTO (`ShareholdingData`, `WarningDataContext`, `InsiderDataContext`)，避免 `Map<String, dynamic>`。已知例外：`scoring_isolate.dart` 內部仍走 Map 序列化 roundtrip（`isolate_map_extensions.dart`），typed 物件實際已直接跨界、Map 層疑似冗餘——待實機驗證後移除 |
-| **OHLCV 提取**              | 使用 `prices.extractOhlcv()` extension，避免重複迴圈                                                             |
-| **launchd 排程**            | 兩支 CLI 的 plist **版控在 `ops/launchd/`**,安裝/更新一律跑 `ops/launchd/install.sh`（會把樣板路徑換成本機實際值再 bootstrap）。**不要只改 `~/Library/LaunchAgents/` 的副本**——那是本機產物，repo 搬家或換機就靜默失效（本專案有過自動更新靜默斷 13 天的前科）。日誌輪替**由 CLI 自己做**(`LogRotation`,1 MB 就地截斷)——刻意不用 newsyslog,那要在 `/etc` 放未版控、換機消失的設定檔 |
-| **tool 鏈純 Dart**          | `tool/daily_update.dart`、`tool/intraday_alert_check.dart`（皆由 launchd `dart run`）的 import 閉包**不得**含 flutter／easy_localization／flutter plugins（shared_preferences 等）——混入即編譯失敗且**靜默斷自動更新**（2026-07 斷 13 天才發現）。守門：`test/tool/tool_chain_pure_dart_test.dart`（涵蓋兩支 CLI）；改動 update 鏈後跑 `dart compile kernel tool/daily_update.dart` 終驗。`@visibleForTesting` 用 `package:meta`，i18n 格式化用 presentation 專用 `LocalizedNumberFormat` |
-| **Dart 3**                | Records, Pattern Matching, Sealed Classes                                                               |
+### 速查
+
+| 原則                      | 規範                                                      |
+|:--------------------------|:----------------------------------------------------------|
+| **Request Deduplication** | Repository 層使用 `RequestDeduplicator` 避免重複 API 呼叫 |
+| **狀態管理**              | `AsyncNotifier` / `StateNotifier`，避免 `StateProvider`   |
+| **Rule Engine**           | 純函數：輸入 `AnalysisContext` → 輸出 `TriggeredReason`   |
+| **配置集中**              | 所有閾值放 `lib/core/constants/`，禁止魔術數字            |
+| **路由**                  | 使用 `AppRoutes` 常數，禁止硬編碼路由字串                 |
+| **OHLCV 提取**            | 使用 `prices.extractOhlcv()` extension，避免重複迴圈      |
+| **Dart 3**                | Records, Pattern Matching, Sealed Classes                 |
+
+### Repository Pattern
+
+Data 層提供實作；`domain/repositories/` 介面**僅保留有真消費者的 7 條**（3 條 lib 內以介面型別使用、4 條供 `tool/backfill` 測試注入）——新增介面前先確認有第二個實作或注入需求，單實作勿加儀式介面（2026-07-30 清除 5 條）
+
+### 錯誤處理
+
+`RateLimitException` / `NetworkException` 必須 rethrow，其餘包裝為 `DatabaseException`。
+例外：`UpdateService`（頂層 orchestrator）改以 `rateLimitedAbort` 旗標 + `recordError` 終止流程，不再往上拋
+
+### Isolate 通訊
+
+使用 typed DTO (`ShareholdingData`, `WarningDataContext`, `InsiderDataContext`)，避免 `Map<String, dynamic>`。
+已知例外：`scoring_isolate.dart` 內部仍走 Map 序列化 roundtrip（`isolate_map_extensions.dart`），typed 物件實際已直接跨界、Map 層疑似冗餘——待實機驗證後移除
+
+### 🚨 launchd 排程
+
+兩支 CLI 的 plist **版控在 `ops/launchd/`**,安裝/更新一律跑 `ops/launchd/install.sh`（會把樣板路徑換成本機實際值再 bootstrap）。
+**不要只改 `~/Library/LaunchAgents/` 的副本**——那是本機產物，repo 搬家或換機就靜默失效（本專案有過自動更新靜默斷 13 天的前科）。
+日誌輪替**由 CLI 自己做**(`LogRotation`,1 MB 就地截斷)——刻意不用 newsyslog,那要在 `/etc` 放未版控、換機消失的設定檔
+
+### 🚨 tool 鏈純 Dart
+
+`tool/daily_update.dart`、`tool/intraday_alert_check.dart`（皆由 launchd `dart run`）的 import 閉包**不得**含 flutter／easy_localization／flutter plugins（shared_preferences 等）——混入即編譯失敗且**靜默斷自動更新**（2026-07 斷 13 天才發現）。
+守門：`test/tool/tool_chain_pure_dart_test.dart`（涵蓋兩支 CLI）；改動 update 鏈後跑 `dart compile kernel tool/daily_update.dart` 終驗。
+`@visibleForTesting` 用 `package:meta`，i18n 格式化用 presentation 專用 `LocalizedNumberFormat`
 
 ---
 
 ## 關鍵文件
 
-| 文件                                                   | 說明              |
-|:-----------------------------------------------------|:----------------|
+| 文件                                                 | 說明                     |
+|:-----------------------------------------------------|:-------------------------|
 | [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)           | 規則引擎詳解 (70 條規則) |
-| [docs/PENDING_UPGRADES.md](docs/PENDING_UPGRADES.md) | 依賴升級紀錄          |
-| [RELEASE.md](RELEASE.md)                             | 發布建置指南          |
-| [CHANGELOG.md](CHANGELOG.md)                         | 版本變更紀錄          |
+| [docs/PENDING_UPGRADES.md](docs/PENDING_UPGRADES.md) | 依賴升級紀錄             |
+| [RELEASE.md](RELEASE.md)                             | 發布建置指南             |
+| [CHANGELOG.md](CHANGELOG.md)                         | 版本變更紀錄             |
 
 ---
 
 ## 按需載入的規則（`.claude/rules/`）
 
-| 規則檔                  | 內容                                                  | 載入條件（`paths:` frontmatter）                                                                                         |
-|----------------------|-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| `architecture.md`    | 四層架構 Mermaid 圖、資料流圖                                 | `lib/core/**`、`lib/data/**`、`lib/domain/**`、`lib/presentation/**`                                                  |
-| `update-pipeline.md` | Update Pipeline Mermaid 圖、11 syncers + 3 helpers 詳解 | `lib/domain/services/update/**`、`lib/data/remote/**`、`**/syncer*`、`**/Syncer*`、`**/BatchData*`、`**/rule_accuracy*` |
+| 規則檔               | 內容                                               | 載入條件（`paths:` frontmatter）                                                                                        |
+|----------------------|----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `architecture.md`    | 四層架構 Mermaid 圖、資料流圖                      | `lib/core/**`、`lib/data/**`、`lib/domain/**`、`lib/presentation/**`                                                    |
+| `update-pipeline.md` | Update Pipeline Mermaid 圖、syncers + helpers 詳解 | `lib/domain/services/update/**`、`lib/data/remote/**`、`**/syncer*`、`**/Syncer*`、`**/BatchData*`、`**/rule_accuracy*` |
