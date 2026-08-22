@@ -24,12 +24,13 @@
 
 | 事件 | 該跑什麼 | 成本 |
 |:---|:---|:---|
-| 新增或修改規則 | 完整管線 `./scripts/calibrate.sh` | 3–5 小時 |
-| 回補了新的歷史資料 | 完整管線 | 3–5 小時 |
+| 新增或修改規則 | 完整管線 `./scripts/calibrate.sh` | ~45–75 分鐘 |
+| 回補了新的歷史資料 | 完整管線 | 同上 |
+| 要補基本面（EPS/ROE/PE/PBR） | `BACKFILL_SKIP_FUNDAMENTALS=0 ./scripts/calibrate-retry.sh` | **~13 小時** |
 | 改統計方法或 gate 閾值 | 只跑 `dart run tool/recalibrate.dart` | 數秒 |
 | 以上都沒發生 | 不用跑 | — |
 
-**為什麼不按月排程**（2026-08-22 量測）：DB 已有 1468 個交易日（2017-05 起）。
+**為什麼不按月排程**（2026-08-22 量測）：DB 已有 1498 個交易日（2017-05 起，2026-08-22 量測）。
 多等一個月只增加 21 個交易日 ＝ +1.4% 樣本，t-stat 隨 √n 成長只改善 0.71%。
 一條卡在 t=1.5 的規則要靠時間推過 1.96 門檻，需要 1.7× 資料 ＝ 再等 4.1 年。
 
@@ -47,12 +48,15 @@ n=11,742）；那是資料變了，不是時間到了。
 
 ```
 📅 replay 落檔於 2026-07-13T02:13:42.224620Z（40 天前）
-🔎 規則涵蓋：70 條註冊規則
-   ⚠️  31 條無 replay 樣本，本次只會拿到手調分：
-      BREAK_MA20, BREAK_MA60, COILING_BELOW_MA20, COILING_BELOW_MA60,
-      CONCENTRATION_HIGH, DAY_TRADING_EXTREME …（另 25 條）
-      → 要給它們統計基礎，需重跑完整管線：./scripts/calibrate.sh
-   ℹ️  3 條樣本中的規則已不在註冊表（candidate JSON 會留下查不到的死列）
+🔎 規則涵蓋：72 條註冊規則
+   ⚠️  9 條無 replay 樣本，本次只會拿到手調分：
+      EPS_DECLINE_WARNING, EPS_TURNAROUND, PBR_UNDERVALUED …（另 6 條）
+      → 這些補得到，但基本面需約 7,100 次 FinMind 呼叫（額度 600/hr）：
+        BACKFILL_SKIP_FUNDAMENTALS=0 ./scripts/calibrate-retry.sh
+   ℹ️  11 條這條管線抓不到資料（集保／內部人／警示股／新聞無 backfill
+      phase），永遠是手調分：
+      CONCENTRATION_HIGH, FOREIGN_EXODUS, HIGH_PLEDGE_RATIO …（另 8 條）
+      → 重跑管線無效。要校準它們得先為這些來源加 backfill phase。
 ```
 
 **已知缺口**：這個比對只看 rule **id**。若規則 id 沒變、但內部閾值改了
@@ -68,19 +72,33 @@ n=11,742）；那是資料變了，不是時間到了。
 
 ## 如何執行
 
-### 完整管線（backfill → replay → recalibrate）
+### 完整管線（backfill → replay → recalibrate → walk-forward）
 
 ```bash
-./scripts/calibrate.sh          # 三階段一次跑完，產出 candidate JSON
+./scripts/calibrate.sh          # 四階段一次跑完，產出 candidate JSON + gate 判準
 ./scripts/calibrate-retry.sh    # 同上，但自動處理 TWSE 限流（每輪間隔 15 分鐘）
 ```
 
 規則、參數或資料來源有變動時走這條——只重算評分無法反映新的觸發樣本。
-一次完整回補約 3–5 小時，`calibrate-retry.sh` 會自行重試直到跑完。
+
+**實測耗時**（2026-08-22，既有 DB 已有 9 年價格的增量情境）：
+backfill 視缺口而定（補 31 個交易日約 5–15 分）、replay ~12 分、recalibrate
+數秒、walk-forward ~13 分。**合計約 45–75 分鐘。**
+
+**基本面預設跳過**（`BACKFILL_SKIP_FUNDAMENTALS` 預設 `1`）。revenue /
+financial / valuation 三個 phase 需約 7,710 次 FinMind 呼叫、額度 600/hr
+（工具自己估 ~12h51m），單次跑不完，而撞限流會 **abort 整個 backfill**——
+連帶讓下一輪只打 1 次的 stock_list 也被鎖在門外。要補時明確 opt-in：
+
+```bash
+BACKFILL_SKIP_FUNDAMENTALS=0 ./scripts/calibrate-retry.sh
+```
+
+**跳過 gate**：`SKIP_WALKFORWARD=1`（省 ~13 分鐘，但 promote 決策沒有依據）。
 
 ### 只重算評分
 
-`recalibrate.dart` 是管線的**第三階段**，單獨跑等於沿用既有的 replay 樣本，
+`recalibrate.dart` 是四階段中的**第三階段**，單獨跑等於沿用既有的 replay 樣本，
 只重新計算分數。統計方法或閾值調整時這樣做是對的；規則本身變了則不夠。
 
 工具啟動時會印出 replay 落檔時間，超過 30 天示警：
