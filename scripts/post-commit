@@ -30,7 +30,7 @@ CHANGED="$(git diff-tree --no-commit-id --name-only -r HEAD)"
 # post-commit 是規則變動與人眼唯一的交會點。
 #
 # 不擋 commit、不自動跑(校準要十幾分鐘且需要 calibration.db),只提醒。
-if echo "$CHANGED" | grep -qE '^lib/(domain/services/rules/|core/constants/(rule_|reason_type))'; then
+if echo "$CHANGED" | grep -qE '^lib/(domain/services/(rules/|rule_registry)|core/constants/(rule_|reason_type))'; then
   echo ""
   echo "📐 這次 commit 動到規則集——既有的 replay 樣本不含新行為。"
   echo "   查哪幾條沒樣本(1 秒、唯讀):"
