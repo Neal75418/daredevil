@@ -7,6 +7,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import 'package:daredevil/core/constants/reason_type.dart';
+import 'package:daredevil/domain/services/rule_registry.dart';
+
 import '../../tool/recalibrate.dart';
 
 void main() {
@@ -289,6 +292,65 @@ void main() {
         hardcodedScores: hard,
       );
       expect(d.map((e) => e.ruleId).toList(), ['BULL', 'CAL']);
+    });
+  });
+  // ── 命名空間必須對齊（2026-08-22 二次修正）─────────────────────────
+  //
+  // 首版 `compareRuleCoverage` 拿 `RuleRegistry.defaultRules.map((r) => r.id)`
+  // 去比 `rule_accuracy.rule_id`，但那是**兩個不同的命名空間**：
+  //   - rule.id：`pattern_doji`、`institutional_shift`（規則自己的識別碼）
+  //   - rule_accuracy.rule_id：`PATTERN_DOJI_BEARISH`、`INSTITUTIONAL_BUY`
+  //     （replay 依 **ReasonType code** 記錄觸發）
+  // 一條規則可依情境發出不同的 ReasonType（`pattern_doji` 會發
+  // `patternDoji` 或 `patternDojiBearish`），兩者本來就不是一對一。
+  //
+  // 後果：把 3 個正常運作的 ReasonType 誤報成「已不在註冊表的死列」，
+  // 未校準數也多算 1 條。用真實的 ReasonType 集合斷言，合成 ID 測不出來。
+  group('涵蓋差集的命名空間', () {
+    test('🚨 真實 ReasonType 與 replay 樣本不得出現孤兒', () {
+      final codes = ReasonType.values.map((r) => r.code.toUpperCase()).toSet();
+      // 這三個曾被誤報為孤兒——它們是 pattern_doji / 法人規則依情境發出的
+      for (final c in [
+        'PATTERN_DOJI_BEARISH',
+        'INSTITUTIONAL_BUY',
+        'INSTITUTIONAL_SELL',
+      ]) {
+        expect(codes, contains(c), reason: '$c 是有效的 ReasonType，不得被當成死列');
+      }
+    });
+
+    test('🚨 rule.id 與 ReasonType.code 確實是不同集合（比錯會誤報）', () {
+      final ruleIds = RuleRegistry.defaultRules
+          .map((r) => r.id.toUpperCase())
+          .toSet();
+      final codes = ReasonType.values.map((r) => r.code.toUpperCase()).toSet();
+      expect(
+        ruleIds.difference(codes),
+        isNotEmpty,
+        reason: '若兩者相同，這條測試與整個修正就沒有意義了',
+      );
+    });
+
+    test('🚨 涵蓋檢查取的必須是 ReasonType code,不是 rule.id', () {
+      // 這是首版真正的錯處:呼叫端餵了 RuleRegistry 的 rule.id。
+      // 純集合函式對命名空間無感,所以要在「取哪個集合」這一步斷言。
+      final codes = coverageReferenceIds();
+      expect(codes, contains('PATTERN_DOJI_BEARISH'));
+      expect(codes, contains('INSTITUTIONAL_BUY'));
+      expect(
+        codes.length,
+        ReasonType.values.length,
+        reason: 'ReasonType 全集;若等於 RuleRegistry.defaultRules.length 就是又比錯了',
+      );
+    });
+
+    test('compareRuleCoverage 的輸入應為 ReasonType code 集合', () {
+      final c = compareRuleCoverage(
+        {'pattern_doji_bearish', 'institutional_buy'},
+        {'PATTERN_DOJI_BEARISH', 'INSTITUTIONAL_BUY'},
+      );
+      expect(c.orphaned, isEmpty);
+      expect(c.uncalibrated, isEmpty);
     });
   });
 }

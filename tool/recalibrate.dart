@@ -43,7 +43,6 @@ import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_tab
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart' as cal;
 import 'package:daredevil/core/constants/reason_type.dart';
 import 'package:daredevil/core/constants/scoring_mode.dart';
-import 'package:daredevil/domain/services/rule_registry.dart';
 
 // ============================================================================
 // Public data models (importable by tests)
@@ -484,6 +483,19 @@ compareRuleCoverage(Set<String> registryIds, Set<String> replayedIds) {
   );
 }
 
+/// 涵蓋檢查的參照集合:**ReasonType code**,不是 `StockRule.id`。
+///
+/// **兩者是不同命名空間**(2026-08-22 首版比錯):
+/// - `StockRule.id`:`pattern_doji`、`institutional_shift`——規則自己的識別碼
+/// - `ReasonType.code`:`PATTERN_DOJI_BEARISH`、`INSTITUTIONAL_BUY`——
+///   replay 依它記錄觸發,`rule_accuracy.rule_id` 存的就是這個
+///
+/// 一條規則可依情境發出不同 ReasonType(`pattern_doji` 會發 `patternDoji`
+/// 或 `patternDojiBearish`),不是一對一。拿 rule.id 去比會把 3 個正常運作
+/// 的 ReasonType 誤報成「已不在註冊表的死列」,未校準數也多算 1 條。
+Set<String> coverageReferenceIds() =>
+    ReasonType.values.map((r) => r.code.toUpperCase()).toSet();
+
 /// 讀 `rule_accuracy` 裡出現過的所有 rule id。表不存在 → 空集合。
 Set<String> readReplayedRuleIds(Database db) {
   try {
@@ -675,7 +687,7 @@ void _printReplayContext(Database db) {
   }
 
   final coverage = compareRuleCoverage(
-    RuleRegistry.defaultRules.map((r) => r.id).toSet(),
+    coverageReferenceIds(),
     readReplayedRuleIds(db),
   );
   if (coverage.uncalibrated.isEmpty && coverage.orphaned.isEmpty) {
