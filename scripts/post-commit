@@ -33,10 +33,23 @@ CHANGED="$(git diff-tree --no-commit-id --name-only -r HEAD)"
 if echo "$CHANGED" | grep -qE '^lib/(domain/services/(rules/|rule_registry)|core/constants/(rule_|reason_type))'; then
   echo ""
   echo "📐 這次 commit 動到規則集——既有的 replay 樣本不含新行為。"
-  echo "   查哪幾條沒樣本(1 秒、唯讀):"
-  echo "     dart run tool/recalibrate.dart --db tool/calibration.db --dry-run"
-  echo "   若它說「N 條無 replay 樣本,但所需資料都在」→ 重跑 Stage 2:"
-  echo "     CALIBRATION_DB=tool/calibration.db flutter test test/tool/run_replay.dart"
+  # 直接把答案算出來(1 秒、唯讀、--dry-run 不寫任何檔),而不是叫人去打
+  # 指令:診斷放在使用者不會主動去的地方等於不存在。
+  # 缺 calibration.db(換機/新 clone)時工具會安靜退出,這裡也就不印。
+  if [ -f "$REPO/tool/calibration.db" ]; then
+    COVERAGE="$(cd "$REPO" && dart run tool/recalibrate.dart \
+      --db tool/calibration.db --dry-run 2>/dev/null \
+      | grep -A2 '所需資料都在')"
+    if [ -n "$COVERAGE" ]; then
+      echo "$COVERAGE" | sed 's/^/   /'
+      echo "   → 重跑 Stage 2(約 12 分鐘):"
+      echo "     CALIBRATION_DB=tool/calibration.db flutter test test/tool/run_replay.dart"
+    else
+      echo "   ✅ 查過了:目前沒有「資料都在但缺樣本」的規則,不用重跑。"
+    fi
+  else
+    echo "   (找不到 tool/calibration.db,略過涵蓋檢查)"
+  fi
   echo ""
 fi
 
