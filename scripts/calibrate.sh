@@ -227,8 +227,12 @@ echo ""
 # 決策非它不可,而留成手動的實際後果是**不會有人跑** —— 2026-08-22 若不是
 # 特地去找,整個 promote 判斷就會建立在沒有樣本外驗證的 candidate 上。
 #
-# exit code:0=gate PASS、1=gate FAIL(兩者都是有效結論,不擋管線)、
-# 2=無 DB、3=無現行 calibrated JSON(setup 錯誤,要讓人看見)。
+# ⚠️ 這裡拿到的是 `flutter test` 的 exit code,不是 gate 判準。
+# run_walkforward.dart 斷言 `runWalkForwardCli() < 2`,所以:
+#   gate PASS(0) 與 gate FAIL(1) → 斷言通過 → flutter test exit 0
+#   無 DB(2)／無現行 calibrated JSON(3) → 斷言失敗 → flutter test 非 0
+# 換句話說**非 0 一律是 setup 錯誤**;gate 的 PASS/FAIL 要看上方輸出的
+# 「WALK-FORWARD 驗證結果」區塊,不在 exit code 裡。
 if [ "${SKIP_WALKFORWARD:-0}" = "1" ]; then
   echo "⏭️  Stage 4 — Walk-forward:SKIP_WALKFORWARD=1,跳過"
   echo ""
@@ -241,10 +245,11 @@ else
   set -e
   if [ "$wf_code" -eq 0 ]; then
     echo ""
-    echo "✅ Walk-forward 完成(判準見上方 gate 結論)"
+    echo "✅ Walk-forward 跑完——PASS/FAIL 見上方「WALK-FORWARD 驗證結果」"
   else
     echo ""
-    echo "⚠️  Walk-forward 未正常完成(exit $wf_code)——promote 前請自行補跑:" >&2
+    echo "⚠️  Walk-forward setup 失敗(exit $wf_code,多半是缺 DB 或缺現行" >&2
+    echo "    calibrated JSON)——這不是 gate FAIL,是根本沒跑成。promote 前補跑:" >&2
     echo "    CALIBRATION_DB=$CALIBRATION_DB flutter test test/tool/run_walkforward.dart" >&2
   fi
   echo ""
