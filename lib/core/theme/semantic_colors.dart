@@ -73,10 +73,15 @@ abstract final class PriceColors {
   ///
   /// 深色主題 [up] 本色對自身 tint 合成底僅 3.76~4.47:1，改用 [chipBullish]
   /// 淺紅（同色相 354.9°，α 0.1~0.15 各背景實測 5.57~6.62:1）。
-  /// **淺色主題暫維持 [up] 本色**——使用者僅使用深色主題，淺色 35 組
-  /// 疊色缺陷列入 deferred（詳 `.superpowers/sdd/phase1-worklist.md`
-  /// PHASE2 節）；日後啟用淺色主題前需一併處理（候選 red-900 `#B71C1C`／
-  /// green-800 `#166534` 已精算通過）。
+  /// **淺色主題暫維持 [up] 本色**——使用者僅使用深色主題，淺色主題下
+  /// 紅綠家族的疊色對比缺陷整批列入 deferred；日後啟用淺色主題前需一併
+  /// 處理（候選 red-900 `#B71C1C`／green-800 `#166534` 已精算通過）。
+  ///
+  /// 原本這裡指向一份 2026-07-18 的稽核清單，2026-08-22 查證後刪除：
+  /// 清單記的是更名前（afterclose）的檔案路徑與行號，抽樣驗證多數站點
+  /// 已在後續重構中消失，留著是一份會誤導人的舊地圖。真正的防線是
+  /// `test/core/theme/` 的 111 條守門測試（色相禁區／對比度／語意單調性），
+  /// 任何新的違規會被它們當場擋下，不需要靜態清單。
   static Color upOnTintFor(Brightness brightness) =>
       brightness == Brightness.dark ? chipBullish : up;
 

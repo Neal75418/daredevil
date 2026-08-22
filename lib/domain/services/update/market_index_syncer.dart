@@ -324,8 +324,7 @@ class MarketIndexSyncer {
   /// 一致，故以它為代表判斷回補起點與既有覆蓋，無需逐指數查詢。
   ///
   /// **僅 TWSE**：TPEx 櫃買指數 OpenAPI（[TpexClient.getTpexIndex]）不支援
-  /// date 參數、只回傳近月資料，無法逐日回補歷史（見 class doc 與
-  /// `.superpowers/sdd/index-backfill-report.md` 的端點調查記錄）。櫃買指數
+  /// date 參數、只回傳近月資料，無法逐日回補歷史（見 class doc）。櫃買指數
   /// 的歷史深度改由 [backfillTpexIndexHistory]（FinMind，單次呼叫）承接。
   ///
   /// Idempotent：與 [backfill] 共用 (date, name) UNIQUE upsert，重複執行
