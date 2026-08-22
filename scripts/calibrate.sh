@@ -20,11 +20,34 @@
 #     export FINMIND_TOKEN=eyJ...          # FinMind API token，必填
 #     ./scripts/calibrate.sh                # 用預設值跑完整 pipeline
 #
-#     # 可選環境變數
-#     export BACKFILL_YEARS=2               # 回溯年數，預設 2
+#     # 可選環境變數 —— 全部由 test/tool/run_backfill.dart 與 run_replay.dart
+#     # 直接讀取，此處未列出的等同不存在（守門：scripts_env_documented_test）
+#
+#     # 範圍
 #     export CALIBRATION_DB=tool/calibration.db  # DB 路徑，預設 tool/calibration.db
+#     export BACKFILL_YEARS=2               # 回溯年數，預設 2
+#     export BACKFILL_START_DATE=2020-07-01 # 明確起日（優先於 YEARS）
+#     export BACKFILL_END_DATE=2026-08-01   # 明確迄日
 #     export BACKFILL_SYMBOLS=2330,2317     # 限定 symbol（測試用，加速）
+#
+#     # 跳過／限定 phase
+#     export BACKFILL_SKIP_FUNDAMENTALS=1   # 跳過 revenue/financial/valuation
+#     export BACKFILL_SKIP_DAY_TRADING=1    # 跳過當沖
+#     export BACKFILL_ONLY_DAY_TRADING=1    # 只補當沖（既有 DB 已有價格時）
+#     export BACKFILL_DAY_TRADING_MAX_DAYS=60  # 當沖單輪上限
+#     export BACKFILL_PRICES_VIA_FINMIND=1  # 價格改走 FinMind（TWSE 不可用時）
 #     export BACKFILL_DRY_RUN=1             # dry run，不實際抓取
+#
+#     # Replay 階段
+#     export REPLAY_MIN_HISTORY=60          # 最少歷史天數
+#     export REPLAY_SYMBOLS=2330,2317       # 限定 symbol
+#     export REPLAY_DRY_RUN=1               # 只印計畫不執行
+#
+# ## 🚨 BACKFILL_SKIP_FUNDAMENTALS 的實務意義（2026-08-22 實測）
+#
+# 基本面三個 phase 需約 7,100 次 FinMind 呼叫，額度 600/hr → 單次跑不完
+# （約 12 小時），而撞限流會 **abort 整個 backfill**，連帶讓下一輪只打 1 次
+# 的 stock_list 也被鎖在門外。若這次目的是重跑校準而非補基本面，設為 1。
 #
 #     ./scripts/calibrate.sh
 #

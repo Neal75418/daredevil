@@ -67,12 +67,14 @@ void main() {
         marketData: any(named: 'marketData'),
         evaluationTime: any(named: 'evaluationTime'),
       ),
-    ).thenReturn(
-      AnalysisContext(
+    ).thenAnswer((inv) {
+      // 轉傳 marketData:stub 若丟掉它,測到的就是 mock 而非 replay 的接線
+      return AnalysisContext(
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.up,
-      ),
-    );
+        marketData: inv.namedArguments[#marketData] as MarketDataContext?,
+      );
+    });
     when(() => mockRuleEngine.evaluateStock(any(), any())).thenReturn(const [
       TriggeredReason(
         type: ReasonType.techBreakout,
@@ -363,6 +365,74 @@ void main() {
         metaAfter?.read<String>('v'),
         metaBefore?.read<String>('v'),
         reason: 'generated_at 不得被覆寫——它是判斷 replay 新舊的依據',
+      );
+    });
+  });
+  // ── marketData 接線（2026-08-22）──────────────────────────────────
+  //
+  // replay 原本把 `marketData` 一律傳 null，註解寫「非 backfillable」。那句
+  // 話寫的時候是真的，現在不是了——backfill 早就有 `day_trading` phase
+  // （甚至有 `--only-day-trading` 模式），calibration.db 存著 155 萬列、
+  // 補到 2026-08-21。
+  //
+  // 後果：`DAY_TRADING_HIGH` / `DAY_TRADING_EXTREME` 兩條規則在 replay 期間
+  // 永遠 no-fire，於是 rule_accuracy 沒有它們的樣本、永遠拿不到校準分——
+  // 而且原因不是「資料抓不到」，是「抓到了沒接上」。
+  group('marketData 接線', () {
+    test('🚨 有當沖資料時,規則收到的 context 帶得到 dayTradingRatio', () async {
+      await seedStock('DT01', priceDays: 200);
+      await seedStock('DT02', priceDays: 200);
+      await seedStock('DT03', priceDays: 200);
+
+      // 為 DT01 塞當沖資料（比例落在 DAY_TRADING_HIGH 區間）
+      final first = DateTime(2024, 1, 1);
+      await db.insertDayTradingData([
+        for (var i = 0; i < 200; i++)
+          DayTradingCompanion.insert(
+            symbol: 'DT01',
+            date: first.add(Duration(days: i)),
+            buyVolume: const Value(600000),
+            sellVolume: const Value(600000),
+            dayTradingRatio: const Value(60),
+            tradeVolume: const Value(1000000),
+          ),
+      ]);
+
+      final seen = <double?>[];
+      when(() => mockRuleEngine.evaluateStock(any(), any())).thenAnswer((inv) {
+        final ctx = inv.positionalArguments[0] as AnalysisContext;
+        final sd = inv.positionalArguments[1] as StockData;
+        if (sd.symbol == 'DT01') seen.add(ctx.marketData?.dayTradingRatio);
+        return const [];
+      });
+
+      await excessCalibrator().run();
+
+      expect(seen, isNotEmpty, reason: '前提:DT01 應被 replay 評估過');
+      expect(
+        seen.where((r) => r == 60).length,
+        greaterThan(0),
+        reason: 'marketData 未接線時全是 null——那正是兩條當沖規則拿不到樣本的原因',
+      );
+    });
+
+    test('無當沖資料的股票 marketData 仍為 null(不得偽造)', () async {
+      await seedStock('NO01', priceDays: 200);
+      await seedStock('NO02', priceDays: 200);
+      await seedStock('NO03', priceDays: 200);
+
+      final seen = <MarketDataContext?>[];
+      when(() => mockRuleEngine.evaluateStock(any(), any())).thenAnswer((inv) {
+        seen.add((inv.positionalArguments[0] as AnalysisContext).marketData);
+        return const [];
+      });
+
+      await excessCalibrator().run();
+      expect(seen, isNotEmpty);
+      expect(
+        seen.every((m) => m?.dayTradingRatio == null),
+        isTrue,
+        reason: '沒資料就是沒有,不得補 0 或預設值',
       );
     });
   });

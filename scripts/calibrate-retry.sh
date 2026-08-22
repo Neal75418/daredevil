@@ -100,20 +100,31 @@ echo ""
 for i in $(seq 1 "$MAX_RETRIES"); do
   echo "[$(date)] attempt $i/$MAX_RETRIES: starting calibrate.sh"
 
-  # 記錄當前 log 行數（用來只 grep 這輪新增的部分）
-  start_lines=$(wc -l < "$CALIBRATE_LOG" 2>/dev/null || echo 0)
+  # 這輪的輸出自己接住，不依賴呼叫端有沒有把 stdout 重導向到 CALIBRATE_LOG。
+  #
+  # 🚨 2026-08-22 實測:舊版記錄 CALIBRATE_LOG 的行數、跑完再 tail 新增行來
+  # 判斷是不是限流。但 calibrate.sh 自己不寫那個檔——重導向是呼叫端的責任。
+  # 少打一個 `>> calibrate.log 2>&1`，new_lines 就永遠是空字串，任何失敗都會
+  # 被判成 non-transient 直接 abort，**retry 等於關掉且毫無警告**。
+  # 改成用 tee 直接接住 calibrate.sh 的輸出:照樣即時顯示、照樣累積到 log，
+  # 但判斷限流用的是自己手上這一輪的內容，與呼叫端怎麼跑無關。
+  round_log="$(mktemp -t calibrate-round)"
 
-  # 不用 `if cmd; then`：那會讓後面的 $? 變成 if 構句的 0 而非真實 exit code
-  ./scripts/calibrate.sh
-  exit_code=$?
+  # `PIPESTATUS[0]` 取的是 calibrate.sh 的 exit code，不是 tee 的
+  set -o pipefail
+  ./scripts/calibrate.sh 2>&1 | tee -a "$CALIBRATE_LOG" "$round_log"
+  exit_code=${PIPESTATUS[0]}
+  set +o pipefail
+
   if [ "$exit_code" -eq 0 ]; then
+    rm -f "$round_log"
     echo ""
     echo "[$(date)] attempt $i: ✅ PIPELINE COMPLETE"
     exit 0
   fi
 
-  # 只 grep 這輪新增的 log 行
-  new_lines=$(tail -n +$((start_lines + 1)) "$CALIBRATE_LOG" 2>/dev/null || echo "")
+  new_lines=$(cat "$round_log")
+  rm -f "$round_log"
 
   # Transient failures：rate limit + network error 都 retry
   # - rate limit: TWSE 短期 IP cooldown (~15min)
@@ -127,8 +138,8 @@ for i in $(seq 1 "$MAX_RETRIES"); do
     sleep 60
   else
     echo "[$(date)] attempt $i: non-transient failure (exit $exit_code)，aborting" >&2
-    echo "Last 50 lines of log:" >&2
-    tail -50 "$CALIBRATE_LOG" >&2
+    echo "Last 50 lines of this round:" >&2
+    echo "$new_lines" | tail -50 >&2
     exit "$exit_code"
   fi
 done

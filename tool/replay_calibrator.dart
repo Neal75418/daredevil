@@ -57,6 +57,7 @@ import 'package:daredevil/core/constants/calibration_thresholds.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/constants/scoring_mode.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
@@ -457,11 +458,24 @@ class ReplayCalibrator {
       final analysisResult = _analysis.analyzeStock(pricesUpToDay);
       if (analysisResult == null) continue;
 
+      // 當沖比率是 current-day-only：只有「當天正好有資料」才給，缺就是
+      // null（不補 0——那會讓「沒資料」與「當沖 0%」變成同一件事）。
+      final dtRatio =
+          data.dayTradingBySymbol[symbol]?[DateTime(
+            currentPrice.date.year,
+            currentPrice.date.month,
+            currentPrice.date.day,
+          )];
+
       final context = _analysis.buildContext(
         analysisResult,
         priceHistory: pricesUpToDay,
         evaluationTime: currentPrice.date,
-        // marketData: null — 4 current-day-only rules 不會 fire，自然被 cut
+        // 其餘 marketData 欄位（外資持股／集保／警示／內部人）仍為 null——
+        // 那些資料 backfill 根本沒抓，對應規則本來就 no-fire。
+        marketData: dtRatio == null
+            ? null
+            : MarketDataContext(dayTradingRatio: dtRatio),
       );
 
       final stockData = _buildStockData(
@@ -691,6 +705,7 @@ class ReplayCalibrator {
     final pricesBySymbol = <String, List<DailyPriceEntry>>{};
     final institutionalBySymbol = <String, List<DailyInstitutionalEntry>>{};
     final revenueBySymbol = <String, List<MonthlyRevenueEntry>>{};
+    final dayTradingBySymbol = <String, Map<DateTime, double>>{};
     final epsBySymbol = <String, List<FinancialDataEntry>>{};
     final roeBySymbol = <String, List<FinancialDataEntry>>{};
     final valuationBySymbol = <String, List<StockValuationEntry>>{};
@@ -712,6 +727,22 @@ class ReplayCalibrator {
         startDate: DateTime(2000),
       );
       if (inst.isNotEmpty) institutionalBySymbol[symbol] = inst;
+
+      // 當沖：2026-08-22 接上。原本 marketData 一律傳 null 讓當沖規則
+      // no-fire，但 backfill 早有 day_trading phase、資料就在 DB 裡——
+      // 「抓到了沒接上」使 DAY_TRADING_HIGH / DAY_TRADING_EXTREME 永遠
+      // 拿不到校準樣本。
+      final dt = await db.getDayTradingHistory(
+        symbol,
+        startDate: DateTime(2000),
+      );
+      if (dt.isNotEmpty) {
+        dayTradingBySymbol[symbol] = {
+          for (final e in dt)
+            DateTime(e.date.year, e.date.month, e.date.day):
+                e.dayTradingRatio ?? 0,
+        };
+      }
     }
 
     // Survivorship bias fix（audit finding #7a）：`getAllActiveStocks()`
@@ -774,6 +805,7 @@ class ReplayCalibrator {
       epsBySymbol: epsBySymbol,
       roeBySymbol: roeBySymbol,
       valuationBySymbol: valuationBySymbol,
+      dayTradingBySymbol: dayTradingBySymbol,
     );
   }
 
@@ -1123,6 +1155,7 @@ class _BackfilledData {
     required this.epsBySymbol,
     required this.roeBySymbol,
     required this.valuationBySymbol,
+    required this.dayTradingBySymbol,
   });
 
   final Map<String, List<DailyPriceEntry>> pricesBySymbol;
@@ -1131,6 +1164,9 @@ class _BackfilledData {
   final Map<String, List<FinancialDataEntry>> epsBySymbol;
   final Map<String, List<FinancialDataEntry>> roeBySymbol;
   final Map<String, List<StockValuationEntry>> valuationBySymbol;
+
+  /// symbol → 該日零時 → 當沖比率（%）。current-day-only，不需 history list。
+  final Map<String, Map<DateTime, double>> dayTradingBySymbol;
 }
 
 class _PerSymbolResult {
