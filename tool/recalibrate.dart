@@ -504,8 +504,13 @@ Set<String> readReplayedRuleIds(Database db) {
         .select('SELECT DISTINCT rule_id FROM rule_accuracy')
         .map((r) => r['rule_id'] as String)
         .toSet();
-  } on SqliteException {
-    return const {};
+  } on SqliteException catch (e) {
+    // 只吞「表不存在」。其餘(SQLITE_BUSY 被別的 process 鎖住、CORRUPT、
+    // NOTADB、IOERR…)一律往上拋——回空集合會讓涵蓋警告自信地宣稱「全部
+    // 72 條無樣本」並建議去補基本面,而校準本身幾行後又讀得到同一張表,
+    // 診斷與執行在同一次執行內互相矛盾。
+    if (e.message.contains('no such table')) return const {};
+    rethrow;
   }
 }
 

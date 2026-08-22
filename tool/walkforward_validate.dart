@@ -94,6 +94,18 @@ class WalkForwardVerdict {
 // Core validator (testable via dep injection)
 // ============================================================================
 
+/// setup 問題(非 gate 判準)——資料或參數讓驗證根本跑不成立。
+///
+/// 與 gate FAIL 嚴格區分:FAIL 是有效結論,setup 錯誤是「這次沒量到東西」。
+/// 對應 `runWalkForwardCli` 的 exit code >= 2,`run_walkforward.dart` 的
+/// `expect(code, lessThan(2))` 會因此失敗,Stage 4 才看得見。
+class _WalkForwardSetupError implements Exception {
+  _WalkForwardSetupError(this.message);
+  final String message;
+  @override
+  String toString() => 'WalkForwardSetupError: $message';
+}
+
 class WalkForwardValidator {
   WalkForwardValidator({
     required this.db,
@@ -232,6 +244,14 @@ class WalkForwardValidator {
     WfHorizon horizon, {
     double? baselineHit,
   }) {
+    if (baselineHit == null) {
+      throw _WalkForwardSetupError(
+        'universe baseline 為 null'
+        '(${horizon == WfHorizon.short ? "5D" : "60D"})'
+        '——沒有任何一天達到 minUniverseSymbols。'
+        '常見成因:WF_SAMPLE_SIZE 小於 minUniverseSymbols(預設 100)。',
+      );
+    }
     final list = <recal.RuleStats>[];
     for (final entry in replayStats.entries) {
       final h = horizon == WfHorizon.short
@@ -249,7 +269,11 @@ class WalkForwardValidator {
     }
     final calibrated = recal.Calibrator.calibrateAllClustered(
       list,
-      baselineHit: baselineHit ?? 0.5,
+      // 🚨 不再 `?? 0.5`(2026-08-23)。0.5 正是 CalibrationThresholds 記載
+      // 「會系統性低估 alpha、幾乎全 cut」的值,而 baseline 為 null 完全是
+      // setup 問題(沒有任何一天達到 minUniverseSymbols)。折內 replay 用靜音
+      // logger,退回 0.5 會連唯一的證據都吞掉。
+      baselineHit: baselineHit!,
     );
     // 走 App 的三態 lookup（cut/缺席 → hardcoded、負證據 → 0），否則
     // NEW arm 與 OLD arm 量的不是同一個評分函式。序列化成
@@ -290,11 +314,19 @@ class WalkForwardValidator {
   /// 多準則 gate 判定（短+長 horizon 各算，合併判斷）。public static 供測試。
   static WalkForwardVerdict evaluateGate(List<FoldResult> folds) {
     final reasons = <String>[];
+    // 🚨 「沒量到」與「量到但沒優勢」必須分開(2026-08-23)。兩者都會讓所有
+    // margin 為 0 → beatsNoise false → 印出「FAIL:現行校準在樣本外已足夠
+    // (有效結論)」。那句話在沒有任何樣本時是憑空斷言,而且「(有效結論)」
+    // 正好叫讀者不要追查。testFirings 一直有收集,只是從沒被讀過。
     if (folds.isEmpty) {
-      return WalkForwardVerdict(
-        folds: folds,
-        passed: false,
-        reasons: const ['無 fold 結果（資料不足？）'],
+      throw _WalkForwardSetupError(
+        '無 fold 結果——WF_FOLD_YEARS 解析後為空,或該區間沒有可用資料。',
+      );
+    }
+    if (folds.every((f) => f.testFirings == 0)) {
+      throw _WalkForwardSetupError(
+        '每一折的樣本外觸發數都是 0——測試年沒有任何規則觸發。'
+        '常見成因:DB 的資料區間與 WF_FOLD_YEARS 不重疊,或 symbolsWhitelist 為空。',
       );
     }
 
@@ -459,7 +491,16 @@ Future<int> runWalkForwardCli(List<String> args) async {
       foldYears: foldYears,
       symbolsWhitelist: sample,
     );
-    final verdict = await validator.run();
+    final WalkForwardVerdict verdict;
+    try {
+      verdict = await validator.run();
+    } on _WalkForwardSetupError catch (e) {
+      // setup 錯誤不是 gate FAIL:什麼都沒量到,不能宣稱「現行校準已足夠」。
+      stderr.writeln('');
+      stderr.writeln('❌ WALK-FORWARD 無法完成(setup 問題,非 gate 判準)');
+      stderr.writeln('   ${e.message}');
+      return 4;
+    }
 
     print('');
     print('═' * 60);
@@ -468,6 +509,10 @@ Future<int> runWalkForwardCli(List<String> args) async {
     for (final r in verdict.reasons) {
       print('  $r');
     }
+    // 🚨 機器可讀的判準(2026-08-23)。先前 PASS/FAIL 只存在於這段文字裡,
+    // 而 Stage 4 拿到的是 `flutter test` 的 exit code——gate FAIL 與 PASS
+    // 都是 0,於是管線一律印 `✅ PIPELINE COMPLETE`。
+    print('WALKFORWARD_VERDICT=${verdict.passed ? "PASS" : "FAIL"}');
     return verdict.passed ? 0 : 1;
   } finally {
     await db.close();

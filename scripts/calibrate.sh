@@ -244,18 +244,31 @@ if [ "${SKIP_WALKFORWARD:-0}" = "1" ]; then
 else
   echo "▶️  Stage 4 — Walk-forward gate (~13 分鐘)"
   echo ""
+  wf_out="$(mktemp -t calibrate-wf.XXXXXX)" || {
+    echo "❌ mktemp 失敗" >&2
+    exit 1
+  }
   set +e
-  flutter test test/tool/run_walkforward.dart --reporter=expanded
-  wf_code=$?
+  flutter test test/tool/run_walkforward.dart --reporter=expanded 2>&1 \
+    | tee "$wf_out"
+  wf_code=${PIPESTATUS[0]}
   set -e
+  # 機器可讀判準:runWalkForwardCli 會印 WALKFORWARD_VERDICT=PASS|FAIL。
+  # flutter test 的 exit code 分不出 PASS/FAIL(兩者都是 0),必須抓這一行。
+  WF_VERDICT="$(grep -oE 'WALKFORWARD_VERDICT=(PASS|FAIL)' "$wf_out" \
+    | tail -1 | cut -d= -f2)"
+  rm -f "$wf_out"
   if [ "$wf_code" -eq 0 ]; then
     echo ""
-    echo "✅ Walk-forward 跑完——PASS/FAIL 見上方「WALK-FORWARD 驗證結果」"
+    echo "✅ Walk-forward 跑完——判準:${WF_VERDICT:-未知}"
   else
     echo ""
-    echo "⚠️  Walk-forward setup 失敗(exit $wf_code,多半是缺 DB 或缺現行" >&2
-    echo "    calibrated JSON)——這不是 gate FAIL,是根本沒跑成。promote 前補跑:" >&2
-    echo "    CALIBRATION_DB=$CALIBRATION_DB flutter test test/tool/run_walkforward.dart" >&2
+    echo "❌ Walk-forward setup 失敗(exit $wf_code)——這不是 gate FAIL,是根本" >&2
+    echo "   沒跑成:缺 DB、缺現行 calibrated JSON、或 universe baseline 算不出來" >&2
+    echo "   (常見:WF_SAMPLE_SIZE < 100)。promote 前必須補跑:" >&2
+    echo "   CALIBRATION_DB=$CALIBRATION_DB flutter test test/tool/run_walkforward.dart" >&2
+    # 🚨 中止而非放行:沒有 gate 判準的 candidate 不該被當成可 review 的產出。
+    exit "$wf_code"
   fi
   echo ""
 fi
@@ -266,6 +279,11 @@ fi
 
 echo "=========================================================="
 echo "✅ PIPELINE COMPLETE"
+if [ "${SKIP_WALKFORWARD:-0}" = "1" ]; then
+  echo "   Walk-forward gate:已跳過(SKIP_WALKFORWARD=1)——promote 無依據"
+else
+  echo "   Walk-forward gate:${WF_VERDICT:-未知}"
+fi
 echo "=========================================================="
 echo ""
 echo "產出的 candidate JSON："
@@ -273,15 +291,19 @@ ls -la assets/rule_scores_calibrated_*_candidate.json 2>/dev/null || echo "  (�
 echo ""
 echo "下一步（人工 review）："
 echo ""
-echo "  1. 檢查 candidate JSON："
-echo "     cat assets/rule_scores_calibrated_short_candidate.json | jq ."
-echo "     cat assets/rule_scores_calibrated_long_candidate.json | jq ."
+echo "  1. 看 Stage 3 印的「Promote 影響(App 有效分數)」區塊"
+echo "     那是唯一正確的判讀面——它走 App 的三態 lookup"
+echo "     (active 用校準分／負證據歸零／cut 或缺席 fallback 到手調分)。"
 echo ""
-echo "  2. Review checklist（設計文件 §5.5）："
-echo "     - 多少 rule active vs cut？預期 30-50 / 62"
-echo "     - 4 個 current-day-only rule 是否 cut 成 'insufficient_samples'？"
-echo "     - Active rule 分數在 [10, 35] 範圍？"
-echo "     - 短/長線排序有意義差異？（完全一樣代表出問題）"
+echo "     🚨 不要自己拿 jq 比 active/score:那樣會把「規則不在 JSON 裡」與"
+echo "     「在 JSON 裡但被 cut」都算成 off/0,而 App 眼中兩者完全不同。"
+echo "     2026-08-22 實測:短線因此報「無變動」,實際有 9 條有效分數改變。"
+echo ""
+echo "  2. Review checklist："
+echo "     - Walk-forward 判準是 PASS 嗎?FAIL 就不要 promote"
+echo "     - 有效分數變動的方向合理嗎?(歸零的是多方規則、解除的有樣本支撐)"
+echo "     - 涵蓋警告有沒有說「N 條無 replay 樣本但資料都在」?那代表該重跑 Stage 2"
+echo "     - 短/長線排序有意義差異?(完全一樣代表出問題)"
 echo ""
 echo "  3. 通過後 rename candidate → production："
 echo ""

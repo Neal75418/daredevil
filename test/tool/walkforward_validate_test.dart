@@ -120,8 +120,42 @@ void main() {
       expect(WalkForwardValidator.evaluateGate(folds).passed, isFalse);
     });
 
-    test('空 folds → FAIL（資料不足）', () {
-      expect(WalkForwardValidator.evaluateGate(const []).passed, isFalse);
+    // 🚨 2026-08-23 改語意：空 folds 不再是「FAIL」而是 setup 錯誤。
+    //
+    // 原本回 `passed: false`，於是最終輸出是
+    // 「FAIL：不建議 ship — 現行校準在樣本外已足夠（有效結論）」——那句話在
+    // 一個樣本都沒有時是憑空斷言，而「（有效結論）」正好叫讀者不要追查。
+    // 現在改拋例外 → CLI 回 4 → `expect(code, lessThan(2))` 失敗 → Stage 4
+    // 看得見。
+    test('🚨 空 folds → setup 錯誤，不得偽裝成 gate FAIL', () {
+      expect(
+        () => WalkForwardValidator.evaluateGate(const []),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('🚨 每折樣本外觸發皆為 0 → 同樣是 setup 錯誤', () {
+      final empty = [
+        FoldResult(
+          testYear: 2024,
+          short: const HorizonComparison(
+            newSwe: 0,
+            oldSwe: 0,
+            newActiveRules: 0,
+          ),
+          long: const HorizonComparison(
+            newSwe: 0,
+            oldSwe: 0,
+            newActiveRules: 0,
+          ),
+          testFirings: 0,
+        ),
+      ];
+      expect(
+        () => WalkForwardValidator.evaluateGate(empty),
+        throwsA(isA<Exception>()),
+        reason: '沒量到與量到沒優勢不是同一件事',
+      );
     });
   });
   // ── gate 必須量「會上線的評分」（2026-08-22）─────────────────────
