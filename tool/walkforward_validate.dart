@@ -37,6 +37,10 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_table.dart';
+import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
+import 'package:daredevil/core/constants/reason_type.dart';
+import 'package:daredevil/core/constants/scoring_mode.dart';
 
 import 'recalibrate.dart' as recal;
 import 'replay_calibrator.dart';
@@ -243,7 +247,16 @@ class WalkForwardValidator {
       list,
       baselineHit: baselineHit ?? 0.5,
     );
-    return {for (final e in calibrated.entries) e.key: e.value.score};
+    // 走 App 的三態 lookup（cut/缺席 → hardcoded、負證據 → 0），否則
+    // NEW arm 與 OLD arm 量的不是同一個評分函式。序列化成
+    // `recalibrate` 寫檔用的同一個形狀，讓 parseJson 原樣消費。
+    return effectiveScores(
+      jsonEncode({
+        'schema_version': 1,
+        'rules': {for (final e in calibrated.entries) e.key: e.value.toJson()},
+      }),
+      applyZeroing: horizon == WfHorizon.short,
+    );
   }
 
   /// score-weighted out-of-sample excess：以校準分數×樣本外頻率為權重，
@@ -359,6 +372,40 @@ Map<String, int> parseCalibratedScores(String jsonStr) {
   return result;
 }
 
+/// App 實際使用的「規則 → 有效分數」，供 gate 的兩個 arm 共用。
+///
+/// **為什麼不能用 [parseCalibratedScores]**（2026-08-22）：它只取 raw
+/// `score`，被 cut 或不在 JSON 裡的規則一律當 0。但 App 走
+/// [CalibratedScoresTable.lookup] 的三態語意——cut／缺席回 null、呼叫端
+/// fallback 到 hardcoded 分，只有「多方宣稱 + avg<0 + t≤−1.5」的負證據
+/// 規則才真的歸零（見 `calibrated_scores_registry.dart`）。
+///
+/// 差異不是理論上的：2026-08-22 長線實測，gate 眼中 OLD 只有
+/// `{EPS_CONSECUTIVE_GROWTH: 22}` 一條，App 同時還有 INSTITUTIONAL_BUY=18、
+/// WEEK_52_HIGH=28 在跑。於是「18 → 10」被記成 +10 的收益（實際 −8）、
+/// 「28 → 27」被記成 +27（實際 −1）——三條變動兩條方向相反。gate 若不
+/// 走這條路，量的就不是會上線的評分函式。
+///
+/// [applyZeroing] 對應 `registry` 的 `horizon == Horizon.short`。
+Map<String, int> effectiveScores(
+  String jsonStr, {
+  Map<String, int>? hardcodedScores,
+  bool applyZeroing = false,
+}) {
+  final hard =
+      hardcodedScores ?? {for (final r in ReasonType.values) r.code: r.score};
+  final table = CalibratedScoresTable.parseJson(
+    jsonStr,
+    // horizon 只影響診斷字串，不影響 lookup 語意；歸零由 applyZeroing 控制
+    horizon: applyZeroing ? Horizon.short : Horizon.long,
+    knownRuleIds: hard.keys.toSet(),
+    hardcodedScores: hard,
+    applyNegativeEvidenceZeroing: applyZeroing,
+    structuralExemptions: ModeFilters.modeCRequiredAnyOf,
+  ).table;
+  return {for (final id in hard.keys) id: table.lookup(id) ?? hard[id] ?? 0};
+}
+
 // ============================================================================
 // CLI entry
 // ============================================================================
@@ -419,8 +466,15 @@ Future<int> runWalkForwardCli(List<String> args) async {
 
     final validator = WalkForwardValidator(
       db: db,
-      oldShortScores: parseCalibratedScores(shortFile.readAsStringSync()),
-      oldLongScores: parseCalibratedScores(longFile.readAsStringSync()),
+      // App 的有效分數，不是 raw score——見 [effectiveScores] 的說明
+      oldShortScores: effectiveScores(
+        shortFile.readAsStringSync(),
+        applyZeroing: true,
+      ),
+      oldLongScores: effectiveScores(
+        longFile.readAsStringSync(),
+        applyZeroing: false,
+      ),
       foldYears: foldYears,
       symbolsWhitelist: sample,
     );

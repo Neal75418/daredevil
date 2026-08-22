@@ -141,4 +141,92 @@ void main() {
       expect(WalkForwardValidator.evaluateGate(const []).passed, isFalse);
     });
   });
+  // ── gate 必須量「會上線的評分」（2026-08-22）─────────────────────
+  //
+  // **發現**：`parseCalibratedScores` 只取 raw `score`，被 cut 或不在 JSON
+  // 裡的規則一律當 0。但 App 走 `CalibratedScoresTable.lookup`：cut／缺席
+  // → null → 呼叫端 fallback 到 hardcoded 分；負證據規則才真的歸零。
+  //
+  // 後果是 OLD arm 被嚴重低估。2026-08-22 實測長線：walkforward 眼中 OLD
+  // 只有 `{EPS_CONSECUTIVE_GROWTH: 22}` 一條，而 App 同時還有
+  // INSTITUTIONAL_BUY=18、WEEK_52_HIGH=28 兩條手調分在跑。於是
+  // 「18 → 校準 10」被記成 +10 的收益（實際是 −8），「28 → 27」被記成
+  // +27（實際是 −1）——三條變動有兩條方向相反，gate 的 5/5 折全正因此
+  // 不能當作 promote 依據。
+  group('有效分數（gate 與 App 必須一致）', () {
+    const hardcoded = {'BULL': 20, 'BEAR': -8, 'CAL': 99};
+
+    // parseJson 缺 schema_version 會整份拒載、ruleCount=0，於是每條都
+    // fallback 到 hardcoded——測試會「通過」卻什麼都沒驗到。這條擋住那種
+    // 假測試（2026-08-22 實際踩到）。
+    test('🚨 前提：測試 JSON 真的被載入（否則整組測試是空的）', () {
+      final eff = effectiveScores(
+        '{"schema_version":1,"rules":{"CAL":{"score":30,"active":true}}}',
+        hardcodedScores: hardcoded,
+      );
+      expect(
+        eff['CAL'],
+        isNot(99),
+        reason: '若等於 hardcoded 99，代表 JSON 被拒載、後續斷言全部無效',
+      );
+    });
+
+    test('🚨 前提：舊行為確實把 cut/缺席當 0（這才是要修的東西）', () {
+      final raw = parseCalibratedScores(
+        '{"schema_version":1,"rules":{"CAL":{"score":30},"BULL":{"score":0}}}',
+      );
+      expect(raw['BULL'], 0, reason: 'cut → raw 0');
+      expect(raw.containsKey('BEAR'), isFalse, reason: '缺席 → 根本不在 map');
+    });
+
+    test('🚨 cut 的規則要回 hardcoded，不是 0', () {
+      final eff = effectiveScores(
+        '{"schema_version":1,"rules":{"CAL":{"score":30,"active":true},'
+        '"BULL":{"score":0,"active":false,"cut_reason":"t_stat_below_threshold",'
+        '"avg_return":1.0,"t_stat":0.5}}}',
+        hardcodedScores: hardcoded,
+      );
+      expect(eff['BULL'], 20, reason: 'cut 但無負證據 → fallback 手調 20');
+      expect(eff['CAL'], 30, reason: 'active → 用校準分');
+    });
+
+    test('🚨 完全不在 JSON 的規則也要回 hardcoded', () {
+      final eff = effectiveScores(
+        '{"schema_version":1,"rules":{"CAL":{"score":30,"active":true}}}',
+        hardcodedScores: hardcoded,
+      );
+      expect(eff['BULL'], 20);
+      expect(eff['BEAR'], -8);
+    });
+
+    test('🚨 負證據（多方宣稱 + avg<0 + t≤−1.5）才歸零', () {
+      final eff = effectiveScores(
+        '{"schema_version":1,"rules":{"BULL":{"score":0,"active":false,'
+        '"cut_reason":"t_stat_below_threshold","avg_return":-0.5,"t_stat":-6.0}}}',
+        hardcodedScores: hardcoded,
+        applyZeroing: true,
+      );
+      expect(eff['BULL'], 0, reason: '多方規則被負證據判死 → 歸零');
+    });
+
+    test('空方規則有負證據也不歸零（方向 gate）', () {
+      final eff = effectiveScores(
+        '{"schema_version":1,"rules":{"BEAR":{"score":0,"active":false,'
+        '"cut_reason":"t_stat_below_threshold","avg_return":-0.5,"t_stat":-6.0}}}',
+        hardcodedScores: hardcoded,
+        applyZeroing: true,
+      );
+      expect(eff['BEAR'], -8, reason: '空方觸發後下跌是命題成立，拔防護才是錯的');
+    });
+
+    test('歸零不套用時（長線）維持 hardcoded', () {
+      final eff = effectiveScores(
+        '{"schema_version":1,"rules":{"BULL":{"score":0,"active":false,'
+        '"cut_reason":"t_stat_below_threshold","avg_return":-0.5,"t_stat":-6.0}}}',
+        hardcodedScores: hardcoded,
+        applyZeroing: false,
+      );
+      expect(eff['BULL'], 20);
+    });
+  });
 }
