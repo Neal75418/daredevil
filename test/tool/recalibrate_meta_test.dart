@@ -7,6 +7,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import 'package:daredevil/core/constants/calibration_thresholds.dart';
 import 'package:daredevil/core/constants/reason_type.dart';
 import 'package:daredevil/domain/services/rule_registry.dart';
 
@@ -351,6 +352,47 @@ void main() {
       );
       expect(c.orphaned, isEmpty);
       expect(c.uncalibrated, isEmpty);
+    });
+  });
+  // ── notBackfillableReasons 的完整性（2026-08-22）──────────────────
+  //
+  // 涵蓋警告原本對這 11 條說「需重跑完整管線」——但集保／內部人／警示股／
+  // 新聞根本沒有 backfill phase，跑一百次也不會有樣本。**給無效建議比不給
+  // 更糟**，它讓人以為問題出在沒跑夠。
+  //
+  // 這組常數是人工維護的，最容易的失效方式是 ReasonType 改名而它沒跟上，
+  // 於是那條規則悄悄掉回「可補」那一群，建議又變回無效的那句。
+  group('notBackfillableReasons', () {
+    test('🚨 每一項都是有效的 ReasonType code（改名不得留下孤兒）', () {
+      final codes = ReasonType.values.map((r) => r.code.toUpperCase()).toSet();
+      final orphans = CalibrationThresholds.notBackfillableReasons
+          .where((id) => !codes.contains(id))
+          .toList();
+      expect(orphans, isEmpty, reason: '這些不是有效的 ReasonType，多半是改名後沒同步：$orphans');
+    });
+
+    test('🚨 不得與「補得到」的基本面規則重疊', () {
+      // EPS/ROE/PE/PBR/REVENUE_NEW_HIGH 是 FinMind 抓得到的，只是貴
+      const fetchable = {
+        'EPS_DECLINE_WARNING',
+        'EPS_TURNAROUND',
+        'PBR_UNDERVALUED',
+        'PE_OVERVALUED',
+        'PE_UNDERVALUED',
+        'REVENUE_NEW_HIGH',
+        'ROE_DECLINING',
+        'ROE_EXCELLENT',
+        'ROE_IMPROVING',
+      };
+      expect(
+        CalibrationThresholds.notBackfillableReasons.intersection(fetchable),
+        isEmpty,
+        reason: '被誤列為不可回補的話，就再也不會建議去補它們了',
+      );
+    });
+
+    test('前提：這組常數非空（空了整個分群邏輯等於沒作用）', () {
+      expect(CalibrationThresholds.notBackfillableReasons, isNotEmpty);
     });
   });
 }

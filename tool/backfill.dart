@@ -1203,10 +1203,22 @@ class Backfiller {
     _log('  DB path: ${config.dbPath}');
     _log('  Years: ${config.years}');
     _log('  Symbols: ${symbols.length}');
-    _log(
-      '  Phases: prices:twse, prices:tpex (per-day batch), '
-      'institutional (per-day batch), revenue, financial, valuation',
-    );
+    // 🚨 依 config 列出實際會跑的 phase(2026-08-22 修)。原本是寫死的字串,
+    // 不管 skipFundamentals / skipDayTrading / onlyDayTrading 設什麼都印一樣
+    // ——dry run 的意義就是預覽會發生什麼,印一份與實際不符的清單比不印更糟。
+    final phases = <String>[
+      if (config.onlyDayTrading) ...[
+        'day_trading (only)',
+      ] else ...[
+        if (!config.skipStockListSync) 'stock_list',
+        'prices:twse',
+        'prices:tpex (per-day batch)',
+        'institutional (per-day batch)',
+        if (!config.skipDayTrading) 'day_trading',
+        if (!config.skipFundamentals) ...['revenue', 'financial', 'valuation'],
+      ],
+    ];
+    _log('  Phases: ${phases.join(', ')}');
     // per-day batch 口徑（2026-07-23 稽核修復：原估算沿用已退役的
     // per-symbol 架構，會嚴重高估 quota/耗時）
     final tradingDays = (config.years * 250).round();
@@ -1217,10 +1229,17 @@ class Backfiller {
     );
     _log('    - Institutional: ~$tradingDays 交易日 × 2 市場 (per-day batch)');
     _log('    - DayTrading:    ~$tradingDays 交易日 × 1 市場（僅 TWSE TWTB4U）');
-    _log('    - Revenue:       ${symbols.length} (FinMind per-symbol)');
-    _log('    - Financial:     ${symbols.length} (FinMind per-symbol)');
-    _log('    - Valuation:     ${symbols.length} (FinMind per-symbol)');
-    final totalFinMind = symbols.length * 3;
+    if (config.skipFundamentals) {
+      _log(
+        '    - Revenue/Financial/Valuation: 跳過'
+        '（BACKFILL_SKIP_FUNDAMENTALS）',
+      );
+    } else {
+      _log('    - Revenue:       ${symbols.length} (FinMind per-symbol)');
+      _log('    - Financial:     ${symbols.length} (FinMind per-symbol)');
+      _log('    - Valuation:     ${symbols.length} (FinMind per-symbol)');
+    }
+    final totalFinMind = config.skipFundamentals ? 0 : symbols.length * 3;
     final eta = Duration(seconds: (totalFinMind * 3600 / 600).round());
     _log(
       '  FinMind calls total: ~$totalFinMind (~${_formatDuration(eta)} at '

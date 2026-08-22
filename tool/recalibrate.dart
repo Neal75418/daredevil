@@ -697,12 +697,35 @@ void _printReplayContext(Database db) {
 
   print('🔎 規則涵蓋：${coverage.registrySize} 條註冊規則');
   if (coverage.uncalibrated.isNotEmpty) {
-    print(
-      '   ⚠️  ${coverage.uncalibrated.length} 條無 replay 樣本，'
-      '本次只會拿到手調分：',
-    );
-    print('      ${_previewIds(coverage.uncalibrated)}');
-    print('      → 要給它們統計基礎，需重跑完整管線：./scripts/calibrate.sh');
+    // 分兩群給不同建議:對「這條管線抓不到」的規則說「重跑完整管線」是
+    // 無效建議,會讓人以為問題出在沒跑夠。
+    final fixable = coverage.uncalibrated
+        .where(
+          (id) => !CalibrationThresholds.notBackfillableReasons.contains(id),
+        )
+        .toList();
+    final unfixable = coverage.uncalibrated
+        .where(
+          (id) => CalibrationThresholds.notBackfillableReasons.contains(id),
+        )
+        .toList();
+
+    if (fixable.isNotEmpty) {
+      print('   ⚠️  ${fixable.length} 條無 replay 樣本,本次只會拿到手調分:');
+      print('      ${_previewIds(fixable)}');
+      print('      → 這些補得到,但基本面需約 7,100 次 FinMind 呼叫(額度 600/hr):');
+      print(
+        '        BACKFILL_SKIP_FUNDAMENTALS=0 ./scripts/calibrate-retry.sh',
+      );
+    }
+    if (unfixable.isNotEmpty) {
+      print(
+        '   ℹ️  ${unfixable.length} 條這條管線抓不到資料'
+        '(集保/內部人/警示股/新聞無 backfill phase),永遠是手調分:',
+      );
+      print('      ${_previewIds(unfixable)}');
+      print('      → 重跑管線無效。要校準它們得先為這些來源加 backfill phase。');
+    }
   }
   if (coverage.orphaned.isNotEmpty) {
     print(

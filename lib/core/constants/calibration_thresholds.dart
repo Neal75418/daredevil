@@ -189,4 +189,36 @@ abstract final class CalibrationThresholds {
   /// **30 天為保守閾值**：正常交易的股票最多幾天無成交（連假 + 緩衝），
   /// 30 天涵蓋任何可能的長假期，同時不會誤殺短暫停牌股。
   static const int stalePriceThresholdDays = 30;
+
+  /// 這條校準管線**無法**提供資料的 ReasonType（2026-08-22 實測）。
+  ///
+  /// `scripts/calibrate.sh` 的 backfill 只抓價格、法人、當沖、營收／財報／
+  /// 估值。集保股權分散（`shareholding_distribution` 表根本不存在）、內部人
+  /// （`insider_transfer` 0 列）、警示股（`trading_warning` 0 列）、新聞
+  /// （`news_article` 表不存在）都沒有 phase，`ReplayCalibrator` 對應的
+  /// context 欄位一律傳 null，這些規則在 replay 期間永遠 no-fire。
+  ///
+  /// **為什麼要顯式列出**：`recalibrate` 的涵蓋警告原本對它們說「需重跑完整
+  /// 管線 `./scripts/calibrate.sh`」——跑一百次也不會有樣本。給無效建議比
+  /// 不給建議更糟，因為它讓人以為問題出在沒跑夠。
+  ///
+  /// 與「跑得到但很貴」的基本面規則（EPS／ROE／PE／PBR／REVENUE_NEW_HIGH）
+  /// 不同：那些補得完，只是需要約 7,100 次 FinMind 呼叫。
+  static const Set<String> notBackfillableReasons = {
+    // 集保 / 外資持股 / 質押（TDCC）
+    'CONCENTRATION_HIGH',
+    'FOREIGN_CONCENTRATION_WARNING',
+    'FOREIGN_EXODUS',
+    'FOREIGN_SHAREHOLDING_DECREASING',
+    'FOREIGN_SHAREHOLDING_INCREASING',
+    'HIGH_PLEDGE_RATIO',
+    // 內部人（MOPS）
+    'INSIDER_SELLING_STREAK',
+    'INSIDER_SIGNIFICANT_BUYING',
+    // 警示股（TWSE）
+    'TRADING_WARNING_ATTENTION',
+    'TRADING_WARNING_DISPOSAL',
+    // 新聞（RSS）
+    'NEWS_RELATED',
+  };
 }

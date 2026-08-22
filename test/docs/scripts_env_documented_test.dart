@@ -56,6 +56,7 @@ void main() {
       'MAX_RETRIES',
       'SLEEP_BETWEEN_RETRIES',
       'CALIBRATE_LOG',
+      'SKIP_WALKFORWARD',
     };
     final stale = envVarsDocumented().difference(read).toList()..sort();
     expect(stale, isEmpty, reason: '說明列了 CLI 不讀的變數：$stale');

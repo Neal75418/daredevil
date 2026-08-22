@@ -38,6 +38,9 @@
 #     export BACKFILL_PRICES_VIA_FINMIND=1  # 價格改走 FinMind（TWSE 不可用時）
 #     export BACKFILL_DRY_RUN=1             # dry run，不實際抓取
 #
+#     # Gate 階段
+#     export SKIP_WALKFORWARD=1             # 跳過 Stage 4 walk-forward(~13 分鐘)
+#
 #     # Replay 階段
 #     export REPLAY_MIN_HISTORY=60          # 最少歷史天數
 #     export REPLAY_SYMBOLS=2330,2317       # 限定 symbol
@@ -130,10 +133,21 @@ trap 'rm -rf "$LOCKDIR"' EXIT INT TERM
 : "${BACKFILL_SYMBOLS:=}"
 : "${BACKFILL_DRY_RUN:=0}"
 
+# 🚨 基本面預設跳過(2026-08-22 改)。原本預設抓,但 revenue/financial/
+# valuation 三個 phase 需約 7,100 次 FinMind 呼叫、額度 600/hr,單次跑不完
+# (約 12 小時),而撞限流會 abort 整個 backfill——連帶讓下一輪只打 1 次的
+# stock_list 也被鎖在門外。2026-08-22 實測連續兩次因此整條管線報廢。
+# 這也吻合 2026-07-13 的既有判斷:「FinMind 額度成本高、對校準邊際低,
+# 刻意停損」(docs/plans/2026-07-13-gapfill-recalibration-report.md)。
+# 要補基本面時明確 opt-in:BACKFILL_SKIP_FUNDAMENTALS=0 且建議走
+# calibrate-retry.sh(它會自動處理限流重試)。
+: "${BACKFILL_SKIP_FUNDAMENTALS:=1}"
+
 export BACKFILL_YEARS
 export CALIBRATION_DB
 export BACKFILL_SYMBOLS
 export BACKFILL_DRY_RUN
+export BACKFILL_SKIP_FUNDAMENTALS
 
 echo "=========================================================="
 echo "🚀 Stage 3+4 Calibration Pipeline"
@@ -203,6 +217,38 @@ dart run tool/recalibrate.dart --db "$CALIBRATION_DB"
 echo ""
 echo "✅ Recalibrate 完成"
 echo ""
+
+# ============================================================================
+# Stage 4 — Walk-forward gate
+# ============================================================================
+#
+# 🚨 為什麼要在管線內(2026-08-22):`run_walkforward.dart` 的 docstring 本來
+# 就寫著「由 scripts 在 backfill + replay 後呼叫」,但從來沒接上。promote
+# 決策非它不可,而留成手動的實際後果是**不會有人跑** —— 2026-08-22 若不是
+# 特地去找,整個 promote 判斷就會建立在沒有樣本外驗證的 candidate 上。
+#
+# exit code:0=gate PASS、1=gate FAIL(兩者都是有效結論,不擋管線)、
+# 2=無 DB、3=無現行 calibrated JSON(setup 錯誤,要讓人看見)。
+if [ "${SKIP_WALKFORWARD:-0}" = "1" ]; then
+  echo "⏭️  Stage 4 — Walk-forward:SKIP_WALKFORWARD=1,跳過"
+  echo ""
+else
+  echo "▶️  Stage 4 — Walk-forward gate (~13 分鐘)"
+  echo ""
+  set +e
+  flutter test test/tool/run_walkforward.dart --reporter=expanded
+  wf_code=$?
+  set -e
+  if [ "$wf_code" -eq 0 ]; then
+    echo ""
+    echo "✅ Walk-forward 完成(判準見上方 gate 結論)"
+  else
+    echo ""
+    echo "⚠️  Walk-forward 未正常完成(exit $wf_code)——promote 前請自行補跑:" >&2
+    echo "    CALIBRATION_DB=$CALIBRATION_DB flutter test test/tool/run_walkforward.dart" >&2
+  fi
+  echo ""
+fi
 
 # ============================================================================
 # Summary + next steps
