@@ -219,8 +219,8 @@ dart run build_runner build --delete-conflicting-outputs        # 程式碼生�
 ## 測試
 
 測試數量與覆蓋率以 [CI](https://github.com/Neal75418/daredevil/actions/workflows/flutter.yml) 與
-[Codecov](https://codecov.io/gh/Neal75418/daredevil) 為準；各層覆蓋率目標與現況快照見
-[docs/TEST_COVERAGE_PLAN.md](docs/TEST_COVERAGE_PLAN.md)。
+[Codecov](https://codecov.io/gh/Neal75418/daredevil) 為準；各層覆蓋率目標見
+[CLAUDE.md](CLAUDE.md) 的「測試」章節。
 
 ```bash
 flutter test                       # 快速測試
@@ -232,14 +232,13 @@ flutter test test/domain/services/ # 測試特定目錄
 
 ## 文件
 
-| 文件                                                     | 說明                     |
-|:---------------------------------------------------------|:-------------------------|
-| [CLAUDE.md](CLAUDE.md)                                   | AI 開發指引              |
-| [RELEASE.md](RELEASE.md)                                 | 發布建置指南             |
-| [CHANGELOG.md](CHANGELOG.md)                             | 版本變更紀錄             |
-| [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)               | 規則引擎定義 (70 條規則) |
-| [docs/PENDING_UPGRADES.md](docs/PENDING_UPGRADES.md)     | 依賴升級紀錄             |
-| [docs/TEST_COVERAGE_PLAN.md](docs/TEST_COVERAGE_PLAN.md) | 測試覆蓋率計劃           |
+| 文件                                                 | 說明                     |
+|:-----------------------------------------------------|:-------------------------|
+| [CLAUDE.md](CLAUDE.md)                               | AI 開發指引              |
+| [RELEASE.md](RELEASE.md)                             | 發布建置指南             |
+| [CHANGELOG.md](CHANGELOG.md)                         | 版本變更紀錄             |
+| [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)           | 規則引擎定義 (70 條規則) |
+| [docs/PENDING_UPGRADES.md](docs/PENDING_UPGRADES.md) | 依賴升級紀錄             |
 
 ---
 
