@@ -89,24 +89,23 @@ _See what changed, without noise._
 
 ```mermaid
 flowchart LR
-    subgraph EXT["🌐 外部資料源"]
+    subgraph EXT["外部資料源"]
         API["TWSE · TPEx<br/>FinMind · TDCC"]
         RSS["RSS 新聞"]
     end
 
-    subgraph DATA["📦 Data Layer"]
+    subgraph DATA["Data Layer"]
         CLI["API Clients"]
         REPO["Repositories"]
         DB[("SQLite")]
     end
 
-    subgraph DOM["⚙️ Domain Layer"]
-        UPD["Update Services"]
+    subgraph DOM["Domain Layer"]
         ANA["Analysis / Scoring"]
         RULE["Rule Engine"]
     end
 
-    subgraph PRES["📱 Presentation"]
+    subgraph PRES["Presentation"]
         PROV["Riverpod Providers"]
         UI["Screens"]
     end
@@ -114,7 +113,6 @@ flowchart LR
     API --> CLI
     RSS --> CLI
     CLI --> REPO --> DB
-    UPD -.-> CLI
     DB --> ANA --> RULE
     RULE -->|訊號寫回| DB
     DB --> PROV --> UI
@@ -126,7 +124,7 @@ flowchart LR
 
     class API,RSS ext
     class CLI,REPO,DB data
-    class UPD,ANA,RULE dom
+    class ANA,RULE dom
     class PROV,UI pres
 ```
 

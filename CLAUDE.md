@@ -14,18 +14,18 @@
 
 ```mermaid
 flowchart LR
-    subgraph Input["🌐 每日輸入"]
+    subgraph Input["每日輸入"]
         API["公開 API"]
         RSS["RSS 新聞"]
     end
 
-    subgraph Process["⚙️ 本地處理"]
+    subgraph Process["本地處理"]
         Sync["資料同步"]
         Rules["70 條規則"]
         Score["評分引擎"]
     end
 
-    subgraph Output["📱 產出"]
+    subgraph Output["產出"]
         Modes["三模式選股<br/>起漲 / 強勢 / 回檔"]
         Alert["異常警示"]
     end
