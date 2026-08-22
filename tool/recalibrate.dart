@@ -39,6 +39,10 @@ import 'package:crypto/crypto.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'package:daredevil/core/constants/calibration_thresholds.dart';
+import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_table.dart';
+import 'package:daredevil/core/constants/calibrated_scores/horizon.dart' as cal;
+import 'package:daredevil/core/constants/reason_type.dart';
+import 'package:daredevil/core/constants/scoring_mode.dart';
 import 'package:daredevil/domain/services/rule_registry.dart';
 
 // ============================================================================
@@ -559,6 +563,99 @@ final _thresholdLong =
 
 const _formulaVersion = 'linear_map_v1';
 
+/// 一條規則在 promote 前後的有效分數。
+typedef EffectiveScoreChange = ({String ruleId, int before, int after});
+
+/// App 實際使用的「規則 → 有效分數」。
+///
+/// **不要改成比 `active`／`score`**（2026-08-22 實際踩到）：`active:false,
+/// score:0` 與「規則根本不在 JSON 裡」在 App 眼中是兩回事——前者可能被負
+/// 證據歸零（lookup 回 0），後者 fallback 到 hardcoded 分。同日寫進
+/// `docs/CALIBRATION.md` 的 jq 摘要正是這樣比，短線報「無變動」而實際有 9
+/// 條改變；walk-forward gate 也栽在同一個坑。一律走
+/// [CalibratedScoresTable.lookup]，不重寫語意。
+///
+/// [applyZeroing] 對應 `calibrated_scores_registry.dart` 的
+/// `horizon == Horizon.short`。
+Map<String, int> effectiveScores(
+  String jsonStr, {
+  Map<String, int>? hardcodedScores,
+  bool applyZeroing = false,
+}) {
+  final hard =
+      hardcodedScores ?? {for (final r in ReasonType.values) r.code: r.score};
+  final table = CalibratedScoresTable.parseJson(
+    jsonStr,
+    horizon: applyZeroing ? cal.Horizon.short : cal.Horizon.long,
+    knownRuleIds: hard.keys.toSet(),
+    hardcodedScores: hard,
+    applyNegativeEvidenceZeroing: applyZeroing,
+    structuralExemptions: ModeFilters.modeCRequiredAnyOf,
+  ).table;
+  return {for (final id in hard.keys) id: table.lookup(id) ?? hard[id] ?? 0};
+}
+
+/// production 與 candidate 的有效分數差異，依 ruleId 排序。
+List<EffectiveScoreChange> diffEffectiveScores(
+  String productionJson,
+  String candidateJson, {
+  Map<String, int>? hardcodedScores,
+  bool applyZeroing = false,
+}) {
+  final a = effectiveScores(
+    productionJson,
+    hardcodedScores: hardcodedScores,
+    applyZeroing: applyZeroing,
+  );
+  final b = effectiveScores(
+    candidateJson,
+    hardcodedScores: hardcodedScores,
+    applyZeroing: applyZeroing,
+  );
+  final ids = ({...a.keys, ...b.keys}.toList())..sort();
+  return [
+    for (final id in ids)
+      if ((a[id] ?? 0) != (b[id] ?? 0))
+        (ruleId: id, before: a[id] ?? 0, after: b[id] ?? 0),
+  ];
+}
+
+/// 印出「promote 這份 candidate 之後,App 的有效分數會怎麼變」。
+///
+/// review gate 的主要判讀面。`git diff` 對 candidate 永遠是空的(它們在
+/// .gitignore 內),而比對 `active`/`score` 會漏掉「缺席 → 被 cut」這類
+/// 變動——那正是負證據歸零生效的地方。這裡走 App 的三態 lookup,印出的
+/// 就是實際會發生的事。
+///
+/// 檔案缺失時安靜跳過:單 horizon 執行或首次產出都可能沒有對應檔。
+void _printPromoteImpact() {
+  print('');
+  print('═══ Promote 影響(App 有效分數)═══');
+  for (final (name, zeroing) in [
+    (_horizonShort, true),
+    (_horizonLong, false),
+  ]) {
+    final prod = File('assets/rule_scores_calibrated_$name.json');
+    final cand = File('assets/rule_scores_calibrated_${name}_candidate.json');
+    if (!prod.existsSync() || !cand.existsSync()) continue;
+
+    final changes = diffEffectiveScores(
+      prod.readAsStringSync(),
+      cand.readAsStringSync(),
+      applyZeroing: zeroing,
+    );
+    final tag = zeroing ? '負證據歸零生效' : '負證據歸零不套用';
+    if (changes.isEmpty) {
+      print('  $name($tag):有效分數無變化');
+      continue;
+    }
+    print('  $name($tag):${changes.length} 條有效分數變動');
+    for (final c in changes) {
+      print('    ${c.ruleId.padRight(30)} ${c.before} → ${c.after}');
+    }
+  }
+}
+
 /// 印出這份 DB 的 replay 背景資訊與規則涵蓋落差。
 ///
 /// 只跑本工具（＝三階段的最後一段）會沿用既有 replay 樣本重算，而 exit code
@@ -681,11 +778,12 @@ Future<void> main(List<String> args) async {
   }
 
   print('');
+  if (!config.dryRun) _printPromoteImpact();
   print('✅ 完成');
   if (!config.dryRun) {
     print('');
     print('👉 Review 流程：');
-    print('   1. git diff assets/rule_scores_calibrated_*_candidate.json');
+    print('   1. 看上方「Promote 影響」——candidate 在 .gitignore 內,git diff 永遠是空的');
     print('   2. 判斷分數變動是否合理');
     print('   3. Approve: mv *_candidate.json → production filename');
     print(

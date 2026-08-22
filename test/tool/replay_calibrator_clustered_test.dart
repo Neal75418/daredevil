@@ -290,4 +290,80 @@ void main() {
       );
     });
   });
+  // ── persist:false（2026-08-22）─────────────────────────────────────
+  //
+  // **為什麼需要**：`run()` 無條件把 rule_accuracy / rule_daily_stats /
+  // calibration_run_meta 寫進傳入的 `db`。walkforward 為了每折的 train/test
+  // 各跑一次 replay，5 折共 10 次，於是**把正式的校準結果整個蓋掉**——
+  // config 的 `dbPath: ':memory:'` 是幌子，寫入用的是傳進去的 db handle。
+  //
+  // 2026-08-22 實測：跑完 walkforward 後，DB 的 rule_daily_stats 只剩
+  // 2026-01-02～2026-05-27 共 93 天（原本 1498 個交易日），firings 從
+  // 3,089,775 掉到 48,738。之後任何 recalibrate 都會拿這份殘骸產 candidate，
+  // 而且三個訊號全部正常：exit 0、JSON 照常寫出、無錯誤訊息。
+  //
+  // `dryRun` 不能用——它早退且回空 stats，walkforward 需要真的算完。
+  group('persist:false — 只算不落檔', () {
+    test('🚨 前提：預設會落檔（否則這組測試沒在驗東西）', () async {
+      await seedStock('SLOW', priceDays: 200, growthPerDay: 0.5);
+      await seedStock('MED', priceDays: 200);
+      await seedStock('FAST', priceDays: 200, growthPerDay: 1.5);
+      await excessCalibrator().run();
+
+      final rows = await db
+          .customSelect('SELECT COUNT(*) c FROM rule_accuracy')
+          .getSingle();
+      expect(rows.read<int>('c'), greaterThan(0), reason: '預設 persist 應寫入');
+    });
+
+    test('🚨 persist:false 不得覆寫既有的 rule_accuracy', () async {
+      await seedStock('SLOW', priceDays: 200, growthPerDay: 0.5);
+      await seedStock('MED', priceDays: 200);
+      await seedStock('FAST', priceDays: 200, growthPerDay: 1.5);
+      await excessCalibrator().run();
+      final before = await db
+          .customSelect('SELECT COUNT(*) c FROM rule_accuracy')
+          .getSingle();
+      final metaBefore = await db
+          .customSelect(
+            "SELECT value v FROM calibration_run_meta WHERE key='generated_at'",
+          )
+          .getSingleOrNull();
+
+      final result = await ReplayCalibrator(
+        db: db,
+        config: const ReplayConfig(
+          dbPath: ':memory:',
+          minHistoryDays: 20,
+          minUniverseSymbols: 2,
+          persist: false,
+        ),
+        analysisService: mockAnalysis,
+        ruleEngine: mockRuleEngine,
+        logger: (_) {},
+      ).run();
+
+      expect(
+        result.ruleStats,
+        isNotEmpty,
+        reason: 'persist:false 只跳過落檔，運算結果照樣回傳（不同於 dryRun）',
+      );
+
+      final after = await db
+          .customSelect('SELECT COUNT(*) c FROM rule_accuracy')
+          .getSingle();
+      expect(after.read<int>('c'), before.read<int>('c'));
+
+      final metaAfter = await db
+          .customSelect(
+            "SELECT value v FROM calibration_run_meta WHERE key='generated_at'",
+          )
+          .getSingleOrNull();
+      expect(
+        metaAfter?.read<String>('v'),
+        metaBefore?.read<String>('v'),
+        reason: 'generated_at 不得被覆寫——它是判斷 replay 新舊的依據',
+      );
+    });
+  });
 }

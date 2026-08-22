@@ -142,6 +142,9 @@ class WalkForwardValidator {
           minUniverseSymbols: minUniverseSymbols,
           symbolsWhitelist: symbolsWhitelist,
           excludeFilter: (start: yearStart, end: yearEnd),
+          // 折內 replay 是評估用的子窗口,不得覆寫正式校準結果——
+          // dbPath 的 ':memory:' 不會讓寫入轉向,落檔用的是傳進來的 db。
+          persist: false,
         ),
         logger: (_) {},
       ).run();
@@ -165,6 +168,9 @@ class WalkForwardValidator {
           minUniverseSymbols: minUniverseSymbols,
           symbolsWhitelist: symbolsWhitelist,
           dateFilter: (start: yearStart, end: yearEnd),
+          // 折內 replay 是評估用的子窗口,不得覆寫正式校準結果——
+          // dbPath 的 ':memory:' 不會讓寫入轉向,落檔用的是傳進來的 db。
+          persist: false,
         ),
         logger: (_) {},
       ).run();

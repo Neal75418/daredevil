@@ -77,6 +77,7 @@ class ReplayConfig {
     this.excessSuccessThreshold = CalibrationThresholds.excessSuccessThreshold,
     this.dateFilter,
     this.excludeFilter,
+    this.persist = true,
   });
 
   final String dbPath;
@@ -85,6 +86,20 @@ class ReplayConfig {
   final int minHistoryDays;
 
   final bool dryRun;
+
+  /// 是否把結果寫回 [db]（`rule_accuracy` / `rule_daily_stats` /
+  /// `calibration_run_meta`）。
+  ///
+  /// **與 [dryRun] 的差別**：`dryRun` 早退、回空 stats，什麼都不算；
+  /// `persist: false` 照常算完並回傳，只跳過落檔。
+  ///
+  /// **為什麼需要**（2026-08-22）：`walkforward_validate` 每折要跑 train +
+  /// test 兩次 replay，5 折共 10 次。這些是**評估用的子窗口**，不該覆寫正式
+  /// 校準結果——`config.dbPath` 寫 `':memory:'` 並不會讓寫入轉向，落檔用的
+  /// 是傳進來的 [db] handle。實測後果：DB 的 rule_daily_stats 只剩最後一折
+  /// 的 93 天（原 1498 個交易日）、firings 從 309 萬掉到 4.9 萬，而且
+  /// exit 0、無任何錯誤訊息。
+  final bool persist;
 
   /// 可選 whitelist（測試用，限定 symbol 範圍）
   final List<String>? symbolsWhitelist;
@@ -346,16 +361,21 @@ class ReplayCalibrator {
     );
 
     // 3. Write aggregated stats to rule_accuracy + clustered 持久化
-    _log('');
-    _log('▶️  Writing rule_accuracy table...');
-    await _ensureClusteredTables();
-    // 單一交易涵蓋兩組表：crash 不會留下「新 rule_accuracy + 舊 daily/meta」
-    // 的混合快照。
-    await db.transaction(() async {
-      await _writeRuleAccuracy(ruleStats);
-      await _writeClusteredStats(ruleStats, baseline);
-    });
-    _log('✅ rule_accuracy / rule_daily_stats / calibration_run_meta 寫入完成');
+    if (config.persist) {
+      _log('');
+      _log('▶️  Writing rule_accuracy table...');
+      await _ensureClusteredTables();
+      // 單一交易涵蓋兩組表：crash 不會留下「新 rule_accuracy + 舊 daily/meta」
+      // 的混合快照。
+      await db.transaction(() async {
+        await _writeRuleAccuracy(ruleStats);
+        await _writeClusteredStats(ruleStats, baseline);
+      });
+      _log('✅ rule_accuracy / rule_daily_stats / calibration_run_meta 寫入完成');
+    } else {
+      _log('');
+      _log('⏭️  persist:false — 只回傳統計，不寫回 DB');
+    }
 
     final duration = DateTime.now().difference(overallStart);
     final result = ReplayResult(

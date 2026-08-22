@@ -226,4 +226,69 @@ void main() {
       expect(replayAgeInDays(null, DateTime.utc(2026, 8, 22)), isNull);
     });
   });
+  // ── promote 影響摘要（2026-08-22）────────────────────────────────
+  //
+  // **為什麼不能比 active/score**：同日先寫進 docs 的 jq 摘要就是這樣比，
+  // 結果短線報「無變動」，實際有 9 條有效分數改變。`active:false, score:0`
+  // 與「規則根本不在 JSON 裡」在 App 眼中完全不同——前者可能被負證據歸零
+  // （lookup 回 0），後者 fallback 到 hardcoded 分。同一天 walk-forward gate
+  // 也栽在這個坑（見 walkforward_validate_test.dart）。
+  //
+  // 所以摘要一律走 `CalibratedScoresTable.lookup`，不重寫語意。
+  group('promote 影響摘要', () {
+    const hard = {'BULL': 20, 'BEAR': -8, 'CAL': 99};
+    String js(String rules) => '{"schema_version":1,"rules":{$rules}}';
+
+    test('🚨 前提：JSON 真的被載入（缺 schema_version 會整份拒載）', () {
+      final d = diffEffectiveScores(
+        js('"CAL":{"score":30,"active":true}'),
+        js('"CAL":{"score":40,"active":true}'),
+        hardcodedScores: hard,
+      );
+      expect(d, isNotEmpty, reason: '若為空代表兩份都被拒載，測試無效');
+    });
+
+    test('🚨 「缺席 → 被 cut」不是無變動（jq 版漏掉的正是這個）', () {
+      final d = diffEffectiveScores(
+        js('"CAL":{"score":30,"active":true}'),
+        js(
+          '"CAL":{"score":30,"active":true},'
+          '"BULL":{"score":0,"active":false,"cut_reason":"t",'
+          '"avg_return":-0.5,"t_stat":-6.0}',
+        ),
+        hardcodedScores: hard,
+        applyZeroing: true,
+      );
+      expect(d.map((e) => e.ruleId), contains('BULL'));
+      final b = d.firstWhere((e) => e.ruleId == 'BULL');
+      expect(b.before, 20, reason: '缺席 → fallback 手調 20');
+      expect(b.after, 0, reason: '被 cut 且有負證據 → 歸零');
+    });
+
+    test('active 分數變動照樣列出', () {
+      final d = diffEffectiveScores(
+        js('"CAL":{"score":30,"active":true}'),
+        js('"CAL":{"score":40,"active":true}'),
+        hardcodedScores: hard,
+      );
+      final c = d.single;
+      expect(c.ruleId, 'CAL');
+      expect(c.before, 30);
+      expect(c.after, 40);
+    });
+
+    test('真的沒變就是空清單', () {
+      final same = js('"CAL":{"score":30,"active":true}');
+      expect(diffEffectiveScores(same, same, hardcodedScores: hard), isEmpty);
+    });
+
+    test('輸出依 ruleId 排序（同輸入不得每次印不同順序）', () {
+      final d = diffEffectiveScores(
+        js('"CAL":{"score":1,"active":true},"BULL":{"score":1,"active":true}'),
+        js('"CAL":{"score":2,"active":true},"BULL":{"score":2,"active":true}'),
+        hardcodedScores: hard,
+      );
+      expect(d.map((e) => e.ruleId).toList(), ['BULL', 'CAL']);
+    });
+  });
 }
