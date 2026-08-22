@@ -1211,8 +1211,13 @@ class Backfiller {
         'day_trading (only)',
       ] else ...[
         if (!config.skipStockListSync) 'stock_list',
-        'prices:twse',
-        'prices:tpex (per-day batch)',
+        // 價格來源是二選一(見主流程的 if/else),不是兩者都跑
+        if (config.pricesViaFinMind)
+          'prices:finmind'
+        else ...[
+          'prices:twse',
+          'prices:tpex (per-day batch)',
+        ],
         'institutional (per-day batch)',
         if (!config.skipDayTrading) 'day_trading',
         if (!config.skipFundamentals) ...['revenue', 'financial', 'valuation'],
