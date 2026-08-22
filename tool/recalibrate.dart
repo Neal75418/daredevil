@@ -39,6 +39,7 @@ import 'package:crypto/crypto.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'package:daredevil/core/constants/calibration_thresholds.dart';
+import 'package:daredevil/domain/services/rule_registry.dart';
 
 // ============================================================================
 // Public data models (importable by tests)
@@ -446,21 +447,49 @@ class RunMeta {
   bool get isExcess => returnMode == 'excess';
 }
 
-/// replay 樣本相對於 [now] 的年齡。[generatedAt] 為 null → null（不知道就
-/// 不下結論，寧可不提示也不要提示錯的）。
+/// replay 樣本相對於 [now] 的天數。[generatedAt] 為 null → null。
 ///
-/// 未來時間戳（時鐘偏移）會得到負數天且 `isStale == false`——那是時鐘問題，
-/// 不是資料過期，不該混為一談。
-({int days, bool isStale})? classifyReplayAge(
-  DateTime? generatedAt,
-  DateTime now,
-) {
-  if (generatedAt == null) return null;
-  final days = now.toUtc().difference(generatedAt.toUtc()).inDays;
+/// **刻意不判斷「過期」**：量測顯示時間是錯的軸——1468 個交易日的 DB 多等
+/// 一個月只增 1.4% 樣本、t-stat 改善 0.71%，而 73 個 cut 裡 61 個是 t-stat
+/// 不足、僅 4 個是樣本不足。天數只當背景資訊印出，判斷交給
+/// [compareRuleCoverage]（規則集變動才是真的會讓 replay 樣本失效的事）。
+///
+/// 未來時間戳（時鐘偏移）得到負數，呼叫端照原樣印出即可。
+int? replayAgeInDays(DateTime? generatedAt, DateTime now) => generatedAt == null
+    ? null
+    : now.toUtc().difference(generatedAt.toUtc()).inDays;
+
+/// 註冊表與 replay 樣本的規則涵蓋差集。
+///
+/// - [uncalibrated]：註冊表有、replay 樣本沒有——新規則在舊 replay 裡一筆
+///   觸發都沒有，只能吃手調分。這是唯一需要重跑完整管線的理由。
+/// - [orphaned]：replay 有、註冊表已無——改名或刪除留下的死列，會在
+///   candidate JSON 佔位卻永遠查不到。
+///
+/// 兩邊 id 大小寫不同（`rule_accuracy` 存大寫、`StockRule.id` 是小寫），
+/// 一律正規化成大寫再比，否則會整組誤判成差異。輸出排序固定，避免同一份
+/// 輸入每次印出不同順序。
+({List<String> uncalibrated, List<String> orphaned, int registrySize})
+compareRuleCoverage(Set<String> registryIds, Set<String> replayedIds) {
+  final registry = registryIds.map((e) => e.toUpperCase()).toSet();
+  final replayed = replayedIds.map((e) => e.toUpperCase()).toSet();
   return (
-    days: days,
-    isStale: days > CalibrationThresholds.staleReplayWarnDays,
+    uncalibrated: registry.difference(replayed).toList()..sort(),
+    orphaned: replayed.difference(registry).toList()..sort(),
+    registrySize: registry.length,
   );
+}
+
+/// 讀 `rule_accuracy` 裡出現過的所有 rule id。表不存在 → 空集合。
+Set<String> readReplayedRuleIds(Database db) {
+  try {
+    return db
+        .select('SELECT DISTINCT rule_id FROM rule_accuracy')
+        .map((r) => r['rule_id'] as String)
+        .toSet();
+  } on SqliteException {
+    return const {};
+  }
 }
 
 /// 讀 `calibration_run_meta`。表不存在（舊 DB、replay 未重跑）→ null。
@@ -530,28 +559,56 @@ final _thresholdLong =
 
 const _formulaVersion = 'linear_map_v1';
 
-/// 印出這份 DB 的 replay 落檔時間，過舊則示警。
+/// 印出這份 DB 的 replay 背景資訊與規則涵蓋落差。
 ///
-/// 只跑本工具（= 三階段的最後一段）會拿舊 replay 樣本重算，而 exit code 0、
-/// candidate JSON 照常產出、無任何異常——把時間戳印出來是唯一能當場看見的
-/// 訊號。刻意只重算末段是合法用法，所以這裡不擋、只提示。
-void _printReplayFreshness(Database db) {
+/// 只跑本工具（＝三階段的最後一段）會沿用既有 replay 樣本重算，而 exit code
+/// 0、candidate JSON 照常產出、無任何異常——與 launchd CLI 產物落後同屬
+/// 「過期但三個訊號全正常」，同樣靠把事實印出來解決。
+///
+/// 印涵蓋差集而非「距今幾天」的判決：差集直接說出是**哪幾條**規則沒有統計
+/// 基礎，天數說不出來。刻意不擋——只重算末段是合法用法（調統計方法或閾值
+/// 時），這裡只負責讓它成為有意識的選擇。
+void _printReplayContext(Database db) {
   final generatedAt = readRunMeta(db)?.generatedAt;
-  final age = classifyReplayAge(generatedAt, DateTime.now().toUtc());
-  if (age == null) {
+  final age = replayAgeInDays(generatedAt, DateTime.now().toUtc());
+  if (generatedAt == null) {
     print('📅 replay 落檔時間：未知（舊 DB 無 generated_at）');
+  } else {
+    print('📅 replay 落檔於 ${generatedAt.toIso8601String()}（$age 天前）');
+  }
+
+  final coverage = compareRuleCoverage(
+    RuleRegistry.defaultRules.map((r) => r.id).toSet(),
+    readReplayedRuleIds(db),
+  );
+  if (coverage.uncalibrated.isEmpty && coverage.orphaned.isEmpty) {
+    print('🔎 規則涵蓋：${coverage.registrySize} 條全部都有 replay 樣本');
     return;
   }
-  final stamp = generatedAt!.toIso8601String();
-  print('📅 replay 落檔於 $stamp（${age.days} 天前）');
-  if (age.isStale) {
+
+  print('🔎 規則涵蓋：${coverage.registrySize} 條註冊規則');
+  if (coverage.uncalibrated.isNotEmpty) {
     print(
-      '⚠️  超過 ${CalibrationThresholds.staleReplayWarnDays} 天——本次只重算'
-      '評分，不會重跑 backfill／replay。',
+      '   ⚠️  ${coverage.uncalibrated.length} 條無 replay 樣本，'
+      '本次只會拿到手調分：',
     );
-    print('   若規則或資料在這段期間有變動，請改跑完整管線：');
-    print('   ./scripts/calibrate.sh（會限流時用 ./scripts/calibrate-retry.sh）');
+    print('      ${_previewIds(coverage.uncalibrated)}');
+    print('      → 要給它們統計基礎，需重跑完整管線：./scripts/calibrate.sh');
   }
+  if (coverage.orphaned.isNotEmpty) {
+    print(
+      '   ℹ️  ${coverage.orphaned.length} 條樣本中的規則已不在註冊表'
+      '（改名或刪除，candidate JSON 會留下查不到的死列）：',
+    );
+    print('      ${_previewIds(coverage.orphaned)}');
+  }
+}
+
+/// 最多列 6 條，其餘以數量帶過——避免 31 條把畫面洗掉。
+String _previewIds(List<String> ids) {
+  const limit = 6;
+  if (ids.length <= limit) return ids.join(', ');
+  return '${ids.take(limit).join(', ')} …（另 ${ids.length - limit} 條）';
 }
 
 Future<void> main(List<String> args) async {
@@ -586,7 +643,7 @@ Future<void> main(List<String> args) async {
   }
 
   final db = sqlite3.open(dbPath, mode: OpenMode.readOnly);
-  _printReplayFreshness(db);
+  _printReplayContext(db);
   final horizonResults = <String, HorizonOutput>{};
   try {
     for (final horizon in _horizonsToProcess(config.horizon)) {

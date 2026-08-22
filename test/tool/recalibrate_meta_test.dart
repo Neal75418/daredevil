@@ -97,16 +97,85 @@ void main() {
       expect(loadDailyMeans(db, '5D'), isEmpty);
     });
   });
-  // ── replay 陳舊警告（2026-08-22）─────────────────────────────────
+  // ── 規則涵蓋差集（2026-08-22）──────────────────────────────────
   //
-  // **問題形狀**：`scripts/calibrate.sh` 串 backfill→replay→recalibrate 三
-  // 階段，但 `docs/CALIBRATION.md` 只教手動跑第三階段。照文件走會拿**舊的
-  // replay 結果**重算分數，而 exit code 0、candidate JSON 正常產出、無任何
-  // 異常——與 CLAUDE.md 記載的 launchd CLI 落後是同一類 bug（產物過期但
-  // 三個訊號全正常），也用同一種解法：把時間戳印出來。
+  // **為什麼從「時間」改成「涵蓋」**：原本用「replay 超過 30 天」示警，但
+  // 量測後那個軸是錯的——DB 有 1468 交易日，多等一個月只增 1.4% 樣本、
+  // t-stat 只改善 0.71%；一條卡在 t=1.5 的規則要靠時間推過門檻得再等 4.1
+  // 年。而 73 個被 cut 的規則裡 61 個是 t_stat 不足、只有 4 個是樣本不足。
+  // 時間幾乎不改變任何結論。
   //
-  // `calibration_run_meta.generated_at` 一直都在表裡，只是 `RunMeta` 沒取。
-  group('replay 陳舊判定', () {
+  // 真正會讓 replay 樣本失效的是**規則集變動**：新規則在舊 replay 裡一筆
+  // 觸發都沒有，拿到的必然是手調分。首次跑就抓到 31/70 條無樣本，其中
+  // BREAK_MA20／BREAK_MA60／RECLAIM_MA20／RECLAIM_MA60 是 2026-08 才做的
+  // 四階均線階梯。
+  //
+  // 反方向也要抓：replay 有、註冊表已無的規則（改名或刪除）會在 candidate
+  // JSON 留下永遠查不到的死列。
+  group('規則涵蓋差集', () {
+    test('大小寫不一致不得算成差異（DB 存大寫、rule.id 是小寫）', () {
+      final c = compareRuleCoverage(
+        {'break_ma20', 'week_52_high'},
+        {'BREAK_MA20', 'WEEK_52_HIGH'},
+      );
+      expect(c.uncalibrated, isEmpty);
+      expect(c.orphaned, isEmpty);
+      expect(c.registrySize, 2);
+    });
+
+    test('🚨 註冊表新增的規則 → 列為未校準', () {
+      final c = compareRuleCoverage(
+        {'week_52_high', 'reclaim_ma20'},
+        {'WEEK_52_HIGH'},
+      );
+      expect(c.uncalibrated, ['RECLAIM_MA20']);
+      expect(c.orphaned, isEmpty);
+    });
+
+    test('🚨 註冊表已移除但樣本仍有 → 列為孤兒', () {
+      final c = compareRuleCoverage(
+        {'week_52_high'},
+        {'WEEK_52_HIGH', 'INSTITUTIONAL_BUY'},
+      );
+      expect(c.uncalibrated, isEmpty);
+      expect(c.orphaned, ['INSTITUTIONAL_BUY']);
+    });
+
+    test('輸出排序穩定（同一份輸入不得每次印不同順序）', () {
+      final c = compareRuleCoverage({'c_rule', 'a_rule', 'b_rule'}, const {});
+      expect(c.uncalibrated, ['A_RULE', 'B_RULE', 'C_RULE']);
+    });
+
+    test('replay 樣本全空（沒跑過 replay）→ 全部未校準，不是 crash', () {
+      final c = compareRuleCoverage({'a_rule', 'b_rule'}, const {});
+      expect(c.uncalibrated, hasLength(2));
+      expect(c.registrySize, 2);
+    });
+
+    test('🚨 真實情境：本專案的四階均線規則確實無樣本', () {
+      // 7/13 replay 之後才新增，rule_accuracy 列數實測為 0
+      final c = compareRuleCoverage(
+        {
+          'break_ma20',
+          'break_ma60',
+          'reclaim_ma20',
+          'reclaim_ma60',
+          'week_52_high',
+        },
+        {'WEEK_52_HIGH', 'PRICE_SPIKE'},
+      );
+      expect(c.uncalibrated, [
+        'BREAK_MA20',
+        'BREAK_MA60',
+        'RECLAIM_MA20',
+        'RECLAIM_MA60',
+      ]);
+      expect(c.orphaned, ['PRICE_SPIKE']);
+    });
+  });
+
+  // ── replay 落檔時間（僅背景資訊，不下判決）──────────────────────
+  group('replay 落檔時間', () {
     Database metaDb(String? generatedAt) {
       final db = sqlite3.openInMemory();
       db.execute(
@@ -133,7 +202,7 @@ void main() {
       expect(at, DateTime.utc(2026, 7, 13, 2, 13, 42, 224, 620));
     });
 
-    test('meta 缺 generated_at（舊 DB）→ null，不假裝新鮮', () {
+    test('meta 缺 generated_at（舊 DB）→ null，不假裝知道', () {
       final db = metaDb(null);
       addTearDown(db.close);
       expect(readRunMeta(db)!.generatedAt, isNull);
@@ -145,47 +214,16 @@ void main() {
       expect(readRunMeta(db)!.generatedAt, isNull);
     });
 
-    test('無時間戳 → 無判定（不知道就不下結論）', () {
-      expect(classifyReplayAge(null, DateTime.utc(2026, 8, 22)), isNull);
-    });
-
-    test('當天跑完 → 0 天、不陳舊', () {
-      final age = classifyReplayAge(
-        DateTime.utc(2026, 8, 22, 2),
-        DateTime.utc(2026, 8, 22, 10),
-      )!;
-      expect(age.days, 0);
-      expect(age.isStale, isFalse);
-    });
-
-    test('邊界：剛好 30 天不警告、31 天才警告', () {
-      final base = DateTime.utc(2026, 7, 1);
+    test('年齡計算：以天為單位，未來時間戳為負數', () {
       expect(
-        classifyReplayAge(base, base.add(const Duration(days: 30)))!.isStale,
-        isFalse,
+        replayAgeInDays(DateTime.utc(2026, 7, 13), DateTime.utc(2026, 8, 22)),
+        40,
       );
       expect(
-        classifyReplayAge(base, base.add(const Duration(days: 31)))!.isStale,
-        isTrue,
+        replayAgeInDays(DateTime.utc(2026, 9, 1), DateTime.utc(2026, 8, 22)),
+        lessThan(0),
       );
-    });
-
-    test('🚨 7/13 那份資料在今天確實會觸發警告（真實情境）', () {
-      final age = classifyReplayAge(
-        DateTime.utc(2026, 7, 13, 2, 13, 42),
-        DateTime.utc(2026, 8, 22),
-      )!;
-      expect(age.days, 39);
-      expect(age.isStale, isTrue);
-    });
-
-    test('時鐘偏移導致時間戳在未來 → 不誤報陳舊', () {
-      final age = classifyReplayAge(
-        DateTime.utc(2026, 9, 1),
-        DateTime.utc(2026, 8, 22),
-      )!;
-      expect(age.days, lessThan(0));
-      expect(age.isStale, isFalse, reason: '未來時間是時鐘問題，不是資料過期');
+      expect(replayAgeInDays(null, DateTime.utc(2026, 8, 22)), isNull);
     });
   });
 }
