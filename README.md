@@ -94,13 +94,13 @@ flowchart LR
         TWSE["TWSE"]
         TPEX["TPEX"]
         FM["FinMind"]
+        TDCC["TDCC"]
         RSS["RSS"]
     end
 
     subgraph Data["Data Layer"]
         Remote["API Clients"]
         Repo["Repositories"]
-        TDCC["TDCC"]
         DB[("SQLite")]
     end
 
@@ -170,18 +170,9 @@ lib/
 
 ## 推薦系統
 
-70 條異常偵測規則（產生 72 種 reason type），涵蓋技術面、籌碼面、基本面。
-
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-pie showData title 規則依類別分佈
-    "技術型態" : 21
-    "價量訊號" : 12
-    "基本面" : 15
-    "籌碼面" : 7
-    "殺手級功能" : 7
-    "強股回檔" : 4
-```
+70 條異常偵測規則（產生 72 種 reason type），涵蓋技術型態、價量訊號、籌碼面、
+基本面、風險警示與強股回檔六大類——各類的規則明細與觸發條件見
+[docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)。
 
 - 每日掃描上市 + 上櫃全市場，依「股票在趨勢中的階段」分流到**三個觀察模式**
   （當前可交易檔數隨新股上市／下市浮動，更新日誌的 `CandidateSelector` 會印出實際候選數）
@@ -215,7 +206,7 @@ flutter run
 ```bash
 flutter pub get                                                # 安裝依賴
 flutter test                                                   # 執行測試
-flutter analyze                                                # 靜態分析
+flutter analyze --no-fatal-infos                               # 靜態分析（同 pre-commit hook）
 dart format .                                                  # 格式化程式碼
 dart run build_runner build --delete-conflicting-outputs        # 程式碼生成
 ```
