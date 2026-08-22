@@ -163,6 +163,7 @@ void main() {
       final eff = effectiveScores(
         '{"schema_version":1,"rules":{"CAL":{"score":30,"active":true}}}',
         hardcodedScores: hardcoded,
+        horizon: WfHorizon.short,
       );
       expect(
         eff['CAL'],
@@ -185,6 +186,7 @@ void main() {
         '"BULL":{"score":0,"active":false,"cut_reason":"t_stat_below_threshold",'
         '"avg_return":1.0,"t_stat":0.5}}}',
         hardcodedScores: hardcoded,
+        horizon: WfHorizon.short,
       );
       expect(eff['BULL'], 20, reason: 'cut 但無負證據 → fallback 手調 20');
       expect(eff['CAL'], 30, reason: 'active → 用校準分');
@@ -194,6 +196,7 @@ void main() {
       final eff = effectiveScores(
         '{"schema_version":1,"rules":{"CAL":{"score":30,"active":true}}}',
         hardcodedScores: hardcoded,
+        horizon: WfHorizon.short,
       );
       expect(eff['BULL'], 20);
       expect(eff['BEAR'], -8);
@@ -205,6 +208,7 @@ void main() {
         '"cut_reason":"t_stat_below_threshold","avg_return":-0.5,"t_stat":-6.0}}}',
         hardcodedScores: hardcoded,
         applyZeroing: true,
+        horizon: WfHorizon.short,
       );
       expect(eff['BULL'], 0, reason: '多方規則被負證據判死 → 歸零');
     });
@@ -215,6 +219,7 @@ void main() {
         '"cut_reason":"t_stat_below_threshold","avg_return":-0.5,"t_stat":-6.0}}}',
         hardcodedScores: hardcoded,
         applyZeroing: true,
+        horizon: WfHorizon.short,
       );
       expect(eff['BEAR'], -8, reason: '空方觸發後下跌是命題成立，拔防護才是錯的');
     });
@@ -225,6 +230,7 @@ void main() {
         '"cut_reason":"t_stat_below_threshold","avg_return":-0.5,"t_stat":-6.0}}}',
         hardcodedScores: hardcoded,
         applyZeroing: false,
+        horizon: WfHorizon.long,
       );
       expect(eff['BULL'], 20);
     });

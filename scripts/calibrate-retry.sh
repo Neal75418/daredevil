@@ -110,11 +110,12 @@ for i in $(seq 1 "$MAX_RETRIES"); do
   # 但判斷限流用的是自己手上這一輪的內容，與呼叫端怎麼跑無關。
   round_log="$(mktemp -t calibrate-round)"
 
-  # `PIPESTATUS[0]` 取的是 calibrate.sh 的 exit code，不是 tee 的
-  set -o pipefail
+  # `PIPESTATUS[0]` 取的是 calibrate.sh 的 exit code，不是 tee 的。
+  # 刻意不動 `pipefail`：腳本開頭已 `set -uo pipefail`，而 PIPESTATUS
+  # 本來就與 pipefail 無關；在這裡 `set +o pipefail` 會從第二輪起關掉
+  # 開頭刻意開啟的選項。
   ./scripts/calibrate.sh 2>&1 | tee -a "$CALIBRATE_LOG" "$round_log"
   exit_code=${PIPESTATUS[0]}
-  set +o pipefail
 
   if [ "$exit_code" -eq 0 ]; then
     rm -f "$round_log"

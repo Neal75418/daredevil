@@ -591,6 +591,7 @@ typedef EffectiveScoreChange = ({String ruleId, int before, int after});
 /// `horizon == Horizon.short`。
 Map<String, int> effectiveScores(
   String jsonStr, {
+  required cal.Horizon horizon,
   Map<String, int>? hardcodedScores,
   bool applyZeroing = false,
 }) {
@@ -598,7 +599,12 @@ Map<String, int> effectiveScores(
       hardcodedScores ?? {for (final r in ReasonType.values) r.code: r.score};
   final table = CalibratedScoresTable.parseJson(
     jsonStr,
-    horizon: applyZeroing ? cal.Horizon.short : cal.Horizon.long,
+    // 🚨 horizon 不是裝飾:drift guard 用
+    // `successThresholds[horizon.tradingDays]` 比對 JSON 宣告的
+    // success_threshold_pct,不一致就**整份拒載**(回空表 → 每條規則
+    // fallback 到 hardcoded,且無錯誤)。顯式傳入,不從 applyZeroing
+    // 推導——後者只管負證據歸零,兩者語意無關。
+    horizon: horizon,
     knownRuleIds: hard.keys.toSet(),
     hardcodedScores: hard,
     applyNegativeEvidenceZeroing: applyZeroing,
@@ -611,16 +617,19 @@ Map<String, int> effectiveScores(
 List<EffectiveScoreChange> diffEffectiveScores(
   String productionJson,
   String candidateJson, {
+  required cal.Horizon horizon,
   Map<String, int>? hardcodedScores,
   bool applyZeroing = false,
 }) {
   final a = effectiveScores(
     productionJson,
+    horizon: horizon,
     hardcodedScores: hardcodedScores,
     applyZeroing: applyZeroing,
   );
   final b = effectiveScores(
     candidateJson,
+    horizon: horizon,
     hardcodedScores: hardcodedScores,
     applyZeroing: applyZeroing,
   );
@@ -643,9 +652,9 @@ List<EffectiveScoreChange> diffEffectiveScores(
 void _printPromoteImpact() {
   print('');
   print('═══ Promote 影響(App 有效分數)═══');
-  for (final (name, zeroing) in [
-    (_horizonShort, true),
-    (_horizonLong, false),
+  for (final (name, horizon, zeroing) in [
+    (_horizonShort, cal.Horizon.short, true),
+    (_horizonLong, cal.Horizon.long, false),
   ]) {
     final prod = File('assets/rule_scores_calibrated_$name.json');
     final cand = File('assets/rule_scores_calibrated_${name}_candidate.json');
@@ -654,6 +663,7 @@ void _printPromoteImpact() {
     final changes = diffEffectiveScores(
       prod.readAsStringSync(),
       cand.readAsStringSync(),
+      horizon: horizon,
       applyZeroing: zeroing,
     );
     final tag = zeroing ? '負證據歸零生效' : '負證據歸零不套用';

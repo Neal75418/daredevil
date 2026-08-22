@@ -741,10 +741,13 @@ class ReplayCalibrator {
         startDate: DateTime(2000),
       );
       if (dt.isNotEmpty) {
+        // ratio 為 null 的列直接略過,不補 0——補了會讓「沒資料」與
+        // 「當沖 0%」變成同一件事(與下游 lookup 的 null 語意一致)。
         dayTradingBySymbol[symbol] = {
           for (final e in dt)
-            DateTime(e.date.year, e.date.month, e.date.day):
-                e.dayTradingRatio ?? 0,
+            if (e.dayTradingRatio != null)
+              DateTime(e.date.year, e.date.month, e.date.day):
+                  e.dayTradingRatio!,
         };
       }
     }

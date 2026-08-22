@@ -38,6 +38,8 @@ import 'dart:math' as math;
 
 import 'package:daredevil/data/database/app_database.dart';
 
+import 'package:daredevil/core/constants/calibrated_scores/horizon.dart' as cal;
+
 import 'recalibrate.dart' as recal;
 import 'replay_calibrator.dart';
 
@@ -253,6 +255,7 @@ class WalkForwardValidator {
     // NEW arm 與 OLD arm 量的不是同一個評分函式。序列化成
     // `recalibrate` 寫檔用的同一個形狀，讓 parseJson 原樣消費。
     return effectiveScores(
+      horizon: horizon,
       jsonEncode({
         'schema_version': 1,
         'rules': {for (final e in calibrated.entries) e.key: e.value.toJson()},
@@ -382,10 +385,12 @@ Map<String, int> parseCalibratedScores(String jsonStr) {
 /// 平均勝幅虛報成 +5.60（實際 −0.048）。同一段語意存兩份，遲早再分岔一次。
 Map<String, int> effectiveScores(
   String jsonStr, {
+  required WfHorizon horizon,
   Map<String, int>? hardcodedScores,
   bool applyZeroing = false,
 }) => recal.effectiveScores(
   jsonStr,
+  horizon: horizon == WfHorizon.short ? cal.Horizon.short : cal.Horizon.long,
   hardcodedScores: hardcodedScores,
   applyZeroing: applyZeroing,
 );
@@ -453,10 +458,12 @@ Future<int> runWalkForwardCli(List<String> args) async {
       // App 的有效分數，不是 raw score——見 [effectiveScores] 的說明
       oldShortScores: effectiveScores(
         shortFile.readAsStringSync(),
+        horizon: WfHorizon.short,
         applyZeroing: true,
       ),
       oldLongScores: effectiveScores(
         longFile.readAsStringSync(),
+        horizon: WfHorizon.long,
         applyZeroing: false,
       ),
       foldYears: foldYears,

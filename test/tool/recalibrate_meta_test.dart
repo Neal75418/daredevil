@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'package:daredevil/core/constants/calibration_thresholds.dart';
+import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
 import 'package:daredevil/core/constants/reason_type.dart';
 import 'package:daredevil/domain/services/rule_registry.dart';
 
@@ -248,6 +249,7 @@ void main() {
         js('"CAL":{"score":30,"active":true}'),
         js('"CAL":{"score":40,"active":true}'),
         hardcodedScores: hard,
+        horizon: Horizon.short,
       );
       expect(d, isNotEmpty, reason: '若為空代表兩份都被拒載，測試無效');
     });
@@ -262,6 +264,7 @@ void main() {
         ),
         hardcodedScores: hard,
         applyZeroing: true,
+        horizon: Horizon.short,
       );
       expect(d.map((e) => e.ruleId), contains('BULL'));
       final b = d.firstWhere((e) => e.ruleId == 'BULL');
@@ -274,6 +277,7 @@ void main() {
         js('"CAL":{"score":30,"active":true}'),
         js('"CAL":{"score":40,"active":true}'),
         hardcodedScores: hard,
+        horizon: Horizon.short,
       );
       final c = d.single;
       expect(c.ruleId, 'CAL');
@@ -283,7 +287,15 @@ void main() {
 
     test('真的沒變就是空清單', () {
       final same = js('"CAL":{"score":30,"active":true}');
-      expect(diffEffectiveScores(same, same, hardcodedScores: hard), isEmpty);
+      expect(
+        diffEffectiveScores(
+          same,
+          same,
+          hardcodedScores: hard,
+          horizon: Horizon.short,
+        ),
+        isEmpty,
+      );
     });
 
     test('輸出依 ruleId 排序（同輸入不得每次印不同順序）', () {
@@ -291,6 +303,7 @@ void main() {
         js('"CAL":{"score":1,"active":true},"BULL":{"score":1,"active":true}'),
         js('"CAL":{"score":2,"active":true},"BULL":{"score":2,"active":true}'),
         hardcodedScores: hard,
+        horizon: Horizon.short,
       );
       expect(d.map((e) => e.ruleId).toList(), ['BULL', 'CAL']);
     });
