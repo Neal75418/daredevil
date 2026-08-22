@@ -21,7 +21,26 @@ REPO="$(git rev-parse --show-toplevel)"
 
 # CLI 的編譯閉包涵蓋整個 lib/(domain + data + core),不是只有 tool/。
 # 靠人工判斷「這次算不算重大改動」本身就是不可靠的判準,所以範圍取寬。
-git diff-tree --no-commit-id --name-only -r HEAD \
+CHANGED="$(git diff-tree --no-commit-id --name-only -r HEAD)"
+
+# 🚨 規則集變動 = 既有 replay 樣本對新規則無效(2026-08-23)
+#
+# 為什麼放在這裡:唯一能自動判斷「該重跑校準」的訊號是「規則集變了」,而
+# recalibrate 的涵蓋診斷住在終端機裡——平常只開 App 的人永遠不會看到它。
+# post-commit 是規則變動與人眼唯一的交會點。
+#
+# 不擋 commit、不自動跑(校準要十幾分鐘且需要 calibration.db),只提醒。
+if echo "$CHANGED" | grep -qE '^lib/(domain/services/rules/|core/constants/(rule_|reason_type))'; then
+  echo ""
+  echo "📐 這次 commit 動到規則集——既有的 replay 樣本不含新行為。"
+  echo "   查哪幾條沒樣本(1 秒、唯讀):"
+  echo "     dart run tool/recalibrate.dart --db tool/calibration.db --dry-run"
+  echo "   若它說「N 條無 replay 樣本,但所需資料都在」→ 重跑 Stage 2:"
+  echo "     CALIBRATION_DB=tool/calibration.db flutter test test/tool/run_replay.dart"
+  echo ""
+fi
+
+echo "$CHANGED" \
   | grep -qE '^(lib|bin|tool|ops/launchd)/|^pubspec\.(yaml|lock)$' || exit 0
 
 LOG="$HOME/Library/Logs/daredevil-cli-rebuild.log"
