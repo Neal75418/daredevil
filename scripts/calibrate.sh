@@ -53,7 +53,7 @@
 #
 # ## 🚨 BACKFILL_SKIP_FUNDAMENTALS 的實務意義（2026-08-22 實測）
 #
-# 基本面三個 phase 需約 7,100 次 FinMind 呼叫，額度 600/hr → 單次跑不完
+# 基本面三個 phase 需 symbols×3 次 FinMind 呼叫、額度 600/hr → 單次跑不完
 # （約 12 小時），而撞限流會 **abort 整個 backfill**，連帶讓下一輪只打 1 次
 # 的 stock_list 也被鎖在門外。若這次目的是重跑校準而非補基本面，設為 1。
 #
@@ -139,7 +139,7 @@ trap 'rm -rf "$LOCKDIR"' EXIT INT TERM
 : "${BACKFILL_DRY_RUN:=0}"
 
 # 🚨 基本面預設跳過(2026-08-22 改)。原本預設抓,但 revenue/financial/
-# valuation 三個 phase 需約 7,100 次 FinMind 呼叫、額度 600/hr,單次跑不完
+# valuation 三個 phase 需 symbols×3 次 FinMind 呼叫、額度 600/hr,單次跑不完
 # (約 12 小時),而撞限流會 abort 整個 backfill——連帶讓下一輪只打 1 次的
 # stock_list 也被鎖在門外。2026-08-22 實測連續兩次因此整條管線報廢。
 # 這也吻合 2026-07-13 的既有判斷:「FinMind 額度成本高、對校準邊際低,

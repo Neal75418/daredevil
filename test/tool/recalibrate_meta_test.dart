@@ -105,13 +105,13 @@ void main() {
   // ── 規則涵蓋差集（2026-08-22）──────────────────────────────────
   //
   // **為什麼從「時間」改成「涵蓋」**：原本用「replay 超過 30 天」示警，但
-  // 量測後那個軸是錯的——DB 有 1468 交易日，多等一個月只增 1.4% 樣本、
+  // 量測後那個軸是錯的——多等一個月只增約 1.4% 樣本、
   // t-stat 只改善 0.71%；一條卡在 t=1.5 的規則要靠時間推過門檻得再等 4.1
   // 年。而 73 個被 cut 的規則裡 61 個是 t_stat 不足、只有 4 個是樣本不足。
   // 時間幾乎不改變任何結論。
   //
   // 真正會讓 replay 樣本失效的是**規則集變動**：新規則在舊 replay 裡一筆
-  // 觸發都沒有，拿到的必然是手調分。首次跑就抓到 31/70 條無樣本，其中
+  // 觸發都沒有，拿到的必然是手調分。首次跑就抓到約四成規則無樣本，其中
   // BREAK_MA20／BREAK_MA60／RECLAIM_MA20／RECLAIM_MA60 是 2026-08 才做的
   // 四階均線階梯。
   //
@@ -375,6 +375,56 @@ void main() {
   //
   // 這組常數是人工維護的，最容易的失效方式是 ReasonType 改名而它沒跟上，
   // 於是那條規則悄悄掉回「可補」那一群，建議又變回無效的那句。
+  // ── 三群分類（2026-08-23 code review）──────────────────────────
+  //
+  // 原本只分「抓不到」與「其他」，於是一條**新加的價格規則**（樣本為 0 只因
+  // 為它比上次 replay 新）會被建議去跑十幾小時的 FinMind——那補不到它。
+  // 2026-08 的 BREAK_MA20 / RECLAIM_MA20 正是這種情況。
+  group('未校準規則的三群分類', () {
+    bool notBackfillable(String id) =>
+        CalibrationThresholds.notBackfillableReasons.contains(id);
+    bool needsFinMind(String id) =>
+        CalibrationThresholds.fundamentalsDependentReasons.contains(id);
+
+    test('🚨 兩個集合不得重疊（否則同一條規則落進兩群）', () {
+      expect(
+        CalibrationThresholds.notBackfillableReasons.intersection(
+          CalibrationThresholds.fundamentalsDependentReasons,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('🚨 新加的價格規則歸「重跑 replay」而非「跑 FinMind」', () {
+      // 這四條 2026-08 新增時樣本為 0,資料(價格/當沖)卻早就在 DB 裡
+      for (final id in [
+        'BREAK_MA20',
+        'BREAK_MA60',
+        'RECLAIM_MA20',
+        'RECLAIM_MA60',
+        'DAY_TRADING_HIGH',
+      ]) {
+        expect(notBackfillable(id), isFalse, reason: '$id 抓得到');
+        expect(needsFinMind(id), isFalse, reason: '$id 不需要基本面資料');
+      }
+    });
+
+    test('🚨 基本面規則歸「跑 FinMind」', () {
+      for (final id in ['EPS_TURNAROUND', 'ROE_EXCELLENT', 'PE_UNDERVALUED']) {
+        expect(needsFinMind(id), isTrue);
+        expect(notBackfillable(id), isFalse);
+      }
+    });
+
+    test('🚨 fundamentalsDependentReasons 每項都是有效 ReasonType', () {
+      final codes = ReasonType.values.map((r) => r.code.toUpperCase()).toSet();
+      final orphans = CalibrationThresholds.fundamentalsDependentReasons
+          .where((id) => !codes.contains(id))
+          .toList();
+      expect(orphans, isEmpty, reason: '改名後沒同步:$orphans');
+    });
+  });
+
   group('notBackfillableReasons', () {
     test('🚨 每一項都是有效的 ReasonType code（改名不得留下孤兒）', () {
       final codes = ReasonType.values.map((r) => r.code.toUpperCase()).toSet();

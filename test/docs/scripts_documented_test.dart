@@ -1,6 +1,6 @@
 // scripts/ 與文件的雙向守門（2026-08-22）
 //
-// **為什麼需要**：`scripts/calibrate.sh` + `calibrate-retry.sh` 曾有 6 週
+// **為什麼需要**：`scripts/calibrate.sh` + `calibrate-retry.sh` 曾有數個月
 // 沒有任何現行文件指向（只有 `docs/plans/` 的歷史設計檔提到），審計時第一
 // 眼看起來像死碼。反過來，文件指向已刪除的腳本則會讓人照著跑然後撞
 // "No such file"。兩個方向都靜默——沒有測試會紅、沒有錯誤訊息。

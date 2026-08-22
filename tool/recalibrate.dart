@@ -452,9 +452,10 @@ class RunMeta {
 
 /// replay 樣本相對於 [now] 的天數。[generatedAt] 為 null → null。
 ///
-/// **刻意不判斷「過期」**：量測顯示時間是錯的軸——1468 個交易日的 DB 多等
-/// 一個月只增 1.4% 樣本、t-stat 改善 0.71%，而 73 個 cut 裡 61 個是 t-stat
-/// 不足、僅 4 個是樣本不足。天數只當背景資訊印出，判斷交給
+/// **刻意不判斷「過期」**：時間是錯的軸——DB 已累積多年資料，多等一個月
+/// 只增加約 1.4% 樣本，而 t-stat 隨 √n 成長，改善幅度遠小於門檻距離；實際
+/// 被 cut 的規則絕大多數卡在 t-stat 與 hit rate，而非樣本不足。天數只當
+/// 背景資訊印出，判斷交給
 /// [compareRuleCoverage]（規則集變動才是真的會讓 replay 樣本失效的事）。
 ///
 /// 未來時間戳（時鐘偏移）得到負數，呼叫端照原樣印出即可。
@@ -469,9 +470,9 @@ int? replayAgeInDays(DateTime? generatedAt, DateTime now) => generatedAt == null
 /// - [orphaned]：replay 有、註冊表已無——改名或刪除留下的死列，會在
 ///   candidate JSON 佔位卻永遠查不到。
 ///
-/// 兩邊 id 大小寫不同（`rule_accuracy` 存大寫、`StockRule.id` 是小寫），
-/// 一律正規化成大寫再比，否則會整組誤判成差異。輸出排序固定，避免同一份
-/// 輸入每次印出不同順序。
+/// 兩邊一律正規化成大寫再比。生產路徑餵進來的兩邊其實都已是大寫
+/// （[coverageReferenceIds] 與 `rule_accuracy.rule_id`），正規化是給測試與
+/// 未來 caller 的保險。輸出排序固定，避免同一份輸入每次印出不同順序。
 ({List<String> uncalibrated, List<String> orphaned, int registrySize})
 compareRuleCoverage(Set<String> registryIds, Set<String> replayedIds) {
   final registry = registryIds.map((e) => e.toUpperCase()).toSet();
@@ -525,7 +526,8 @@ RunMeta? readRunMeta(Database db) {
         double.tryParse(map['excess_success_threshold'] ?? '') ?? 0.0,
     baselineHit5: double.tryParse(map['universe_baseline_hit_5d'] ?? ''),
     baselineHit60: double.tryParse(map['universe_baseline_hit_60d'] ?? ''),
-    // 一律轉 UTC：落庫是 UTC ISO8601，若被當成本地時間比較會差 8 小時。
+    // 轉 UTC 是為了讓 `==` 能與 `DateTime.utc(...)` 比對（測試依賴）。
+    // 年齡計算走 `difference`，那本來就與時區無關。
     generatedAt: DateTime.tryParse(map['generated_at'] ?? '')?.toUtc(),
   );
 }
@@ -728,7 +730,8 @@ void _printPromoteImpact(Set<String> producedHorizons) {
 
 /// 印出這份 DB 的 replay 背景資訊與規則涵蓋落差。
 ///
-/// 只跑本工具（＝三階段的最後一段）會沿用既有 replay 樣本重算，而 exit code
+/// 只跑本工具（＝四階段管線的第 3 段，後面還有 walk-forward gate）會沿用既有
+/// replay 樣本重算，而 exit code
 /// 0、candidate JSON 照常產出、無任何異常——與 launchd CLI 產物落後同屬
 /// 「過期但三個訊號全正常」，同樣靠把事實印出來解決。
 ///
@@ -757,21 +760,35 @@ void _printReplayContext(Database db) {
   if (coverage.uncalibrated.isNotEmpty) {
     // 分兩群給不同建議:對「這條管線抓不到」的規則說「重跑完整管線」是
     // 無效建議,會讓人以為問題出在沒跑夠。
-    final fixable = coverage.uncalibrated
-        .where(
-          (id) => !CalibrationThresholds.notBackfillableReasons.contains(id),
-        )
+    bool notBackfillable(String id) =>
+        CalibrationThresholds.notBackfillableReasons.contains(id);
+    bool needsFinMind(String id) =>
+        CalibrationThresholds.fundamentalsDependentReasons.contains(id);
+
+    final unfixable = coverage.uncalibrated.where(notBackfillable).toList();
+    final needsFundamentals = coverage.uncalibrated
+        .where(needsFinMind)
         .toList();
-    final unfixable = coverage.uncalibrated
-        .where(
-          (id) => CalibrationThresholds.notBackfillableReasons.contains(id),
-        )
+    // 三群而非兩群(2026-08-23 code review):既不是「抓不到」也不是「要基本
+    // 面」→ 資料都在,只是這條規則比上次 replay 新。解是重跑 Stage 2,不是
+    // 燒十幾小時 FinMind 額度。2026-08 的 BREAK_MA20 / RECLAIM_MA20 正是如此。
+    final needsReplay = coverage.uncalibrated
+        .where((id) => !notBackfillable(id) && !needsFinMind(id))
         .toList();
 
-    if (fixable.isNotEmpty) {
-      print('   ⚠️  ${fixable.length} 條無 replay 樣本,本次只會拿到手調分:');
-      print('      ${_previewIds(fixable)}');
-      print('      → 這些補得到,但基本面需約 7,100 次 FinMind 呼叫(額度 600/hr):');
+    if (needsReplay.isNotEmpty) {
+      print('   ⚠️  ${needsReplay.length} 條無 replay 樣本,但所需資料都在:');
+      print('      ${_previewIds(needsReplay)}');
+      print('      → 多半是規則比上次 replay 新。重跑 Stage 2 即可,不需 FinMind:');
+      print(
+        '        CALIBRATION_DB=<db> flutter test test/tool/run_replay.dart',
+      );
+    }
+    if (needsFundamentals.isNotEmpty) {
+      print('   ⚠️  ${needsFundamentals.length} 條需要 FinMind 基本面資料:');
+      print('      ${_previewIds(needsFundamentals)}');
+      print('      → 補得到但很貴(額度 600/hr;實際次數跑 BACKFILL_DRY_RUN=1');
+      print('        看 FinMind calls total):');
       print(
         '        BACKFILL_SKIP_FUNDAMENTALS=0 ./scripts/calibrate-retry.sh',
       );
@@ -794,7 +811,7 @@ void _printReplayContext(Database db) {
   }
 }
 
-/// 最多列 6 條，其餘以數量帶過——避免 31 條把畫面洗掉。
+/// 最多列 6 條，其餘以數量帶過——清單可能有數十條，全印會洗掉畫面。
 String _previewIds(List<String> ids) {
   const limit = 6;
   if (ids.length <= limit) return ids.join(', ');

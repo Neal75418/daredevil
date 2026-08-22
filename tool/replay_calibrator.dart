@@ -98,7 +98,7 @@ class ReplayConfig {
   /// test 兩次 replay，5 折共 10 次。這些是**評估用的子窗口**，不該覆寫正式
   /// 校準結果——`config.dbPath` 寫 `':memory:'` 並不會讓寫入轉向，落檔用的
   /// 是傳進來的 [db] handle。實測後果：DB 的 rule_daily_stats 只剩最後一折
-  /// 的 93 天（原 1498 個交易日）、firings 從 309 萬掉到 4.9 萬，而且
+  /// 的區間（原本涵蓋整段回補歷史）、firings 掉了兩個數量級，而且
   /// exit 0、無任何錯誤訊息。
   final bool persist;
 

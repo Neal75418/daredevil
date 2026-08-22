@@ -300,7 +300,7 @@ void main() {
   // config 的 `dbPath: ':memory:'` 是幌子，寫入用的是傳進去的 db handle。
   //
   // 2026-08-22 實測：跑完 walkforward 後，DB 的 rule_daily_stats 只剩
-  // 2026-01-02～2026-05-27 共 93 天（原本 1498 個交易日），firings 從
+  // 只剩最後一折的數個月（原本涵蓋整段回補歷史），firings 從
   // 3,089,775 掉到 48,738。之後任何 recalibrate 都會拿這份殘骸產 candidate，
   // 而且三個訊號全部正常：exit 0、JSON 照常寫出、無錯誤訊息。
   //

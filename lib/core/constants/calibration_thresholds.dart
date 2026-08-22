@@ -192,18 +192,20 @@ abstract final class CalibrationThresholds {
 
   /// 這條校準管線**無法**提供資料的 ReasonType（2026-08-22 實測）。
   ///
-  /// `scripts/calibrate.sh` 的 backfill 只抓價格、法人、當沖、營收／財報／
-  /// 估值。集保股權分散（`shareholding_distribution` 表根本不存在）、內部人
-  /// （`insider_transfer` 0 列）、警示股（`trading_warning` 0 列）、新聞
-  /// （`news_article` 表不存在）都沒有 phase，`ReplayCalibrator` 對應的
-  /// context 欄位一律傳 null，這些規則在 replay 期間永遠 no-fire。
+  /// `scripts/calibrate.sh` 的 backfill 只抓價格、法人、當沖；基本面三 phase
+  /// 預設關閉（見 `BACKFILL_SKIP_FUNDAMENTALS`）。集保（`shareholding` /
+  /// `holding_distribution`）、內部人（`insider_transfer`）、警示股
+  /// （`trading_warning`）、新聞（`news_item`）**表都存在但是 0 列**——缺的是
+  /// backfill phase，不是 schema。`ReplayCalibrator` 對應的 context 欄位一律
+  /// 傳 null，這些規則在 replay 期間永遠 no-fire。
   ///
   /// **為什麼要顯式列出**：`recalibrate` 的涵蓋警告原本對它們說「需重跑完整
   /// 管線 `./scripts/calibrate.sh`」——跑一百次也不會有樣本。給無效建議比
   /// 不給建議更糟，因為它讓人以為問題出在沒跑夠。
   ///
   /// 與「跑得到但很貴」的基本面規則（EPS／ROE／PE／PBR／REVENUE_NEW_HIGH）
-  /// 不同：那些補得完，只是需要約 7,100 次 FinMind 呼叫。
+  /// 不同：那些補得完，只是要花掉大量 FinMind 額度（實際次數跑
+  /// `BACKFILL_DRY_RUN=1` 看 `FinMind calls total`）。
   static const Set<String> notBackfillableReasons = {
     // 集保 / 外資持股 / 質押（TDCC）
     'CONCENTRATION_HIGH',
@@ -220,5 +222,27 @@ abstract final class CalibrationThresholds {
     'TRADING_WARNING_DISPOSAL',
     // 新聞（RSS）
     'NEWS_RELATED',
+  };
+
+  /// 需要 FinMind 基本面資料（revenue／financial／valuation）才能觸發的規則。
+  ///
+  /// 與 [notBackfillableReasons] 的差別是**補得到,只是很貴**:三個 phase 約
+  /// 需 symbols×3 次 FinMind 呼叫、額度 600/hr,實測十餘小時。
+  ///
+  /// **為什麼要顯式列出**（2026-08-23 code review 指出）：涵蓋警告原本只分
+  /// 「不可回補」與「其他」兩群，於是一條**新加的價格規則**（樣本為 0 只因為
+  /// 它比上次 replay 新）也會被建議去跑十幾小時的 FinMind——那補不到它，真正
+  /// 的解是重跑 Stage 2 replay。2026-08 的 `BREAK_MA20` / `RECLAIM_MA20` 正是
+  /// 這種情況。給錯方向的建議與不給建議一樣糟。
+  static const Set<String> fundamentalsDependentReasons = {
+    'EPS_DECLINE_WARNING',
+    'EPS_TURNAROUND',
+    'PBR_UNDERVALUED',
+    'PE_OVERVALUED',
+    'PE_UNDERVALUED',
+    'REVENUE_NEW_HIGH',
+    'ROE_DECLINING',
+    'ROE_EXCELLENT',
+    'ROE_IMPROVING',
   };
 }
