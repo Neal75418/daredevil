@@ -79,22 +79,22 @@ version: 1.0.0+1  # major.minor.patch+buildNumber
 
 ## ✅ 發布檢查清單
 
-| 項目           | 指令 / 動作                                 |
-|:-------------|:----------------------------------------|
-| 更新版本號        | 修改 `pubspec.yaml` 的 `version`           |
-| 測試通過         | `flutter test`                          |
-| 靜態分析         | `flutter analyze`                       |
-| 實機測試         | Android + iOS 裝置驗證                      |
-| 移除 debug 程式碼 | 確認無 `debugPrint` / `kDebugMode` 殘留      |
-| 更新圖示         | `dart run flutter_launcher_icons`       |
-| 更新啟動畫面       | `dart run flutter_native_splash:create` |
+| 項目              | 指令 / 動作                             |
+|:------------------|:----------------------------------------|
+| 更新版本號        | 修改 `pubspec.yaml` 的 `version`        |
+| 測試通過          | `flutter test`                          |
+| 靜態分析          | `flutter analyze`                       |
+| 實機測試          | Android + iOS 裝置驗證                  |
+| 移除 debug 程式碼 | 確認無 `debugPrint` / `kDebugMode` 殘留 |
+| 更新圖示          | `dart run flutter_launcher_icons`       |
+| 更新啟動畫面      | `dart run flutter_native_splash:create` |
 
 ---
 
 ## ⚠️ 注意事項
 
-| 項目       | 說明                                      |
-|:---------|:----------------------------------------|
-| 金鑰安全     | 勿 commit `key.properties` 或 keystore 檔案 |
-| Crash 解析 | 保留 `build/debug-info` 供 crash 分析        |
+| 項目       | 說明                                                                |
+|:-----------|:--------------------------------------------------------------------|
+| 金鑰安全   | 勿 commit `key.properties` 或 keystore 檔案                         |
+| Crash 解析 | 保留 `build/debug-info` 供 crash 分析                               |
 | Sentry DSN | 手動建置需設定 `export SENTRY_DSN=<dsn>`，CI 從 GitHub Secrets 注入 |

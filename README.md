@@ -56,18 +56,18 @@ _See what changed, without noise._
 
 ## 技術棧
 
-| 類別 | 技術 |
-|:---|:---|
-| Framework | Flutter 3.38 + Dart 3.10 |
-| State | Riverpod 3.2.1 |
-| Database | Drift (SQLite) 2.32 |
-| Network | Dio 5.9.2 |
-| Navigation | GoRouter 17.1.0 |
-| Crash Reporting | Sentry 9.15.0 |
-| Charts | fl_chart + k_chart_plus |
-| Code Gen | Drift Dev |
-| Testing | Flutter Test + Mocktail |
-| CI/CD | GitHub Actions + Codecov |
+| 類別            | 技術                     |
+|:----------------|:-------------------------|
+| Framework       | Flutter 3.38 + Dart 3.10 |
+| State           | Riverpod 3.2.1           |
+| Database        | Drift (SQLite) 2.32      |
+| Network         | Dio 5.9.2                |
+| Navigation      | GoRouter 17.1.0          |
+| Crash Reporting | Sentry 9.15.0            |
+| Charts          | fl_chart + k_chart_plus  |
+| Code Gen        | Drift Dev                |
+| Testing         | Flutter Test + Mocktail  |
+| CI/CD           | GitHub Actions + Codecov |
 
 ---
 
