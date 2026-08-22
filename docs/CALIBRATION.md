@@ -82,8 +82,10 @@ n=11,742）；那是資料變了，不是時間到了。
 規則、參數或資料來源有變動時走這條——只重算評分無法反映新的觸發樣本。
 
 **實測耗時**（2026-08-22，既有 DB 已有 9 年價格的增量情境）：
-backfill 視缺口而定（補 31 個交易日約 5–15 分）、replay ~12 分、recalibrate
-數秒、walk-forward ~13 分。**合計約 45–75 分鐘。**
+backfill **~18 分**（實測 17:59:33 起跑、18:18:02 進入 revenue 階段；涵蓋
+stock_list + 雙市場價格 + 法人 + 當沖，其中要補的價格缺口是 31 個交易日）、
+replay **12 分 24 秒**、recalibrate 數秒、walk-forward **~13 分**。
+**合計約 45 分鐘**；缺口更大時 backfill 會拉長，故實務上抓 45–75 分。
 
 **基本面預設跳過**（`BACKFILL_SKIP_FUNDAMENTALS` 預設 `1`）。revenue /
 financial / valuation 三個 phase 需約 7,710 次 FinMind 呼叫、額度 600/hr
