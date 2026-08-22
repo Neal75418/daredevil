@@ -37,9 +37,14 @@
 #     export BACKFILL_DAY_TRADING_MAX_DAYS=60  # 當沖單輪上限
 #     export BACKFILL_PRICES_VIA_FINMIND=1  # 價格改走 FinMind（TWSE 不可用時）
 #     export BACKFILL_DRY_RUN=1             # dry run，不實際抓取
+#     export BACKFILL_INTER_DAY_DELAY_MS=5000  # per-day 批次間隔（避 TWSE 限流）
 #
 #     # Gate 階段
 #     export SKIP_WALKFORWARD=1             # 跳過 Stage 4 walk-forward(~13 分鐘)
+#     export WF_FOLD_YEARS=2022,2023,2024,2025,2026  # leave-one-year-out 的折
+#     export WF_SAMPLE_SIZE=400             # 流動性樣本數;🚨 低於 100 會讓
+#                                           # universe baseline 退回 0.5,
+#                                           # 系統性低估 alpha、幾乎全 cut
 #
 #     # Replay 階段
 #     export REPLAY_MIN_HISTORY=60          # 最少歷史天數

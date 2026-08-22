@@ -408,4 +408,68 @@ void main() {
       expect(CalibrationThresholds.notBackfillableReasons, isNotEmpty);
     });
   });
+  // ── 拒載必須大聲（2026-08-23，三份 review 收斂）─────────────────
+  //
+  // `CalibratedScoresTable.parseJson` 回 `(table, warnings)`,而
+  // `effectiveScores` 只取 `.table`。任何結構性拒載——JSON 壞掉、
+  // schema_version 不對、rules 缺失、**drift guard 不過**——都回一張空表,
+  // 於是 72 條規則全部 fallback 到 hardcoded,無例外、無訊息。
+  //
+  // 實測後果(reviewer 跑出來的):兩份 JSON 都被拒載時,promote 摘要印
+  // 「有效分數無變化」而實際有 13/72 條改變——正是這個功能當初要消滅的
+  // 假陰性,從另一扇門原樣重現。
+  group('拒載偵測', () {
+    const hard = {'BULL': 20, 'CAL': 99};
+
+    test('🚨 前提:正常 JSON 不得誤判為拒載', () {
+      expect(
+        () => effectiveScores(
+          '{"schema_version":1,"rules":{"CAL":{"score":30,"active":true}}}',
+          horizon: Horizon.short,
+          hardcodedScores: hard,
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('🚨 JSON 有 rules 但整份被拒載 → 拋錯,不得靜默 fallback', () {
+      // schema_version 缺失 = 結構性拒載
+      expect(
+        () => effectiveScores(
+          '{"rules":{"CAL":{"score":30,"active":true}}}',
+          horizon: Horizon.short,
+          hardcodedScores: hard,
+        ),
+        throwsA(isA<StateError>()),
+        reason: '靜默回 hardcoded 會讓 promote 摘要謊報「無變化」',
+      );
+    });
+
+    test('warnings 會交給 onWarnings 回呼', () {
+      final seen = <String>[];
+      try {
+        effectiveScores(
+          '{"rules":{"CAL":{"score":30}}}',
+          horizon: Horizon.short,
+          hardcodedScores: hard,
+          onWarnings: seen.addAll,
+        );
+      } on StateError {
+        // 預期
+      }
+      expect(seen, isNotEmpty);
+      expect(seen.join(), contains('schema_version'));
+    });
+
+    test('rules 本來就空的 JSON 不算拒載(沒東西可載)', () {
+      expect(
+        () => effectiveScores(
+          '{"schema_version":1,"rules":{}}',
+          horizon: Horizon.short,
+          hardcodedScores: hard,
+        ),
+        returnsNormally,
+      );
+    });
+  });
 }

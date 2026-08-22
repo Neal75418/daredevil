@@ -24,6 +24,21 @@ void main() {
           .map((m) => m.group(1)!)
           .toSet();
 
+  /// 所有會被 `calibrate.sh` 的四個 stage 直接或間接讀到環境變數的檔。
+  ///
+  /// 🚨 2026-08-23 補上 `tool/` 三檔:先前只掃兩個 wrapper,但 Stage 1 的
+  /// `BACKFILL_INTER_DAY_DELAY_MS` 與 Stage 4 的 `WF_FOLD_YEARS`／
+  /// `WF_SAMPLE_SIZE` 是各 CLI 自己讀的,守門看不到——而 calibrate.sh 卻
+  /// 宣稱「此處未列出的等同不存在(守門:scripts_env_documented_test)」。
+  /// 那正是這支測試要防的那種「沒列出＝不存在」的靜默落差。
+  const envSourceFiles = [
+    'test/tool/run_backfill.dart',
+    'test/tool/run_replay.dart',
+    'tool/backfill.dart',
+    'tool/replay_calibrator.dart',
+    'tool/walkforward_validate.dart',
+  ];
+
   test('🚨 前提：CLI 確實有讀環境變數（否則本測試是空的）', () {
     expect(envVarsRead('test/tool/run_backfill.dart'), isNotEmpty);
     expect(envVarsRead('test/tool/run_replay.dart'), isNotEmpty);
@@ -31,10 +46,7 @@ void main() {
   });
 
   test('🚨 calibrate.sh 說明未漏列任何 CLI 實際讀取的環境變數', () {
-    final read = {
-      ...envVarsRead('test/tool/run_backfill.dart'),
-      ...envVarsRead('test/tool/run_replay.dart'),
-    };
+    final read = {for (final f in envSourceFiles) ...envVarsRead(f)};
     final documented = envVarsDocumented();
     final missing = read.difference(documented).toList()..sort();
 
@@ -49,8 +61,7 @@ void main() {
 
   test('🚨 說明裡不得出現 CLI 根本不讀的變數（過時殘留）', () {
     final read = {
-      ...envVarsRead('test/tool/run_backfill.dart'),
-      ...envVarsRead('test/tool/run_replay.dart'),
+      for (final f in envSourceFiles) ...envVarsRead(f),
       // 由 shell 自己消費、不經 Dart CLI
       'FINMIND_TOKEN',
       'MAX_RETRIES',

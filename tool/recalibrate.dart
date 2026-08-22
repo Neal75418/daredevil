@@ -594,10 +594,11 @@ Map<String, int> effectiveScores(
   required cal.Horizon horizon,
   Map<String, int>? hardcodedScores,
   bool applyZeroing = false,
+  void Function(List<String> warnings)? onWarnings,
 }) {
   final hard =
       hardcodedScores ?? {for (final r in ReasonType.values) r.code: r.score};
-  final table = CalibratedScoresTable.parseJson(
+  final parsed = CalibratedScoresTable.parseJson(
     jsonStr,
     // 🚨 horizon 不是裝飾:drift guard 用
     // `successThresholds[horizon.tradingDays]` 比對 JSON 宣告的
@@ -609,8 +610,35 @@ Map<String, int> effectiveScores(
     hardcodedScores: hard,
     applyNegativeEvidenceZeroing: applyZeroing,
     structuralExemptions: ModeFilters.modeCRequiredAnyOf,
-  ).table;
+  );
+  if (parsed.warnings.isNotEmpty) onWarnings?.call(parsed.warnings);
+
+  // 🚨 拒載必須大聲(2026-08-23)。parseJson 對任何結構性問題——壞 JSON、
+  // schema_version 不對、rules 缺失、**drift guard 不過**——都回一張空表而
+  // 不拋例外,於是每條規則靜默 fallback 到 hardcoded。實測後果:兩份 JSON
+  // 都被拒載時 promote 摘要印「有效分數無變化」,而實際有 13/72 條改變。
+  // 那正是這個功能當初要消滅的假陰性。
+  final table = parsed.table;
+  if (table.ruleCount == 0 && _jsonDeclaresRules(jsonStr)) {
+    throw StateError(
+      'calibrated JSON 被拒載,無法計算有效分數。'
+      '${parsed.warnings.isEmpty ? "" : parsed.warnings.join("; ")}',
+    );
+  }
   return {for (final id in hard.keys) id: table.lookup(id) ?? hard[id] ?? 0};
+}
+
+/// JSON 是否**宣告了**非空的 `rules`——用來區分「拒載」與「本來就沒規則」。
+bool _jsonDeclaresRules(String jsonStr) {
+  try {
+    final root = jsonDecode(jsonStr);
+    if (root is! Map) return false;
+    final rules = root['rules'];
+    return rules is Map && rules.isNotEmpty;
+  } on FormatException {
+    // 連 JSON 都不是 → parseJson 也會拒載,算拒載
+    return true;
+  }
 }
 
 /// production 與 candidate 的有效分數差異，依 ruleId 排序。
@@ -620,18 +648,21 @@ List<EffectiveScoreChange> diffEffectiveScores(
   required cal.Horizon horizon,
   Map<String, int>? hardcodedScores,
   bool applyZeroing = false,
+  void Function(List<String> warnings)? onWarnings,
 }) {
   final a = effectiveScores(
     productionJson,
     horizon: horizon,
     hardcodedScores: hardcodedScores,
     applyZeroing: applyZeroing,
+    onWarnings: onWarnings,
   );
   final b = effectiveScores(
     candidateJson,
     horizon: horizon,
     hardcodedScores: hardcodedScores,
     applyZeroing: applyZeroing,
+    onWarnings: onWarnings,
   );
   final ids = ({...a.keys, ...b.keys}.toList())..sort();
   return [
@@ -649,23 +680,40 @@ List<EffectiveScoreChange> diffEffectiveScores(
 /// 就是實際會發生的事。
 ///
 /// 檔案缺失時安靜跳過:單 horizon 執行或首次產出都可能沒有對應檔。
-void _printPromoteImpact() {
+void _printPromoteImpact(Set<String> producedHorizons) {
   print('');
   print('═══ Promote 影響(App 有效分數)═══');
   for (final (name, horizon, zeroing) in [
     (_horizonShort, cal.Horizon.short, true),
     (_horizonLong, cal.Horizon.long, false),
   ]) {
+    // 🚨 只報本次真的產出的 horizon(2026-08-23)。candidate 在 .gitignore
+    // 內會跨 run 留存,`--horizon short` 時若照舊讀磁碟,會把上一次(甚至
+    // 別的 DB)的 long candidate 當成本次結果印出來——而 review 流程第 1 步
+    // 現在只指向這個區塊。
+    if (!producedHorizons.contains(name)) {
+      print('  $name:本次未產出 candidate,略過');
+      continue;
+    }
     final prod = File('assets/rule_scores_calibrated_$name.json');
     final cand = File('assets/rule_scores_calibrated_${name}_candidate.json');
     if (!prod.existsSync() || !cand.existsSync()) continue;
 
-    final changes = diffEffectiveScores(
-      prod.readAsStringSync(),
-      cand.readAsStringSync(),
-      horizon: horizon,
-      applyZeroing: zeroing,
-    );
+    final List<EffectiveScoreChange> changes;
+    try {
+      changes = diffEffectiveScores(
+        prod.readAsStringSync(),
+        cand.readAsStringSync(),
+        horizon: horizon,
+        applyZeroing: zeroing,
+        onWarnings: (w) =>
+            stderr.writeln('  ⚠️  $name JSON warning: ${w.join("; ")}'),
+      );
+    } on StateError catch (e) {
+      stderr.writeln('  ❌ $name 無法計算 promote 影響:$e');
+      stderr.writeln('     (JSON 被拒載——不要拿這次的輸出做 promote 決策)');
+      continue;
+    }
     final tag = zeroing ? '負證據歸零生效' : '負證據歸零不套用';
     if (changes.isEmpty) {
       print('  $name($tag):有效分數無變化');
@@ -823,7 +871,7 @@ Future<void> main(List<String> args) async {
   }
 
   print('');
-  if (!config.dryRun) _printPromoteImpact();
+  if (!config.dryRun) _printPromoteImpact(horizonResults.keys.toSet());
   print('✅ 完成');
   if (!config.dryRun) {
     print('');

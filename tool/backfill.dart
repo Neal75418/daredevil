@@ -1227,13 +1227,30 @@ class Backfiller {
     // per-day batch 口徑（2026-07-23 稽核修復：原估算沿用已退役的
     // per-symbol 架構，會嚴重高估 quota/耗時）
     final tradingDays = (config.years * 250).round();
+    // 🚨 這個區塊也要依 config(2026-08-23 補)。先前只把上面的 Phases 改成
+    // config-aware,估算卻仍無條件印——開 pricesViaFinMind 時預覽說
+    // 「FinMind ~0 次」,實際是每 symbol 一次(~2,400,約 4 小時),而那正是
+    // 新的 SKIP_FUNDAMENTALS 預設要避免的失敗。
     _log('  Estimated API calls:');
-    _log(
-      '    - Prices:        ~$tradingDays 交易日 × 2 市場 (per-day batch) '
-      '= ~${tradingDays * 2}',
-    );
-    _log('    - Institutional: ~$tradingDays 交易日 × 2 市場 (per-day batch)');
-    _log('    - DayTrading:    ~$tradingDays 交易日 × 1 市場（僅 TWSE TWTB4U）');
+    if (config.onlyDayTrading) {
+      _log('    - DayTrading:    ~$tradingDays 交易日 × 1 市場（僅 TWSE TWTB4U）');
+    } else {
+      if (config.pricesViaFinMind) {
+        _log(
+          '    - Prices:        ${symbols.length} symbols '
+          '(FinMind per-symbol range call)',
+        );
+      } else {
+        _log(
+          '    - Prices:        ~$tradingDays 交易日 × 2 市場 (per-day batch) '
+          '= ~${tradingDays * 2}',
+        );
+      }
+      _log('    - Institutional: ~$tradingDays 交易日 × 2 市場 (per-day batch)');
+      if (!config.skipDayTrading) {
+        _log('    - DayTrading:    ~$tradingDays 交易日 × 1 市場（僅 TWSE TWTB4U）');
+      }
+    }
     if (config.skipFundamentals) {
       _log(
         '    - Revenue/Financial/Valuation: 跳過'
@@ -1244,7 +1261,12 @@ class Backfiller {
       _log('    - Financial:     ${symbols.length} (FinMind per-symbol)');
       _log('    - Valuation:     ${symbols.length} (FinMind per-symbol)');
     }
-    final totalFinMind = config.skipFundamentals ? 0 : symbols.length * 3;
+    // FinMind 用量 = 基本面三 phase + (價格走 FinMind 時的每 symbol 一次)
+    final totalFinMind =
+        (config.skipFundamentals ? 0 : symbols.length * 3) +
+        (config.pricesViaFinMind && !config.onlyDayTrading
+            ? symbols.length
+            : 0);
     final eta = Duration(seconds: (totalFinMind * 3600 / 600).round());
     _log(
       '  FinMind calls total: ~$totalFinMind (~${_formatDuration(eta)} at '
