@@ -363,26 +363,16 @@ enum WfHorizon { short, long }
 // JSON loading
 // ============================================================================
 
-/// 從 calibrated scores JSON（assets/rule_scores_calibrated_*.json）載入
-/// rule → score。檔案 shape 見 recalibrate.dart `_processHorizon`。
-Map<String, int> parseCalibratedScores(String jsonStr) {
-  final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
-  final rules = decoded['rules'] as Map<String, dynamic>? ?? const {};
-  final result = <String, int>{};
-  for (final entry in rules.entries) {
-    final rule = entry.value as Map<String, dynamic>;
-    final score = (rule['score'] as num?)?.toInt() ?? 0;
-    result[entry.key] = score;
-  }
-  return result;
-}
-
 /// gate 的兩個 arm 共用 `recalibrate` 的 [recal.effectiveScores]。
 ///
-/// **刻意不在此重寫一份**（2026-08-22）：今天最大的那個 bug 正是
+/// **刻意不在此重寫一份**（2026-08-22）：當時最大的那個 bug 正是
 /// walkforward 用自己的 `parseCalibratedScores` 重寫了 App 的 lookup 語意
 /// （cut／缺席當 0，而非 fallback 到 hardcoded），使 OLD arm 被低估、長線
-/// 平均勝幅虛報成 +5.60（實際 −0.048）。同一段語意存兩份，遲早再分岔一次。
+/// 平均勝幅虛報成 +5.60（實際 −0.048）。
+///
+/// 2026-08-23：`parseCalibratedScores` 已刪除——它當時只從 walkforward 拿掉，
+/// 卻仍被 `regime_calibrate.dart` 用來建 OLD arm，同一個 bug 在另一支工具裡
+/// 活了一整天。留著一份「看起來能用但語意錯」的函式，遲早有人再用它。
 Map<String, int> effectiveScores(
   String jsonStr, {
   required WfHorizon horizon,

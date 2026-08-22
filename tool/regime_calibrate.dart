@@ -29,7 +29,9 @@ import 'package:daredevil/data/database/app_database.dart';
 
 import 'recalibrate.dart' show Calibrator;
 import 'regime_report.dart';
-import 'walkforward_validate.dart' show parseCalibratedScores;
+import 'package:daredevil/core/constants/calibrated_scores/horizon.dart' as cal;
+
+import 'recalibrate.dart' show effectiveScores;
 
 // ============================================================================
 // Pure calibration logic (testable)
@@ -191,8 +193,14 @@ Future<int> runRegimeCalibrateCli(List<String> args) async {
       requireCoverageYear: bearYear,
     );
     // OLD（現行 production）
-    final oldShort = _loadOld('assets/rule_scores_calibrated_short.json');
-    final oldLong = _loadOld('assets/rule_scores_calibrated_long.json');
+    final oldShort = _loadOld(
+      'assets/rule_scores_calibrated_short.json',
+      cal.Horizon.short,
+    );
+    final oldLong = _loadOld(
+      'assets/rule_scores_calibrated_long.json',
+      cal.Horizon.long,
+    );
 
     print('');
     print('═' * 64);
@@ -240,10 +248,24 @@ Future<int> runRegimeCalibrateCli(List<String> args) async {
   }
 }
 
-Map<String, int> _loadOld(String path) {
+/// 讀現行 production 校準,回傳 **App 實際使用的有效分數**。
+///
+/// 🚨 **不可用 `parseCalibratedScores`**(2026-08-23):那個只取 raw
+/// `score`,被 cut 或不在 JSON 裡的規則一律當 0。但 App 走
+/// `CalibratedScoresTable.lookup` 的三態——cut／缺席 fallback 到 hardcoded,
+/// 只有負證據規則才真的歸零。本工具拿 OLD 與 NEW 做樣本外比較後會寫出
+/// candidate JSON,OLD arm 被低估等於系統性高估 NEW:2026-08-22 在
+/// walkforward 實測,同一個錯誤讓長線平均勝幅虛報成 +5.60(實際 −0.048),
+/// 三條變動中兩條方向相反。
+Map<String, int> _loadOld(String path, cal.Horizon horizon) {
   final f = File(path);
   if (!f.existsSync()) return {};
-  return parseCalibratedScores(f.readAsStringSync());
+  return effectiveScores(
+    f.readAsStringSync(),
+    horizon: horizon,
+    // 與 calibrated_scores_registry.dart 的 `horizon == Horizon.short` 一致
+    applyZeroing: horizon == cal.Horizon.short,
+  );
 }
 
 void _printTop(

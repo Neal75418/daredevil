@@ -44,23 +44,6 @@ FoldResult fold(
 }
 
 void main() {
-  group('parseCalibratedScores', () {
-    test('從 JSON 載入 rule → score（含被 cut 的 0 分）', () {
-      const json =
-          '{"schema_version":1,"horizon":"5d","rules":{'
-          '"RULE_A":{"score":25,"active":true},'
-          '"RULE_B":{"score":0,"active":false}}}';
-      final scores = parseCalibratedScores(json);
-      expect(scores['RULE_A'], 25);
-      expect(scores['RULE_B'], 0);
-      expect(scores.length, 2);
-    });
-
-    test('無 rules 欄 → 空 map（不爆）', () {
-      expect(parseCalibratedScores('{"schema_version":1}'), isEmpty);
-    });
-  });
-
   group('scoreWeightedExcess', () {
     final testStats = {
       'A': statsWith(short: [10, 10], long: [20, 20]),
@@ -172,12 +155,20 @@ void main() {
       );
     });
 
-    test('🚨 前提：舊行為確實把 cut/缺席當 0（這才是要修的東西）', () {
-      final raw = parseCalibratedScores(
-        '{"schema_version":1,"rules":{"CAL":{"score":30},"BULL":{"score":0}}}',
+    test('🚨 對照：cut/缺席若被當成 0（已刪除的舊行為）會是什麼樣', () {
+      // parseCalibratedScores 於 2026-08-23 刪除(唯一殘存消費者
+      // regime_calibrate 已遷移)。這裡用手算的方式保留對照,說明差別:
+      // 舊行為 BULL(cut) → 0、BEAR(缺席) → 不在 map;
+      // 正確行為見下一條測試。
+      final eff = effectiveScores(
+        '{"schema_version":1,"rules":{"CAL":{"score":30,"active":true},'
+        '"BULL":{"score":0,"active":false,"cut_reason":"t",'
+        '"avg_return":1.0,"t_stat":0.5}}}',
+        hardcodedScores: hardcoded,
+        horizon: WfHorizon.short,
       );
-      expect(raw['BULL'], 0, reason: 'cut → raw 0');
-      expect(raw.containsKey('BEAR'), isFalse, reason: '缺席 → 根本不在 map');
+      expect(eff['BULL'], isNot(0), reason: '舊行為會給 0,正確行為給 hardcoded');
+      expect(eff['BEAR'], isNot(null), reason: '缺席不得從 map 消失');
     });
 
     test('🚨 cut 的規則要回 hardcoded，不是 0', () {
