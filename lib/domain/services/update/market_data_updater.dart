@@ -94,7 +94,8 @@ class MarketDataUpdater {
     int? marginCount = 0;
     var foreignShareholdingCount = 0;
 
-    // 從 TWSE 批次同步上市當沖資料（無 TPEX 對等：上櫃端點被 Cloudflare 擋）
+    // 從 TWSE 批次同步上市當沖資料（上櫃對等見 syncAllDayTradingFromTpex；
+    // 先前記載的「被 Cloudflare 擋」指舊站路徑，櫃買改版後已 302）
     try {
       twseDayTradingCount = await _tradingRepo.syncAllDayTradingFromTwse(
         date: date,

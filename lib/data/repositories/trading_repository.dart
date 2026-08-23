@@ -89,7 +89,11 @@ class TradingRepository implements ITradingRepository {
 
       if (data.isEmpty) return 0;
 
-      return _persistDayTrading(
+      // `await` 不可省：Dart 的 `return future;` 在 try 內會**先離開 try**，
+      // catch 收不到內部例外——DatabaseException 包裝形同虛設，且 Error 子型別
+      // 會躲過上游 market_data_updater 的 `on Exception catch`，讓整個回補迴圈
+      // 而非單日被中斷。實測 FK 787（新掛牌股尚未進 stock_master）會裸奔而出。
+      return await _persistDayTrading(
         dataDate: targetDate,
         market: MarketCode.twse,
         items: [
@@ -146,6 +150,13 @@ class TradingRepository implements ITradingRepository {
         if (p.volume != null) p.symbol: p.volume!.toDouble(),
     };
 
+    // 比例失真時第一個要看的數字：分母是從幾列價格取出來的。
+    // 兩市場寫同一張表，但價格覆蓋可能只有一邊到位。
+    AppLogger.info(
+      'TradingRepo',
+      '用於計算比例的價格資料: ${volumeMap.length} 筆 ($market, $dataDate)',
+    );
+
     final entries = <DayTradingCompanion>[];
     for (final item in items) {
       if (!StockPatterns.isValidCode(item.code)) continue;
@@ -168,6 +179,10 @@ class TradingRepository implements ITradingRepository {
         ),
       );
     }
+    // **刻意不刪**：舊版上市路徑走的是 delete-then-insert，批次全被
+    // isValidCode 濾掉時仍會執行刪除，把該市場當日資料清空卻不寫回任何東西
+    // （例如某日回應全是權證）。這裡改為什麼都不做——沒東西可寫就不該動既有
+    // 資料。上櫃路徑到不了這裡（client 端已先濾過），只有上市會踩到。
     if (entries.isEmpty) return 0;
 
     // 刪除舊記錄（歷史上 UTC/本地不一致造成的同日變體時間戳）。
@@ -249,7 +264,11 @@ class TradingRepository implements ITradingRepository {
         }
       }
 
-      return _persistDayTrading(
+      // `await` 不可省：Dart 的 `return future;` 在 try 內會**先離開 try**，
+      // catch 收不到內部例外——DatabaseException 包裝形同虛設，且 Error 子型別
+      // 會躲過上游 market_data_updater 的 `on Exception catch`，讓整個回補迴圈
+      // 而非單日被中斷。實測 FK 787（新掛牌股尚未進 stock_master）會裸奔而出。
+      return await _persistDayTrading(
         dataDate: dataDate,
         market: MarketCode.tpex,
         items: [

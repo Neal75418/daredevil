@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/core/constants/data_freshness.dart';
+import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/models/tpex/models.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
@@ -152,6 +153,15 @@ void main() {
     final n = await repo.syncAllDayTradingFromTpex();
 
     expect(n, 0, reason: '> DataFreshness.twseBatchThreshold 視為已同步');
+    expect(
+      await db.getDayTradingHistory(
+        '6104',
+        startDate: dataDay,
+        endDate: dataDay,
+      ),
+      isEmpty,
+      reason: '跳過就是真的沒寫，不能只看回傳值',
+    );
   });
 
   test('force 略過新鮮度', () async {
@@ -205,5 +215,43 @@ void main() {
       endDate: dataDay,
     );
     expect(rows.single.dayTradingRatio, DataFreshness.dayTradingMaxValidRatio);
+  });
+
+  test('🚨 寫入失敗必須包成 DatabaseException（return future 會繞過 catch）', () async {
+    // 未登錄在 stock_master 的代號 → FK 787。上櫃新掛牌、或 step 2 股票清單
+    // 同步失敗（只記錯誤續跑）時，這是會真的發生的情況。
+    await seedPrice('6104', dataDay, 4000);
+    stubTpex([row('9999')]);
+
+    await expectLater(
+      repo.syncAllDayTradingFromTpex(),
+      throwsA(isA<DatabaseException>()),
+      reason:
+          'Dart 的 `return future;` 在 try 內會先離開 try——catch 收不到，'
+          '原始例外裸奔而出，上游的 on Exception catch 也接不到 Error 子型別',
+    );
+  });
+
+  test('🚨 回應為空 → 不得刪掉該市場既有資料', () async {
+    await db.insertDayTradingData([
+      DayTradingCompanion.insert(
+        symbol: '6104',
+        date: dataDay,
+        buyVolume: const Value(1),
+        sellVolume: const Value(1),
+        dayTradingRatio: const Value(7),
+        tradeVolume: const Value(1),
+      ),
+    ]);
+    stubTpex([]);
+
+    expect(await repo.syncAllDayTradingFromTpex(), 0);
+
+    final rows = await db.getDayTradingHistory(
+      '6104',
+      startDate: dataDay,
+      endDate: dataDay,
+    );
+    expect(rows, isNotEmpty, reason: '沒東西可寫時不該把既有資料清掉');
   });
 }

@@ -32,7 +32,10 @@ class Shareholding extends Table {
 /// 當沖資料 Table
 ///
 /// **資料來源說明：**
-/// - TWSE TWTB4U API（唯一 writer）：買賣欄位為金額（元）
+/// - TWSE TWTB4U（上市）：買賣欄位為金額（元）
+/// - TPEx `/www/zh-tw/intraday/stat`（上櫃，2026-08-23 接上）：同一組欄位語意，
+///   2026-08-21 兩市場各 6 檔 × 3 欄位與官方逐位元相符，故共用本表。
+///   ⚠️ 兩市場同寫一天，故 delete window 與新鮮度檢查都必須分市場。
 ///
 /// [dayTradingRatio] 為交易訊號使用的主要指標，
 /// 由每日價量資料另行計算。
