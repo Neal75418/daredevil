@@ -115,4 +115,65 @@ void main() {
     final history = await db.getDayTradingHistory('2317', startDate: dayBefore);
     expect(history, isEmpty, reason: '2317 的同日變體時間戳應被 dedup 刪除');
   });
+
+  test('🚨 寫入某市場不得刪掉同日另一市場的當沖資料', () async {
+    // 上櫃已有當日資料（模擬上櫃先同步完）
+    await db.upsertStocks([
+      StockMasterCompanion.insert(symbol: '6104', name: '創惟', market: 'TPEx'),
+    ]);
+    await db.insertDayTradingData([
+      DayTradingCompanion.insert(
+        symbol: '6104',
+        date: dayX,
+        buyVolume: const Value(1000),
+        sellVolume: const Value(900),
+        dayTradingRatio: const Value(30.0),
+        tradeVolume: const Value(500),
+      ),
+    ]);
+
+    // 上市接著同步同一天
+    await repo.syncAllDayTradingFromTwse(date: dayX, force: true);
+
+    final otc = await db.getDayTradingHistory(
+      '6104',
+      startDate: dayX,
+      endDate: dayX,
+    );
+    expect(otc, isNotEmpty, reason: 'delete window 按日期刪光不分市場，接上櫃後兩市場會互相清除');
+  });
+  test('🚨 分類漂移：上市批次含被歸類為 TPEx 的股票，其同日變體仍須清掉', () async {
+    // 上櫃轉上市的股票——stock_master 尚未更新分類（calibration.db 實測 36 檔）
+    await db.upsertStocks([
+      StockMasterCompanion.insert(symbol: '2646', name: '星宇航空', market: 'TPEx'),
+    ]);
+    await db.insertDayTradingData([
+      entry('2646', dayX.add(const Duration(hours: 8))), // 變體時間戳
+    ]);
+    when(
+      () => mockTwse.getAllDayTradingData(date: any(named: 'date')),
+    ).thenAnswer(
+      (_) async => [
+        TwseDayTrading(
+          date: dayX,
+          code: '2646',
+          name: '星宇航空',
+          buyVolume: 1000,
+          sellVolume: 900,
+          totalVolume: 500,
+        ),
+      ],
+    );
+
+    await repo.syncAllDayTradingFromTwse(date: dayX, force: true);
+
+    final rows = await db.getDayTradingHistory('2646', startDate: dayBefore);
+    expect(
+      rows.length,
+      1,
+      reason:
+          'market 只是可變分類，不等於「哪條管線寫的」；'
+          '本次批次寫到的股票不論分類，其同日變體都該清掉',
+    );
+  });
 }

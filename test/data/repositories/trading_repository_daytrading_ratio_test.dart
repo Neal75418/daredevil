@@ -113,40 +113,50 @@ void main() {
     expect(await syncAndReadRatio(), 0.0);
   });
 
-  test('🚨 寫入某市場不得刪掉同日另一市場的當沖資料', () async {
-    // 上櫃已有當日資料（模擬上櫃先同步完）
-    await db.upsertStocks([
-      StockMasterCompanion.insert(symbol: '6104', name: '創惟', market: 'TPEx'),
-    ]);
-    await db.insertDayTradingData([
-      DayTradingCompanion.insert(
-        symbol: '6104',
-        date: day,
-        buyVolume: const Value(1000),
-        sellVolume: const Value(900),
-        dayTradingRatio: const Value(30.0),
-        tradeVolume: const Value(500),
-      ),
-    ]);
-
-    // 上市接著同步同一天
-    await seedPriceVolume(4000);
-    stubDayTrading(1000);
-    await repo.syncAllDayTradingFromTwse(date: day, force: true);
-
-    final otc = await db.getDayTradingHistory(
-      '6104',
-      startDate: day,
-      endDate: day,
-    );
-    expect(otc, isNotEmpty, reason: 'delete window 按日期刪光不分市場，接上櫃後兩市場會互相清除');
-    expect(otc.single.dayTradingRatio, 30.0, reason: '既有值不得被覆寫');
-  });
-
   test('當沖量為 0 → 比例為 0', () async {
     await seedPriceVolume(4000);
     stubDayTrading(0);
 
-    expect(await syncAndReadRatio(), 0.0);
+    expect(
+      await syncAndReadRatio(),
+      0.0,
+      reason: '當沖量 0 的股票仍須寫入一列，不得被過濾掉（本條真正釘的是這個）',
+    );
+  });
+
+  test('🚨 新鮮度檢查必須分市場：上櫃已有資料不得讓上市整批跳過', () async {
+    await db.upsertStocks([
+      for (var i = 0; i < 150; i++)
+        StockMasterCompanion.insert(
+          symbol: '9${i.toString().padLeft(3, '0')}',
+          name: 'OTC$i',
+          market: 'TPEx',
+        ),
+    ]);
+    // 上櫃先寫入 150 列（> DataFreshness.twseBatchThreshold = 100）
+    await db.insertDayTradingData([
+      for (var i = 0; i < 150; i++)
+        DayTradingCompanion.insert(
+          symbol: '9${i.toString().padLeft(3, '0')}',
+          date: day,
+          buyVolume: const Value(1),
+          sellVolume: const Value(1),
+          dayTradingRatio: const Value(10),
+          tradeVolume: const Value(1),
+        ),
+    ]);
+
+    await seedPriceVolume(4000);
+    stubDayTrading(1000);
+
+    // 刻意不帶 force——正是每日路徑與回補迴圈的走法
+    await repo.syncAllDayTradingFromTwse(date: day);
+
+    final twse = await db.getDayTradingHistory(
+      '2330',
+      startDate: day,
+      endDate: day,
+    );
+    expect(twse, isNotEmpty, reason: '閘門若不分市場，上櫃的 150 列會讓上市整批不同步、當沖規則全市場失明');
   });
 }

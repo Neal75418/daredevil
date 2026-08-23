@@ -81,7 +81,9 @@ void main() {
     Set<DateTime> missingTpexMargin = const {},
     Map<DateTime, int> priceCounts = const {},
   }) {
-    when(() => mockDb.getDayTradingCountForDate(any())).thenAnswer((inv) async {
+    when(
+      () => mockDb.getDayTradingCountForDateAndMarket(any(), any()),
+    ).thenAnswer((inv) async {
       final d = inv.positionalArguments[0] as DateTime;
       return missingDayTrading.contains(d)
           ? 0
@@ -208,9 +210,13 @@ void main() {
 
       await updater.syncMarketWideData(date: today);
 
-      verifyNever(() => mockDb.getDayTradingCountForDate(sat));
-      verifyNever(() => mockDb.getDayTradingCountForDate(typhoon));
-      verify(() => mockDb.getDayTradingCountForDate(d13)).called(1);
+      verifyNever(() => mockDb.getDayTradingCountForDateAndMarket(sat, any()));
+      verifyNever(
+        () => mockDb.getDayTradingCountForDateAndMarket(typhoon, any()),
+      );
+      verify(
+        () => mockDb.getDayTradingCountForDateAndMarket(d13, any()),
+      ).called(1);
     });
 
     test('今日不列入回補（由每日路徑負責）', () async {
@@ -223,7 +229,9 @@ void main() {
         () =>
             mockTradingRepo.syncAllDayTradingFromTwse(date: today, force: true),
       );
-      verifyNever(() => mockDb.getDayTradingCountForDate(today));
+      verifyNever(
+        () => mockDb.getDayTradingCountForDateAndMarket(today, any()),
+      );
     });
 
     test('無價格資料的日子不補當沖（比例算不出來會寫出全 0 的假資料）', () async {
@@ -243,7 +251,7 @@ void main() {
     test('單次回補天數受上限保護', () async {
       // 窗內所有交易日全缺
       when(
-        () => mockDb.getDayTradingCountForDate(any()),
+        () => mockDb.getDayTradingCountForDateAndMarket(any(), any()),
       ).thenAnswer((_) async => 0);
       when(
         () => mockDb.countMarginTradingByDateAndMarket(any(), any()),
@@ -263,7 +271,7 @@ void main() {
 
     test('連續零筆中止（端點失效防護）', () async {
       when(
-        () => mockDb.getDayTradingCountForDate(any()),
+        () => mockDb.getDayTradingCountForDateAndMarket(any(), any()),
       ).thenAnswer((_) async => 0);
       when(
         () => mockDb.countMarginTradingByDateAndMarket(any(), any()),
@@ -451,9 +459,9 @@ void main() {
         final m = inv.positionalArguments[1] as String;
         return m == MarketCode.tpex ? 0 : twseThreshold + 1; // 上櫃全缺
       });
-      when(() => mockDb.getDayTradingCountForDate(any())).thenAnswer((
-        inv,
-      ) async {
+      when(
+        () => mockDb.getDayTradingCountForDateAndMarket(any(), any()),
+      ).thenAnswer((inv) async {
         final d = inv.positionalArguments[0] as DateTime;
         return (d == d7 || d == d6) ? 0 : DataFreshness.twseBatchThreshold + 1;
       });

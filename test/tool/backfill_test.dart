@@ -145,7 +145,9 @@ void main() {
       ),
     ).thenAnswer((_) async => 0);
     // Default: 該日尚無既有當沖 rows → 不觸發 day_trading per-day skip
-    when(() => db.getDayTradingCountForDate(any())).thenAnswer((_) async => 0);
+    when(
+      () => db.getDayTradingCountForDateAndMarket(any(), any()),
+    ).thenAnswer((_) async => 0);
   });
 
   BackfillConfig makeConfig({
@@ -925,7 +927,7 @@ void main() {
     test('該日已有足量當沖 rows → 跳過、完全不打 API（resume）', () async {
       // > DataFreshness.twseBatchThreshold(100) → 視為該日已回補完成
       when(
-        () => db.getDayTradingCountForDate(any()),
+        () => db.getDayTradingCountForDateAndMarket(any(), any()),
       ).thenAnswer((_) async => 950);
 
       final backfiller = makeBackfiller(dayTradingOnly());

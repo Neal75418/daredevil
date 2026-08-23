@@ -727,7 +727,10 @@ class Backfiller {
       // Resume：該日已有足量當沖 rows → 跳過，連 API 都不打。門檻沿用
       // TradingRepository 自身的 freshness 門檻，避免兩層判斷不一致造成
       // 「這裡放行、repo 內部又跳過」的空轉。
-      final existing = await deps.db.getDayTradingCountForDate(current);
+      final existing = await deps.db.getDayTradingCountForDateAndMarket(
+        current,
+        MarketCode.twse,
+      );
       if (existing > DataFreshness.twseBatchThreshold) {
         daysSucceeded++;
         daysProcessed++;

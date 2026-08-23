@@ -266,7 +266,7 @@ class MarketDataUpdater {
       var canBackfillDayTrading = false;
       if (!dead.contains(srcDayTrading) &&
           twseStocks > 0 &&
-          await _db.getDayTradingCountForDate(day) <=
+          await _db.getDayTradingCountForDateAndMarket(day, MarketCode.twse) <=
               DataFreshness.twseBatchThreshold) {
         canBackfillDayTrading = twsePrices >= twseThreshold;
         if (!canBackfillDayTrading) {

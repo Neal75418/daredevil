@@ -69,7 +69,11 @@ class TradingRepository implements ITradingRepository {
 
       // 新鮮度檢查：若已有目標日期資料則跳過
       if (!force) {
-        final existingCount = await _db.getDayTradingCountForDate(targetDate);
+        // 分市場計數：不分市場會讓上櫃寫入的列把上市的閘門頂過門檻
+        final existingCount = await _db.getDayTradingCountForDateAndMarket(
+          targetDate,
+          MarketCode.twse,
+        );
         if (existingCount > _batchFreshnessThreshold) {
           return 0;
         }
@@ -166,6 +170,7 @@ class TradingRepository implements ITradingRepository {
           deleteStart,
           deleteEnd,
           market: MarketCode.twse,
+          batchSymbols: {for (final e in entries) e.symbol.value},
         );
         await _db.insertDayTradingData(entries);
       });

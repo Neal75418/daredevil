@@ -26,6 +26,32 @@ mixin DayTradingDaoMixin on $AppDatabase {
   }
 
   /// 取得指定日期的當沖資料筆數（新鮮度檢查用）
+  /// 某日某市場的當沖筆數（新鮮度檢查用）
+  ///
+  /// **必須分市場**：不分市場的版本在 TWSE 是唯一 writer 時等價，接上櫃之後
+  /// 會變成「上櫃先寫了 800 列 → 上市的閘門看到 800 > 100 → 整批跳過」，
+  /// 當沖規則對整個上市市場失明，而 `tool/backfill.dart` 還會把該日記成成功、
+  /// 永不重試。比照 `countPricesByDateAndMarket` / `countMarginTradingByDateAndMarket`。
+  Future<int> getDayTradingCountForDateAndMarket(
+    DateTime date,
+    String market,
+  ) async {
+    final startOfDay = DateContext.normalize(date);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+    final result = await customSelect(
+      'SELECT COUNT(*) AS cnt FROM day_trading dt '
+      'INNER JOIN stock_master sm ON dt.symbol = sm.symbol '
+      'WHERE dt.date >= ? AND dt.date < ? AND sm.market = ?',
+      variables: [
+        Variable.withDateTime(startOfDay),
+        Variable.withDateTime(endOfDay),
+        Variable.withString(market),
+      ],
+      readsFrom: {dayTrading, stockMaster},
+    ).getSingle();
+    return result.read<int>('cnt');
+  }
+
   Future<int> getDayTradingCountForDate(DateTime date) async {
     // 使用本地時間午夜以匹配資料庫儲存格式
     final startOfDay = DateContext.normalize(date);
@@ -51,29 +77,41 @@ mixin DayTradingDaoMixin on $AppDatabase {
   /// 刪除指定日期範圍內的當沖資料
   ///
   /// 用於清理可能存在的重複記錄（由於 UTC/本地時間不一致）
-  /// 刪除日期區間內、**指定市場**的當沖列。
+  /// 刪除日期區間內、**本次同步所擁有**的當沖列。
   ///
-  /// 兩個必須同時成立的保證：
-  /// 1. **同日變體時間戳要清掉**——歷史上 UTC/本地不一致造成同一天有多個非
-  ///    午夜時間戳的列，即使該股不在本次批次也要清（原設計意圖，有測試守）。
-  /// 2. **不得跨市場刪除**——本方法原本無條件刪光區間內所有列，在 TWSE 單一
-  ///    writer 時代無害；接上櫃後兩市場寫同一天會互相清除，且因為刪完立刻
+  /// 「擁有」＝ `stock_master.market` 屬於 [market]，**或** 出現在本次寫入的
+  /// [batchSymbols] 裡。兩個條件缺一不可：
+  ///
+  /// - 只用 [market]：`market` 是可變的分類，不等於「哪條管線寫的」。上櫃轉
+  ///   上市的股票在 `stock_master` 更新前，由上市管線寫入卻被歸類為 TPEx
+  ///   （`tool/calibration.db` 實測 36 檔），其同日變體會清不到。
+  /// - 只用 [batchSymbols]：清不到「不在本次批次、但同市場」的殘留變體，
+  ///   那正是 2026-07-14 事故留下的護欄要防的。
+  ///
+  /// 兩者聯集同時滿足：
+  /// 1. **同日變體時間戳要清掉**——歷史 UTC/本地不一致造成的髒資料。
+  /// 2. **不得跨市場刪除**——接上櫃後兩市場寫同一天會互相清除，而且刪完立刻
   ///    寫入自己的資料，筆數看起來正常，不會有任何錯誤訊號。
-  ///
-  /// 故以 `stock_master.market` 限縮：清得到同市場的變體，碰不到另一市場。
+  ///    （批次條件不破壞這點：本次批次裡的股票本來就要被覆寫。）
   Future<int> deleteDayTradingForDateRange(
     DateTime startDate,
     DateTime endDate, {
     required String market,
+    required Set<String> batchSymbols,
   }) async {
+    final placeholders = batchSymbols.isEmpty
+        ? 'NULL'
+        : List.filled(batchSymbols.length, '?').join(',');
     return customUpdate(
       'DELETE FROM day_trading '
       'WHERE date >= ? AND date <= ? '
-      'AND symbol IN (SELECT symbol FROM stock_master WHERE market = ?)',
+      'AND (symbol IN (SELECT symbol FROM stock_master WHERE market = ?) '
+      'OR symbol IN ($placeholders))',
       variables: [
         Variable.withDateTime(startDate),
         Variable.withDateTime(endDate),
         Variable.withString(market),
+        for (final s in batchSymbols) Variable.withString(s),
       ],
       updates: {dayTrading},
     );
