@@ -55,6 +55,8 @@ if echo "$CHANGED" | grep -qE '^lib/(domain/services/(rules/|rule_registry)|core
     else
       # 沒事:一行帶過,不佔版面
       echo "${G}📐 規則集有變動,已自動查過——無缺樣本規則,不用重跑。${Z}"
+      echo "   (若改的是規則邏輯/門檻,記得同步 docs/RULE_ENGINE.md 的條件欄——"
+      echo "    那一欄是散文,守門測試抓不到)"
     fi
   else
     echo "📐 規則集有變動,但找不到 tool/calibration.db,略過涵蓋檢查。"

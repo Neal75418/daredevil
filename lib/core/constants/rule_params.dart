@@ -20,6 +20,7 @@ export 'package:daredevil/core/constants/rule_scores.dart';
 /// - [FundamentalParams] — 基本面 / EPS / ROE / 估值 / 董監持股
 /// - [PatternParams] — K 線型態
 /// - [PullbackParams] — 強股回檔進場（Mode C v2）
+/// - [SectorParams] — 族群強度 / 產業輪動
 /// - [AlertParams] — 警示系統
 ///
 /// ### 數值慣例
@@ -172,8 +173,17 @@ abstract final class RuleParams {
   // ==================================================
 
   /// 每檔股票最多理由數（資料庫儲存用，供篩選功能使用）
-  /// 設為 64 確保所有規則都能被儲存（目前 64 條規則；單股每規則最多 1 理由 → 上限 64）
-  /// UI 顯示時會用 .take(2) 或 .take(3) 限制
+  ///
+  /// **上限怎麼算的**（2026-08-23 修正推導）：舊註解寫「64 條規則 → 上限 64」，
+  /// 但現在有 72 種 `ReasonType`。真正的上限是 **72 扣掉互斥收斂**——
+  /// `RuleEngine._mutexGroups` 6 組涵蓋 16 條、每組只留 1 條，省下 11 條，
+  /// 所以單股理論最大 61 條，64 仍有餘裕。
+  ///
+  /// ⚠️ 這個餘裕會隨規則集變動。新增規則後若 `ReasonType.values.length` 減去
+  /// 互斥收斂數超過 64，`saveReasons` 的 `take()` 會**靜默截斷**——沒有錯誤、
+  /// 沒有日誌，只是有些理由不見了。
+  ///
+  /// UI 顯示時會用 `.take(2)` / `.take(3)`（卡片 compact 佈局只顯示 1 條）。
   static const int maxReasonsPerStock = 64;
 
   /// 每日 Top N 推薦數量

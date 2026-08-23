@@ -179,7 +179,7 @@ lib/
 
 - 每日掃描上市 + 上櫃全市場，依「股票在趨勢中的階段」分流到**三個觀察模式**
   （當前可交易檔數隨新股上市／下市浮動，更新日誌的 `CandidateSelector` 會印出實際候選數）
-- 每檔最多 **2 條理由**，分數上限 **80 分**
+- 卡片顯示最多 **2 條理由**（compact 佈局 1 條，詳情頁 3 條），落庫分數上限 **80 分**
 - 可調參數集中於 `lib/core/constants/rule_params_*.dart` 的 typed param classes
 
 詳見 [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)
