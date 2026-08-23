@@ -87,7 +87,7 @@ void main() {
   test('🚨 上櫃當沖失敗不得中止整段（融資融券仍須執行）', () async {
     when(
       () => trading.syncAllDayTradingFromTpex(force: any(named: 'force')),
-    ).thenThrow(NetworkException('TPEx 掛了'));
+    ).thenThrow(const NetworkException('TPEx 掛了'));
 
     final r = await updater.syncMarketWideData(date: date);
 
@@ -101,19 +101,19 @@ void main() {
     expect(r.dayTradingCount, 11, reason: '上市不受牽連');
   });
 
-  test('🚨 上櫃限流也不得中止整段', () async {
+  test('🚨 上櫃限流必須往上拋（與 pipeline 既有契約一致）', () async {
     when(
       () => trading.syncAllDayTradingFromTpex(force: any(named: 'force')),
-    ).thenThrow(RateLimitException('slow down'));
+    ).thenThrow(const RateLimitException());
 
-    final r = await updater.syncMarketWideData(date: date);
-
-    verify(
-      () => trading.syncAllMarginTrading(
-        date: any(named: 'date'),
-        force: any(named: 'force'),
-      ),
-    ).called(1);
-    expect(r.tpexDayTradingCount, 0);
+    await expectLater(
+      updater.syncMarketWideData(date: date),
+      throwsA(isA<RateLimitException>()),
+      reason:
+          'pipeline 靠 RateLimitException 設 rateLimitedAbort 並中止後續；'
+          '吞掉只是讓中止晚幾行發生卻少一個來源的線索。而且限流時四行後的'
+          '融資融券同樣打 TPEx、照樣會死——「吞掉才能保住融資」的理由對限流'
+          '不成立，只對網路錯誤成立',
+    );
   });
 }

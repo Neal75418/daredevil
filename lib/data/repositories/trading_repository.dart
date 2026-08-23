@@ -265,7 +265,9 @@ class TradingRepository implements ITradingRepository {
       // 迴圈對上市的 `價格覆蓋不足 → 跳過當沖回補（比例會失真）` 閘門。
       final tpexStocks = await _db.countStocksByMarket(MarketCode.tpex);
       if (tpexStocks > 0) {
-        final priced = await _db.countPricesByDateAndMarket(
+        // 用 range 版：與 _persistDayTrading 取分母時的 range 備援語意一致，
+        // 否則變體時間戳重現時兩者對「這天有沒有價格」的判斷會分歧。
+        final priced = await _db.countPricesInDayAndMarket(
           dataDate,
           MarketCode.tpex,
         );

@@ -53,6 +53,10 @@ void main() {
   /// 每日路徑（今日同步）預設成功，讓測試專注在回補
   void stubTodaySync() {
     when(
+      () =>
+          mockTradingRepo.syncAllDayTradingFromTpex(force: any(named: 'force')),
+    ).thenAnswer((_) async => 0);
+    when(
       () => mockTradingRepo.syncAllDayTradingFromTwse(
         date: any(named: 'date'),
         force: any(named: 'force'),

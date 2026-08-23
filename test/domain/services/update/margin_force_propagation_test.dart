@@ -50,6 +50,9 @@ void main() {
       backfillCallDelay: Duration.zero,
     );
     when(
+      () => trading.syncAllDayTradingFromTpex(force: any(named: 'force')),
+    ).thenAnswer((_) async => 0);
+    when(
       () => trading.syncAllDayTradingFromTwse(
         date: any(named: 'date'),
         force: any(named: 'force'),

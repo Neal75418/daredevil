@@ -117,8 +117,13 @@ class MarketDataUpdater {
       tpexDayTradingCount = await _tradingRepo.syncAllDayTradingFromTpex(
         force: force,
       );
-    } catch (e) {
-      AppLogger.warning('MarketDataUpdater', '上櫃當沖資料同步失敗', e);
+    } on NetworkException catch (e) {
+      // **只吞網路錯誤**。TPEx 掛掉時上市當沖、融資融券、外資持股都還好端端的，
+      // 為三者裡最不關鍵的一個中止整段不划算。
+      // RateLimitException 不吞——它是 coordinator 用來設 rateLimitedAbort 的
+      // 訊號，而且限流時四行後的融資融券同樣打 TPEx、照樣會死，吞了只是讓
+      // 中止晚四行發生卻少一個來源的線索。
+      AppLogger.warning('MarketDataUpdater', '上櫃當沖同步網路失敗（續跑）', e);
     }
 
     // 從 TWSE/TPEX 批次同步融資融券資料

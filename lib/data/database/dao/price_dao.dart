@@ -274,6 +274,32 @@ mixin PriceDaoMixin on $AppDatabase {
     return result.read<int>('cnt');
   }
 
+  /// 某日某市場的價格筆數（**整日範圍**，非精確等值）
+  ///
+  /// 與 [countPricesByDateAndMarket] 的差別只在日期比對方式。當沖的價格覆蓋
+  /// 閘門必須用這個版本：它保護的 `_persistDayTrading` 取分母時帶 range 備援
+  /// （防「帶時間分量的髒歷史日期」逃過 equals，2026-08-15 稽核）。閘門若走
+  /// 精確等值，變體時間戳一旦重現，閘門判「覆蓋不足」整批跳過、日誌讀起來像
+  /// 「沒有價格」，而計算其實算得出正確比例。
+  Future<int> countPricesInDayAndMarket(DateTime date, String market) async {
+    final start = DateTime(date.year, date.month, date.day);
+    final end = start
+        .add(const Duration(days: 1))
+        .subtract(const Duration(milliseconds: 1));
+    final result = await customSelect(
+      'SELECT COUNT(*) as cnt FROM daily_price dp '
+      'INNER JOIN stock_master sm ON dp.symbol = sm.symbol '
+      'WHERE dp.date >= ? AND dp.date <= ? AND sm.market = ?',
+      variables: [
+        Variable.withDateTime(start),
+        Variable.withDateTime(end),
+        Variable.withString(market),
+      ],
+      readsFrom: {dailyPrice, stockMaster},
+    ).getSingle();
+    return result.read<int>('cnt');
+  }
+
   /// 窗內各（交易日, 市場）的價格筆數（phase-0 缺漏掃描用）
   ///
   /// 一次 GROUP BY 取代逐 (日, 市場) 的 [countPricesByDateAndMarket]

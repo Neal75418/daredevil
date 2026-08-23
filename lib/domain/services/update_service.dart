@@ -342,6 +342,11 @@ class UpdateService {
       // daily_reason）、不再產生 / 儲存 Top-20 推薦清單。
       ctx.onProgress?.call(9, 10, '完成分析');
       ctx.onProgress?.call(10, 10, '完成');
+      // ⚠️ 上方 `_syncPricesAndHistory` 的 await **必須在此平行組之前**：
+      // 步驟 4.5 的上櫃當沖有一道價格覆蓋閘門，分母來自 daily_price 同日資料。
+      // 順序反過來的話閘門每輪都看到 0 筆、整批跳過，上櫃當沖等於永久關閉，
+      // 而症狀與「端點掛掉」一模一樣。
+      //
       // 步驟 10+: 三個後處理。**必須在 _finishUpdate 之前**——後者依
       // `result.errors` 決定 update_run 狀態並設 `result.success = true`，
       // 跑在它之後等於這三步的失敗永遠反映不到狀態上（finding #23）。
@@ -793,7 +798,8 @@ class UpdateService {
           : '';
       AppLogger.info(
         'UpdateService',
-        '步驟 4.5: 當沖=${marketResult.dayTradingCount}, '
+        '步驟 4.5: 當沖 上市=${marketResult.dayTradingCount}／'
+            '上櫃=${marketResult.tpexDayTradingCount}, '
             '融資=$marginLabel, '
             '外資持股(全市場)=${marketResult.foreignShareholdingCount}, '
             '持股(自選+熱門)=$syncedCount$backfillLabel',
