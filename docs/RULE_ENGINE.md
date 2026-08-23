@@ -73,12 +73,12 @@ flowchart LR
 |:--------------------|----:|:---------------------------|
 | REVERSAL_W2S        | +35 | 弱轉強（限 trendState ∈ 下跌/盤整）：突破區間上緣 **或** 形成更高低點；兩者皆需量能確認 |
 | REVERSAL_S2W        | -25 | 強轉弱（限 trendState ∈ 上升/盤整）：跌破支撐 **或** 跌破區間底部 **或** 形成更低高點 |
-| TECH_BREAKOUT       | +25 | 突破壓力位（3% buffer + MA20 確認） |
+| TECH_BREAKOUT       | +25 | 突破壓力位：3% buffer + close ≥ MA20 + **今日量 ≥ 1.5× 20 日均量** |
 | TECH_BREAKDOWN      | -20 | 跌破支撐位（3% buffer + 量能確認；無 MA20 過濾，多空不對稱為現狀，對稱化需回測驗證） |
 | VOLUME_SPIKE        | +22 | 量 >= 4x 均量且價變 >= 1.5%      |
-| PRICE_SPIKE         | +15 | 日漲幅 >= 5%（僅正向；空方由 PRICE_VOLUME_BEARISH_DIVERGENCE / TECH_BREAKDOWN 覆蓋，2026-07 audit 修正） |
-| INSTITUTIONAL_BUY   | +18 | 法人買超轉向                     |
-| INSTITUTIONAL_SELL  | -12 | 法人賣超轉向                     |
+| PRICE_SPIKE         | +15 | 日漲幅 >= 5% + **量 ≥ 1.5× 20 日均量**（僅正向；空方由 PRICE_VOLUME_BEARISH_DIVERGENCE / TECH_BREAKDOWN 覆蓋，2026-07 audit 修正） |
+| INSTITUTIONAL_BUY   | +18 | 法人買超：轉向 / 加速擴大 / 顯著單日（>5000 張 + >35% 佔量 + 價漲 >1%）共 3 類 |
+| INSTITUTIONAL_SELL  | -12 | 法人賣超：同上三類的空方版                     |
 | NEWS_RELATED        |  ±8 | 近期相關新聞                     |
 
 ### K 線型態
@@ -106,14 +106,14 @@ flowchart LR
 
 | 規則                     | 基準分 | 條件               |
 |:-----------------------|----:|:-----------------|
-| WEEK_52_HIGH           | +28 | 52 週新高           |
-| WEEK_52_LOW            |  +8 | 52 週新低（逆勢機會）     |
-| MA_ALIGNMENT_BULLISH   | +22 | 多頭排列（5>10>20>60） |
-| MA_ALIGNMENT_BEARISH   | -15 | 空頭排列             |
+| WEEK_52_HIGH           | +28 | 距 52 週新高 **1% 內**（除權息調整後）——「接近新高」也會觸發 |
+| WEEK_52_LOW            |  +8 | 距 52 週新低 **3% 內** **且** close < MA20 < MA60（空方確認）|
+| MA_ALIGNMENT_BULLISH   | +22 | 多頭排列 5>10>20>60（每段間距 > 0.3%）+ close > MA5 + 乖離 < 5% + 量 > 1.3× 均量 |
+| MA_ALIGNMENT_BEARISH   | -15 | 空頭排列（間距 > 0.3%）+ close < MA5 + 乖離 > −5%；**無量能濾網**（與多方不對稱為現狀） |
 | RSI_EXTREME_OVERBOUGHT |  -8 | RSI > 85（警示）     |
 | RSI_EXTREME_OVERSOLD   | +10 | RSI < 30（反彈機會）   |
-| KD_GOLDEN_CROSS        | +18 | K 上穿 D（低檔區 < 30） |
-| KD_DEATH_CROSS         | -12 | K 下穿 D（高檔區 > 70） |
+| KD_GOLDEN_CROSS        | +18 | K 上穿 D 於低檔區 < 30 + **量 ≥ 1.5× 5 日均量** + **當日漲幅 ≥ 1%** |
+| KD_DEATH_CROSS         | -12 | K 下穿 D 於高檔區 > 70 + **量 ≥ 1.5× 5 日均量** |
 
 ### 價量背離
 
@@ -133,7 +133,7 @@ flowchart LR
 | INSTITUTIONAL_BUY_STREAK        | +20 | 法人連買 >= 4 日          |
 | INSTITUTIONAL_SELL_STREAK       | -15 | 法人連賣 >= 4 日          |
 | FOREIGN_SHAREHOLDING_INCREASING | +18 | 外資持股 5 日增 >= 0.5%    |
-| FOREIGN_SHAREHOLDING_DECREASING | -12 | 外資持股 5 日減 >= 0.5%    |
+| FOREIGN_SHAREHOLDING_DECREASING | -12 | 外資持股 5 日變化落在 **(−2%, −0.5%]**；跌破 −2% 由 FOREIGN_EXODUS 專屬 |
 | DAY_TRADING_HIGH                |   0 | 當沖比例落在 **[50%, 70%)**；≥70% 由 DAY_TRADING_EXTREME 專屬 |
 | DAY_TRADING_EXTREME             |  -5 | 當沖比例 >= 70% + 3 萬張以上 |
 | CONCENTRATION_HIGH              |   0 | 大戶持股集中度 >= 60%（noise filter, demote 0） |
@@ -146,11 +146,11 @@ flowchart LR
 
 | 規則                  | 基準分 | 條件                      |
 |:--------------------|----:|:------------------------|
-| REVENUE_YOY_SURGE   | +20 | 營收年增 > 30% + 站上 MA60    |
+| REVENUE_YOY_SURGE   | +20 | 營收年增 > 30% + 站上 MA60 **且當日漲幅 > 1.5%** |
 | REVENUE_YOY_DECLINE | -10 | 營收年減 > 20%              |
 | REVENUE_MOM_GROWTH  | +15 | 營收月增連續正成長 + 站上 MA20     |
-| REVENUE_NEW_HIGH    |   0 | 營收創歷史新高（noise filter, demote 0）      |
-| HIGH_DIVIDEND_YIELD | +18 | 殖利率 > 5.5%              |
+| REVENUE_NEW_HIGH    |   0 | 營收創歷史新高 **+ 站上 MA20**（noise filter, demote 0） |
+| HIGH_DIVIDEND_YIELD | +18 | 殖利率 5.5%–20%（>20% 視為資料錯誤排除）+ 估值資料 ≤ 7 天新鮮 |
 | PE_UNDERVALUED      | +15 | PE < 10（且 > 0）+ 站上 MA20 |
 | PE_OVERVALUED       |  -8 | PE > 60 + RSI > 75      |
 | PBR_UNDERVALUED     | +12 | 股價淨值比 < 0.8             |
@@ -159,9 +159,9 @@ flowchart LR
 
 | 規則                     | 基準分 | 條件                                |
 |:-----------------------|----:|:----------------------------------|
-| EPS_YOY_SURGE          | +22 | EPS 年增 >= 50% + 站上 MA60           |
+| EPS_YOY_SURGE          | +22 | EPS 年增 >= 50% + 站上 MA60 **且當日漲幅 > 1.5%** |
 | EPS_CONSECUTIVE_GROWTH | +18 | 連續 >= 2 季 EPS **年增**（比去年同季，350–380 天前）>= 10% + 站上 MA20 |
-| EPS_TURNAROUND         | +15 | 前季虧損、本季 EPS >= 0.3 元              |
+| EPS_TURNAROUND         | +15 | 前季虧損、本季 EPS >= 0.3 元 **+ 站上 MA20 或 RSI > 50** |
 | EPS_DECLINE_WARNING    | -12 | 連續 2 季 EPS **年減**（比去年同季） >= 20%              |
 
 ### ROE 分析
@@ -231,6 +231,11 @@ flowchart LR
 ## 🔄 強股回檔（Mode C v2）
 
 ### 回檔進場
+
+四條共用 `pullbackPrologue` 三道前置,任一不過就整組 no-fire:
+**ETF 一律排除**、**大盤非上升趨勢時不觸發**(`isMarketUptrend == false`)、
+**至少 21 根 K 棒**。各條另需:過去 20 日強勢(MA > 20 日前收盤 × 1.05)、
+當日非跌停(≥ −9.5%)、近 5 日至少 1 根紅 K。
 
 | 規則                | 基準分 | 條件                            |
 |:------------------|----:|:------------------------------|
