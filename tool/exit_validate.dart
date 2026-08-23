@@ -10,7 +10,7 @@
 // gate 報告供人工決定哪些條件上線。**沒 edge 的條件不進 app。**
 //
 // 設計：docs/plans/2026-07-11-exit-thesis-invalidation-design.md §2-§3
-// 計畫：docs/plans/2026-07-11-exit-validate-gate-plan.md
+// 結果：docs/plans/2026-07-12-exit-gate-report.md（81,989 樣本；hardStop/trendBreak 全負不上線）
 //
 // ## 關鍵原則
 //

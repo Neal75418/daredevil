@@ -1,5 +1,11 @@
 # 出場層：釘選論點失效追蹤 — Design Spec
 
+> ⚠️ **§2 的三個失效條件只有 timeStop 上線。**
+> hardStop（-8%）與 trendBreak（跌破 MA60）經 replay gate 81,989 樣本驗證
+> **全年全 mode 為負，不上線**（結果見 `2026-07-12-exit-gate-report.md`）。
+> 本文以下仍以三條件描述設計，讀時請自行扣除那兩條——`ThesisInvalidationRules`
+> 與 `PinnedThesis.invalidationReason` 的實際值域只有 timeStop。
+
 > 評分改進 #3（八項中最後一項）。App 只有進場推薦、沒有出場紀律——
 > 損益大半由出場決定。本設計把「推薦」升級為可追蹤的「論點」：
 > 釘選 → 每日檢查失效條件 → 失效進警示頁。

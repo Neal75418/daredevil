@@ -1,5 +1,5 @@
 // simulateExit 純函數測試 — 出場條件 replay gate 核心
-// (docs/plans/2026-07-11-exit-validate-gate-plan.md Task 2)
+// (gate 結果見 docs/plans/2026-07-12-exit-gate-report.md)
 //
 // 合成序列手算對照：平坦 100 基底，指定位置覆寫製造觸發情境。
 import 'package:drift/drift.dart' show Value;

@@ -523,9 +523,8 @@ rate-limit retry 每輪從頭重抓推不動（commit 8a4debd 修復）。
 
 ## 設計背景
 
-完整的 Stage 2 LEAN 設計文件在 [`docs/plans/2026-04-11-scoring-stage2-design.md`](plans/2026-04-11-scoring-stage2-design.md)。
-
-關鍵決策（來自 2026-04-11 brainstorming session）：
+關鍵決策（來自 2026-04-11 brainstorming session；原始設計文件已刪除，
+其鎖定的門檻與 baseline 已被下方「實證背景」段落取代）：
 - 公式選 **linear_map_v1**（interpretable），非 IC-based 或 logistic regression
 - **雙 horizon** 策略：短 5D + 長 60D，每條規則在兩個 horizon 各有獨立分數
 - Cut threshold **嚴格版**：t_stat<1.5 / hit_rate<55% / n<30

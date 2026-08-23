@@ -8,8 +8,7 @@
 // 把 2 年（可自訂）的台股歷史資料從 TWSE + FinMind 抓下來寫進獨立的
 // calibration DB，供 Stage 4 `tool/replay_calibrator.dart` 消費產出
 // `rule_accuracy` 表，再由 `tool/recalibrate.dart` 生成 calibrated
-// rule scores JSON。詳細設計見
-// docs/plans/2026-04-12-stage3-4-design.md。
+// rule scores JSON。詳細設計、資料源清單與實測耗時見 docs/CALIBRATION.md。
 //
 // ## 使用方式
 //

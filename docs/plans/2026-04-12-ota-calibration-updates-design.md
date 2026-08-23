@@ -1,5 +1,17 @@
 # OTA Calibration Updates — jsDelivr CDN 無版本發布的校準資料更新
 
+> ⚠️ **三處已與實作不符，照抄會出錯：**
+> 1. 所有 jsDelivr URL 寫 `gh/Neal75418/afterclose`，**實際是 `daredevil`**——
+>    照抄會 404。以 `lib/data/network/calibration_updater.dart` 為準。
+> 2. §2 Q3／§3.4／§4.2 的「AppSettings 加 6 個 nullable columns」**被推翻**：
+>    實作走既有 key-value 表加 `calibration.` 前綴，刻意避開 schema 變更
+>    （`lib/data/database/dao/calibration_cache_dao.dart`）。
+> 3. §3.7／§4.2 的 `loadWithFallback` 已改名為 `loadWithOverride` 且依賴方向
+>    反轉（2026-06-19 純 Dart 化重構）。
+>
+> 仍有效且不可從 code 還原的是：§2 各項被否決的替代方案、§7.3 的三層 rollback
+> 階梯、§7.4／§7.5 首次啟動與離線行為。
+
 **Date**: 2026-04-12
 **Scope**: Over-The-Air 校準資料更新 — 讓 `tool/recalibrate.dart` 產出的新 calibration 能在不發 app 版本的前提下送到所有用戶
 **Status**: Design locked via `/brainstorming` (Q1-Q7), ready for implementation

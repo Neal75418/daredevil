@@ -1,5 +1,16 @@
 # Rule Score 重新校準 — Design Spec
 
+> ⚠️ **四項已被後續決策推翻：**
+> 1. §2 非目標「不改 recalibrate.dart 的 cut 規則」——三週後被 clustered
+>    超額設計推翻，現行 cut 見 `docs/CALIBRATION.md`。
+> 2. §4a「`successThresholds` 改為超額語意」**沒有發生**，改為另加
+>    `excessSuccessThreshold`。
+> 3. §4b「季末 + 45 天」**刻意否決**，現行是固定 5/15、8/14、11/14、次年 3/31。
+> 4. §3／§7 的 `scripts/recalibrate.sh` 從未建立，包裝腳本是 `scripts/calibrate.sh`，
+>    且順序是 backfill → replay → recalibrate → walkforward（與本文圖相反）。
+>
+> 仍有效的是 §1 的三項偏誤診斷，與 §5「勝幅 > 折間離散度」判準。
+
 > 用「修正後的回測方法論」重新產生 calibrated rule scores，讓選股建立在**真 alpha**（超額報酬）而非多頭 beta 上，並用 **rolling walk-forward（含 2022 空頭樣本外）** 證明新校準在沒看過的資料上確實不輸舊版，才允許 ship。
 >
 > **狀態**：Design（待實作）。全程離線於 `tool/`，production scoring 不動，直到人工確認新 JSON 樣本外勝出。

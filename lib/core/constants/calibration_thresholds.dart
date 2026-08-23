@@ -17,7 +17,8 @@
 /// ## 選值依據
 ///
 /// 5D / 60D **採用實證 calibration 校正值**，10D / 20D 仍走 Stage 2 LEAN
-/// scoring overhaul plan 鎖定的設計值（`docs/plans/2026-04-11-scoring-stage2-design.md`）。
+/// scoring overhaul 的原始設計值（未經實證校正，僅供 `rule_accuracy`
+/// 多 horizon 統計用；calibration 只跑 5D / 60D）。
 ///
 /// **5D / 60D 實證背景（2026-06）**：
 /// plan 原設計 5D=3%、60D=12%。2 年市場資料下 recalibrate 結果幾乎全 cut

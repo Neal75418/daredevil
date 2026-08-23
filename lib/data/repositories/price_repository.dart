@@ -394,6 +394,17 @@ class PriceRepository implements IPriceRepository {
 
       // 回報零筆的市場：safeAwait 把來源失敗吞成空清單，只有兩市場皆空才會
       // 被上方分支攔下；僅單一市場掛掉時流程照常走完，必須讓呼叫端看得見。
+      //
+      // **半市場日刻意不擋整天出榜**（2026-07-26 稽核否決過「全市場列數
+      // < 1500 就整天不出榜」，三條理由）：
+      //  1. 半市場產出的是「清單不完整」而非「排名被扭曲」——
+      //     `getModeStockScores` 無 LIMIT 無 top-N，每檔的 mode 分數是它自己
+      //     規則分數的 SUM，與其他股票無關；配合 staleBar 檢查，每一列都由
+      //     該股當日 bar 算出，個別訊號皆正確。
+      //  2. 已有通報管道：本 `emptyMarkets` 會在半市場日觸發警告。再加整天
+      //     不出榜是替使用者做決定。
+      //  3. 門檻須綁定當下市場規模（當時 2,129 檔）。規模漂移後會開始靜默
+      //     丟棄健康日的資料，是難以察覺的迴歸。
       final emptyMarkets = <String>[
         if (twseResult.priceEntries.isEmpty) MarketCode.twse,
         if (tpexResult.priceEntries.isEmpty) MarketCode.tpex,

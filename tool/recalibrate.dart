@@ -29,7 +29,8 @@
 //         assets/rule_scores_calibrated_short.json
 //   4. Commit + push
 //
-// 詳細設計見 docs/plans/2026-04-11-scoring-stage2-design.md 和 docs/CALIBRATION.md
+// 詳細設計與現行公式見 docs/CALIBRATION.md（Stage 2 LEAN 原設計已被
+// 2026-06 的實證 baseline 與 2026-07 的 clustered 超額路徑取代）
 
 import 'dart:convert';
 import 'dart:io';

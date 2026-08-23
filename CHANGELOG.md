@@ -47,7 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - 色彩系統依語意分類重構：紅綠專屬多空語意，非方向性語意改用品牌紫
 - 籌碼評等色階翻轉為台股慣例（強勢＝紅、弱勢＝綠）
-- 深色主題表面改用中性灰，品牌色改 Violet
+- 深色主題表面改用中性灰，品牌色改 Blue（實機否決 Violet）
 - 漲跌平色與品牌色改為依主題解析：淺色主題不再沿用為深色主題挑的色值
 
 ### Fixed
