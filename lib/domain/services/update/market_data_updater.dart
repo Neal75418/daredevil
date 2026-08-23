@@ -597,12 +597,10 @@ class MarketDataUpdater {
       );
     }
 
-    // 上櫃當沖恆為 0：**沒有任何 TPEx 當沖資料來源**。
-    // `dayTrading` 在 lib/data/remote/ 底下只出現於 twse_client.dart，
-    // TPEx 側從未實作過對應端點，day_trading 表全期 0 筆 TPEx 列。
-    // （此處原本註明「已由批次 TPEX API 同步」，與程式碼不符，2026-07-26 更正。）
-    //
-    // 後果見 RuleScores.dayTradingExtreme 的註解：上櫃股結構性吃不到該扣分。
+    // 此處的 dayTradingCount 恆為 0——**不代表沒有上櫃當沖資料**。
+    // 上櫃當沖走的是 `syncMarketWideData` 的全市場路徑
+    // （`syncAllDayTradingFromTpex`，2026-08-23 接上），不在這條「自選+熱門」
+    // 的逐檔路徑上。此欄位留 0 是路徑分工，不是資料缺失。
     return OtcMarketDataResult(
       dayTradingCount: 0,
       shareholdingCount: shareholdingCount,

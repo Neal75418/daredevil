@@ -361,7 +361,21 @@
 
 ### 24. 上櫃 1311 檔完全沒有當沖資料（不是今天沒抓到，是沒有資料源），程式碼內兩處註解自相矛盾、日誌與 UI 都看不出差別
 
-**狀態**：📋 已記錄未修 `b538c41` — 無 TPEx 當沖 API 實作（`dayTrading` 僅存在於 twse_client）；已更正錯誤註解並於 `RuleScores.dayTradingExtreme` 記載市場不對稱
+**狀態**：✅ 已修（2026-08-23）
+
+**修復**：接上兩條路徑——每日走櫃買 `/www/zh-tw/intraday/stat`（免費、842 檔、
+1 次呼叫），歷史走 FinMind `TaiwanStockDayTrading`（一次性 CLI
+`tool/backfill_tpex_day_trading.dart`）。app DB 已回補 2025-06-10 起 59,098 列
+／295 個交易日／748 檔，抽驗與官方逐位元相符。
+
+本條建議的「TPEx 有上櫃股票個股當日沖銷交易統計日報（非被 Cloudflare 擋的那個
+端點）」是對的——舊站路徑已 302，新站 `/www/zh-tw/intraday/stat` 以 app 實際
+User-Agent 測試回 200。
+
+⚠️ 尚未做：`tool/calibration.db` 未回補上櫃當沖（僅 9,714 列，來自上櫃轉上市
+個股），故校準結果目前仍以上市樣本為主。
+
+**原始記錄（保留以備回溯）**：
 
 **證據**：lib/domain/services/update/market_data_updater.dart:54 註解「無 TPEX 對等：上櫃端點被 Cloudflare 擋」，但同檔 483-485 回傳處註解寫「當沖資料已由批次 TPEX API 同步，此處回傳 0」——兩處對同一事實的描述相反，日誌只會印「步驟 6.5: 上櫃 (20/269 檔): ... 當沖=0」，讀起來像「今天上櫃沒有高當沖股」而不是「這個資料源不存在」。DB 實證：`SELECT m.market,COUNT(*) FROM day_trading d JOIN stock_master m ... WHERE d.date=MAX(date)` → TWSE 1129 列、TPEx 0 列。今日 daily_reason：DAY_TRADING_HIGH 命中 TWSE 11 檔、TPEx 0 檔。UI 端 lib/presentation/screens/stock_detail/widgets/day_trading_section.dart:23-34 在 history 為空時顯示通用的 'chip.noData'。另外 trading_repository.dart:131-140：上市股若當天沒有價格列，分母為 0 時 ratio 直接寫 0（非 NULL）——DB 實測最新日有 33 列 ratio=0，另有 96 檔 TWSE 有價格但完全沒有當沖列。
 
