@@ -36,6 +36,13 @@
 // 實測約 248 檔 ≈ 25 分鐘。**它會排擠當天的財報同步**（那也吃 FinMind），
 // 所以刻意做成獨立手動 CLI，不塞進每日更新。
 //
+// ## 退出碼
+//
+//   0  完成（含個別股票失敗，會列在最後統計）
+//   1  全數失敗
+//   2  參數/環境問題（token 未設、DB 不存在）
+//   4  觸及 FinMind 額度上限——**就地停止**，等一小時後重跑
+//
 // ## Resume
 //
 // 每檔跑完即寫入。判斷邏輯分兩種情境：
@@ -48,6 +55,7 @@
 import 'dart:io';
 
 import 'package:daredevil/core/constants/api_config.dart';
+import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/date_context.dart';
@@ -237,6 +245,15 @@ Future<int> main(List<String> args) async {
             '${failed > 0 ? "，失敗 $failed" : ""}',
           );
         }
+      } on RateLimitException catch (e) {
+        // **fail fast**：額度用完後，剩下的每一檔都會失敗，而迴圈仍會為每檔
+        // 等 6.2 秒——在第 100 檔撞到上限意味著多空轉 12 分鐘才收工。
+        // 而且此時 DB 是半成品，下次重跑會因「有缺口」而整批重打（再 220 次），
+        // 不是只補剩下那些。停在這裡讓你知道要等額度回復再繼續。
+        stderr.writeln('   ⛔ $symbol 觸及 FinMind 額度上限: $e');
+        stderr.writeln('      已完成 $done/${work.length} 檔，就地停止。');
+        stderr.writeln('      額度為 sliding 1 小時窗，等一小時後重跑即可。');
+        return 4;
       } catch (e) {
         failed++;
         stderr.writeln('   ⚠️ $symbol 失敗: $e');
