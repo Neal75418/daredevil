@@ -12,25 +12,10 @@ paths:
 
 ```mermaid
 flowchart LR
-    US(["UpdateService<br/><b>Coordinator</b>"])
-
-    subgraph Sync["🔄 11 Syncer / Updater"]
-        direction TB
-        S1["StockList"] ~~~ S2["HistoricalPrice"] ~~~ S3["Institutional"] ~~~ S4["MarketData"]
-        S5["Fundamental"] ~~~ S6["QuarterlyReport"] ~~~ S7["Dividend"] ~~~ S8["MarketIndex"]
-        S9["News"] ~~~ S10["TdccHolding"] ~~~ S11["InsiderTransfer"]
-    end
-
-    subgraph Help["🧰 3 Helpers"]
-        direction TB
-        H1["BatchDataBuilder"] ~~~ H2["BatchDataLoader"] ~~~ H3["CandidateSelector"]
-    end
-
-    subgraph Post["🩺 Post-Update — fail-safe"]
-        direction TB
-        R1["RuleAccuracyService"] ~~~ R2["ThesisMonitorService"] ~~~ R3["TrailingMaAlertService"]
-        R4["NewsMentionSnapshot"] ~~~ R5["ZeroingImpactReporter"]
-    end
+    US(["<b>UpdateService</b><br/>Coordinator"])
+    Sync["<b>11 Syncer / Updater</b><br/>StockList<br/>HistoricalPrice<br/>Institutional<br/>MarketData<br/>Fundamental<br/>QuarterlyReport<br/>Dividend<br/>MarketIndex<br/>News<br/>TdccHolding<br/>InsiderTransfer"]
+    Help["<b>3 Helpers</b><br/>BatchDataBuilder<br/>BatchDataLoader<br/>CandidateSelector"]
+    Post["<b>Post-Update</b><br/><i>fail-safe</i><br/>RuleAccuracy<br/>ThesisMonitor<br/>TrailingMaAlert<br/>NewsMentionSnapshot<br/>ZeroingImpactReporter"]
 
     US ==> Sync ==> Help
     US -.->|錯誤不中斷更新| Post
@@ -41,9 +26,9 @@ flowchart LR
     classDef post fill:#8B5CF6,stroke:#4C1D95,stroke-width:2px,color:#FFFFFF
 
     class US coord
-    class S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11 sync
-    class H1,H2,H3 help
-    class R1,R2,R3,R4,R5 post
+    class Sync sync
+    class Help help
+    class Post post
 ```
 
 ## Update 元件

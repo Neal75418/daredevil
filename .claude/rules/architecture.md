@@ -14,17 +14,17 @@ paths:
 > 兩者差很多,而差異本身才是這份文件的價值——照理想圖推論會推錯。
 
 ```mermaid
-flowchart LR
-    Core["🧱 core/<br/>constants · exceptions · utils<br/>extensions · l10n · services · theme"]
-    Data["💾 data/<br/>database · remote · repositories<br/>models · loaders · network · mappers"]
-    Domain["⚙️ domain/<br/>models · repositories(介面)<br/>services · services/rules (70 rules) · services/update"]
-    Pres["📱 presentation/<br/>providers · screens · widgets<br/>mappers"]
+flowchart TB
+    Core["<b>core/</b>"]
+    Data["<b>data/</b>"]
+    Domain["<b>domain/</b>"]
+    Pres["<b>presentation/</b>"]
 
     Core ==>|142 檔| Pres
-    Core ==> Data
-    Core ==> Domain
+    Core ==>|67 檔| Data
+    Core ==>|70 檔| Domain
     Data ==>|62 檔| Domain
-    Domain -.->|10 檔<br/>雙向| Data
+    Domain -.->|10 檔 反向| Data
     Data ==>|68 檔| Pres
     Domain ==>|42 檔| Pres
 
@@ -39,7 +39,14 @@ flowchart LR
     class Pres pres
 ```
 
-箭頭方向＝「被誰 import」，數字＝實測的檔案數（2026-08-23）。三件會讓人推錯的事：
+| 層 | 檔數 | 子目錄 |
+|:--|--:|:--|
+| `core/` | 73 | constants · exceptions · utils · extensions · l10n · services · theme |
+| `data/` | 132 | database · remote · repositories · models · loaders · network · mappers |
+| `domain/` | 95 | models · repositories(介面) · services（含 services/rules 的 **70 rules**、services/update） |
+| `presentation/` | 156 | providers · screens · widgets · mappers |
+
+箭頭方向＝「被誰 import」，數字＝實測檔案數（2026-08-23）。三件會讓人推錯的事：
 
 1. **`presentation` 直接吃 `data/` 比吃 `domain/` 還多**（68 vs 42）。Provider 常繞過
    domain 直接打 DAO，甚至直接用 remote client。「UI 只跟 domain 講話」是錯的。
@@ -56,7 +63,7 @@ flowchart LR
 UI 的資料**不是只有一條路**。畫成單線會讓人以為改 Repository 就能攔截全部。
 
 ```mermaid
-flowchart LR
+flowchart TB
     API["外部 API"] -->|syncer| Repo["Repository"]
     Repo --> DB[("Drift SQLite")]
     DB --> Score["Scoring<br/>Isolate.run()"]
