@@ -273,7 +273,7 @@ class WalkForwardValidator {
       // 「會系統性低估 alpha、幾乎全 cut」的值,而 baseline 為 null 完全是
       // setup 問題(沒有任何一天達到 minUniverseSymbols)。折內 replay 用靜音
       // logger,退回 0.5 會連唯一的證據都吞掉。
-      baselineHit: baselineHit!,
+      baselineHit: baselineHit,
     );
     // 走 App 的三態 lookup（cut/缺席 → hardcoded、負證據 → 0），否則
     // NEW arm 與 OLD arm 量的不是同一個評分函式。序列化成

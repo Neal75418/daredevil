@@ -74,7 +74,7 @@ dart format .                                                  # 格式化 (pre-
 | `lib/core/utils/request_deduplicator.dart`       | Request Deduplication 機制                                                                                                               |
 | `lib/domain/services/rules/`                     | 70 條規則 (15 檔案，權威數字見 `RuleRegistry.defaultRules`)                                                                              |
 | `lib/domain/services/scoring_isolate.dart`       | Isolate 評分 (typed DTO 序列化)                                                                                                          |
-| `lib/domain/services/update/`                    | 更新元件 (10 syncers + 3 helpers + coordinator + 快照/歸零報告各 1)                                                                      |
+| `lib/domain/services/update/`                    | 更新元件 17 檔 (11 syncer/updater + 3 helpers + 快照/歸零報告各 1 + barrel)；**coordinator `UpdateService` 在上一層 `lib/domain/services/`**                                                                      |
 | `lib/data/database/tables/`                      | Drift 資料表定義                                                                                                                         |
 | `lib/data/database/dao/batch_query_mixin.dart`   | 批次查詢共享工具 (groupBySymbol)                                                                                                         |
 | `lib/domain/services/rule_accuracy_service.dart` | 推薦績效回測引擎 (多週期驗證)                                                                                                            |
@@ -217,5 +217,5 @@ Data 層提供實作；`domain/repositories/` 介面**僅保留有真消費者�
 
 | 規則檔               | 內容                                               | 載入條件（`paths:` frontmatter）                                                                                        |
 |----------------------|----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| `architecture.md`    | 四層架構 Mermaid 圖、資料流圖                      | `lib/core/**`、`lib/data/**`、`lib/domain/**`、`lib/presentation/**`                                                    |
+| `architecture.md`    | **實際** import 方向（非理想分層）、三條讀取路徑    | `lib/core/**`、`lib/data/**`、`lib/domain/**`、`lib/presentation/**`、`lib/app/**`、`lib/main.dart`                     |
 | `update-pipeline.md` | Update Pipeline Mermaid 圖、syncers + helpers 詳解 | `lib/domain/services/update/**`、`lib/data/remote/**`、`**/syncer*`、`**/Syncer*`、`**/BatchData*`、`**/rule_accuracy*` |
