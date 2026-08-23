@@ -590,7 +590,7 @@ typedef EffectiveScoreChange = ({String ruleId, int before, int after});
 /// **不要改成比 `active`／`score`**（2026-08-22 實際踩到）：`active:false,
 /// score:0` 與「規則根本不在 JSON 裡」在 App 眼中是兩回事——前者可能被負
 /// 證據歸零（lookup 回 0），後者 fallback 到 hardcoded 分。同日寫進
-/// `docs/CALIBRATION.md` 的 jq 摘要正是這樣比，短線報「無變動」而實際有 9
+/// `docs/CALIBRATION.md` 曾放過一段這樣比的 jq（已移除），短線報「無變動」而實際有 9
 /// 條改變；walk-forward gate 也栽在同一個坑。一律走
 /// [CalibratedScoresTable.lookup]，不重寫語意。
 ///

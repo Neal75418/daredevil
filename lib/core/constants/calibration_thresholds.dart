@@ -103,7 +103,11 @@ abstract final class CalibrationThresholds {
   /// 修 t-stat 不動 hit-rate；hit-rate 改造留作 follow-up。
   static const double hitRateCutThreshold = 0.55;
 
-  /// Calibration cut：proportion z-test 的 |t_stat| 必須 ≥ 此值才能保留
+  /// Calibration cut：t_stat（**有號值**，非絕對值）必須 ≥ 此值才能保留
+  ///
+  /// 🚨 兩條 cut 路徑比的都是 `tStat < tStatCutThreshold`，所以**負的 t 一律
+  /// 被 cut**——那是對的:負 t 代表觸發後表現低於 baseline，不是「顯著的反向
+  /// 訊號」。寫成 |t_stat| 會讓 t=−22 的規則被放行。
   ///
   /// 1.5 對應約 86.6% 信賴區間。低於此視為統計上不顯著。
   static const double tStatCutThreshold = 1.5;

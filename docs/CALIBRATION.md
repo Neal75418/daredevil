@@ -15,7 +15,9 @@
 - [Cut 規則](#cut-規則)
 - [JSON 輸出格式](#json-輸出格式)
 - [Troubleshooting](#troubleshooting)
-
+- [決策層雙路](#決策層雙路2026-07-10-起)
+- [校準紀錄](#校準紀錄)
+- [設計背景](#設計背景)
 ---
 
 ## 何時該跑 calibration
@@ -30,13 +32,13 @@
 | 改統計方法或 gate 閾值 | 只跑 `dart run tool/recalibrate.dart` | 數秒 |
 | 以上都沒發生 | 不用跑 | — |
 
-**為什麼不按月排程**（2026-08-22 量測）：DB 已有 1498 個交易日（2017-05 起，2026-08-22 量測）。
-多等一個月只增加 21 個交易日 ＝ +1.4% 樣本，t-stat 隨 √n 成長只改善 0.71%。
-一條卡在 t=1.5 的規則要靠時間推過 1.96 門檻，需要 1.7× 資料 ＝ 再等 4.1 年。
+**為什麼不按月排程**：DB 已累積多年資料，多等一個月只增加約 1.4% 樣本，
+而 t-stat 隨 √n 成長——改善幅度遠小於門檻距離。實際被 cut 的規則絕大多數卡在
+t-stat 與 hit rate，而非樣本量；等再久也不會變。
 
-同次量測：73 個被 cut 的規則裡 **61 個是 `t_stat_below_threshold`**、8 個是
-hit rate 不足，**只有 4 個是 `dates_too_few`**。卡住的不是樣本量，是那些規則
-本身沒有可測得的 edge——等再久也不會變。
+> 具體數字每跑一次 backfill 就過期，這裡刻意不寫。要看當下的 cut 原因分布，
+> 讀 candidate JSON 的 `cut_reason` 欄位。
+
 
 唯一真正會改變結論的是規則集或資料本身變動。2026-07-13 那次把價格資料從
 2 年補到 6 年、replay 樣本 +21%，`INSTITUTIONAL_BUY` 因此首次過關（t=2.2、
@@ -44,37 +46,33 @@ n=11,742）；那是資料變了，不是時間到了。
 
 ### 工具會自己告訴你
 
-`recalibrate.dart` 啟動時比對 `RuleRegistry` 與 `rule_accuracy`，印出涵蓋落差：
+`recalibrate.dart` 啟動時比對 `ReasonType`（**不是** `RuleRegistry`——兩者是
+不同命名空間，見 `coverageReferenceIds()`）與 `rule_accuracy`，把未校準的規則
+分成三群並各給對應建議：
 
+| 它說 | 意思 | 該做 |
+|:---|:---|:---|
+| N 條無 replay 樣本，**但所需資料都在** | 規則比上次 replay 新 | 重跑 Stage 2（約 12 分） |
+| N 條**需要 FinMind 基本面資料** | 老問題，要額度 | 通常不動；要補才 `BACKFILL_SKIP_FUNDAMENTALS=0` |
+| N 條**這條管線抓不到資料** | 集保／內部人／警示股／新聞無 backfill phase | 忽略，重跑無效 |
+
+實際輸出跑一次就有（唯讀、約 1 秒、不寫任何檔）：
+
+```bash
+dart run tool/recalibrate.dart --db tool/calibration.db --dry-run
 ```
-📅 replay 落檔於 2026-07-13T02:13:42.224620Z（40 天前）
-🔎 規則涵蓋：72 條註冊規則
-   ⚠️  9 條無 replay 樣本，本次只會拿到手調分：
-      EPS_DECLINE_WARNING, EPS_TURNAROUND, PBR_UNDERVALUED …（另 6 條）
-      → 這些補得到，但基本面需約 7,100 次 FinMind 呼叫（額度 600/hr）：
-        BACKFILL_SKIP_FUNDAMENTALS=0 ./scripts/calibrate-retry.sh
-   ℹ️  11 條這條管線抓不到資料（集保／內部人／警示股／新聞無 backfill
-      phase），永遠是手調分：
-      CONCENTRATION_HIGH, FOREIGN_EXODUS, HIGH_PLEDGE_RATIO …（另 8 條）
-      → 重跑管線無效。要校準它們得先為這些來源加 backfill phase。
-```
 
-**已知缺口**：這個比對只看 rule **id**。若規則 id 沒變、但內部閾值改了
-（例如 `rule_params` 調整），觸發樣本其實已經失效，而差集看不出來——需要
-靠自己記得。刻意不做參數雜湊：任何無關的參數改動都會誤觸發，訊號會被稀釋
-成噪音。
-
-**不要**：
-- 剛上線第一天就跑（樣本數 < 30 → 全部 cut）
-- 自動覆寫 production（永遠要人工 review gate）
-
----
+> **已知缺口**：這個比對只看 `ReasonType.code`。若 code 沒變、但規則內部閾值
+> 改了（例如 `rule_params` 調整），觸發樣本其實已經失效，而差集看不出來——
+> 需要靠自己記得。刻意不做參數雜湊：任何無關的參數改動都會誤觸發，訊號會被
+> 稀釋成噪音。
 
 ## 如何執行
 
 ### 完整管線（backfill → replay → recalibrate → walk-forward）
 
 ```bash
+export FINMIND_TOKEN=<你的 token>   # 必填,兩支腳本都會在缺少時 exit 1
 ./scripts/calibrate.sh          # 四階段一次跑完，產出 candidate JSON + gate 判準
 ./scripts/calibrate-retry.sh    # 同上，但自動處理 TWSE 限流（每輪間隔 15 分鐘）
 ```
@@ -84,7 +82,7 @@ n=11,742）；那是資料變了，不是時間到了。
 **實測耗時**（2026-08-22，既有 DB 已有 9 年價格的增量情境）：
 backfill **~18 分**（實測 17:59:33 起跑、18:18:02 進入 revenue 階段；涵蓋
 stock_list + 雙市場價格 + 法人 + 當沖，其中要補的價格缺口是 31 個交易日）、
-replay **12 分 24 秒**、recalibrate 數秒、walk-forward **~13 分**。
+replay **12–60 分**（實測增量情境 12 分,腳本 banner 保守估 30–60 分）、recalibrate 數秒、walk-forward **~13 分**。
 **合計約 45 分鐘**；缺口更大時 backfill 會拉長，故實務上抓 45–75 分。
 
 **基本面預設跳過**（`BACKFILL_SKIP_FUNDAMENTALS` 預設 `1`）。revenue /
@@ -103,12 +101,8 @@ BACKFILL_SKIP_FUNDAMENTALS=0 ./scripts/calibrate-retry.sh
 `recalibrate.dart` 是四階段中的**第三階段**，單獨跑等於沿用既有的 replay 樣本，
 只重新計算分數。統計方法或閾值調整時這樣做是對的；規則本身變了則不夠。
 
-工具啟動時會印出 replay 落檔時間，超過 30 天示警：
-
-```
-📅 replay 落檔於 2026-07-13T02:13:42.224620Z（40 天前）
-⚠️  超過 30 天——本次只重算評分，不會重跑 backfill／replay。
-```
+工具啟動時會印出 replay 落檔時間**當作背景資訊**——刻意不對「距今幾天」下判決
+（時間是錯的軸，理由見上方）。真正的判斷是規則涵蓋差集。
 
 從 repo root 目錄：
 
@@ -209,26 +203,36 @@ horizon 隔了幾輪沒 promote 時，樣本數與 t_stat 全表都會動，所�
 
 ### 3. 判斷
 
-**要 approve 當前 candidate**：
+**要 approve 當前 candidate**——**三個檔一起搬,漏了 manifest 會靜默失效**：
+
 ```bash
 mv assets/rule_scores_calibrated_short_candidate.json \
    assets/rule_scores_calibrated_short.json
 
 mv assets/rule_scores_calibrated_long_candidate.json \
    assets/rule_scores_calibrated_long.json
+
+# 🚨 別漏這一個:manifest 記著兩支 JSON 的 sha256,對不上時 OTA 會
+# 「hash mismatch」直接跳過更新——沒有錯誤、沒有日誌,只是沒生效
+mv assets/calibration_manifest_candidate.json \
+   assets/calibration_manifest.json
 ```
 
 **要退回**：
 ```bash
-rm assets/rule_scores_calibrated_*_candidate.json
+rm assets/rule_scores_calibrated_*_candidate.json \
+   assets/calibration_manifest_candidate.json
 ```
-然後檢查 DB 資料是否有異常，必要時等下個月再試。
+
+退回不需要「等下個月」——校準是事件觸發的（見開頭「何時該跑」）。
+先確認 walk-forward 的判準：`WALKFORWARD_VERDICT=FAIL` 就是不該 promote，
+那是有效結論而非資料異常。
 
 ### 4. Commit + push
 
 ```bash
 git add assets/rule_scores_calibrated_short.json assets/rule_scores_calibrated_long.json
-git commit -m "chore(calibration): monthly recalibration YYYY-MM"
+git commit -m "chore(calibration): promote <horizon> YYYY-MM-DD"
 git push origin main
 ```
 
@@ -273,17 +277,23 @@ drift 已消除）。
 
 ### Step 1 — Proportion z-test
 
-判斷 `hit_rate` 是否統計顯著地超過 0.5（純機率）：
+判斷 `hit_rate` 是否統計顯著地超過**該 horizon 的實證 baseline**——不是 0.5。
 
 ```
-z = (hit_rate - 0.5) / sqrt(hit_rate × (1 - hit_rate) / n)
+z = (hit_rate − baseline) / sqrt(baseline × (1 − baseline) / n)
 ```
 
-Degenerate cases (z = 0)：
-- `n = 0`
-- `hit_rate ∈ {0, 1}`（variance = 0，undefined）
+`baseline` 查 `CalibrationThresholds.successProbabilityBaselines`：
+**5D = 0.3461、60D = 0.3965**（未列出的 period 才 fallback 0.5）。
 
-這些 case 會落入 `sample_too_small` cut，不影響後續計算。
+> **2026-06-18 修正**：舊版把 null hypothesis 寫死 0.5，而台股實證 baseline
+> 與 (horizon, threshold) 強相關——用 0.5 系統性**低估** alpha，曾造成短線
+> 0 條 active。變異數也一併改用 `baseline × (1 − baseline)` 而非
+> `hit_rate × (1 − hit_rate)`（null hypothesis 下的變異數才是對的）。
+
+Degenerate case（`n ≤ 0` 或 `baseline ∈ {0, 1}`）回傳 `0.0`。注意
+`hit_rate ∈ {0, 1}` **不再是** degenerate——hit_rate 已不在分母，
+`hit_rate = 0` 且 n 大時會得到很負的 z，落入 `t_stat_below_threshold`。
 
 ### Step 2 — Raw weight
 
@@ -315,56 +325,66 @@ score = 10 + (raw_weight - minRaw) / (maxRaw - minRaw) × 25
 
 ## Cut 規則
 
-規則會被判定為 `active: false` 並得分 0 的三種情況，check order 重要：
+**現行跑的是 clustered 路徑**（live DB 的 `calibration_run_meta.return_mode = excess`）。
+兩條路徑的 cut 條件與**順序都不同**：
 
-| # | 門檻     | `cut_reason`               | 觸發條件            | 為什麼先檢查                   |
-|:-:|:---------|:---------------------------|:--------------------|:-------------------------------|
-| 1 | samples  | `sample_too_small`         | `triggerCount < 30` | 樣本太少，所有統計都不可信     |
-| 2 | z-stat   | `t_stat_below_threshold`   | `z_stat < 1.5`      | 顯著性測試失敗，效果可能是雜訊 |
-| 3 | hit_rate | `hit_rate_below_threshold` | `hit_rate < 0.55`   | 顯著但勝率太低，實戰價值不足   |
+| # | clustered（現行） | legacy（meta 缺失時） |
+|:--|:---|:---|
+| 1 | `n < 30` → `sample_too_small` | 同左 |
+| 2 | **`distinct_dates < 30` → `dates_too_few`** | *（無此檢查）* |
+| 3 | `t_stat < 1.5` → `t_stat_below_threshold` | `z_stat < 1.5` → 同名 |
+| 4 | `hit_rate < baseline_hit + 0.05` | `hit_rate < 0.55`（絕對值） |
 
-**Check order 的重要性**：檢查順序從「最嚴格 / 最通用」到「最細節」。樣本不足時無法做後續測試；z-stat 失敗時 hit_rate 數字本身不可靠。
+門檻常數：`CalibrationThresholds` 的 `minDistinctDates`（30）、
+`tStatCutThreshold`（1.5）、`hitRateLiftThreshold`（0.05）、
+`sampleSizeCutThreshold`（30）。
+
+被 cut 的規則 `score = 0`、`active = false`，runtime 行為見
+[docs/RULE_ENGINE.md](RULE_ENGINE.md) 的「基準分不是實際生效的分數」。
 
 ### 邊界案例示意
 
-| Scenario           | hit_rate | samples | z-stat | Cut reason               |
-|:-------------------|:--------:|:-------:|:------:|:-------------------------|
-| 新規則，資料不足   |   0.65   |   25    |   —    | sample_too_small         |
-| 小樣本瞎貓撞死耗子 |   0.80   |   20    |   —    | sample_too_small         |
-| 中性訊號           |   0.51   |   50    |  0.14  | t_stat_below_threshold   |
-| 顯著但勝率邊緣     |   0.54   |   500   |  1.79  | hit_rate_below_threshold |
-| 顯著且強勢         |   0.65   |   100   |  3.15  | **active** ✅            |
+> ⚠️ 這裡刻意不列具體 z 值。舊版曾列一張用 **2026-06-18 之前的公式**算出來的
+> 表（baseline 寫死 0.5、變異數用 hit_rate），三個 case 的 z 與判定在現行
+> 實作下全部不同。要看真實數字請跑 `--dry-run` 並讀 candidate JSON 的
+> `t_stat` / `cut_reason` 欄位。
 
----
+判定順序（clustered 路徑，見上一節）：
+
+1. `n < 30` → `sample_too_small`
+2. `distinct_dates < 30` → `dates_too_few`
+3. `t_stat < 1.5` → `t_stat_below_threshold`
+4. `hit_rate < baseline_hit + 0.05` → `hit_rate_below_threshold`
 
 ## JSON 輸出格式
 
 ```json
 {
   "schema_version": 1,
-  "generated_at": "2026-05-01T02:30:00.000Z",
   "horizon": "5d",
+  "generated_at": "2026-08-22T13:01:34.014981Z",
   "backtest": {
-    "window_days": 504,
-    "train_ratio": 0.7,
-    "success_threshold_pct": 1.5,
-    "formula": "linear_map_v1"
+    "success_threshold_pct": 0.0,
+    "formula": "linear_map_v1",
+    "return_mode": "excess",
+    "stats_method": "date_clustered_t_v1",
+    "baseline_hit_rate": 0.4357
   },
   "rules": {
-    "reversalW2S": {
-      "score": 28,
-      "hit_rate": 0.6523,
-      "avg_return": 3.1247,
-      "samples": 412,
-      "t_stat": 6.2147,
+    "WEEK_52_HIGH": {
+      "score": 35,
+      "hit_rate": 0.4776,
+      "avg_return": 3.6545,
+      "samples": 32241,
+      "t_stat": 7.8173,
       "active": true
     },
-    "patternDoji": {
+    "PATTERN_DOJI": {
       "score": 0,
-      "hit_rate": 0.5234,
-      "avg_return": 1.1203,
-      "samples": 89,
-      "t_stat": 0.4425,
+      "hit_rate": 0.3747,
+      "avg_return": 0.0683,
+      "samples": 6179,
+      "t_stat": -1.6357,
       "active": false,
       "cut_reason": "t_stat_below_threshold"
     }
@@ -372,47 +392,64 @@ score = 10 + (raw_weight - minRaw) / (maxRaw - minRaw) × 25
 }
 ```
 
+> `rules` 的鍵是 **`ReasonType.code`（UPPER_SNAKE）**，直接來自
+> `rule_accuracy.rule_id`——不是 Dart enum 的識別字。
+
 ### 欄位說明
 
-| 欄位                             | 型別                | 說明                                                                                                                                                                                                                           |
-|:---------------------------------|:--------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `schema_version`                 | int                 | 目前固定為 1。升級公式（例如切到 IC-based）時 bump                                                                                                                                                                             |
-| `generated_at`                   | ISO 8601 UTC string | 跑 `recalibrate.dart` 的時間戳                                                                                                                                                                                                 |
-| `horizon`                        | `"5d"` \| `"60d"`   | 此檔對應的時間尺度                                                                                                                                                                                                             |
-| `backtest.window_days`           | int                 | 回測天數（目前 504 = 2 trading years）                                                                                                                                                                                         |
-| `backtest.train_ratio`           | float               | Train/test split ratio（目前 0.7，但 Stage 2 LEAN 未實作 out-of-sample validation）                                                                                                                                            |
-| `backtest.success_threshold_pct` | float               | 對應 horizon 的 success 判定門檻。canonical 值由 [`CalibrationThresholds.successThresholds`](../lib/core/constants/calibration_thresholds.dart) 提供（5D=1.5%、60D=8.0%；drift guard 會把 JSON 對比 canonical 拒載失準版本）。 |
-| `backtest.formula`               | string              | 公式版本識別子，目前 `linear_map_v1`                                                                                                                                                                                           |
-| `rules.*.score`                  | int                 | 校準後分數（cut 為 0，active 為 [10, 35]）                                                                                                                                                                                     |
-| `rules.*.hit_rate`               | float (4 dp)        | 命中率                                                                                                                                                                                                                         |
-| `rules.*.avg_return`             | float (4 dp)        | 平均報酬率（%）                                                                                                                                                                                                                |
-| `rules.*.samples`                | int                 | 觸發次數                                                                                                                                                                                                                       |
-| `rules.*.t_stat`                 | float (4 dp)        | Proportion z-test 值                                                                                                                                                                                                           |
-| `rules.*.active`                 | bool                | 是否通過 cut                                                                                                                                                                                                                   |
-| `rules.*.cut_reason`             | string (optional)   | 只有 cut 規則有此欄位                                                                                                                                                                                                          |
+| 欄位 | 說明 |
+|:---|:---|
+| `backtest.success_threshold_pct` | 「成功」的報酬門檻。clustered 路徑寫 `runMeta.excessThreshold`（現行 **0.0**，因為 excess 模式比的是超額報酬）；legacy 路徑才用 `CalibrationThresholds.successThresholds`（5D=1.5 / 60D=8.0） |
+| `backtest.formula` | 目前恆為 `linear_map_v1` |
+| `backtest.return_mode` | `excess`（橫斷面超額）或 `absolute`。**App 的 drift guard 會讀它**決定 canonical 門檻 |
+| `backtest.stats_method` | clustered 路徑寫 `date_clustered_t_v1`；legacy 不寫 |
+| `backtest.baseline_hit_rate` | 該 horizon 全 universe 實測的 P(excess ≥ threshold)，clustered 的 hit cut 以它為基準 |
+| `rules.*.score` | 10–35 或 0（被 cut）。**這不是實際生效分數**，見 [RULE_ENGINE.md](RULE_ENGINE.md) |
+| `rules.*.t_stat` | clustered 路徑是 date-clustered 單樣本 t；legacy 是 proportion z |
+| `rules.*.cut_reason` | 只在 `active: false` 時出現，四種值見「Cut 規則」 |
 
----
+> **已移除的欄位**：`window_days` / `train_ratio` 於 2026-07-23 稽核後刪除
+> ——它們宣稱的「2 年窗 / 0.7 split」與實際脫節（replay 吃全庫多年資料、
+> split 在獨立的 walkforward_validate）。舊的 production JSON 仍帶著這兩個鍵，
+> 只是因為還沒重新產出過。
 
 ## Troubleshooting
 
 ### ❌ `DB file 找不到`
 
-Auto-detect 只知道 macOS Flutter container 的預設位置（`~/Library/Containers/com.neo.afterclose/Data/Documents/`）。若你的 DB 在別處：
+**先確認你是不是根本不該看到這個訊息。** 校準管線用的是 `tool/calibration.db`
+（`scripts/calibrate.sh` 會設好 `CALIBRATION_DB`）。只有在**手動裸跑**
+`dart run tool/recalibrate.dart` 而沒帶 `--db` 時，才會走到 auto-detect。
 
 ```bash
-find ~ -name "afterclose*.sqlite" 2>/dev/null
-dart run tool/recalibrate.dart --db /path/found/above
+dart run tool/recalibrate.dart --db tool/calibration.db
 ```
+
+> 🚨 **不要用 `find ~ -name "afterclose*.sqlite"` 的結果。**
+> auto-detect 只找 App 容器的 `~/Library/Containers/com.neo.afterclose/…/afterclose.sqlite`
+> ——那是**App 的即時資料庫，不是校準用的**。兩者都有 `rule_accuracy` 表，所以
+> 指錯不會報錯，會**靜默算出無意義的結果**：
+>
+> | | App 容器 DB | `tool/calibration.db` |
+> |:---|:---|:---|
+> | periods | 1D/3D/5D/10D/20D（**無 60D**） | 5D / 60D |
+> | 5D firings | 約 1.7 萬 | 約 312 萬 |
+> | `calibration_run_meta` | **表不存在** | 有 |
+>
+> 後果：長線直接失敗；短線**會成功**，但因為缺 `calibration_run_meta`，
+> 會退回舊的 absolute 決策層（輸出會印 `🧮 舊決策層（absolute / meta 缺失）`），
+> 產出一份決策層與現行 production 不相容的 candidate。exit 0，檔案照寫。
 
 ### ⚠️ `rule_accuracy 沒有 XX 的統計資料`
 
-`rule_accuracy` 表是空的或對應 period 沒資料。可能原因：
+這張表由 **Stage 2 replay** 寫入（每次執行整表刪除重建），不是 App 產生的。
 
-- App 從未跑過 post-update hook（`validatePastRecommendationsMultiPeriod` 或 `backfillAllHistoricalRecommendations`）
-- `daily_reason` 本身沒資料（scoring pipeline 沒 persist reasons）
-- 60D horizon 需要資料回溯至少 60 個交易日 + backtest window，pre-launch 根本不可能有
-
-**解法**：跑 app，讓 daily scoring pipeline 生成資料，等幾週再重跑。
+| 可能原因 | 怎麼確認 / 解法 |
+|:---|:---|
+| 指錯 DB | 見上一節——`--db tool/calibration.db` |
+| 還沒跑過 replay | `CALIBRATION_DB=tool/calibration.db flutter test test/tool/run_replay.dart` |
+| replay 跑了但沒 firing | 檢查 `daily_price` 筆數是否合理；三檔以下的樣本會 0 firings 直接 exit 3 |
+| **被 walk-forward 洗掉**（2026-08-22 前） | 見下方「所有規則都被 cut」 |
 
 ### 所有規則都被 cut
 
@@ -440,6 +477,22 @@ dart run tool/recalibrate.dart --db /path/found/above
 ---
 
 ## 校準紀錄
+
+**歷次 promote 決策記在 commit body,不在這裡。** 這一節曾經是手抄的變更清單,
+但六次 promote 只記了一次(而且記的是「決定不 promote」),漂移六週無人察覺——
+git 本來就記得更完整,而且不會過期。
+
+```bash
+git log --format='%h %ad %s%n%b' --date=short \
+  -- assets/rule_scores_calibrated_short.json assets/rule_scores_calibrated_long.json
+```
+
+決策報告(較深入的那幾次):
+
+| 日期 | 報告 |
+|:---|:---|
+| 2026-07-10 | [excess 決策層 clustered t-stat](plans/2026-07-10-excess-decision-layer-clustered-tstat.md) |
+| 2026-07-13 | [gapfill 重校準報告](plans/2026-07-13-gapfill-recalibration-report.md) |
 
 ### 2026-07-09 — Mode C 首份 baseline（決定：不 rename）
 

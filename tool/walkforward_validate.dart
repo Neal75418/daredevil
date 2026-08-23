@@ -475,25 +475,37 @@ Future<int> runWalkForwardCli(List<String> args) async {
       print('🎯 流動性樣本: ${sample.length} 檔（avg volume top-$sampleSize）');
     }
 
-    final validator = WalkForwardValidator(
-      db: db,
-      // App 的有效分數，不是 raw score——見 [effectiveScores] 的說明
-      oldShortScores: effectiveScores(
-        shortFile.readAsStringSync(),
-        horizon: WfHorizon.short,
-        applyZeroing: true,
-      ),
-      oldLongScores: effectiveScores(
-        longFile.readAsStringSync(),
-        horizon: WfHorizon.long,
-        applyZeroing: false,
-      ),
-      foldYears: foldYears,
-      symbolsWhitelist: sample,
-    );
+    // 🚨 OLD arm 的載入也要在 setup 錯誤的傘下(2026-08-23)。
+    // `effectiveScores` 在 production JSON 被拒載時會拋 StateError——先前它
+    // 落在 try 之外,例外會直接逃出 runWalkForwardCli 變成未捕捉錯誤,而
+    // calibrate.sh 只會報一句沒有這個成因的「setup 失敗」。
     final WalkForwardVerdict verdict;
     try {
+      final validator = WalkForwardValidator(
+        db: db,
+        // App 的有效分數，不是 raw score——見 [effectiveScores] 的說明
+        oldShortScores: effectiveScores(
+          shortFile.readAsStringSync(),
+          horizon: WfHorizon.short,
+          applyZeroing: true,
+        ),
+        oldLongScores: effectiveScores(
+          longFile.readAsStringSync(),
+          horizon: WfHorizon.long,
+          applyZeroing: false,
+        ),
+        foldYears: foldYears,
+        symbolsWhitelist: sample,
+      );
       verdict = await validator.run();
+    } on StateError catch (e) {
+      // 現行 calibrated JSON 被拒載(壞 JSON／schema_version 不對／drift guard
+      // 不過)——那是 setup 問題,不是 gate 判準。
+      stderr.writeln('');
+      stderr.writeln('❌ WALK-FORWARD 無法完成:現行 calibrated JSON 無法載入');
+      stderr.writeln('   $e');
+      stderr.writeln('   檢查 assets/rule_scores_calibrated_{short,long}.json');
+      return 4;
     } on _WalkForwardSetupError catch (e) {
       // setup 錯誤不是 gate FAIL:什麼都沒量到,不能宣稱「現行校準已足夠」。
       stderr.writeln('');
