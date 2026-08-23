@@ -74,6 +74,36 @@ mixin DayTradingDaoMixin on $AppDatabase {
     });
   }
 
+  /// 回補用寫入：更新量值欄位，**保留既有的 [DayTrading.dayTradingRatio]**
+  ///
+  /// [insertDayTradingData] 走 `InsertMode.insertOrReplace`——整列覆寫。歷史
+  /// 回補只有原始量值（比例的分母來自價格表同日總量，由每日路徑計算），
+  /// 直接 insert 會把既有比例寫成 NULL。
+  ///
+  /// 2026-08-23 彩排實測：回補 3 檔就洗掉當日兩筆已算好的比例。而
+  /// `day_trading_ratio` 是 DAY_TRADING_HIGH / EXTREME 唯一的輸入——變 NULL
+  /// 等於那些股票當天的當沖訊號消失，且筆數看起來完全正常。
+  Future<void> upsertDayTradingPreservingRatio(
+    List<DayTradingCompanion> entries,
+  ) async {
+    await batch((b) {
+      for (final e in entries) {
+        b.insert(
+          dayTrading,
+          e,
+          onConflict: DoUpdate(
+            (_) => DayTradingCompanion(
+              buyVolume: e.buyVolume,
+              sellVolume: e.sellVolume,
+              tradeVolume: e.tradeVolume,
+              // dayTradingRatio 刻意不列入 → 既有值原封不動
+            ),
+          ),
+        );
+      }
+    });
+  }
+
   /// 刪除指定日期範圍內的當沖資料
   ///
   /// 用於清理可能存在的重複記錄（由於 UTC/本地時間不一致）

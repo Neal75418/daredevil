@@ -432,6 +432,24 @@ class FinMindClient {
     fromJson: FinMindDailyPrice.tryFromJson,
   );
 
+  /// 取得單檔當沖歷史（`TaiwanStockDayTrading`）
+  ///
+  /// **只給回補用**。每日同步走免費官方端點；這裡吃 FinMind 600/hr 額度，
+  /// 逐檔一次呼叫可拉整段區間（實測 2024-01～2026-08 單檔 606 筆一次回完），
+  /// 所以成本是「檔數」而非「檔數 × 天數」。免付費層不支援不帶 `data_id`
+  /// 的全市場查詢（回 `Your level is free`），故只能逐檔。
+  Future<List<FinMindDayTrading>> getDayTrading({
+    required String stockId,
+    required String startDate,
+    String? endDate,
+  }) => _fetchDateRange(
+    dataset: 'TaiwanStockDayTrading',
+    stockId: stockId,
+    startDate: startDate,
+    endDate: endDate,
+    fromJson: FinMindDayTrading.tryFromJson,
+  );
+
   /// 取得日期範圍內所有股票價格（批次）
   ///
   /// 用於高效批量擷取

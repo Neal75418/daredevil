@@ -4,6 +4,7 @@
 library;
 
 export 'balance_sheet.dart';
+export 'day_trading.dart';
 export 'daily_price.dart';
 export 'dividend.dart';
 export 'financial_statement.dart';

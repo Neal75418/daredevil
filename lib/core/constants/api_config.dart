@@ -150,6 +150,13 @@ abstract final class ApiConfig {
   /// 端點靜默凍在某一天的前例，故以天數上界補回。放寬到 7 天以涵蓋連假。
   static const int tpexDayTradingMaxStaleDays = 7;
 
+  /// 上櫃當沖歷史回補的流動性門檻（20 日中位成交值，NTD）
+  ///
+  /// 沿用 `RuleParams.liquidityMinMedianTurnoverNtd` 的 3,000 萬——回補只需要
+  /// 涵蓋「會進評分候選」的股票，而候選本來就套同一道門檻。全上櫃 1,320 檔
+  /// 裡約 248 檔達標；對照組是上市 1,249 檔裡實際觸發過當沖規則的只有 113 檔。
+  static const double dayTradingBackfillMinMedianTurnover = 30000000;
+
   /// 上櫃財報回填時保留給後續步驟的 FinMind 額度
   ///
   /// 回填佇列是最舊優先，設計上保證每輪都選得出 100 檔全新的 stale 股，
