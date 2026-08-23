@@ -103,4 +103,25 @@ void main() {
     expect(rows.single.tradeVolume, 3);
     expect(rows.single.dayTradingRatio, isNull);
   });
+
+  test('🚨 回補即使帶了比例，既有值仍優先（每日路徑的分母才是權威）', () async {
+    await db.upsertDayTradingPreservingRatio([
+      DayTradingCompanion.insert(
+        symbol: '6811',
+        date: day,
+        buyVolume: const Value(111),
+        sellVolume: const Value(99),
+        dayTradingRatio: const Value(88.8),
+        tradeVolume: const Value(7000),
+      ),
+    ]);
+
+    expect(
+      await ratio(),
+      42.5,
+      reason:
+          '本方法刻意只更新量值——回補算出的比例與每日路徑可能用不同分母，'
+          '既有值優先。回補腳本因此只在該日「原本沒有列」時才貢獻比例',
+    );
+  });
 }

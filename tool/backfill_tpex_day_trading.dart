@@ -42,6 +42,7 @@
 import 'dart:io';
 
 import 'package:daredevil/core/constants/api_config.dart';
+import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.dart';
@@ -145,6 +146,7 @@ Future<int> main(List<String> args) async {
     var done = 0;
     var rowsWritten = 0;
     var failed = 0;
+    var skippedNoPrice = 0;
 
     for (final symbol in work) {
       try {
@@ -154,22 +156,51 @@ Future<int> main(List<String> args) async {
           endDate: _ymd(end),
         );
         if (data.isNotEmpty) {
-          // 只補原始量值，比例留給每日路徑算（分母是價格表同日總量，硬算
-          // 要逐日查價、成本高且語意可能與每日路徑分歧）。
+          // **必須算出比例才寫**。校準 replay 只吃 dayTradingRatio，
+          // ratio 為 null 的列直接略過（replay_calibrator.dart 的
+          // 「不補 0」設計——補了會讓「沒資料」與「當沖 0%」變同一件事）。
+          // 只寫原始量值等於回補了幾萬列卻一列都用不到。
           //
-          // **必須用 preservingRatio 版**：insertDayTradingData 是整列覆寫，
-          // 會把每日路徑已算好的比例洗成 NULL——彩排實測 3 檔就洗掉 2 筆。
-          await db.upsertDayTradingPreservingRatio([
-            for (final d in data)
+          // 分母＝價格表同日總量。上櫃價格歷史從 2025-06 才有，更早的日子
+          // 算不出比例——那些列**不寫**，寧可沒資料也不要寫入校準看不見的列。
+          final prices = await db.getPriceHistory(
+            symbol,
+            startDate: start,
+            endDate: end,
+          );
+          final volByDay = <String, double>{
+            for (final p in prices)
+              if (p.volume != null && p.volume! > 0)
+                _ymd(p.date): p.volume!.toDouble(),
+          };
+
+          final entries = <DayTradingCompanion>[];
+          for (final d in data) {
+            final total = volByDay[d.date];
+            if (total == null) {
+              skippedNoPrice++;
+              continue;
+            }
+            var ratio = (d.volume / total) * 100;
+            if (ratio > DataFreshness.dayTradingMaxValidRatio) {
+              ratio = DataFreshness.dayTradingMaxValidRatio;
+            }
+            if (ratio < 0) ratio = 0;
+            entries.add(
               DayTradingCompanion.insert(
                 symbol: d.stockId,
                 date: DateTime.parse(d.date),
                 buyVolume: Value(d.buyAmount),
                 sellVolume: Value(d.sellAmount),
+                dayTradingRatio: Value(ratio),
                 tradeVolume: Value(d.volume),
               ),
-          ]);
-          rowsWritten += data.length;
+            );
+          }
+          if (entries.isNotEmpty) {
+            await db.upsertDayTradingPreservingRatio(entries);
+            rowsWritten += entries.length;
+          }
         }
         done++;
         if (done % 10 == 0 || done == work.length) {
@@ -185,7 +216,10 @@ Future<int> main(List<String> args) async {
       if (done + failed < work.length) await Future.delayed(_callInterval);
     }
 
-    print('✅ 完成: $done 檔成功、$failed 檔失敗，寫入 $rowsWritten 列');
+    print(
+      '✅ 完成: $done 檔成功、$failed 檔失敗，寫入 $rowsWritten 列'
+      '${skippedNoPrice > 0 ? "，跳過 $skippedNoPrice 列（該日無價格、算不出比例）" : ""}',
+    );
     return failed > 0 && done == 0 ? 1 : 0;
   } finally {
     await db.close();
