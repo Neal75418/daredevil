@@ -1,4 +1,14 @@
 // lib/presentation/providers/news_heat_provider.dart
+//
+// 新聞熱度＝**發現層**，不是買點。
+//
+// 熱度標記的很可能是頂部而非起點——本功能的定位是「觀察清單產生器」：
+// 從近期新聞找出主流族群與焦點股，等它們回檔修正時再由既有三模式與
+// 使用者判斷進場時機，用途正是避免追高。
+//
+// 因此熱度**刻意不進評分**（匹配結果不寫 `news_stock_map`，由架構保證而非
+// 靠約定，見 `StockNameMatcher` 的 class doc）。未來若要讓熱度影響評分，
+// 必須先用 `news_mention_daily` 的快照資料回測驗證，不得直接接線。
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:daredevil/core/constants/news_heat_params.dart';
