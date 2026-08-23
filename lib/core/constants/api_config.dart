@@ -143,6 +143,13 @@ abstract final class ApiConfig {
   /// 都不會撞 402。
   static const int financialBackfillReserve = 200;
 
+  /// 上櫃當沖端點可接受的資料落後天數上限
+  ///
+  /// 該端點無視請求日期、永遠回最新交易日，因此失去了上市那道「回應日期 ≠
+  /// 請求日期就丟棄」的守衛——那道守衛同時是端點凍結偵測器。本專案已有兩個
+  /// 端點靜默凍在某一天的前例，故以天數上界補回。放寬到 7 天以涵蓋連假。
+  static const int tpexDayTradingMaxStaleDays = 7;
+
   /// 上櫃財報回填時保留給後續步驟的 FinMind 額度
   ///
   /// 回填佇列是最舊優先，設計上保證每輪都選得出 100 檔全新的 stale 股，

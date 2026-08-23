@@ -306,4 +306,30 @@ void main() {
       expect(TwParseUtils.parseFormattedDouble('0.00'), 0.0);
     });
   });
+
+  group('parseAdDateOrNull（嚴格版）', () {
+    test('合法 YYYYMMDD → 本地午夜', () {
+      expect(TwParseUtils.parseAdDateOrNull('20260821'), DateTime(2026, 8, 21));
+    });
+
+    // 🚨 這些若回退成今天，上櫃當沖會把最新資料寫成錯誤日期且毫無訊號。
+    // parseAdDate 的既有測試斷言「回今天」，因此無法區分「內部回 null 再由
+    // 外層 fallback」與「內部直接回今天」——那個 mutation 能存活整套測試。
+    for (final bad in <String?>[
+      null,
+      '',
+      '2026',
+      '2026082',
+      '202608211',
+      'abcdefgh',
+      '00001218', // 年份過早（實戰髒資料）
+      '20260230', // 2/30 會被正規化成 3/2
+      '20261318', // 月份越界
+      '20260832', // 日期越界
+    ]) {
+      test('🚨 無效輸入 ${bad ?? "null"} → null，不得回退成今天', () {
+        expect(TwParseUtils.parseAdDateOrNull(bad), isNull);
+      });
+    }
+  });
 }

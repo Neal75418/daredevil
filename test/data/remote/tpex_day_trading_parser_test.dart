@@ -33,11 +33,27 @@ void main() {
     'date': date,
     'stat': stat,
     'tables': [
+      // ⚠️ 彙總表也是 6 欄（實際 payload 抄錄）——早期 fixture 誤寫成 2 欄，
+      // 讓「欄數 >= 6」的判別法看起來可行，測試全綠卻永遠選錯表。
       {
         'title': '現股當沖交易統計資訊',
-        'fields': ['當日沖銷交易總成交股數', '當日沖銷交易總成交股數占市場比重'],
+        'fields': [
+          '當日沖銷交易總成交股數',
+          '當日沖銷交易總成交股數占市場比重',
+          '當日沖銷交易總買進成交金額',
+          '當日沖銷交易總買進成交金額占市場比重',
+          '當日沖銷交易總賣出成交金額',
+          '當日沖銷交易總賣出成交金額占市場比重',
+        ],
         'data': [
-          ['445,333,000', '25.90%'],
+          [
+            '445,333,000',
+            '25.90%',
+            '99,670,194,370',
+            '49.23%',
+            '99,891,649,810',
+            '49.34%',
+          ],
         ],
       },
       {
@@ -163,6 +179,54 @@ void main() {
 
     final result = await client.getAllDayTradingData();
     expect(result.length, 1, reason: '哨兵值不得被當成 0 寫入');
+    expect(result.single.code, '1815');
+  });
+
+  test('🚨 日期是未來 → 回空（會寫出永遠讀不到的列）', () async {
+    final future = DateTime.now().add(const Duration(days: 3));
+    final ymd =
+        '${future.year}'
+        '${future.month.toString().padLeft(2, '0')}'
+        '${future.day.toString().padLeft(2, '0')}';
+    stub(body(date: ymd));
+
+    expect(await client.getAllDayTradingData(), isEmpty);
+  });
+
+  test('🚨 日期過期太久 → 回空（端點凍結偵測）', () async {
+    final old = DateTime.now().subtract(const Duration(days: 30));
+    final ymd =
+        '${old.year}'
+        '${old.month.toString().padLeft(2, '0')}'
+        '${old.day.toString().padLeft(2, '0')}';
+    stub(body(date: ymd));
+
+    expect(
+      await client.getAllDayTradingData(),
+      isEmpty,
+      reason:
+          '此路徑放棄了上市那道「回應日期≠請求日期就丟棄」的守衛，'
+          '而那道守衛兼任端點凍結偵測器；本專案有兩個端點靜默凍結的前例',
+    );
+  });
+
+  test('date 格式髒（00001218）→ 回空', () async {
+    stub(body(date: '00001218'));
+    expect(await client.getAllDayTradingData(), isEmpty);
+  });
+
+  test('逐檔表首列欄數不足 → 只跳過該列，其餘照常', () async {
+    stub(
+      body(
+        rows: [
+          ['6104', '創惟'], // 殘缺列
+          ['1815', '富喬', ' ', '1,000', '2,000', '3,000'],
+        ],
+      ),
+    );
+
+    final result = await client.getAllDayTradingData();
+    expect(result.length, 1, reason: '不得因首列殘缺就整批丟棄');
     expect(result.single.code, '1815');
   });
 }

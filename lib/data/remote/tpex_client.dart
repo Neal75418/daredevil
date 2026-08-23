@@ -1359,24 +1359,42 @@ class TpexClient {
         return const <TpexDayTrading>[];
       }
 
-      // 逐檔在第二張表：第一張是全市場彙總（單列、無證券代號欄）。
-      // 以「欄數 ≥ 6 且首欄是代號」定位，不寫死索引。
+      // 日期上下界:parseAdDateOrNull 只擋 year < 2000。此路徑刻意放棄了上市
+      // 那道「回應日期 ≠ 請求日期就丟棄」的守衛（端點無視請求日期），而那道
+      // 守衛同時兼任「端點凍結偵測器」。本檔已有兩個端點靜默凍在某一天的
+      // 前例，故在此補回下界；未來日期一律拒收（會寫出永遠讀不到的列）。
+      final now = DateContext.normalize(DateTime.now());
+      if (dataDate.isAfter(now)) {
+        AppLogger.warning(_tag, '當沖回應日期 $dataDate 在未來，整批丟棄');
+        return const <TpexDayTrading>[];
+      }
+      final staleDays = now.difference(dataDate).inDays;
+      if (staleDays > ApiConfig.tpexDayTradingMaxStaleDays) {
+        AppLogger.warning(
+          _tag,
+          '當沖回應日期 $dataDate 已過期 $staleDays 天（端點可能凍結），整批丟棄',
+        );
+        return const <TpexDayTrading>[];
+      }
+
+      // 逐檔在第二張表：**兩張表都是 6 欄**，不能用欄數判別（早期版本正是
+      // 這樣寫，選到彙總表回 0 筆、不報錯、還被快取 30 分鐘）。改以 `fields`
+      // 是否含「證券代號」判斷——比照 TwseClient 以 title 判別的做法。
       final tables = data['tables'];
       if (tables is! List) return const <TpexDayTrading>[];
       List<dynamic>? rows;
       for (final t in tables) {
         if (t is! Map) continue;
+        final fields = t['fields'];
+        if (fields is! List || !fields.contains('證券代號')) continue;
         final d = t['data'];
-        if (d is List &&
-            d.isNotEmpty &&
-            d.first is List &&
-            d.first.length >= 6) {
+        if (d is List) {
           rows = d;
           break;
         }
       }
       if (rows == null) {
-        AppLogger.warning(_tag, '當沖回應找不到逐檔表，整批丟棄');
+        AppLogger.warning(_tag, '當沖回應找不到逐檔表（fields 無「證券代號」），整批丟棄');
         return const <TpexDayTrading>[];
       }
 
@@ -1406,6 +1424,14 @@ class TpexClient {
         );
       }
 
+      // 「找到表但解析出 0 筆」與「休市」在回傳值上無法區分，而它正是判別法
+      // 出錯時的樣子——不快取、且出聲，否則錯誤會被凍結一個 TTL。
+      if (result.isEmpty) {
+        AppLogger.warning(_tag, '當沖逐檔表有 ${rows.length} 列但解析出 0 筆，不快取');
+        return result;
+      }
+
+      AppLogger.info(_tag, '當沖資料: ${result.length} 筆 (上櫃, $dataDate)');
       _cache.put(cacheKey, result);
       return result;
     });

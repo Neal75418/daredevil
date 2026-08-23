@@ -45,14 +45,14 @@ abstract final class TwParseUtils {
     return parsed;
   }
 
-  /// 解析 YYYYMMDD 格式的西元日期（例如 "20260121"）
+  /// 解析 YYYYMMDD 格式的西元日期（例如 "20260121"），**無效時回 null**。
   ///
-  /// 回傳本地時間午夜以匹配資料庫儲存格式。
-  /// 無效格式（長度、非數字、年份過早、月日越界或被正規化）時回傳今日午夜。
+  /// 回傳本地時間午夜以匹配資料庫儲存格式。無效的定義：長度非 8、非數字、
+  /// 年份早於 [ApiConfig.minSaneAdYear]、月日越界，或日期被 `DateTime`
+  /// 正規化（例如 2/30 → 3/2）。
   ///
   /// **防護動機**：API 偶爾回傳髒日期字串（例如 `00001218`），早期僅檢查長度
   /// 而未驗證內容，導致 `0000-12-18` 等錯誤年份寫入 DB 並污染走勢圖與均線。
-  /// 解析西元緊湊日期（`YYYYMMDD`），**無效時回 null**。
   ///
   /// [parseAdDate] 的嚴格版。當日期本身就是「這批資料屬於哪天」的唯一依據時
   /// （例如上櫃當沖端點無視請求日期、只能信回應的 `date`），回退成今天會把
@@ -74,6 +74,11 @@ abstract final class TwParseUtils {
     return date;
   }
 
+  /// [parseAdDateOrNull] 的寬鬆版：無效時回**今日午夜**。
+  ///
+  /// 適用於「日期只是輔助、資料本身另有來源」的路徑。若日期就是「這批資料
+  /// 屬於哪天」的唯一依據（例如上櫃當沖端點無視請求日期、只能信回應的
+  /// `date`），必須用嚴格版——回退成今天會把最新資料寫成錯誤日期且毫無訊號。
   static DateTime parseAdDate(String dateStr) =>
       parseAdDateOrNull(dateStr) ?? DateContext.normalize(DateTime.now());
 
