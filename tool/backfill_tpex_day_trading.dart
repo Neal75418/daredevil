@@ -38,7 +38,13 @@
 //
 // ## Resume
 //
-// 每檔跑完即寫入。中斷後重跑會跳過「該檔已有足量歷史」的股票，不重打 API。
+// 每檔跑完即寫入。判斷邏輯分兩種情境：
+//   - **有缺口**（該市場某些交易日完全沒有當沖列）→ 全部重打。FinMind 逐檔
+//     計費、單次可拉整段區間，補 3 天與補全部同價，沒有只補幾天的省法。
+//   - **無缺口** → 走總列數判斷，處理「首次回補被中斷」的續跑。
+//
+// 只看總列數會讓 CLI 對缺口無效：漏最近 3 天的股票總列數仍遠超門檻，
+// 會被判成「已有足量歷史」而跳過。
 import 'dart:io';
 
 import 'package:daredevil/core/constants/api_config.dart';
@@ -116,15 +122,37 @@ Future<int> main(List<String> args) async {
       targets = liquid;
     }
 
-    // Resume：已有足量歷史的跳過
-    final expectedRows = (years * 250 * _resumeCoverageRatio).round();
-    final todo = <String>[];
-    for (final s in targets) {
-      final have = await db.getDayTradingHistory(s, startDate: start);
-      if (have.length < expectedRows) todo.add(s);
+    // Resume / 缺口偵測
+    //
+    // **不能只看總列數**。判「該檔已有 N 列就跳過」是為「中斷後續跑」設計的，
+    // 但最常見的用途其實是補缺口——漏掉最近 3 天的股票總列數仍遠超門檻，
+    // 會被判定「已有足量歷史」而跳過，於是 CLI 對缺口完全無效。
+    //
+    // 改判「該市場有哪些交易日缺當沖」：有缺口就全部重打（FinMind 逐檔計費、
+    // 單次可拉整段區間，補 3 天與補全部同價，沒有只補幾天的省法）。
+    // 無缺口時才走總列數判斷，處理「首次回補被中斷」的情境。
+    final gaps = await db.findDayTradingGapDates(
+      market: MarketCode.tpex,
+      since: start,
+    );
+    final List<String> todo;
+    if (gaps.isNotEmpty) {
+      final shown = gaps.take(5).map(_ymd).join(', ');
+      print(
+        '🕳  缺口: ${gaps.length} 個交易日無上櫃當沖'
+        '（$shown${gaps.length > 5 ? " …" : ""}）→ 全部重打',
+      );
+      todo = targets;
+    } else {
+      final expectedRows = (years * 250 * _resumeCoverageRatio).round();
+      final pending = <String>[];
+      for (final s in targets) {
+        final have = await db.getDayTradingHistory(s, startDate: start);
+        if (have.length < expectedRows) pending.add(s);
+      }
+      todo = pending;
+      print('⏭  無缺口；已有足量歷史、跳過: ${targets.length - todo.length} 檔');
     }
-    final skipped = targets.length - todo.length;
-    print('⏭  已有足量歷史、跳過: $skipped 檔');
 
     final work = limit == null ? todo : todo.take(limit).toList();
     final mins = (work.length * _callInterval.inMilliseconds / 60000).ceil();

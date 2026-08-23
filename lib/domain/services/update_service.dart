@@ -799,7 +799,8 @@ class UpdateService {
       AppLogger.info(
         'UpdateService',
         '步驟 4.5: 當沖 上市=${marketResult.dayTradingCount}／'
-            '上櫃=${marketResult.tpexDayTradingCount}, '
+            '上櫃=${marketResult.tpexDayTradingCount}'
+            '${marketResult.tpexDayTradingGaps > 0 ? "(缺 ${marketResult.tpexDayTradingGaps} 日)" : ""}, '
             '融資=$marginLabel, '
             '外資持股(全市場)=${marketResult.foreignShareholdingCount}, '
             '持股(自選+熱門)=$syncedCount$backfillLabel',

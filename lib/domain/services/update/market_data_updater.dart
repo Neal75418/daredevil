@@ -92,6 +92,7 @@ class MarketDataUpdater {
   }) async {
     var twseDayTradingCount = 0;
     var tpexDayTradingCount = 0;
+    var tpexDayTradingGaps = 0;
     int? marginCount = 0;
     var foreignShareholdingCount = 0;
 
@@ -124,6 +125,37 @@ class MarketDataUpdater {
       // 訊號，而且限流時四行後的融資融券同樣打 TPEx、照樣會死，吞了只是讓
       // 中止晚四行發生卻少一個來源的線索。
       AppLogger.warning('MarketDataUpdater', '上櫃當沖同步網路失敗（續跑）', e);
+    }
+
+    // 上櫃當沖缺口偵測（純 DB 查詢、零 API 額度）
+    //
+    // 上市漏掉的日子由下方 40 天窗自動補回；上櫃端點只給最新交易日，**漏一天
+    // 就永久少一天**。實測近 60 天 22 次 PARTIAL、1 次 FAILED（10.7%），
+    // 所以缺口不是罕見情況。
+    //
+    // **刻意只偵測不自動補**：補救走 FinMind、逐檔計費，補 3 天與補 6 年
+    // 同為 ~220 次呼叫，塞進每日路徑會天天跟財報同步搶額度。改為印出來讓
+    // 補救批次做（跑 `tool/backfill_tpex_day_trading.dart`）——這個缺口的
+    // 問題從來不是難修，是**無法察覺**。
+    try {
+      final gaps = await _db.findDayTradingGapDates(
+        market: MarketCode.tpex,
+        since: DateContext.normalize(
+          date,
+        ).subtract(const Duration(days: ApiConfig.tradingBackfillLookbackDays)),
+      );
+      if (gaps.isNotEmpty) {
+        tpexDayTradingGaps = gaps.length;
+        AppLogger.warning(
+          'MarketDataUpdater',
+          '上櫃當沖有 ${gaps.length} 個交易日缺資料'
+              '（最近: ${DateContext.formatYmd(gaps.last)}）——'
+              '端點不給歷史，需跑 tool/backfill_tpex_day_trading.dart 補',
+        );
+      }
+    } catch (e) {
+      // fail-soft：偵測本身絕不能成為更新失敗的原因
+      AppLogger.warning('MarketDataUpdater', '上櫃當沖缺口偵測失敗', e);
     }
 
     // 從 TWSE/TPEX 批次同步融資融券資料
@@ -182,6 +214,7 @@ class MarketDataUpdater {
     return MarketDataSyncResult(
       dayTradingCount: twseDayTradingCount,
       tpexDayTradingCount: tpexDayTradingCount,
+      tpexDayTradingGaps: tpexDayTradingGaps,
       marginCount: marginCount,
       foreignShareholdingCount: foreignShareholdingCount,
       backfilledDays: backfilledDays,
@@ -668,6 +701,7 @@ class MarketDataSyncResult {
   const MarketDataSyncResult({
     required this.dayTradingCount,
     this.tpexDayTradingCount = 0,
+    this.tpexDayTradingGaps = 0,
     required this.marginCount,
     this.foreignShareholdingCount = 0,
     this.backfilledDays = 0,
@@ -681,6 +715,12 @@ class MarketDataSyncResult {
   /// **與上市分開記**：相加會讓「某一邊整批掛掉」被另一邊的筆數蓋過去，
   /// 而那正是最需要看見的訊號。
   final int tpexDayTradingCount;
+
+  /// 上櫃當沖缺資料的交易日數（40 天窗內）
+  ///
+  /// 上市有 40 天窗自動回補、上櫃沒有——端點只給最新交易日。此欄位讓
+  /// 「漏了幾天」看得見，補救走 `tool/backfill_tpex_day_trading.dart`。
+  final int tpexDayTradingGaps;
 
   /// 融資融券同步筆數。null 表示已快取（跳過同步）。
   final int? marginCount;

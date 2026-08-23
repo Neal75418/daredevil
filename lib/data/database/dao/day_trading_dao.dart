@@ -107,6 +107,40 @@ mixin DayTradingDaoMixin on $AppDatabase {
   /// 刪除指定日期範圍內的當沖資料
   ///
   /// 用於清理可能存在的重複記錄（由於 UTC/本地時間不一致）
+  /// 找出「有價格但無當沖」的交易日（該市場）
+  ///
+  /// **上櫃專屬需求**。上市當沖漏掉的日子由 `MarketDataUpdater` 的 40 天窗
+  /// 自動補回（TWTB4U 吃日期）；上櫃端點只給最新交易日，漏一天就永久少一天，
+  /// 除非手動跑 `tool/backfill_tpex_day_trading.dart`。
+  ///
+  /// 價格表是「那天有沒有開市」的 ground truth（與回補迴圈同一判準）。
+  /// 純 DB 查詢、**零 API 額度**——偵測便宜，補救才貴（FinMind 逐檔計費，
+  /// 補 3 天與補 6 年同為 ~220 次呼叫），所以偵測可以每輪做、補救要批次。
+  Future<List<DateTime>> findDayTradingGapDates({
+    required String market,
+    required DateTime since,
+  }) async {
+    final rows = await customSelect(
+      'SELECT DISTINCT substr(dp.date, 1, 10) AS d '
+      'FROM daily_price dp '
+      'INNER JOIN stock_master sm ON dp.symbol = sm.symbol '
+      'WHERE sm.market = ? AND dp.date >= ? '
+      'AND NOT EXISTS ('
+      '  SELECT 1 FROM day_trading dt '
+      '  INNER JOIN stock_master s2 ON dt.symbol = s2.symbol '
+      '  WHERE s2.market = ? AND substr(dt.date, 1, 10) = substr(dp.date, 1, 10)'
+      ') '
+      'ORDER BY d',
+      variables: [
+        Variable.withString(market),
+        Variable.withDateTime(since),
+        Variable.withString(market),
+      ],
+      readsFrom: {dailyPrice, dayTrading, stockMaster},
+    ).get();
+    return [for (final r in rows) DateTime.parse(r.read<String>('d'))];
+  }
+
   /// 刪除日期區間內、**本次同步所擁有**的當沖列。
   ///
   /// 「擁有」＝ `stock_master.market` 屬於 [market]，**或** 出現在本次寫入的

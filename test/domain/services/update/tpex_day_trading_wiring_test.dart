@@ -62,6 +62,12 @@ void main() {
       ),
     ).thenAnswer((_) async => 33);
     when(() => db.countStocksByMarket(any())).thenAnswer((_) async => 0);
+    when(
+      () => db.findDayTradingGapDates(
+        market: any(named: 'market'),
+        since: any(named: 'since'),
+      ),
+    ).thenAnswer((_) async => <DateTime>[]);
   });
 
   test('🚨 上櫃當沖有被呼叫，且 force 有傳', () async {
@@ -115,5 +121,38 @@ void main() {
           '融資融券同樣打 TPEx、照樣會死——「吞掉才能保住融資」的理由對限流'
           '不成立，只對網路錯誤成立',
     );
+  });
+
+  test('🚨 上櫃當沖缺口要被偵測並回報（上市有 40 天窗、上櫃沒有）', () async {
+    when(
+      () => db.findDayTradingGapDates(
+        market: any(named: 'market'),
+        since: any(named: 'since'),
+      ),
+    ).thenAnswer((_) async => [DateTime(2026, 8, 18), DateTime(2026, 8, 19)]);
+
+    final r = await updater.syncMarketWideData(date: date);
+
+    expect(
+      r.tpexDayTradingGaps,
+      2,
+      reason:
+          '端點只給最新交易日，漏掉的日子不會自己回來——'
+          '看不見就等於永久遺失',
+    );
+  });
+
+  test('🚨 缺口偵測失敗不得中止更新（fail-soft）', () async {
+    when(
+      () => db.findDayTradingGapDates(
+        market: any(named: 'market'),
+        since: any(named: 'since'),
+      ),
+    ).thenThrow(StateError('DB 壞了'));
+
+    final r = await updater.syncMarketWideData(date: date);
+
+    expect(r.tpexDayTradingCount, 22, reason: '同步本身照常完成');
+    expect(r.tpexDayTradingGaps, 0);
   });
 }
