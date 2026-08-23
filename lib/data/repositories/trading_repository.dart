@@ -10,6 +10,7 @@ import 'package:daredevil/core/utils/safe_execution.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
+import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/domain/repositories/trading_repository.dart';
 
@@ -252,6 +253,33 @@ class TradingRepository implements ITradingRepository {
       if (data.isEmpty) return 0;
 
       final dataDate = DateContext.normalize(data.first.date);
+
+      // **批次層級的分母覆蓋閘門**
+      //
+      // 個別股票缺價格 → 比例 0 是對的（那檔就是沒當沖）。但整個市場都缺
+      // 分母時，842 筆會全部算成 0，而 0 在當沖語意下是合法值「無當沖」——
+      // DAY_TRADING_HIGH/EXTREME 對整個上櫃市場失明，且筆數正常、毫無訊號。
+      //
+      // 這不是假想：交易日盤前／盤中跑更新時 TPEx 當日價格檔尚未發布，而本
+      // 端點已有資料（`UpdateService` 已記載這個 dataDate 分歧）。比照回補
+      // 迴圈對上市的 `價格覆蓋不足 → 跳過當沖回補（比例會失真）` 閘門。
+      final tpexStocks = await _db.countStocksByMarket(MarketCode.tpex);
+      if (tpexStocks > 0) {
+        final priced = await _db.countPricesByDateAndMarket(
+          dataDate,
+          MarketCode.tpex,
+        );
+        final need = (tpexStocks * ApiConfig.tradingBackfillMinCoverageRatio)
+            .ceil();
+        if (priced < need) {
+          AppLogger.warning(
+            'TradingRepo',
+            '上櫃當沖 $dataDate 價格覆蓋不足（$priced < $need），整批跳過'
+                '（比例會全部算成 0，與「無當沖」無法區分）',
+          );
+          return 0;
+        }
+      }
 
       if (!force) {
         final existing = await _db.getDayTradingCountForDateAndMarket(

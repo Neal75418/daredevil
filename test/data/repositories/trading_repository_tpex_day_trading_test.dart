@@ -147,6 +147,10 @@ void main() {
           tradeVolume: const Value(1),
         ),
     ]);
+    // 價格覆蓋要足夠，否則測到的是覆蓋閘門而非新鮮度
+    for (var i = 0; i < 100; i++) {
+      await seedPrice('8${i.toString().padLeft(3, '0')}', dataDay, 4000);
+    }
     await seedPrice('6104', dataDay, 4000);
     stubTpex([row('6104')]);
 
@@ -184,14 +188,22 @@ void main() {
           tradeVolume: const Value(1),
         ),
     ]);
+    for (var i = 0; i < 100; i++) {
+      await seedPrice('8${i.toString().padLeft(3, '0')}', dataDay, 4000);
+    }
     await seedPrice('6104', dataDay, 4000);
     stubTpex([row('6104')]);
 
     expect(await repo.syncAllDayTradingFromTpex(force: true), 1);
   });
 
-  test('無價格資料 → 比例 0（與上市同語意，不瞎猜）', () async {
-    stubTpex([row('6104')]);
+  test('個別股票無價格 → 該檔比例 0（市場覆蓋足夠時，不瞎猜）', () async {
+    // 市場整體有價格，只有 6104 這檔缺 → 那就是它自己沒量
+    await db.upsertStocks([
+      StockMasterCompanion.insert(symbol: '3105', name: 'X', market: 'TPEx'),
+    ]);
+    await seedPrice('3105', dataDay, 9999);
+    stubTpex([row('6104'), row('3105')]);
 
     await repo.syncAllDayTradingFromTpex();
 
@@ -201,6 +213,37 @@ void main() {
       endDate: dataDay,
     );
     expect(rows.single.dayTradingRatio, 0.0);
+  });
+
+  test('🚨 整個市場都沒價格 → 整批跳過，不得寫入一堆 0', () async {
+    // 交易日盤前／盤中跑更新時，TPEx 當日價格檔尚未發布，但當沖端點已有資料
+    // （update_service.dart 已記載這個 dataDate 分歧）。此時分母全缺，
+    // 842 筆會全部算成 0——而 0 在當沖語意下是合法值「無當沖」，
+    // DAY_TRADING_HIGH/EXTREME 對整個上櫃市場失明且毫無訊號。
+    await db.upsertStocks([
+      for (var i = 0; i < 40; i++)
+        StockMasterCompanion.insert(
+          symbol: '7${i.toString().padLeft(3, '0')}',
+          name: 'O$i',
+          market: 'TPEx',
+        ),
+    ]);
+    stubTpex([
+      row('6104'),
+      for (var i = 0; i < 40; i++) row('7${i.toString().padLeft(3, '0')}'),
+    ]);
+
+    final n = await repo.syncAllDayTradingFromTpex();
+
+    expect(n, 0, reason: '系統性缺分母時不寫，寧可沒資料也不要一整片假的 0');
+    expect(
+      await db.getDayTradingHistory(
+        '6104',
+        startDate: dataDay,
+        endDate: dataDay,
+      ),
+      isEmpty,
+    );
   });
 
   test('比例超過 100% 仍鉗制', () async {
@@ -253,5 +296,19 @@ void main() {
       endDate: dataDay,
     );
     expect(rows, isNotEmpty, reason: '沒東西可寫時不該把既有資料清掉');
+  });
+
+  test('🚨 force 不得繞過覆蓋閘門（語意是重抓，不是硬寫假資料）', () async {
+    await db.upsertStocks([
+      for (var i = 0; i < 40; i++)
+        StockMasterCompanion.insert(
+          symbol: '7${i.toString().padLeft(3, '0')}',
+          name: 'O$i',
+          market: 'TPEx',
+        ),
+    ]);
+    stubTpex([row('6104')]);
+
+    expect(await repo.syncAllDayTradingFromTpex(force: true), 0);
   });
 }

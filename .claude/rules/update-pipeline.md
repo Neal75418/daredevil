@@ -91,6 +91,13 @@ TDCC holding、dividend、insider transfer、quarterly report。
 **`MarketDataUpdater`** — 除當日籌碼外還有兩類回補
 
 - **當沖／融資缺漏日**：TWSE ~21:00 才發布，早更新錯過的日子掃 40 天窗補回
+- **上櫃當沖**（2026-08-23）：走 `/www/zh-tw/intraday/stat`，免費、1 次呼叫拿
+  842 檔。**日期語意與上市相反**——該端點無視 `date` 參數、永遠回最新交易日，
+  故寫入日期取自回應；上市那條的守衛是「回應日期 ≠ 請求日期就丟棄」。
+  另有兩道閘：價格覆蓋不足整批跳過（分母全缺會寫出一整片假的 0，而 0 在當沖
+  語意下是合法值），失敗不 rethrow（三個來源裡最不關鍵，中止會犧牲融資與外資
+  持股）。**歷史回補不走這條**——端點只給最新日，回補循 FinMind
+  `TaiwanStockDayTrading`（逐檔、吃額度，僅手動 CLI）
 - **全市場外資持股**（2026-08-16）：`syncAllMarketShareholding` / `backfillForeignShareholding`
   走 MI_QFIIS——同樣是免費、全市場的那一類，加它是為了修 FOREIGN_* 規則在 TWSE/TPEx 之間
   4 倍的觸發不對稱

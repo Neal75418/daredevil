@@ -91,6 +91,7 @@ class MarketDataUpdater {
     bool force = false,
   }) async {
     var twseDayTradingCount = 0;
+    var tpexDayTradingCount = 0;
     int? marginCount = 0;
     var foreignShareholdingCount = 0;
 
@@ -107,6 +108,17 @@ class MarketDataUpdater {
       rethrow;
     } catch (e) {
       AppLogger.warning('MarketDataUpdater', '上市當沖資料同步失敗', e);
+    }
+
+    // 上櫃當沖（2026-08-23 接上）。**不 rethrow 網路／限流例外**：這是三個
+    // 來源裡最不關鍵的一個，讓它中止整段會連帶犧牲融資融券與外資持股。
+    // 日期由回應決定、價格覆蓋不足會自行整批跳過——見 syncAllDayTradingFromTpex。
+    try {
+      tpexDayTradingCount = await _tradingRepo.syncAllDayTradingFromTpex(
+        force: force,
+      );
+    } catch (e) {
+      AppLogger.warning('MarketDataUpdater', '上櫃當沖資料同步失敗', e);
     }
 
     // 從 TWSE/TPEX 批次同步融資融券資料
@@ -164,6 +176,7 @@ class MarketDataUpdater {
 
     return MarketDataSyncResult(
       dayTradingCount: twseDayTradingCount,
+      tpexDayTradingCount: tpexDayTradingCount,
       marginCount: marginCount,
       foreignShareholdingCount: foreignShareholdingCount,
       backfilledDays: backfilledDays,
@@ -651,12 +664,20 @@ class MarketDataUpdater {
 class MarketDataSyncResult {
   const MarketDataSyncResult({
     required this.dayTradingCount,
+    this.tpexDayTradingCount = 0,
     required this.marginCount,
     this.foreignShareholdingCount = 0,
     this.backfilledDays = 0,
   });
 
+  /// 上市當沖同步筆數
   final int dayTradingCount;
+
+  /// 上櫃當沖同步筆數
+  ///
+  /// **與上市分開記**：相加會讓「某一邊整批掛掉」被另一邊的筆數蓋過去，
+  /// 而那正是最需要看見的訊號。
+  final int tpexDayTradingCount;
 
   /// 融資融券同步筆數。null 表示已快取（跳過同步）。
   final int? marginCount;
@@ -668,7 +689,7 @@ class MarketDataSyncResult {
   /// 1 天——與收斂設計第 2 條一致，非「有寫入列」即計）
   final int backfilledDays;
 
-  int get total => dayTradingCount + (marginCount ?? 0);
+  int get total => dayTradingCount + tpexDayTradingCount + (marginCount ?? 0);
 }
 
 /// 上櫃籌碼同步結果
