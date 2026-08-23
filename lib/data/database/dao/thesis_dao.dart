@@ -100,10 +100,14 @@ mixin ThesisDaoMixin on $AppDatabase {
     await (delete(_thesis)..where((t) => t.id.equals(id))).go();
   }
 
-  /// monitor 每次跑完批次更新 ACTIVE 的最後檢查時間（staleness 顯示）。
+  /// 單筆蓋「本次已檢查」章（staleness 顯示）。
+  ///
+  /// **刻意不篩 status**：`ThesisMonitorService` 在評估完成後才蓋章，而本輪
+  /// 剛被 `invalidateThesis` 轉成 INVALIDATED 的那筆同樣需要蓋——它確實在
+  /// 本輪被檢查過，`lastCheckedDate` 應凍結在本輪而非上一輪。
   /// 刻意不動 updatedAt（那是 status 變更專用）。
-  Future<void> touchLastChecked(DateTime checkedAt) async {
-    await (update(_thesis)..where((t) => t.status.equals('ACTIVE'))).write(
+  Future<void> touchLastCheckedById(int id, DateTime checkedAt) async {
+    await (update(_thesis)..where((t) => t.id.equals(id))).write(
       PinnedThesisCompanion(lastCheckedDate: Value(checkedAt)),
     );
   }

@@ -172,11 +172,8 @@ class FundamentalSyncer {
       fallback: revenueCount,
       errors: errors,
       errorLabel: '上櫃自選營收',
-      action: () => _fundamentalRepo.syncOtcRevenue(
-        otcWatchlistSymbols,
-        date: date,
-        force: force,
-      ),
+      action: () =>
+          _fundamentalRepo.syncOtcRevenue(otcWatchlistSymbols, force: force),
     );
 
     AppLogger.info(
@@ -276,7 +273,7 @@ class FundamentalSyncer {
       fallback: revenueCount,
       errors: errors,
       errorLabel: '上櫃候選營收',
-      action: () => _fundamentalRepo.syncOtcRevenue(otcCandidates, date: date),
+      action: () => _fundamentalRepo.syncOtcRevenue(otcCandidates),
     );
 
     return FundamentalSyncResult(

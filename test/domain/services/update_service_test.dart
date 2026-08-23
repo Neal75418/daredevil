@@ -689,11 +689,7 @@ void main() {
         ),
       ).thenThrow(Exception('OTC valuation broken'));
       when(
-        () => mockFundamental.syncOtcRevenue(
-          any(),
-          date: any(named: 'date'),
-          force: any(named: 'force'),
-        ),
+        () => mockFundamental.syncOtcRevenue(any(), force: any(named: 'force')),
       ).thenAnswer((_) async => 0);
 
       final service = buildService(fundamental: mockFundamental);
@@ -1107,11 +1103,7 @@ void main() {
         ),
       ).thenAnswer((_) async => 0);
       when(
-        () => mock.syncOtcRevenue(
-          any(),
-          date: any(named: 'date'),
-          force: any(named: 'force'),
-        ),
+        () => mock.syncOtcRevenue(any(), force: any(named: 'force')),
       ).thenAnswer((_) async => 0);
       return mock;
     }

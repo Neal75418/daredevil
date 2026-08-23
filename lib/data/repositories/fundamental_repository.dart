@@ -384,39 +384,48 @@ class FundamentalRepository implements IFundamentalRepository {
   ///
   /// 回傳成功同步的股票數量。
   @override
-  Future<int> syncOtcRevenue(
-    List<String> symbols, {
-    DateTime? date,
-    bool force = false,
-  }) async {
+  Future<int> syncOtcRevenue(List<String> symbols, {bool force = false}) async {
     if (symbols.isEmpty) return 0;
 
-    final targetDate = date ?? _clock.now();
-
-    // 新鮮度檢查：過濾掉已有當月營收資料的股票
-    // 營收以年/月為單位，同月內不需重複同步
+    // 新鮮度檢查：過濾掉已追上「上一個月」的股票
+    //
+    // **不能拿當下年月比對**：台股月營收於次月 10 日前公布，DB 裡能有的最新月
+    // **永遠不會是當月**。原本比對「當下年月」，條件恆為 false → 每次
+    // 更新都判定全部需要同步、白打 TPEX。
+    //
+    // **刻意用「上一個月」而非 [TaiwanCalendar.expectedLatestRevenueMonth]**：
+    // 那個函式在 1–10 日會保守退兩個月，因為它服務的是 FinMind 回補（誤判
+    // 「缺月」要付額度）。這裡的來源是 TPEX 全市場端點——免費、已 memoize，
+    // 誤抓的代價是一次快取內呼叫；退兩個月的代價卻是每月 1–10 日這十天
+    // 整批上櫃股跳過同步，比上市路徑（`syncAllMarketRevenue` 走筆數門檻，
+    // 會跟著公布進度走）落後一個月。用 M-1 則在公布期逐輪重試、自動收斂。
+    //
+    // 時鐘用 `_clock.now()`：原本收的 `date` 參數在 coordinator 會被校正成
+    // 實際價格資料日（見 `UpdateService._syncPricesAndHistory`），那是「資料
+    // 屬於哪天」，不是「現在幾號」；拿它判公布進度會在假日或補跑時算錯，
+    // 故該參數已移除。
     List<String> symbolsToSync = symbols;
     if (!force) {
-      final currentYear = targetDate.year;
-      final currentMonth = targetDate.month;
+      final now = _clock.now();
+      final expected = DateTime(now.year, now.month - 1, 1);
+      final expectedKey = expected.year * 100 + expected.month;
       final needSync = <String>[];
 
       final latestMap = await _db.getLatestMonthlyRevenuesBatch(symbols);
       for (final symbol in symbols) {
         final latest = latestMap[symbol];
-        // 若無資料或資料不是當月則需要同步
-        final isCurrentMonth =
+        // 已追上（或超前）應公布月即算新鮮
+        final isFresh =
             latest != null &&
-            latest.revenueYear == currentYear &&
-            latest.revenueMonth == currentMonth;
-        if (!isCurrentMonth) {
+            (latest.revenueYear * 100 + latest.revenueMonth) >= expectedKey;
+        if (!isFresh) {
           needSync.add(symbol);
         }
       }
       symbolsToSync = needSync;
 
       if (symbolsToSync.isEmpty) {
-        AppLogger.info('FundamentalRepo', '上櫃營收: 所有股票已有當月資料，跳過同步');
+        AppLogger.info('FundamentalRepo', '上櫃營收: 所有股票已有應公布的最新月，跳過同步');
         return 0;
       }
 

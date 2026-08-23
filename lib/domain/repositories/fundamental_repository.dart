@@ -31,11 +31,10 @@ abstract class IFundamentalRepository {
   Future<int?> syncAllMarketRevenue(DateTime date, {bool force = false});
 
   /// 同步上櫃月營收
-  Future<int> syncOtcRevenue(
-    List<String> symbols, {
-    DateTime? date,
-    bool force = false,
-  });
+  ///
+  /// 不收日期：TPEX 全市場端點不吃日期，新鮮度判定用的是「現在幾號」
+  /// （由實作的 clock 提供），不是資料日。
+  Future<int> syncOtcRevenue(List<String> symbols, {bool force = false});
 
   /// 同步財務報表
   Future<int> syncFinancialStatements({

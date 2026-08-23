@@ -4,7 +4,7 @@
 //   1. 一 symbol 一 ACTIVE（service 層 enforcement）
 //   2. INVALIDATED 凍結（僅 ACTIVE 可被 invalidate；不復活）
 //   3. 取消 = 物理刪除；封存 = ARCHIVED
-//   4. touchLastChecked 批次更新（updatedAt 僅於 status 變更時動）
+//   4. touchLastCheckedById 單筆蓋章（不篩 status；updatedAt 僅於 status 變更時動）
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/exit_params.dart';
@@ -117,16 +117,38 @@ void main() {
     });
   });
 
-  group('touchLastChecked', () {
-    test('批次更新 ACTIVE 的 lastCheckedDate', () async {
-      await pin('2330');
+  group('touchLastCheckedById', () {
+    test('只蓋指定那筆，其餘不動', () async {
+      final targetId = await pin('2330');
       await pin('2317');
       final checkedAt = DateTime(2026, 7, 12, 18);
-      await db.touchLastChecked(checkedAt);
+
+      await db.touchLastCheckedById(targetId, checkedAt);
+
       final active = await db.getActiveTheses();
-      for (final row in active) {
-        expect(row.lastCheckedDate, checkedAt);
-      }
+      final target = active.firstWhere((r) => r.id == targetId);
+      final other = active.firstWhere((r) => r.id != targetId);
+      expect(target.lastCheckedDate, checkedAt);
+      expect(other.lastCheckedDate, isNull, reason: '逐筆蓋章不得波及其他論點');
+    });
+
+    test('🚨 不篩 status：已 INVALIDATED 的仍蓋得到', () async {
+      final id = await pin('2330');
+      await db.invalidateThesis(
+        id,
+        invalidatedDate: DateTime(2026, 7, 10),
+        reason: 'timeStop',
+      );
+      final checkedAt = DateTime(2026, 7, 12, 18);
+
+      await db.touchLastCheckedById(id, checkedAt);
+
+      final row = (await db.getThesesByStatus('INVALIDATED')).single;
+      expect(
+        row.lastCheckedDate,
+        checkedAt,
+        reason: '本輪失效者確實在本輪被檢查過，lastCheckedDate 應凍結在本輪',
+      );
     });
   });
 }

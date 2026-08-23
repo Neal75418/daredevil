@@ -315,7 +315,18 @@
 
 ### 22. 「部分更新成功」只活在一次性 snackbar：update_run.status=partial 有寫入但 UI 從不讀取，errors 明細完全不持久化
 
-**狀態**：❓ 未查證
+**狀態**：✅ 已修（2026-08-23 查證，非本輪修復）
+
+**查證結果**：本條寫下後已被實作補齊，兩個缺口都補了。
+- 明細持久化：`UpdateService._partialRunMessage` 把失敗步驟連同例外訊息組成
+  `message`（截斷 500 字）寫入 `update_run`；DB 實測 PARTIAL 列的 message 形如
+  「部分更新成功(3 項失敗): 籌碼資料更新失敗: AppException: TWSE receive timeout…」。
+- UI 出口：`today_screen.dart` 讀最新一列的 `status`，PARTIAL 顯示
+  `Icons.error_outline` + warning 色徽章（SUCCESS 刻意不顯示以減 noise），
+  徽章可點開 `UpdateHistorySheet`，逐列顯示 status icon 與完整 message
+  （長訊息走 ExpansionTile 展開）。
+
+**原始記錄（保留以備回溯）**：
 
 **證據**：lib/domain/services/update_service.dart:841-848 寫入 partial/success 與 message，errors 內容未持久化；lib/data/database/dao/user_dao.dart:196 getLatestUpdateRun；lib/presentation/providers/today_provider.dart:117-136 只取 finishedAt/startedAt，status 與 message 完全沒被讀；背景路徑 lib/app/headless_update_runner.dart:104 拿到 UpdateResult 直接回傳，errors 沒有任何出口
 

@@ -63,9 +63,7 @@ void main() {
     when(
       () => mockFundRepo.syncOtcValuation(any(), date: any(named: 'date')),
     ).thenAnswer((_) async => 0);
-    when(
-      () => mockFundRepo.syncOtcRevenue(any(), date: any(named: 'date')),
-    ).thenAnswer((_) async => 0);
+    when(() => mockFundRepo.syncOtcRevenue(any())).thenAnswer((_) async => 0);
   });
 
   group('syncOtcCandidatesFundamentals 批次端點候選傳遞', () {
@@ -97,10 +95,7 @@ void main() {
 
       final capturedRevenue =
           verify(
-                () => mockFundRepo.syncOtcRevenue(
-                  captureAny(),
-                  date: any(named: 'date'),
-                ),
+                () => mockFundRepo.syncOtcRevenue(captureAny()),
               ).captured.single
               as List<String>;
       expect(capturedRevenue.length, 270);
