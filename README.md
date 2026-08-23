@@ -232,14 +232,13 @@ flutter test test/domain/services/ # 測試特定目錄
 
 ## 文件
 
-| 文件                                                 | 說明                     |
-|:-----------------------------------------------------|:-------------------------|
-| [CLAUDE.md](CLAUDE.md)                               | AI 開發指引              |
-| [RELEASE.md](RELEASE.md)                             | 發布建置指南             |
-| [CHANGELOG.md](CHANGELOG.md)                         | 版本變更紀錄             |
-| [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)           | 規則引擎定義 (70 條規則) |
-| [docs/CALIBRATION.md](docs/CALIBRATION.md)           | 規則分數校準管線         |
-| [docs/PENDING_UPGRADES.md](docs/PENDING_UPGRADES.md) | 依賴升級紀錄             |
+| 文件                                       | 說明                     |
+|:-------------------------------------------|:-------------------------|
+| [CLAUDE.md](CLAUDE.md)                     | AI 開發指引              |
+| [RELEASE.md](RELEASE.md)                   | 發布建置指南             |
+| [CHANGELOG.md](CHANGELOG.md)               | 版本變更紀錄             |
+| [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md) | 規則引擎定義 (70 條規則) |
+| [docs/CALIBRATION.md](docs/CALIBRATION.md) | 規則分數校準管線         |
 
 ---
 
