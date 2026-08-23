@@ -51,16 +51,32 @@ mixin DayTradingDaoMixin on $AppDatabase {
   /// 刪除指定日期範圍內的當沖資料
   ///
   /// 用於清理可能存在的重複記錄（由於 UTC/本地時間不一致）
+  /// 刪除日期區間內、**指定市場**的當沖列。
+  ///
+  /// 兩個必須同時成立的保證：
+  /// 1. **同日變體時間戳要清掉**——歷史上 UTC/本地不一致造成同一天有多個非
+  ///    午夜時間戳的列，即使該股不在本次批次也要清（原設計意圖，有測試守）。
+  /// 2. **不得跨市場刪除**——本方法原本無條件刪光區間內所有列，在 TWSE 單一
+  ///    writer 時代無害；接上櫃後兩市場寫同一天會互相清除，且因為刪完立刻
+  ///    寫入自己的資料，筆數看起來正常，不會有任何錯誤訊號。
+  ///
+  /// 故以 `stock_master.market` 限縮：清得到同市場的變體，碰不到另一市場。
   Future<int> deleteDayTradingForDateRange(
     DateTime startDate,
-    DateTime endDate,
-  ) async {
-    return (delete(dayTrading)..where(
-          (t) =>
-              t.date.isBiggerOrEqualValue(startDate) &
-              t.date.isSmallerOrEqualValue(endDate),
-        ))
-        .go();
+    DateTime endDate, {
+    required String market,
+  }) async {
+    return customUpdate(
+      'DELETE FROM day_trading '
+      'WHERE date >= ? AND date <= ? '
+      'AND symbol IN (SELECT symbol FROM stock_master WHERE market = ?)',
+      variables: [
+        Variable.withDateTime(startDate),
+        Variable.withDateTime(endDate),
+        Variable.withString(market),
+      ],
+      updates: {dayTrading},
+    );
   }
 
   /// 取得資料庫中最新的當沖資料日期

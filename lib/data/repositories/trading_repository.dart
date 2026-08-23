@@ -162,7 +162,11 @@ class TradingRepository implements ITradingRepository {
         const Duration(hours: DataFreshness.dayTradingDeleteWindowAfterHours),
       );
       await _db.transaction(() async {
-        await _db.deleteDayTradingForDateRange(deleteStart, deleteEnd);
+        await _db.deleteDayTradingForDateRange(
+          deleteStart,
+          deleteEnd,
+          market: MarketCode.twse,
+        );
         await _db.insertDayTradingData(entries);
       });
 

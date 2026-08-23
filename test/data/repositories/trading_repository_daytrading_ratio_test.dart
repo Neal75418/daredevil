@@ -113,6 +113,36 @@ void main() {
     expect(await syncAndReadRatio(), 0.0);
   });
 
+  test('🚨 寫入某市場不得刪掉同日另一市場的當沖資料', () async {
+    // 上櫃已有當日資料（模擬上櫃先同步完）
+    await db.upsertStocks([
+      StockMasterCompanion.insert(symbol: '6104', name: '創惟', market: 'TPEx'),
+    ]);
+    await db.insertDayTradingData([
+      DayTradingCompanion.insert(
+        symbol: '6104',
+        date: day,
+        buyVolume: const Value(1000),
+        sellVolume: const Value(900),
+        dayTradingRatio: const Value(30.0),
+        tradeVolume: const Value(500),
+      ),
+    ]);
+
+    // 上市接著同步同一天
+    await seedPriceVolume(4000);
+    stubDayTrading(1000);
+    await repo.syncAllDayTradingFromTwse(date: day, force: true);
+
+    final otc = await db.getDayTradingHistory(
+      '6104',
+      startDate: day,
+      endDate: day,
+    );
+    expect(otc, isNotEmpty, reason: 'delete window 按日期刪光不分市場，接上櫃後兩市場會互相清除');
+    expect(otc.single.dayTradingRatio, 30.0, reason: '既有值不得被覆寫');
+  });
+
   test('當沖量為 0 → 比例為 0', () async {
     await seedPriceVolume(4000);
     stubDayTrading(0);
