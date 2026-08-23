@@ -140,6 +140,13 @@ abstract final class ApiEndpoints {
       '/web/stock/margin_trading/margin_balance/margin_bal_result.php';
 
   /// TPEX OpenAPI 基礎 URL（免費、無限制）
+  /// 上櫃現股當沖交易統計（逐檔）
+  ///
+  /// 新站路徑（舊的 `/web/stock/.../intraday_trading_list.php` 已 302）。
+  /// **無視 `date` 參數，永遠回最新交易日**——寫入日期必須取回應的 `date`。
+  /// 回應含兩張表：第一張是全市場彙總，**逐檔資料在第二張**。
+  static const String tpexDayTrading = '/www/zh-tw/intraday/stat';
+
   static const String tpexOpenApiBaseUrl = 'https://www.tpex.org.tw/openapi';
 
   /// 櫃買指數歷史（OHLC + Change）- OpenAPI（免費、無限制）

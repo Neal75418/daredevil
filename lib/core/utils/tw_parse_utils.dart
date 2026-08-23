@@ -52,24 +52,30 @@ abstract final class TwParseUtils {
   ///
   /// **防護動機**：API 偶爾回傳髒日期字串（例如 `00001218`），早期僅檢查長度
   /// 而未驗證內容，導致 `0000-12-18` 等錯誤年份寫入 DB 並污染走勢圖與均線。
-  static DateTime parseAdDate(String dateStr) {
-    final fallback = DateContext.normalize(DateTime.now());
-    if (dateStr.length != 8) return fallback;
+  /// 解析西元緊湊日期（`YYYYMMDD`），**無效時回 null**。
+  ///
+  /// [parseAdDate] 的嚴格版。當日期本身就是「這批資料屬於哪天」的唯一依據時
+  /// （例如上櫃當沖端點無視請求日期、只能信回應的 `date`），回退成今天會把
+  /// 最新資料寫成錯誤日期且毫無訊號——那種情況必須拿 null 整批丟棄。
+  static DateTime? parseAdDateOrNull(String? dateStr) {
+    if (dateStr == null || dateStr.length != 8) return null;
 
     final year = int.tryParse(dateStr.substring(0, 4));
     final month = int.tryParse(dateStr.substring(4, 6));
     final day = int.tryParse(dateStr.substring(6, 8));
-    if (year == null || month == null || day == null) return fallback;
+    if (year == null || month == null || day == null) return null;
 
-    // 年份過早視為解析錯誤（例如 "0000"）
-    if (year < ApiConfig.minSaneAdYear) return fallback;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return fallback;
+    if (year < ApiConfig.minSaneAdYear) return null;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
 
     final date = DateTime(year, month, day);
     // 驗證日期未被正規化（例如 2/30 會變成 3/2，表示原始日期無效）
-    if (date.month != month || date.day != day) return fallback;
+    if (date.month != month || date.day != day) return null;
     return date;
   }
+
+  static DateTime parseAdDate(String dateStr) =>
+      parseAdDateOrNull(dateStr) ?? DateContext.normalize(DateTime.now());
 
   /// 解析含斜線的民國日期（例如 "115/01/02"）
   ///

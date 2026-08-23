@@ -5,6 +5,7 @@ library;
 
 export 'insider_aggregation.dart';
 export 'tpex_daily_price.dart';
+export 'tpex_day_trading.dart';
 export 'tpex_declared_dividend.dart';
 export 'tpex_insider_holding.dart';
 export 'tpex_insider_transfer.dart';

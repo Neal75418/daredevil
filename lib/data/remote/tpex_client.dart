@@ -1312,4 +1312,102 @@ class TpexClient {
     _dio.close(force: false);
     _cache.clear();
   }
+
+  /// 上櫃現股當沖交易統計（逐檔）
+  ///
+  /// **與上市的日期語意相反**：TWSE TWTB4U 吃 `date` 參數，那條路的守衛是
+  /// 「回應日期 ≠ 請求日期就整批丟棄」；本端點**無視 `date` 參數、永遠回最新
+  /// 交易日**（2026-08-23 實測六個日期回同一份資料、md5 相同），故資料日期
+  /// 取自回應的 `date`，呼叫端據此寫入，不可用請求日期。
+  ///
+  /// 回應含兩張表：第一張是全市場彙總，**逐檔在第二張**——不可重用只取
+  /// `tables.first` 的既有 helper。`stat` 是小寫 `ok`（上市是大寫 `OK`）。
+  Future<List<TpexDayTrading>> getAllDayTradingData() {
+    return MarketClientMixin.executeRequest(_tag, '當沖資料', () async {
+      const cacheKey = 'tpexDayTrading';
+      final cached = _cache.get(cacheKey) as List<TpexDayTrading>?;
+      if (cached != null) return cached;
+
+      final response = await _dio.get(
+        ApiEndpoints.tpexDayTrading,
+        queryParameters: {'type': 'Daily', 'response': 'json'},
+        options: Options(headers: {'Accept': 'application/json'}),
+      );
+
+      if (response.statusCode != 200) {
+        throw ApiException(
+          '$_tag API error: ${response.statusCode}',
+          response.statusCode,
+        );
+      }
+
+      final data = MarketClientMixin.decodeResponseData(
+        response.data,
+        _tag,
+        '當沖資料',
+      );
+      if (data == null) return const <TpexDayTrading>[];
+
+      if (data['stat']?.toString().toLowerCase() != 'ok') {
+        return const <TpexDayTrading>[];
+      }
+
+      // 資料日期：無從驗證就整批丟棄——寫錯日期比沒資料糟。
+      final dataDate = TwParseUtils.parseAdDateOrNull(data['date']?.toString());
+      if (dataDate == null) {
+        AppLogger.warning(_tag, '當沖回應缺 date 欄位，整批丟棄');
+        return const <TpexDayTrading>[];
+      }
+
+      // 逐檔在第二張表：第一張是全市場彙總（單列、無證券代號欄）。
+      // 以「欄數 ≥ 6 且首欄是代號」定位，不寫死索引。
+      final tables = data['tables'];
+      if (tables is! List) return const <TpexDayTrading>[];
+      List<dynamic>? rows;
+      for (final t in tables) {
+        if (t is! Map) continue;
+        final d = t['data'];
+        if (d is List &&
+            d.isNotEmpty &&
+            d.first is List &&
+            d.first.length >= 6) {
+          rows = d;
+          break;
+        }
+      }
+      if (rows == null) {
+        AppLogger.warning(_tag, '當沖回應找不到逐檔表，整批丟棄');
+        return const <TpexDayTrading>[];
+      }
+
+      final result = <TpexDayTrading>[];
+      for (final raw in rows) {
+        if (raw is! List || raw.length < 6) continue;
+        final code = raw[0]?.toString().trim() ?? '';
+        // ETF／債券等非個股代號一併排除（比照上市路徑）
+        if (!StockPatterns.isValidCode(code)) continue;
+
+        // 千分位逗號、全形空白、`--` 哨兵一併處理；解析不出來就跳過該列，
+        // 不落 0——0 在當沖語意下是合法值（無當沖），不可與「讀不到」混淆。
+        final volume = TwParseUtils.parseFormattedDouble(raw[3]);
+        final buy = TwParseUtils.parseFormattedDouble(raw[4]);
+        final sell = TwParseUtils.parseFormattedDouble(raw[5]);
+        if (volume == null || buy == null || sell == null) continue;
+
+        result.add(
+          TpexDayTrading(
+            date: dataDate,
+            code: code,
+            name: raw[1]?.toString().trim() ?? '',
+            buyVolume: buy,
+            sellVolume: sell,
+            totalVolume: volume,
+          ),
+        );
+      }
+
+      _cache.put(cacheKey, result);
+      return result;
+    });
+  }
 }
