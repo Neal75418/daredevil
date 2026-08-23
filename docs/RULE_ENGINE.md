@@ -45,10 +45,15 @@ flowchart LR
     Engine --> Score["分數合成"]
     Score --> Modes["三模式選股<br/>起漲 / 強勢 / 回檔"]
 
-    style Data fill:#2563EB,color:#fff,stroke:#1D4ED8
-    style Engine fill:#4F46E5,stroke:#3730A3,color:#fff
-    style Score fill:#059669,color:#fff,stroke:#047857
-    style Modes fill:#D97706,color:#fff,stroke:#B45309
+    classDef src fill:#2563EB,stroke:#1D4ED8,stroke-width:2px,color:#FFFFFF
+    classDef eng fill:#4F46E5,stroke:#3730A3,stroke-width:2px,color:#FFFFFF
+    classDef calc fill:#059669,stroke:#047857,stroke-width:2px,color:#FFFFFF
+    classDef out fill:#D97706,stroke:#B45309,stroke-width:2px,color:#FFFFFF
+
+    class Data src
+    class Engine eng
+    class Score calc
+    class Modes out
 ```
 
 | 項目 | 說明                    |
@@ -66,8 +71,8 @@ flowchart LR
 
 | 規則                  | 基準分 | 條件                         |
 |:--------------------|----:|:---------------------------|
-| REVERSAL_W2S        | +35 | 弱轉強：突破區間上緣                 |
-| REVERSAL_S2W        | -25 | 強轉弱：跌破支撐                   |
+| REVERSAL_W2S        | +35 | 弱轉強（限 trendState ∈ 下跌/盤整）：突破區間上緣 **或** 形成更高低點；兩者皆需量能確認 |
+| REVERSAL_S2W        | -25 | 強轉弱（限 trendState ∈ 上升/盤整）：跌破支撐 **或** 跌破區間底部 **或** 形成更低高點 |
 | TECH_BREAKOUT       | +25 | 突破壓力位（3% buffer + MA20 確認） |
 | TECH_BREAKDOWN      | -20 | 跌破支撐位（3% buffer + 量能確認；無 MA20 過濾，多空不對稱為現狀，對稱化需回測驗證） |
 | VOLUME_SPIKE        | +22 | 量 >= 4x 均量且價變 >= 1.5%      |
@@ -129,7 +134,7 @@ flowchart LR
 | INSTITUTIONAL_SELL_STREAK       | -15 | 法人連賣 >= 4 日          |
 | FOREIGN_SHAREHOLDING_INCREASING | +18 | 外資持股 5 日增 >= 0.5%    |
 | FOREIGN_SHAREHOLDING_DECREASING | -12 | 外資持股 5 日減 >= 0.5%    |
-| DAY_TRADING_HIGH                |   0 | 當沖比例 >= 50% + 萬張以上   |
+| DAY_TRADING_HIGH                |   0 | 當沖比例落在 **[50%, 70%)**；≥70% 由 DAY_TRADING_EXTREME 專屬 |
 | DAY_TRADING_EXTREME             |  -5 | 當沖比例 >= 70% + 3 萬張以上 |
 | CONCENTRATION_HIGH              |   0 | 大戶持股集中度 >= 60%（noise filter, demote 0） |
 
@@ -155,9 +160,9 @@ flowchart LR
 | 規則                     | 基準分 | 條件                                |
 |:-----------------------|----:|:----------------------------------|
 | EPS_YOY_SURGE          | +22 | EPS 年增 >= 50% + 站上 MA60           |
-| EPS_CONSECUTIVE_GROWTH | +18 | 連續 >= 2 季 EPS 季增 >= 10% + 站上 MA20 |
+| EPS_CONSECUTIVE_GROWTH | +18 | 連續 >= 2 季 EPS **年增**（比去年同季，350–380 天前）>= 10% + 站上 MA20 |
 | EPS_TURNAROUND         | +15 | 前季虧損、本季 EPS >= 0.3 元              |
-| EPS_DECLINE_WARNING    | -12 | 連續 2 季 EPS 季減 >= 20%              |
+| EPS_DECLINE_WARNING    | -12 | 連續 2 季 EPS **年減**（比去年同季） >= 20%              |
 
 ### ROE 分析
 
@@ -230,7 +235,7 @@ flowchart LR
 | 規則                | 基準分 | 條件                            |
 |:------------------|----:|:------------------------------|
 | PULLBACK_TO_MA20  | +15 | 強勢趨勢拉回 MA20、量縮、趨勢未破           |
-| PULLBACK_TO_MA10  | +12 | 淺回檔至 MA10（close 仍在 MA20 上）、量縮 |
+| PULLBACK_TO_MA10  | +12 | 淺回檔至 MA10；需 `close > MA20 × 1.03`（突破 MA20 拉回帶上緣，與深回檔互斥）、量縮 |
 | HAMMER_AT_SUPPORT | +18 | 拉回 MA20/MA60 支撐 + 錘子線止跌       |
 | KD_HIGH_PULLBACK  | +12 | KD 高檔回落未死叉、多頭排列維持             |
 
@@ -247,12 +252,19 @@ flowchart LR
     Decay --> Sum["加總 + 夾住<br/>上限 80"]
     Sum --> Gate["落庫閘門<br/>|raw| ≥ 8"]
 
-    style Fire fill:#2563EB,color:#fff,stroke:#1D4ED8
-    style Mutex fill:#7C3AED,color:#fff,stroke:#5B21B6
-    style Lookup fill:#4F46E5,color:#fff,stroke:#3730A3
-    style Decay fill:#059669,color:#fff,stroke:#047857
-    style Sum fill:#D97706,color:#fff,stroke:#B45309
-    style Gate fill:#DC2626,color:#fff,stroke:#991B1B
+    classDef src fill:#2563EB,stroke:#1D4ED8,stroke-width:2px,color:#FFFFFF
+    classDef filt fill:#7C3AED,stroke:#5B21B6,stroke-width:2px,color:#FFFFFF
+    classDef eng fill:#4F46E5,stroke:#3730A3,stroke-width:2px,color:#FFFFFF
+    classDef calc fill:#059669,stroke:#047857,stroke-width:2px,color:#FFFFFF
+    classDef out fill:#D97706,stroke:#B45309,stroke-width:2px,color:#FFFFFF
+    classDef gate fill:#DC2626,stroke:#991B1B,stroke-width:2px,color:#FFFFFF
+
+    class Fire src
+    class Mutex filt
+    class Lookup eng
+    class Decay calc
+    class Sum out
+    class Gate gate
 ```
 
 每檔股票會**跑兩次**（`Horizon.short` = 5D、`Horizon.long` = 60D），各得一個分數。
@@ -277,7 +289,9 @@ VOLUME／BREAKOUT 的組合加成。
 
 ## ⚙️ 關鍵參數
 
-> 來源：`lib/core/constants/rule_params.dart`（8 typed classes, 200+ 參數）
+> 來源：`lib/core/constants/rule_params.dart` barrel（`RuleParams` 本身 + 8 個 domain
+> class：Trend / Indicator / Institutional / Fundamental / Pattern / Pullback / Sector /
+> Alert）。下表只列常查的幾個，完整清單見 `rule_params*.dart`。
 
 | 參數                          |   值 | 說明         |
 |:----------------------------|----:|:-----------|
@@ -288,13 +302,14 @@ VOLUME／BREAKOUT 的組合加成。
 | institutionalStreakDays     |   4 | 法人連續買賣天數   |
 | insiderSellingStreakMonths  |   3 | 董監連續減持月數   |
 | highPledgeRatioThreshold    | 70% | 高質押門檻      |
-| foreignConcentrationWarning | 60% | 外資集中警告     |
+| foreignConcentrationWarningThreshold | 60% | 外資集中警告（另有 Danger 70%） |
 | concentrationHighThreshold  | 60% | 籌碼集中度門檻    |
 | peOvervaluedThreshold       |  60 | PE 過高警示門檻  |
 | epsYoYSurgeThreshold        | 50% | EPS 年增暴增門檻 |
 | epsConsecutiveQuarters      |   2 | EPS 連續成長季數 |
 | roeExcellentThreshold       | 15% | ROE 優異門檻   |
-| minScoreThreshold           |  12 | 最低評分門檻     |
+| minScoreThreshold           |  12 | 「訊號成立」分級界線（**不是**落庫閘門）     |
+| observationScoreThreshold   |   8 | **落庫閘門**：|raw| ≥ 8 才寫 daily_analysis |
 
 ---
 
@@ -309,6 +324,19 @@ VOLUME／BREAKOUT 的組合加成。
 | insider_holding      | 董監持股     |
 | daily_analysis       | 分析結果     |
 | daily_reason         | 觸發理由（三模式選股即時聚合來源） |
+
+規則另外會讀這些來源表（缺資料時對應規則自然 no-fire）：
+
+| 表                    | 支撐的規則                                        |
+|:---------------------|:---------------------------------------------|
+| shareholding         | FOREIGN_SHAREHOLDING_INCREASING / DECREASING / EXODUS |
+| holding_distribution | CONCENTRATION_HIGH、FOREIGN_CONCENTRATION_WARNING |
+| day_trading          | DAY_TRADING_HIGH / EXTREME                   |
+| monthly_revenue      | REVENUE_* 四條                                 |
+| financial_data       | EPS_* 四條、ROE_* 三條                            |
+| stock_valuation      | HIGH_DIVIDEND_YIELD、PE_*、PBR_UNDERVALUED      |
+| news_item            | NEWS_RELATED                                 |
+| rule_accuracy        | 校準回饋迴路（見 [CALIBRATION.md](CALIBRATION.md)）   |
 
 ---
 
