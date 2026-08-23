@@ -89,130 +89,185 @@ class TradingRepository implements ITradingRepository {
 
       if (data.isEmpty) return 0;
 
-      // 2. 取得同日期的價格資料以計算比例
-      // 註：呼叫此方法前必須先同步價格資料
-      var prices = await _db.getPricesForDate(targetDate);
-
-      // 備援：範圍查詢,防「帶時間分量的髒歷史日期」逃過 equals 比對。
-      // (2026-08-15 審計刪掉原「備援 1」:targetDate 經 DateContext.normalize
-      // 必為本地午夜,對它 .toLocal() 是 no-op,與主查詢逐 bit 相同)
-      if (prices.isEmpty) {
-        final year = targetDate.year;
-        final month = targetDate.month;
-        final day = targetDate.day;
-
-        final start = DateTime(year, month, day); // 本地午夜
-        final end = start
-            .add(const Duration(days: 1))
-            .subtract(const Duration(milliseconds: 1));
-
-        final result = await _db.getAllPricesInRange(
-          startDate: start,
-          endDate: end,
-        );
-        prices = result.values.expand((list) => list).toList();
-      }
-
-      AppLogger.info('TradingRepo', '用於計算的價格資料: ${prices.length} 筆');
-      final volumeMap = <String, double>{};
-      for (final p in prices) {
-        if (p.volume != null) {
-          volumeMap[p.symbol] = p.volume!.toDouble();
-        }
-      }
-
-      final entries = <DayTradingCompanion>[];
-
-      for (final item in data) {
-        // 過濾無效股票代碼（權證、TDR 等）
-        if (!StockPatterns.isValidCode(item.code)) continue;
-
-        double ratio = 0;
-        final totalVolumeFromPrice = volumeMap[item.code] ?? 0;
-
-        // 優先使用價格表的總成交量，否則使用當沖成交量
-        // 但計算比例需要總市場成交量
-        if (totalVolumeFromPrice > 0) {
-          ratio = (item.totalVolume / totalVolumeFromPrice) * 100;
-        } else {
-          // 若無價格資料則備援（需確認同步順序）
-          ratio = 0;
-        }
-
-        // 驗證比例
-        if (ratio > DataFreshness.dayTradingMaxValidRatio) {
-          ratio = DataFreshness.dayTradingMaxValidRatio;
-        }
-        if (ratio < 0) ratio = 0;
-
-        entries.add(
-          DayTradingCompanion.insert(
-            symbol: item.code,
-            date: targetDate, // 使用標準化日期，確保與查詢一致
-            buyVolume: Value(item.buyVolume),
-            sellVolume: Value(item.sellVolume),
-            dayTradingRatio: Value(ratio),
-            tradeVolume: Value(item.totalVolume),
-          ),
-        );
-      }
-
-      // 刪除舊記錄（可能存在因 UTC/本地時間不一致導致的重複）
-      // 刪除範圍：目標日期的前後各 12 小時（涵蓋 UTC 偏移）
-      final deleteStart = targetDate.subtract(
-        const Duration(hours: DataFreshness.dayTradingDeleteWindowBeforeHours),
+      return _persistDayTrading(
+        dataDate: targetDate,
+        market: MarketCode.twse,
+        items: [
+          for (final item in data)
+            (
+              code: item.code,
+              buy: item.buyVolume,
+              sell: item.sellVolume,
+              volume: item.totalVolume,
+            ),
+        ],
       );
-      final deleteEnd = targetDate.add(
-        const Duration(hours: DataFreshness.dayTradingDeleteWindowAfterHours),
-      );
-      await _db.transaction(() async {
-        await _db.deleteDayTradingForDateRange(
-          deleteStart,
-          deleteEnd,
-          market: MarketCode.twse,
-          batchSymbols: {for (final e in entries) e.symbol.value},
-        );
-        await _db.insertDayTradingData(entries);
-      });
-
-      // 統計當沖比例分佈
-      final highRatioEntries = entries.where((e) {
-        final ratio = e.dayTradingRatio.value;
-        return ratio != null &&
-            ratio >= DataFreshness.dayTradingHighDisplayRatio;
-      }).toList();
-      final extremeRatioCount = entries.where((e) {
-        final ratio = e.dayTradingRatio.value;
-        return ratio != null &&
-            ratio >= DataFreshness.dayTradingExtremeDisplayRatio;
-      }).length;
-      final zeroRatioCount = entries.where((e) {
-        final ratio = e.dayTradingRatio.value;
-        return ratio == null || ratio == 0;
-      }).length;
-
-      AppLogger.info(
-        'TradingRepo',
-        '當沖資料寫入 ${entries.length} 筆 (上市, TWSE): '
-            '高比例(>=60%)=${highRatioEntries.length}，極高(>=70%)=$extremeRatioCount，零比例=$zeroRatioCount',
-      );
-
-      if (highRatioEntries.isNotEmpty) {
-        final highSymbols = highRatioEntries
-            .map(
-              (e) =>
-                  '${e.symbol.value}(${e.dayTradingRatio.value?.toStringAsFixed(1)}%)',
-            )
-            .join(', ');
-        AppLogger.info('TradingRepo', '高當沖股票: $highSymbols');
-      }
-      return entries.length;
     } on RateLimitException {
       rethrow;
     } on NetworkException {
       rethrow;
     } catch (e) {
       throw DatabaseException('Failed to sync day trading from TWSE', e);
+    }
+  }
+
+  /// 當沖寫入的共用路徑（上市／上櫃）
+  ///
+  /// 兩市場的差異只在**取得原始資料的方式與日期來源**；比例計算、delete
+  /// window、寫入與統計日誌完全相同，抽出共用避免兩份實作漂移。
+  ///
+  /// [dataDate] 已 normalize 的資料日。上市傳請求日（端點吃日期、且有
+  /// 「回應日期≠請求日期就丟棄」的守衛）；上櫃傳**回應的日期**（端點無視請求
+  /// 日期、永遠回最新交易日）。
+  Future<int> _persistDayTrading({
+    required DateTime dataDate,
+    required String market,
+    required List<({String code, double buy, double sell, double volume})>
+    items,
+  }) async {
+    if (items.isEmpty) return 0;
+
+    // 比例的分母來自價格表同日總量。取不到就給 0——0 在當沖語意下代表
+    // 「無當沖」，而分母未知時給任何非零值都是編造。
+    var prices = await _db.getPricesForDate(dataDate);
+    if (prices.isEmpty) {
+      final start = DateTime(dataDate.year, dataDate.month, dataDate.day);
+      final end = start
+          .add(const Duration(days: 1))
+          .subtract(const Duration(milliseconds: 1));
+      final result = await _db.getAllPricesInRange(
+        startDate: start,
+        endDate: end,
+      );
+      prices = result.values.expand((list) => list).toList();
+    }
+    final volumeMap = <String, double>{
+      for (final p in prices)
+        if (p.volume != null) p.symbol: p.volume!.toDouble(),
+    };
+
+    final entries = <DayTradingCompanion>[];
+    for (final item in items) {
+      if (!StockPatterns.isValidCode(item.code)) continue;
+
+      final total = volumeMap[item.code] ?? 0;
+      var ratio = total > 0 ? (item.volume / total) * 100 : 0.0;
+      if (ratio > DataFreshness.dayTradingMaxValidRatio) {
+        ratio = DataFreshness.dayTradingMaxValidRatio;
+      }
+      if (ratio < 0) ratio = 0;
+
+      entries.add(
+        DayTradingCompanion.insert(
+          symbol: item.code,
+          date: dataDate,
+          buyVolume: Value(item.buy),
+          sellVolume: Value(item.sell),
+          dayTradingRatio: Value(ratio),
+          tradeVolume: Value(item.volume),
+        ),
+      );
+    }
+    if (entries.isEmpty) return 0;
+
+    // 刪除舊記錄（歷史上 UTC/本地不一致造成的同日變體時間戳）。
+    // 範圍限縮在本市場 ∪ 本次批次——見 deleteDayTradingForDateRange 的說明。
+    final deleteStart = dataDate.subtract(
+      const Duration(hours: DataFreshness.dayTradingDeleteWindowBeforeHours),
+    );
+    final deleteEnd = dataDate.add(
+      const Duration(hours: DataFreshness.dayTradingDeleteWindowAfterHours),
+    );
+    await _db.transaction(() async {
+      await _db.deleteDayTradingForDateRange(
+        deleteStart,
+        deleteEnd,
+        market: market,
+        batchSymbols: {for (final e in entries) e.symbol.value},
+      );
+      await _db.insertDayTradingData(entries);
+    });
+
+    final high = entries
+        .where(
+          (e) =>
+              (e.dayTradingRatio.value ?? 0) >=
+              DataFreshness.dayTradingHighDisplayRatio,
+        )
+        .toList();
+    final extreme = entries
+        .where(
+          (e) =>
+              (e.dayTradingRatio.value ?? 0) >=
+              DataFreshness.dayTradingExtremeDisplayRatio,
+        )
+        .length;
+    final zero = entries
+        .where((e) => (e.dayTradingRatio.value ?? 0) == 0)
+        .length;
+
+    final label = market == MarketCode.twse ? '上市, TWSE' : '上櫃, TPEx';
+    AppLogger.info(
+      'TradingRepo',
+      '當沖資料寫入 ${entries.length} 筆 ($label, $dataDate): '
+          '高比例(>=60%)=${high.length}，極高(>=70%)=$extreme，零比例=$zero',
+    );
+    if (high.isNotEmpty) {
+      AppLogger.info(
+        'TradingRepo',
+        '高當沖股票: ${high.map((e) => '${e.symbol.value}'
+            '(${e.dayTradingRatio.value?.toStringAsFixed(1)}%)').join(', ')}',
+      );
+    }
+    return entries.length;
+  }
+
+  /// 同步上櫃當沖（TPEx `/www/zh-tw/intraday/stat`，免費無額度）
+  ///
+  /// **日期由回應決定**：端點無視請求日期、永遠回最新交易日，故先取資料再依
+  /// 其 `date` 做新鮮度檢查與寫入。照抄上市的「用請求日期寫入」會把最新資料
+  /// 掛到錯誤的日子上，而且筆數正常、毫無訊號。
+  ///
+  /// 呼叫端不傳日期正是為此——簽章上就杜絕誤用。
+  @override
+  Future<int> syncAllDayTradingFromTpex({bool force = false}) async {
+    try {
+      // 端點免費且 client 端有快取，先抓再判新鮮度的成本可忽略
+      final data = await _tpexClient.getAllDayTradingData();
+      if (data.isEmpty) return 0;
+
+      final dataDate = DateContext.normalize(data.first.date);
+
+      if (!force) {
+        final existing = await _db.getDayTradingCountForDateAndMarket(
+          dataDate,
+          MarketCode.tpex,
+        );
+        if (existing > _batchFreshnessThreshold) {
+          AppLogger.info('TradingRepo', '上櫃當沖 $dataDate 已有 $existing 筆，跳過');
+          return 0;
+        }
+      }
+
+      return _persistDayTrading(
+        dataDate: dataDate,
+        market: MarketCode.tpex,
+        items: [
+          for (final d in data)
+            (
+              code: d.code,
+              buy: d.buyVolume,
+              sell: d.sellVolume,
+              volume: d.totalVolume,
+            ),
+        ],
+      );
+    } on RateLimitException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e) {
+      throw DatabaseException('Failed to sync day trading from TPEx', e);
     }
   }
 

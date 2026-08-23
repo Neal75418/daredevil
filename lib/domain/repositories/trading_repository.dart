@@ -17,8 +17,16 @@ abstract class ITradingRepository {
 
   /// 從 TWSE 同步全市場當沖資料（上市）
   ///
-  /// 無上櫃對等 method — TPEX 當沖端點被 Cloudflare 擋、OpenAPI 也無替代。
+  /// 上櫃對等見 [syncAllDayTradingFromTpex]（2026-08-23 接上；先前記載的
+  /// 「TPEX 當沖端點被 Cloudflare 擋」指的是舊站路徑，櫃買改版後已 302）。
   Future<int> syncAllDayTradingFromTwse({DateTime? date, bool force = false});
+
+  /// 同步上櫃當沖（TPEx `/www/zh-tw/intraday/stat`，免費無額度）
+  ///
+  /// **刻意不收日期**：端點無視請求日期、永遠回最新交易日，寫入日期取自回應。
+  /// 收一個做不到的參數只會誘使呼叫端以為自己能指定歷史日。歷史回補另循
+  /// FinMind（逐檔、吃額度），不走這條。
+  Future<int> syncAllDayTradingFromTpex({bool force = false});
 
   // ==================================================
   // 融資融券
