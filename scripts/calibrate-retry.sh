@@ -130,6 +130,16 @@ for i in $(seq 1 "$MAX_RETRIES"); do
     exit 0
   fi
 
+  # 7 = walk-forward gate FAIL、8 = 抓不到 gate 判準(2026-08-29 稽核
+  # #9/#15)。兩者都**跑完了**、重試不會改變結果——不是 transient,且
+  # 必須從 exit code 傳遞出去,否則建在這層之上的自動化分不出 PASS/FAIL。
+  if [ "$exit_code" -eq 7 ] || [ "$exit_code" -eq 8 ]; then
+    rm -f "$round_log"
+    echo ""
+    echo "[$(date)] attempt $i: 管線跑完但 gate 未通過(exit $exit_code)——不重試" >&2
+    exit "$exit_code"
+  fi
+
   new_lines=$(cat "$round_log")
   rm -f "$round_log"
 

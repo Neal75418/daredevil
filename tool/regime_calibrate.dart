@@ -27,6 +27,8 @@ import 'dart:math' as math;
 
 import 'package:daredevil/data/database/app_database.dart';
 
+import 'tool_db.dart';
+
 import 'recalibrate.dart' show Calibrator;
 import 'regime_report.dart';
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart' as cal;
@@ -155,7 +157,13 @@ Future<int> runRegimeCalibrateCli(List<String> args) async {
   final sampleSize =
       int.tryParse(Platform.environment['REGIME_SAMPLE_SIZE'] ?? '400') ?? 400;
 
-  final db = AppDatabase.forToolFile(dbPath);
+  final AppDatabase db;
+  try {
+    db = openToolDatabase(dbPath);
+  } on SchemaFingerprintMismatch catch (e) {
+    stderr.writeln(e.message);
+    return 6;
+  }
   try {
     List<String>? sample;
     final rows = await db

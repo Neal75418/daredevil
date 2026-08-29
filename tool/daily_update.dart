@@ -48,6 +48,8 @@ import 'package:daredevil/core/utils/build_stamp.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
 
+import 'tool_db.dart';
+
 Future<void> main(List<String> args) async {
   AppLogger.forceOutput = true; // CLI:繞過 assert gate,否則日誌全滅
   // stderr 也要輪替:故障訊息落在那裡,而它曾長到 153 MB(見 intraday 註解)
@@ -100,7 +102,12 @@ Future<void> main(List<String> args) async {
 
   AppDatabase? database;
   try {
-    database = AppDatabase.forToolFile(dbPath);
+    database = openToolDatabase(
+      dbPath,
+      // app DB 的非 user-input 表全是 derived data,fingerprint reset
+      // 可接受(隔天 syncer 重抓);校準鏈的 calibration.db 不得如此
+      allowSchemaReset: true,
+    );
     final result = await runHeadlessUpdate(
       database: database,
       // 純 Dart 檔案版(DB 同目錄):shared_preferences 是 flutter plugin,

@@ -61,6 +61,8 @@ import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
+
+import 'tool_db.dart';
 import 'package:drift/drift.dart' show Value;
 
 /// 單檔視為「已回補」的最少列數比例（相對於預期交易日數）
@@ -69,7 +71,19 @@ const _resumeCoverageRatio = 0.8;
 /// 每檔之間的間隔——600/hr = 每 6 秒 1 次，取 6.2 秒留餘裕
 const _callInterval = Duration(milliseconds: 6200);
 
-Future<int> main(List<String> args) async {
+/// ⚠️ `main` 的回傳值 Dart **不看**——只有 `exit()` 或 `io.exitCode` 才設
+/// 得了 process exit code(2026-08-29 稽核實測:`Future<int> main` return 4
+/// 的 process 實際 exit 0)。本檔的 0/1/2/4 曾經全是空話:限流中止、
+/// token 未設、DB 不存在、全數失敗一律對呼叫端呈現為成功,而 docstring
+/// 建議的 `until ...; do sleep 3600; done` 重跑迴圈會在第一輪就結束。
+/// 保持這個分工:`main` 只負責把 [runTpexDayTradingCli] 的碼交給 exit()。
+Future<void> main(List<String> args) async {
+  exit(await runTpexDayTradingCli(args));
+}
+
+/// CLI 本體。回傳 exit code(0 成功 / 1 全數失敗 / 2 前置條件缺 /
+/// 4 限流中止)。
+Future<int> runTpexDayTradingCli(List<String> args) async {
   final dryRun = args.contains('--dry-run');
   final all = args.contains('--all');
   final years = _intArg(args, '--years') ?? 2;
@@ -94,7 +108,13 @@ Future<int> main(List<String> args) async {
   print('📦 DB: $dbPath');
   print('📅 區間: ${_ymd(start)} → ${_ymd(end)}（$years 年）');
 
-  final db = AppDatabase.forToolFile(dbPath);
+  final AppDatabase db;
+  try {
+    db = openToolDatabase(dbPath);
+  } on SchemaFingerprintMismatch catch (e) {
+    stderr.writeln(e.message);
+    return 6;
+  }
   try {
     final stocks = await db.getStocksByMarket(MarketCode.tpex);
     final active = stocks.where((s) => s.isActive).toList();

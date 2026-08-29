@@ -29,6 +29,8 @@ import 'dart:io';
 import 'package:daredevil/core/constants/exit_params.dart';
 import 'package:daredevil/data/database/app_database.dart';
 
+import 'tool_db.dart';
+
 import 'replay_calibrator.dart';
 
 // ============================================================================
@@ -213,7 +215,13 @@ Future<int> runScoreValidateCli(List<String> args) async {
       int.tryParse(Platform.environment['SCORE_SAMPLE_SIZE'] ?? '400') ?? 400;
   final years = [2021, 2022, 2023, 2024, 2025, 2026];
 
-  final db = AppDatabase.forToolFile(dbPath);
+  final AppDatabase db;
+  try {
+    db = openToolDatabase(dbPath);
+  } on SchemaFingerprintMismatch catch (e) {
+    stderr.writeln(e.message);
+    return 6;
+  }
   try {
     final r = await db
         .customSelect(

@@ -38,6 +38,8 @@ import 'dart:math' as math;
 
 import 'package:daredevil/data/database/app_database.dart';
 
+import 'tool_db.dart';
+
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart' as cal;
 
 import 'recalibrate.dart' as recal;
@@ -459,7 +461,13 @@ Future<int> runWalkForwardCli(List<String> args) async {
   print('📂 DB: $dbPath');
   print('📅 Fold years: ${foldYears.join(", ")}');
 
-  final db = AppDatabase.forToolFile(dbPath);
+  final AppDatabase db;
+  try {
+    db = openToolDatabase(dbPath);
+  } on SchemaFingerprintMismatch catch (e) {
+    stderr.writeln(e.message);
+    return 6;
+  }
   try {
     List<String>? sample;
     if (sampleSize > 0) {

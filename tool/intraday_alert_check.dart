@@ -22,6 +22,8 @@ import 'package:daredevil/data/remote/intraday_quote_client.dart';
 import 'package:daredevil/domain/services/alert/intraday_alert_monitor.dart';
 import 'package:daredevil/domain/services/alert/intraday_poll_schedule.dart';
 
+import 'tool_db.dart';
+
 /// 把 offset 印成 `+8` / `+5:30` —— `inHours` 會截斷半小時時區
 /// (印度 +5:30 印成 +5、紐芬蘭 −3:30 印成 −3),診斷值不精確
 /// (2026-08-08 四次審查)。
@@ -103,7 +105,12 @@ Future<void> main(List<String> args) async {
 
   AppDatabase? database;
   try {
-    database = AppDatabase.forToolFile(dbPath);
+    database = openToolDatabase(
+      dbPath,
+      // app DB 的非 user-input 表全是 derived data,fingerprint reset
+      // 可接受(隔天 syncer 重抓);校準鏈的 calibration.db 不得如此
+      allowSchemaReset: true,
+    );
     // --force 時印出判定過程:靜默成功無法證明 API 真的打通了
     if (force) {
       final pending = (await database.getActiveAlerts())

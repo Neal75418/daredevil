@@ -100,6 +100,8 @@ import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/update/batch_data_builder.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
 
+import 'tool_db.dart';
+
 // ============================================================================
 // Public data models (importable by tests)
 // ============================================================================
@@ -1530,7 +1532,13 @@ Future<int> runReplayCalibratorCli(List<String> args) async {
   }
 
   print('📦 開啟 calibration DB: ${config.dbPath}');
-  final db = AppDatabase.forToolFile(config.dbPath);
+  final AppDatabase db;
+  try {
+    db = openToolDatabase(config.dbPath);
+  } on SchemaFingerprintMismatch catch (e) {
+    stderr.writeln(e.message);
+    return 6;
+  }
 
   try {
     final calibrator = ReplayCalibrator(db: db, config: config);

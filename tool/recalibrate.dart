@@ -520,8 +520,14 @@ RunMeta? readRunMeta(Database db) {
   final ResultSet rows;
   try {
     rows = db.select('SELECT key, value FROM calibration_run_meta');
-  } on SqliteException {
-    return null;
+  } on SqliteException catch (e) {
+    // 只吞「表不存在」(舊 DB / replay 未重跑)。其餘(BUSY 被別的 process
+    // 鎖住、CORRUPT、IOERR…)往上拋——回 null 會讓 isExcess 退成 false,
+    // 整份 candidate 改用**絕對模式**的虛無假設與門檻重算(實測 baseline
+    // 0.445/0.397 vs 平坦 0.55,cut 決策會實質分歧),而輸出與一次合法的
+    // 絕對模式跑完全同貌(2026-08-29 tool 稽核 #5)。
+    if (e.message.contains('no such table')) return null;
+    rethrow;
   }
   final map = {for (final r in rows) r['key'] as String: r['value'] as String};
   final mode = map['return_mode'];
@@ -548,8 +554,15 @@ Map<String, List<double>> loadDailyMeans(Database db, String period) {
       'WHERE period = ? ORDER BY rule_id, date',
       [period],
     );
-  } on SqliteException {
-    return {};
+  } on SqliteException catch (e) {
+    // 同 readReplayedRuleIds:只吞「表不存在」。回空 map 會讓每條規則的
+    // dailyMeans 變 const []、cut reason 全成 dates_too_few、t 值全 0,
+    // 於是負證據歸零(需 t <= -1.5)一條都不觸發、全部 score 0 + active
+    // false → lookup 全 fallback 到 hardcoded → promote 影響報「無變化」。
+    // 那正是唯一的人工判讀面,而它會與一次真正的 no-op 跑完全同貌
+    // (2026-08-29 tool 稽核 #4)。
+    if (e.message.contains('no such table')) return {};
+    rethrow;
   }
   final result = <String, List<double>>{};
   for (final r in rows) {
@@ -824,6 +837,9 @@ String _previewIds(List<String> ids) {
   return '${ids.take(limit).join(', ')} …（另 ${ids.length - limit} 條）';
 }
 
+/// 本輪請求處理的 horizon——缺產出時用來判定「本輪什麼都沒做」(稽核 #3)
+Set<String> requestedHorizons = {};
+
 Future<void> main(List<String> args) async {
   final config = _parseArgs(args);
   if (config == null) {
@@ -859,7 +875,8 @@ Future<void> main(List<String> args) async {
   _printReplayContext(db);
   final horizonResults = <String, HorizonOutput>{};
   try {
-    for (final horizon in _horizonsToProcess(config.horizon)) {
+    requestedHorizons = _horizonsToProcess(config.horizon).toSet();
+    for (final horizon in requestedHorizons) {
       print('');
       print('═══ Horizon: $horizon ═══');
       final result = _processHorizon(
@@ -891,10 +908,32 @@ Future<void> main(List<String> args) async {
       long: horizonResults[_horizonLong]!,
     );
     print('  ✅ Wrote $manifestPath');
+  } else if (!config.dryRun) {
+    // 稽核 #7:沒有 else 分支時,manifest 悄悄停在**上一輪**的雜湊,而
+    // 下方的 review 指引照樣叫人 promote 它——promote 後 manifest 描述
+    // 的檔案已經變了,每台既有安裝的 OTA 更新從此無聲 no-op。
+    stderr.writeln(
+      '⚠️  manifest 未重新產生(本輪未同時產出 short + long candidate)——'
+      '**不要** promote calibration_manifest_candidate.json,它仍是上一輪的雜湊',
+    );
   }
 
   print('');
   if (!config.dryRun) _printPromoteImpact(horizonResults.keys.toSet());
+
+  // 稽核 #3:缺 horizon 是「本輪什麼都沒產出」,不是成功。candidate 在
+  // .gitignore 內會跨輪留存,exit 0 會讓 calibrate.sh 宣告 Stage 3 成功、
+  // 操作者 review 到的其實是上週的產物。
+  final missing = requestedHorizons.difference(horizonResults.keys.toSet());
+  if (missing.isNotEmpty) {
+    stderr.writeln(
+      '❌ 以下 horizon 未產出 candidate(rule_accuracy 無該 period 統計):'
+      '${missing.join(", ")}——磁碟上的 *_candidate.json 是**前一輪**的產物,'
+      '不得拿本輪的成功訊息為它們背書',
+    );
+    exitCode = 5;
+    return;
+  }
   print('✅ 完成');
   if (!config.dryRun) {
     print('');

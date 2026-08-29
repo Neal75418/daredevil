@@ -30,6 +30,8 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 
+import 'tool_db.dart';
+
 import 'replay_calibrator.dart';
 
 // ============================================================================
@@ -449,7 +451,13 @@ Future<int> runExitValidateCli(List<String> args) async {
   }
 
   print('📦 開啟 calibration DB: $dbPath');
-  final db = AppDatabase.forToolFile(dbPath);
+  final AppDatabase db;
+  try {
+    db = openToolDatabase(dbPath);
+  } on SchemaFingerprintMismatch catch (e) {
+    stderr.writeln(e.message);
+    return 6;
+  }
   try {
     final validator = ExitValidator(
       db: db,

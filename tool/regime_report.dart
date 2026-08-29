@@ -30,6 +30,8 @@ import 'dart:io';
 
 import 'package:daredevil/data/database/app_database.dart';
 
+import 'tool_db.dart';
+
 import 'replay_calibrator.dart';
 
 // ============================================================================
@@ -239,7 +241,13 @@ Future<int> runRegimeReportCli(List<String> args) async {
   print('📂 DB: $dbPath');
   print('📅 Years: ${years.join(", ")}');
 
-  final db = AppDatabase.forToolFile(dbPath);
+  final AppDatabase db;
+  try {
+    db = openToolDatabase(dbPath);
+  } on SchemaFingerprintMismatch catch (e) {
+    stderr.writeln(e.message);
+    return 6;
+  }
   try {
     List<String>? sample;
     if (sampleSize > 0) {

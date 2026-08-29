@@ -258,9 +258,19 @@ else
   WF_VERDICT="$(grep -oE 'WALKFORWARD_VERDICT=(PASS|FAIL)' "$wf_out" \
     | tail -1 | cut -d= -f2)"
   rm -f "$wf_out"
-  if [ "$wf_code" -eq 0 ]; then
+  # 空判準 == 沒有 gate 結論,與 setup 失敗同級(2026-08-29 稽核 #9):
+  # 只看 wf_code 的話,任何輸出格式/緩衝變動都會讓判準變空,而腳本照樣
+  # exit 0 印「判準:未知」——上面那條「沒有 gate 判準的 candidate 不該
+  # 被當成可 review 的產出」只被執行了一半。temp 檔在此之前已刪,事後
+  # 無從追查。
+  if [ "$wf_code" -eq 0 ] && [ -n "$WF_VERDICT" ]; then
     echo ""
-    echo "✅ Walk-forward 跑完——判準:${WF_VERDICT:-未知}"
+    echo "✅ Walk-forward 跑完——判準:$WF_VERDICT"
+  elif [ "$wf_code" -eq 0 ]; then
+    echo ""
+    echo "❌ Walk-forward 跑完但抓不到 WALKFORWARD_VERDICT——沒有 gate 判準," >&2
+    echo "   candidate 不得當成可 review 的產出(輸出格式或緩衝可能已變)。" >&2
+    exit 8
   else
     echo ""
     echo "❌ Walk-forward setup 失敗(exit $wf_code)——這不是 gate FAIL,是根本" >&2
@@ -276,6 +286,19 @@ fi
 # ============================================================================
 # Summary + next steps
 # ============================================================================
+
+# gate FAIL 必須從 exit code 看得出來(2026-08-29 稽核 #15):
+# runWalkForwardCli 的 FAIL 回 1,但 run_walkforward.dart 斷言的是
+# `lessThan(2)`,於是 flutter test exit 0 → 本腳本 exit 0 → retry wrapper
+# 印「✅ PIPELINE COMPLETE」。人看得到 banner 裡的 FAIL,但任何建在
+# 這層之上的自動化都分不出 PASS/FAIL。7 = gate FAIL(非 transient)。
+if [ "${WF_VERDICT:-}" = "FAIL" ]; then
+  echo "=========================================================="
+  echo "⚠️  PIPELINE 跑完,但 WALK-FORWARD GATE = FAIL"
+  echo "   candidate 已產出但**不建議 promote**;細節見上方 Stage 4 區塊。"
+  echo "=========================================================="
+  exit 7
+fi
 
 echo "=========================================================="
 echo "✅ PIPELINE COMPLETE"
