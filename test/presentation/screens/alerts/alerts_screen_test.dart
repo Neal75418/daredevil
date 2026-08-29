@@ -255,6 +255,52 @@ void main() {
       expect(find.text('My note'), findsOneWidget);
     });
 
+    testWidgets('🚨 主檔查不到的啟用中提醒要標「無法監控」', (tester) async {
+      // release build 的 AppLogger 全等級靜默,monitor 的 warning 到不了
+      // GUI 使用者——這顆徽章是「提醒掛在下市代號上永遠不會響」唯一的
+      // 可見訊號,而唯一能修的人就是看這個畫面的人(2026-08-29 review)
+      widenViewport(tester);
+      final alerts = [createAlert(symbol: '9999', isActive: true)];
+      await tester.pumpWidget(
+        buildTestWidget(
+          alertState: PriceAlertState(
+            alerts: alerts,
+            unmonitorableSymbols: const {'9999'},
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('alert.unmonitorable'), findsOneWidget);
+    });
+
+    testWidgets('已停用的提醒不標「無法監控」——它本來就不在監控隊列', (tester) async {
+      widenViewport(tester);
+      final alerts = [createAlert(symbol: '9999', isActive: false)];
+      await tester.pumpWidget(
+        buildTestWidget(
+          alertState: PriceAlertState(
+            alerts: alerts,
+            unmonitorableSymbols: const {'9999'},
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('alert.unmonitorable'), findsNothing);
+    });
+
+    testWidgets('主檔查得到的提醒不標「無法監控」', (tester) async {
+      widenViewport(tester);
+      final alerts = [createAlert(symbol: '2330', isActive: true)];
+      await tester.pumpWidget(
+        buildTestWidget(alertState: PriceAlertState(alerts: alerts)),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('alert.unmonitorable'), findsNothing);
+    });
+
     testWidgets('shows triggered alert with special styling', (tester) async {
       widenViewport(tester);
       final alerts = [

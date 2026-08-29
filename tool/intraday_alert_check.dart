@@ -236,8 +236,13 @@ Future<void> main(List<String> args) async {
       }
     }
     // ⚠️ 措辭不可斷言「已送達」:osascript 即使通知被 Focus 模式或系統
-    // 設定抑制也回 exit 0,我們只知道它「接受」了,不知道使用者看到沒
+    // 設定抑制也回 exit 0,我們只知道它「接受」了,不知道使用者看到沒。
+    // 任何降級(通知沒全數被接受、或有檔監控不到)都冠 PARTIAL——這支
+    // 檔案的慣例是「事後翻任一行 beat 都能還原當時狀態」,grep PARTIAL
+    // 的監控不該漏掉「有觸價但同輪也有降級」的輪次(2026-08-29 review)
+    final degraded = unres > 0 || notified != fired.length;
     beat(
+      '${degraded ? 'PARTIAL: ' : ''}'
       '觸價 ${fired.length} 筆,osascript 接受 $notified 筆(未確認送達)'
       '$unresSuffix',
     );

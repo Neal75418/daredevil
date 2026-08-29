@@ -54,10 +54,17 @@ class ChipAnalysisService {
 
     final attitude = _deriveAttitude(sortedInst);
 
+    // 「已量測」= 該域資料量足以讓對應 adjustment **可能**吐出非零值。
+    // isNotEmpty 不夠(2026-08-29 review 實測):一列融資湊不出 pair、
+    // 一列持股沒有 diff——貢獻是**結構上保證為 0**,不是「量測結果中性」。
+    // 把孤列算成已量測,兩列孤資料的上櫃稀疏股照樣渲染「偏弱 0/100」,
+    // 正是這個門檻要消滅的東西。各域下限對應各自計分路徑的最低需求;
+    // day/holding/insider 走 last/加總,單列即可。
     final measuredDomains = [
-      institutionalHistory.isNotEmpty,
-      shareholdingHistory.isNotEmpty,
-      marginHistory.isNotEmpty,
+      institutionalHistory.length >= ChipScoringParams.instStreakSmallDays,
+      shareholdingHistory.length >= 2, // 同 _shareholdingAdjustment 守衛:頭尾才有 diff
+      // 連增判定需 marginStreakDays 個連續 pair → 至少 streak+1 列
+      marginHistory.length >= ChipScoringParams.marginStreakDays + 1,
       dayTradingHistory.isNotEmpty,
       holdingDistribution.isNotEmpty,
       insiderHistory.isNotEmpty,

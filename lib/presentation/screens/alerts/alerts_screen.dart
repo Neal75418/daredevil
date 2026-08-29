@@ -127,7 +127,12 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                   ],
                 ),
               Expanded(
-                child: _buildAlertsList(state.alerts, state.stockNames, theme),
+                child: _buildAlertsList(
+                  state.alerts,
+                  state.stockNames,
+                  state.unmonitorableSymbols,
+                  theme,
+                ),
               ),
             ],
           );
@@ -144,6 +149,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
   Widget _buildAlertsList(
     List<PriceAlertEntry> alerts,
     Map<String, String> stockNames,
+    Set<String> unmonitorableSymbols,
     ThemeData theme,
   ) {
     // 依股票代號分組警示
@@ -240,6 +246,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                     stockNames[alert.symbol],
                     theme,
                     alertIndex,
+                    unmonitorable: unmonitorableSymbols.contains(alert.symbol),
                   );
                 }),
               ],
@@ -260,8 +267,9 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
     PriceAlertEntry alert,
     String? stockName,
     ThemeData theme,
-    int index,
-  ) {
+    int index, {
+    required bool unmonitorable,
+  }) {
     final alertType = AlertType.fromValue(alert.alertType);
     final isActive = alert.isActive;
     final wasTriggered = alert.triggeredAt != null;
@@ -413,6 +421,36 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                       'alert.trailingManaged'.tr(),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+                // 主檔查不到/已下市 → monitor 永遠解析不到這檔,提醒不會
+                // 響。release build 的 AppLogger 全等級靜默,這顆徽章是唯一
+                // 可見訊號,而唯一能修的人(刪掉或改代號)就是看這個畫面的
+                // 人(2026-08-29 review)。只標啟用中的:停用的本來就不在
+                // 監控隊列,標了反而暗示「打開就能監控」。
+                if (isActive && unmonitorable) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warningColor.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(
+                        DesignTokens.radiusXs,
+                      ),
+                      border: Border.all(
+                        color: AppTheme.warningColor.withValues(alpha: 0.5),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      'alert.unmonitorable'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: WarningColors.onTintFor(theme.brightness),
                       ),
                     ),
                   ),

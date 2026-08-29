@@ -244,6 +244,7 @@ class PriceAlertState {
   const PriceAlertState({
     this.alerts = const [],
     this.stockNames = const {},
+    this.unmonitorableSymbols = const {},
     this.isLoading = false,
     this.error,
   });
@@ -253,18 +254,28 @@ class PriceAlertState {
   /// 代碼 → 名稱。`price_alert` 只存代碼,名稱在 `stock_master`——清單只顯示
   /// 「3231」而不是「緯創」,提醒一多就認不出來(2026-08-08 實機回報)。
   final Map<String, String> stockNames;
+
+  /// 主檔查不到(或已非上市中)的代碼——盤中/盤後監控都以主檔為準,這些
+  /// 提醒**永遠不會觸發**。監控端只在日誌裡 warning,而 release build 的
+  /// AppLogger 對所有等級都靜默(2026-08-29 review):GUI 使用者掛在下市
+  /// 代號上的提醒會無聲卡死。唯一能修的人是使用者(刪掉或改代號),所以
+  /// 訊號放在提醒清單上,不放日誌。判準與 monitor 的 getAllActiveStocks
+  /// 等價:無 row 或 isActive=false。
+  final Set<String> unmonitorableSymbols;
   final bool isLoading;
   final String? error;
 
   PriceAlertState copyWith({
     List<PriceAlertEntry>? alerts,
     Map<String, String>? stockNames,
+    Set<String>? unmonitorableSymbols,
     bool? isLoading,
     Object? error = sentinel,
   }) {
     return PriceAlertState(
       alerts: alerts ?? this.alerts,
       stockNames: stockNames ?? this.stockNames,
+      unmonitorableSymbols: unmonitorableSymbols ?? this.unmonitorableSymbols,
       isLoading: isLoading ?? this.isLoading,
       error: error == sentinel ? this.error : error as String?,
     );
@@ -301,17 +312,25 @@ class PriceAlertNotifier extends Notifier<PriceAlertState> {
       // catch、清單變空——一個顯示用的加值把核心功能弄壞,正是這個專案
       // 反覆吃虧的形狀(2026-08-08)。
       final names = <String, String>{};
+      // 同一趟迴圈順帶判定監控性:無 row 或 isActive=false ⟺ monitor 的
+      // getAllActiveStocks 查不到 ⟺ 這檔的提醒永遠不會觸發。兩個判準必須
+      // 同源,否則 UI 說可監控、monitor 說查無此檔會漂移。
+      final unmonitorable = <String>{};
       try {
         for (final sym in alerts.map((a) => a.symbol).toSet()) {
           final stock = await _db.getStock(sym);
           if (stock != null) names[sym] = stock.name;
+          if (stock == null || !stock.isActive) unmonitorable.add(sym);
         }
       } catch (e) {
+        // 查詢失敗時 unmonitorable 只有失敗前已判定的部分——寧可少標
+        // 不誤標(標了使用者會去刪提醒,誤標的代價比漏標高)
         AppLogger.warning('PriceAlertNotifier', '查詢股票名稱失敗,清單只顯示代碼', e);
       }
       state = state.copyWith(
         alerts: alerts,
         stockNames: names,
+        unmonitorableSymbols: unmonitorable,
         isLoading: false,
       );
     } catch (e) {

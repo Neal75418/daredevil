@@ -929,7 +929,8 @@
     "trailingRefresh": "依均線階梯重算",
     "trailingRefreshDone": "已重算 {count} 檔自動提醒（手動設定的未更動）",
     "trailingRefreshEmpty": "沒有可設定的自選股（價格資料不足）",
-    "trailingManaged": "每日自動"
+    "trailingManaged": "每日自動",
+    "unmonitorable": "不在主檔,無法監控"
   },
   "notification": {
     "title": "通知設定",
@@ -1264,7 +1265,6 @@
     "ratingBullish": "偏多",
     "ratingNeutral": "中性",
     "ratingBearish": "偏空",
-    "ratingInsufficient": "資料不足",
     "insufficientCaption": "六類籌碼資料僅 {} 類有資料，不足以評級",
     "ratingWeak": "弱勢",
     "institutionalAttitude": "法人態度",

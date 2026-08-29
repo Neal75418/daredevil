@@ -174,6 +174,42 @@ void main() {
       expect(state.isLoading, isFalse);
       expect(state.error, isNotNull);
     });
+
+    test('🚨 標出主檔查不到/已下市的代碼——這些提醒永遠不會觸發', () async {
+      // 判準必須與 IntradayAlertMonitor 的 getAllActiveStocks 等價:
+      // 無 row(9999)或 isActive=false(1234)都算 unmonitorable。
+      // 名稱是另一回事:1234 有 row 就該顯示名稱(裝飾不受監控性影響)。
+      StockMasterEntry stockRow(String symbol, {required bool isActive}) =>
+          StockMasterEntry(
+            symbol: symbol,
+            name: '測試$symbol',
+            market: 'TWSE',
+            industry: '測試',
+            isActive: isActive,
+            updatedAt: _now,
+          );
+      when(() => mockDb.getAllAlerts()).thenAnswer(
+        (_) async => [
+          createAlert(id: 1, symbol: '2330'),
+          createAlert(id: 2, symbol: '9999'),
+          createAlert(id: 3, symbol: '1234'),
+        ],
+      );
+      when(
+        () => mockDb.getStock('2330'),
+      ).thenAnswer((_) async => stockRow('2330', isActive: true));
+      when(() => mockDb.getStock('9999')).thenAnswer((_) async => null);
+      when(
+        () => mockDb.getStock('1234'),
+      ).thenAnswer((_) async => stockRow('1234', isActive: false));
+
+      final notifier = container.read(priceAlertProvider.notifier);
+      await notifier.loadAlerts();
+
+      final state = container.read(priceAlertProvider);
+      expect(state.unmonitorableSymbols, {'9999', '1234'});
+      expect(state.stockNames, {'2330': '測試2330', '1234': '測試1234'});
+    });
   });
 
   // ==========================================

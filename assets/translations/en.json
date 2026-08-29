@@ -929,7 +929,8 @@
     "trailingRefresh": "Recompute MA ladder",
     "trailingRefreshDone": "Recomputed {count} auto alerts (manual ones untouched)",
     "trailingRefreshEmpty": "No watchlist stock has enough price history",
-    "trailingManaged": "Daily auto"
+    "trailingManaged": "Daily auto",
+    "unmonitorable": "Not in stock master; cannot monitor"
   },
   "notification": {
     "title": "Notification Settings",
@@ -1264,7 +1265,6 @@
     "ratingBullish": "Bullish",
     "ratingNeutral": "Neutral",
     "ratingBearish": "Bearish",
-    "ratingInsufficient": "Insufficient data",
     "insufficientCaption": "Only {} of 6 chip data domains available — not enough to rate",
     "ratingWeak": "Weak",
     "institutionalAttitude": "Institutional Attitude",

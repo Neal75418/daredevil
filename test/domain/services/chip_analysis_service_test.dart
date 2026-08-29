@@ -1,3 +1,4 @@
+import 'package:daredevil/core/constants/chip_scoring_params.dart';
 import 'package:daredevil/core/constants/chip_strength.dart';
 import 'package:daredevil/domain/services/chip_analysis_service.dart';
 import 'package:daredevil/data/database/app_database.dart';
@@ -245,13 +246,32 @@ void main() {
       List<DailyInstitutionalEntry> inst = const [],
       List<ShareholdingEntry> share = const [],
       List<MarginTradingEntry> margin = const [],
+      List<DayTradingEntry> day = const [],
+      List<HoldingDistributionEntry> holding = const [],
+      List<InsiderHoldingEntry> insider = const [],
     }) => service.compute(
       institutionalHistory: inst,
       shareholdingHistory: share,
       marginHistory: margin,
-      dayTradingHistory: [],
-      holdingDistribution: [],
-      insiderHistory: [],
+      dayTradingHistory: day,
+      holdingDistribution: holding,
+      insiderHistory: insider,
+    );
+
+    DailyInstitutionalEntry instRow(int d) => DailyInstitutionalEntry(
+      symbol: '6104',
+      date: DateTime(2026, 8, d),
+      foreignNet: 1000,
+    );
+    ShareholdingEntry shareRow(int d) => ShareholdingEntry(
+      symbol: '6104',
+      date: DateTime(2026, 8, d),
+      foreignSharesRatio: 20.0,
+    );
+    MarginTradingEntry marginRow(int d) => MarginTradingEntry(
+      symbol: '6104',
+      date: DateTime(2026, 8, d),
+      marginBuy: 100,
     );
 
     test('🚨 六域全空 → isInsufficient,不得評「極弱」當事實', () {
@@ -264,13 +284,15 @@ void main() {
       );
     });
 
-    test('只有一域有資料 → 仍 insufficient(門檻 2)', () {
+    test('只有一域可計算 → 仍 insufficient(門檻 2)', () {
+      // dayTrading 走 history.last,單列即可計算——用它當「真的量測了
+      // 一域」的代表
       final r = run(
-        inst: [
-          DailyInstitutionalEntry(
+        day: [
+          DayTradingEntry(
             symbol: '6104',
             date: DateTime(2026, 8, 20),
-            foreignNet: 1000,
+            dayTradingRatio: 10.0,
           ),
         ],
       );
@@ -278,25 +300,83 @@ void main() {
       expect(r.isInsufficient, isTrue);
     });
 
-    test('兩域有資料 → 可評級', () {
+    test('🚨 孤列資料不算已量測——上櫃稀疏股(1 列融資+1 列持股)結構上保證 0 分', () {
+      // 2026-08-29 review 實測反例:isNotEmpty 當充足性 proxy 時,這個
+      // fixture 得到 measuredDomains=2 → 照樣渲染「偏弱 0/100」。但
+      // _marginAdjustment 湊不出 pair、_shareholdingAdjustment 有
+      // length<2 守衛——兩域的貢獻是**保證為 0**,不是「量測結果中性」。
+      final r = run(margin: [marginRow(20)], share: [shareRow(20)]);
+      expect(r.measuredDomains, 0);
+      expect(r.isInsufficient, isTrue);
+    });
+
+    test('兩域確實可計算 → 可評級,且分數證明評級非捏造', () {
+      // insider(單列可計算:內部人買進)+ 集中度(大戶 ≥ 高門檻)——
+      // 斷言精確分數,證明「可評級」的 fixture 真的能產生非零訊號,
+      // 不再替 score=0 → weak 的洞背書
       final r = run(
-        inst: [
-          DailyInstitutionalEntry(
+        insider: [
+          InsiderHoldingEntry(
             symbol: '6104',
             date: DateTime(2026, 8, 20),
-            foreignNet: 1000,
+            sharesChange: 500,
+            pledgeRatio: 0,
           ),
         ],
-        margin: [
-          MarginTradingEntry(
+        holding: [
+          HoldingDistributionEntry(
             symbol: '6104',
             date: DateTime(2026, 8, 20),
-            marginBuy: 100,
+            level: '1,000以上',
+            percent: 65.0,
           ),
         ],
       );
       expect(r.measuredDomains, 2);
       expect(r.isInsufficient, isFalse);
+      expect(
+        r.score,
+        ChipScoringParams.insiderBuyBonus +
+            ChipScoringParams.concentrationHighBonus,
+      );
+    });
+
+    test('各域可計算下限:inst/share 要 2 列,margin 要 streak+1 列', () {
+      // 下限的定義:資料量足以讓對應 adjustment **可能**吐出非零值。
+      // share 的 2 是結構性(頭尾才有 diff),刻意用字面值釘住,不引常數
+      expect(run(inst: [instRow(20)]).measuredDomains, 0);
+      expect(
+        run(
+          inst: List.generate(
+            ChipScoringParams.instStreakSmallDays,
+            (i) => instRow(20 + i),
+          ),
+        ).measuredDomains,
+        1,
+      );
+
+      expect(run(share: [shareRow(20)]).measuredDomains, 0);
+      expect(run(share: [shareRow(20), shareRow(21)]).measuredDomains, 1);
+
+      // marginStreakDays 個連續 pair 需要 streak+1 列;少一列即保證 0
+      expect(
+        run(
+          margin: List.generate(
+            ChipScoringParams.marginStreakDays,
+            (i) => marginRow(20 + i),
+          ),
+        ).measuredDomains,
+        0,
+      );
+      expect(
+        run(
+          margin: List.generate(
+            ChipScoringParams.marginStreakDays + 1,
+            (i) => marginRow(20 + i),
+          ),
+        ).measuredDomains,
+        1,
+      );
     });
   });
 }
