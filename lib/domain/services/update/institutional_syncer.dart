@@ -163,24 +163,6 @@ class InstitutionalSyncer {
       return false;
     }
   }
-
-  /// 同步單日法人資料
-  Future<bool> syncSingleDay({
-    required DateTime date,
-    bool force = false,
-  }) async {
-    try {
-      await _institutionalRepo.syncAllMarketInstitutional(date, force: force);
-      return true;
-    } on RateLimitException {
-      rethrow;
-    } on NetworkException {
-      rethrow;
-    } catch (e) {
-      AppLogger.warning('InstitutionalSyncer', '法人資料同步失敗', e);
-      return false;
-    }
-  }
 }
 
 /// 法人資料同步結果

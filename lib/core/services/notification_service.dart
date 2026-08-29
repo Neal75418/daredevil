@@ -318,11 +318,6 @@ class NotificationService {
     );
   }
 
-  /// 取消指定通知
-  Future<void> cancelNotification(int id) async {
-    await _notifications.cancel(id: id);
-  }
-
   /// 處理通知點擊事件
   ///
   /// payload 包含股票代號，導航由應用程式的導航系統處理。

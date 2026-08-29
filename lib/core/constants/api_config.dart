@@ -43,9 +43,6 @@ abstract final class ApiConfig {
   /// Syncer 批次操作間延遲（毫秒），避免觸發 API rate limit
   static const int syncerBatchDelayMs = 500;
 
-  /// TWSE 歷史資料逐月請求間延遲（毫秒）
-  static const int twseHistoryRequestDelayMs = 300;
-
   /// t187ap03_L 官方名單的完整性下限（實際 ~1093 家）。低於此值視為
   /// 部分回應——殭屍清理（官方名單缺席→標下市）當輪跳過，避免 API
   /// 截斷造成大規模誤殺；per-symbol 的產業別覆蓋不受此限（部分名單

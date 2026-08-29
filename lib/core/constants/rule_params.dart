@@ -186,11 +186,6 @@ abstract final class RuleParams {
   /// UI 顯示時會用 `.take(2)` / `.take(3)`（卡片 compact 佈局只顯示 1 條）。
   static const int maxReasonsPerStock = 64;
 
-  /// 每日 Top N 推薦數量
-  ///
-  /// 上市+上櫃共約 1,770 檔股票，20 檔可提供足夠多樣性
-  static const int dailyTopN = 20;
-
   /// 最低評分門檻
   ///
   /// 過濾掉完全沒有真實 signal rule 的股票（如僅命中 CONCENTRATION_HIGH /

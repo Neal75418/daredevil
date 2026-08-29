@@ -455,9 +455,6 @@ class RssParseResult {
 
   /// 成功解析的項目數
   int get successCount => items.length;
-
-  /// 失敗的 feed 數
-  int get errorCount => errors.length;
 }
 
 // `NewsFeedSource` / `NewsFeedError` 已搬至 `domain/models/news_feed.dart`，

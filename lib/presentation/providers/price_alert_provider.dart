@@ -92,22 +92,6 @@ enum AlertType {
     AlertType.highPledgeRatio => false,
   };
 
-  /// 取得目標值的單位標籤（i18n）
-  String get targetValueUnit => switch (this) {
-    AlertType.above ||
-    AlertType.below ||
-    AlertType.breakResistance ||
-    AlertType.breakSupport => 'alert.currency'.tr(),
-    AlertType.changePct ||
-    AlertType.revenueYoySurge ||
-    AlertType.highDividendYield => '%',
-    AlertType.volumeAbove => 'stockDetail.unitShares'.tr(),
-    AlertType.rsiOverbought || AlertType.rsiOversold => '',
-    AlertType.crossAboveMa || AlertType.crossBelowMa => 'alert.unit.dayMa'.tr(),
-    AlertType.peUndervalued => 'alert.unit.times'.tr(),
-    _ => '',
-  };
-
   /// 取得此警示類型的預設目標值（常數集中於 AlertParams）
   double? get defaultTargetValue => switch (this) {
     AlertType.rsiOverbought => AlertParams.defaultRsiOverbought,
