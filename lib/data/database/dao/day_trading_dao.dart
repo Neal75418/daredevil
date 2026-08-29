@@ -25,6 +25,44 @@ mixin DayTradingDaoMixin on $AppDatabase {
     return query.get();
   }
 
+  /// 窗內各（交易日, 市場）的當沖筆數（缺漏日回補掃描用）。
+  ///
+  /// 一次 GROUP BY 取代逐 (日, 市場) 的 [getDayTradingCountForDateAndMarket]——40 天窗
+  /// 每輪每日更新累積 ~140 次逐日 COUNT（2026-08-29 效能稽核 #4，
+  /// getPriceCountsByDayAndMarket 批次化前例的 sibling）。
+  /// 回傳 market → 'yyyy-MM-dd' → 筆數；無資料的 (日, 市場) 不在 Map
+  /// （caller 以 `?? 0` 處理）。日期鍵取儲存文字前綴（全庫皆本地午夜，
+  /// 與逐日精確比對等價，由真 DB 對照測試釘住）。
+  Future<Map<String, Map<String, int>>> getDayTradingCountsByDayAndMarket({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final rows = await customSelect(
+      '''
+      SELECT substr(t.date, 1, 10) AS d, sm.market AS market, COUNT(*) AS n
+      FROM day_trading t
+      INNER JOIN stock_master sm ON t.symbol = sm.symbol
+      WHERE t.date >= ? AND t.date <= ?
+      GROUP BY d, market
+      ''',
+      variables: [
+        Variable.withDateTime(startDate),
+        Variable.withDateTime(endDate),
+      ],
+      readsFrom: {dayTrading, stockMaster},
+    ).get();
+
+    final result = <String, Map<String, int>>{};
+    for (final row in rows) {
+      result.putIfAbsent(row.read<String>('market'), () => {})[row.read<String>(
+        'd',
+      )] = row.read<int>(
+        'n',
+      );
+    }
+    return result;
+  }
+
   /// 取得指定日期的當沖資料筆數（新鮮度檢查用）
   /// 某日某市場的當沖筆數（新鮮度檢查用）
   ///

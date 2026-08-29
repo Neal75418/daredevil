@@ -286,6 +286,26 @@ class MarketDataUpdater {
       }
     }
 
+    // 一次預載三張表的 (日, 市場) 筆數(2026-08-29 效能稽核 #4):40 天窗
+    // 逐日 COUNT 每輪每日更新累積 ~140 次查詢,單次有索引但次數 × in-app
+    // isolate roundtrip 貴(countPricesByDateAndMarket 批次化前例同因)。
+    // 快照只餵「該日是否已完整」的前置判斷;進度判定用 API 回傳列數,
+    // 不讀過期快照——迴圈中的回補寫入不影響本輪判斷正確性。
+    final priceCounts = await _db.getPriceCountsByDayAndMarket(
+      startDate: windowStart,
+      endDate: endDay,
+    );
+    final dayTradingCounts = await _db.getDayTradingCountsByDayAndMarket(
+      startDate: windowStart,
+      endDate: endDay,
+    );
+    final marginCounts = await _db.getMarginTradingCountsByDayAndMarket(
+      startDate: windowStart,
+      endDate: endDay,
+    );
+    int countOf(Map<String, Map<String, int>> m, DateTime day, String market) =>
+        m[market]?[DateContext.formatYmd(day)] ?? 0;
+
     var backfilledDays = 0;
     var apiDays = 0;
 
@@ -299,12 +319,11 @@ class MarketDataUpdater {
 
       // 收斂設計 1：價格表 = 「那天到底有沒有開市」的 ground truth
       final twsePrices = twseStocks > 0
-          ? await _db.countPricesByDateAndMarket(day, MarketCode.twse)
+          ? countOf(priceCounts, day, MarketCode.twse)
           : 0;
       var hasPrices = twsePrices > 0;
       if (!hasPrices && tpexStocks > 0) {
-        hasPrices =
-            await _db.countPricesByDateAndMarket(day, MarketCode.tpex) > 0;
+        hasPrices = countOf(priceCounts, day, MarketCode.tpex) > 0;
       }
       if (!hasPrices) {
         AppLogger.debug(
@@ -318,7 +337,7 @@ class MarketDataUpdater {
       var canBackfillDayTrading = false;
       if (!dead.contains(srcDayTrading) &&
           twseStocks > 0 &&
-          await _db.getDayTradingCountForDateAndMarket(day, MarketCode.twse) <=
+          countOf(dayTradingCounts, day, MarketCode.twse) <=
               DataFreshness.twseBatchThreshold) {
         canBackfillDayTrading = twsePrices >= twseThreshold;
         if (!canBackfillDayTrading) {
@@ -334,13 +353,11 @@ class MarketDataUpdater {
       final missingMarkets = <String>{
         if (!dead.contains(MarketCode.twse) &&
             twseStocks > 0 &&
-            await _db.countMarginTradingByDateAndMarket(day, MarketCode.twse) <
-                twseThreshold)
+            countOf(marginCounts, day, MarketCode.twse) < twseThreshold)
           MarketCode.twse,
         if (!dead.contains(MarketCode.tpex) &&
             tpexStocks > 0 &&
-            await _db.countMarginTradingByDateAndMarket(day, MarketCode.tpex) <
-                tpexThreshold)
+            countOf(marginCounts, day, MarketCode.tpex) < tpexThreshold)
           MarketCode.tpex,
       };
 

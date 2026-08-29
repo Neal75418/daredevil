@@ -13,6 +13,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/insider_repository.dart';
@@ -121,6 +122,53 @@ void main() {
     ).thenAnswer((_) async => (twseRows: twseRows, tpexRows: tpexRows));
   }
 
+  /// 三個 (日, 市場) 批次聚合 stub——**委派**給呼叫當下生效的逐日 stub
+  /// 推導,與各測試的情境(含測試內的重 stub)恆一致,零 per-test 維護。
+  /// 副作用:推導會對窗內每一天呼叫逐日 mock,別再對逐日方法做
+  /// verify/verifyNever 探針(產品碼已不呼叫它們,改驗行為)。
+  void stubBatchCountsFromPerDayStubs() {
+    Future<Map<String, Map<String, int>>> derive(
+      Invocation inv,
+      Future<int> Function(DateTime, String) perDay,
+    ) async {
+      final start = inv.namedArguments[#startDate] as DateTime;
+      final end = inv.namedArguments[#endDate] as DateTime;
+      final m = <String, Map<String, int>>{};
+      for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+        for (final mk in [MarketCode.twse, MarketCode.tpex]) {
+          final n = await perDay(d, mk);
+          if (n > 0) {
+            m.putIfAbsent(mk, () => {})[DateContext.formatYmd(d)] = n;
+          }
+        }
+      }
+      return m;
+    }
+
+    when(
+      () => mockDb.getPriceCountsByDayAndMarket(
+        startDate: any(named: 'startDate'),
+        endDate: any(named: 'endDate'),
+      ),
+    ).thenAnswer((inv) => derive(inv, mockDb.countPricesByDateAndMarket));
+    when(
+      () => mockDb.getDayTradingCountsByDayAndMarket(
+        startDate: any(named: 'startDate'),
+        endDate: any(named: 'endDate'),
+      ),
+    ).thenAnswer(
+      (inv) => derive(inv, mockDb.getDayTradingCountForDateAndMarket),
+    );
+    when(
+      () => mockDb.getMarginTradingCountsByDayAndMarket(
+        startDate: any(named: 'startDate'),
+        endDate: any(named: 'endDate'),
+      ),
+    ).thenAnswer(
+      (inv) => derive(inv, mockDb.countMarginTradingByDateAndMarket),
+    );
+  }
+
   setUp(() {
     mockDb = MockAppDatabase();
     mockTradingRepo = MockTradingRepository();
@@ -141,6 +189,7 @@ void main() {
     stubTodaySync();
     stubCoverage();
     stubBackfillMargin();
+    stubBatchCountsFromPerDayStubs();
   });
 
   group('syncMarketWideData — 缺漏日回補', () {
@@ -214,13 +263,15 @@ void main() {
 
       await updater.syncMarketWideData(date: today);
 
-      verifyNever(() => mockDb.getDayTradingCountForDateAndMarket(sat, any()));
-      verifyNever(
-        () => mockDb.getDayTradingCountForDateAndMarket(typhoon, any()),
-      );
-      verify(
-        () => mockDb.getDayTradingCountForDateAndMarket(d13, any()),
-      ).called(1);
+      // 產品碼已改批次預載,逐日 COUNT 不再被呼叫——探針改驗行為:
+      // 非交易日即使被標缺也不得被回補,交易日照補
+      final dates = verify(
+        () => mockTradingRepo.syncAllDayTradingFromTwse(
+          date: captureAny(named: 'date'),
+          force: true,
+        ),
+      ).captured.cast<DateTime>();
+      expect(dates, [d13], reason: '週末/颱風日不進迴圈,僅 d13 被回補');
     });
 
     test('今日不列入回補（由每日路徑負責）', () async {
@@ -233,9 +284,8 @@ void main() {
         () =>
             mockTradingRepo.syncAllDayTradingFromTwse(date: today, force: true),
       );
-      verifyNever(
-        () => mockDb.getDayTradingCountForDateAndMarket(today, any()),
-      );
+      // (逐日 COUNT 已批次化,今日不查的保證由迴圈起點 endDay-1 提供,
+      //  上一個 verifyNever 的行為探針已足)
     });
 
     test('無價格資料的日子不補當沖（比例算不出來會寫出全 0 的假資料）', () async {
@@ -248,7 +298,10 @@ void main() {
       );
       expect(result.backfilledDays, 0);
       verify(
-        () => mockDb.countPricesByDateAndMarket(d13, MarketCode.twse),
+        () => mockDb.getPriceCountsByDayAndMarket(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
       ).called(1);
     });
 
