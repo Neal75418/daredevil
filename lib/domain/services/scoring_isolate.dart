@@ -208,11 +208,14 @@ Future<ScoringBatchResult> evaluateStocksInIsolate(
   // 複製過去,所以在 isolate 內重設一次即可。
   final forceOutput = AppLogger.forceOutput;
   // typed 物件直接跨界(2026-08-29 效能稽核 #2):Map 序列化 roundtrip
-  // benchmark 實測每次評分多付 ~1.2s(556k 列價格,serialize 382ms 在
-  // main isolate=更新中的 UI jank)。isolate 訊息傳遞本就能載任意純資料
+  // benchmark 實測每次評分多付 ~1.2s(556k 列價格)。⚠️ 歸因更正
+  // (review 對照被刪的碼):舊的 input.toMap() 在 Isolate.run closure
+  // **裡面**執行——typed 圖在修改前就已跨界,Map 層是 worker 內的純
+  // CPU 浪費 + 峰值記憶體 ~3×(同時持有跨界複本、Map、重建的 typed 圖),
+  // 不是 main-isolate 的 UI jank。isolate 訊息傳遞本就能載任意純資料
   // 物件;可跨界性由真 spawn 的 sendability 測試把關(scoring_watchlist_
-  // zero_reason_test),欄位若新增不可傳的型別(closure/port)會在該測試
-  // 當場炸,不會等到實機。
+  // zero_reason_test,九個元素型別各放一顆真實例——sendability 走
+  // runtime 物件圖,空集合驗不到元素型別)。
   return Isolate.run(() {
     AppLogger.forceOutput = forceOutput;
     return evaluateStocksIsolated(input);

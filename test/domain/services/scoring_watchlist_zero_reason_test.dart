@@ -205,24 +205,105 @@ void main() {
       // 「可跨界性」是唯一只有真 Isolate.run 才驗得到的性質——純函數測試
       // 不 spawn,欄位混入不可傳型別(closure/ReceivePort)只會在生產炸。
       // 這條把所有 optional 欄位都填滿,任何欄位變不可傳當場紅。
+      // ⚠️ 每個 map 都要放**一顆真實例**,不能空(2026-08-29 review 實測:
+      // sendability 走的是 runtime 物件圖不是靜態型別——空 Map<String,
+      // 不可傳型別> 照樣過得了 Isolate.run,守門形同虛設)。這裡的九個
+      // 元素型別正是本次刪掉手寫 mapper 的那批。
       final input = ScoringIsolateInput(
         candidates: const ['1111'],
         pricesMap: {'1111': flatHeavy('1111')},
-        newsMap: const {'1111': []},
-        institutionalMap: const {'1111': []},
-        revenueMap: const {},
-        valuationMap: const {},
-        revenueHistoryMap: const {'1111': []},
+        newsMap: {
+          '1111': [
+            NewsItemEntry(
+              id: 'n1',
+              source: '鉅亨網',
+              title: 't',
+              url: 'https://example.com/n1',
+              category: 'OTHER',
+              publishedAt: today,
+              fetchedAt: today,
+            ),
+          ],
+        },
+        institutionalMap: {
+          '1111': [
+            DailyInstitutionalEntry(symbol: '1111', date: today, foreignNet: 1),
+          ],
+        },
+        revenueMap: {
+          '1111': MonthlyRevenueEntry(
+            symbol: '1111',
+            date: DateTime(2026, 7, 1),
+            revenueYear: 2026,
+            revenueMonth: 7,
+            revenue: 1000,
+          ),
+        },
+        valuationMap: {
+          '1111': StockValuationEntry(symbol: '1111', date: today, per: 12.0),
+        },
+        revenueHistoryMap: {
+          '1111': [
+            MonthlyRevenueEntry(
+              symbol: '1111',
+              date: DateTime(2026, 6, 1),
+              revenueYear: 2026,
+              revenueMonth: 6,
+              revenue: 900,
+            ),
+          ],
+        },
         date: today,
         dayTradingMap: const {'1111': 5.0},
-        shareholdingMap: const {},
-        warningMap: const {},
-        insiderMap: const {},
-        epsHistoryMap: const {'1111': []},
-        roeHistoryMap: const {'1111': []},
-        dividendHistoryMap: const {'1111': []},
+        shareholdingMap: const {
+          '1111': ShareholdingData(foreignSharesRatio: 20.0),
+        },
+        warningMap: const {
+          '1111': WarningDataContext(
+            isAttention: true,
+            warningType: 'ATTENTION',
+          ),
+        },
+        insiderMap: const {'1111': InsiderDataContext(pledgeRatio: 10.0)},
+        epsHistoryMap: {
+          '1111': [
+            FinancialDataEntry(
+              symbol: '1111',
+              date: today,
+              statementType: 'INCOME',
+              dataType: 'EPS',
+              value: 1.0,
+              originName: null,
+            ),
+          ],
+        },
+        roeHistoryMap: {
+          '1111': [
+            FinancialDataEntry(
+              symbol: '1111',
+              date: today,
+              statementType: 'ROE',
+              dataType: 'ROE',
+              value: 12.0,
+              originName: null,
+            ),
+          ],
+        },
+        dividendHistoryMap: const {
+          '1111': [
+            DividendHistoryEntry(
+              symbol: '1111',
+              year: 2025,
+              cashDividend: 2.0,
+              stockDividend: 0,
+            ),
+          ],
+        },
         maxHistoricalRevenueMap: const {'1111': 1.0},
-        calibratedScores: CalibratedScoreContext.empty,
+        calibratedScores: const CalibratedScoreContext(
+          shortScores: {'TECH_BREAKOUT': 30},
+          longScores: {'TECH_BREAKOUT': 10},
+        ),
         watchlistSymbols: const ['1111', '2330'],
       );
       final result = await evaluateStocksInIsolate(input);

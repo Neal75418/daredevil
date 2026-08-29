@@ -340,7 +340,7 @@ class ScoringService {
     final calibratedScores = CalibratedScoresRegistry.instance
         .snapshotForIsolate();
 
-    // 直接傳入 typed DTO（序列化由 toMap() 處理）
+    // 直接傳入 typed DTO
     final input = ScoringIsolateInput(
       candidates: candidates,
       pricesMap: batchData.pricesMap,
