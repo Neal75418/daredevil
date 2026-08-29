@@ -416,9 +416,9 @@ typedef $$DailyPriceTableProcessedTableManager =
       i1.DailyPriceEntry,
       i0.PrefetchHooks Function({bool symbol})
     >;
-i0.Index get idxDailyPriceDate => i0.Index(
-  'idx_daily_price_date',
-  'CREATE INDEX idx_daily_price_date ON daily_price (date)',
+i0.Index get idxDailyPriceDateSymbol => i0.Index(
+  'idx_daily_price_date_symbol',
+  'CREATE INDEX idx_daily_price_date_symbol ON daily_price (date, symbol)',
 );
 
 class $DailyPriceTable extends i2.DailyPrice

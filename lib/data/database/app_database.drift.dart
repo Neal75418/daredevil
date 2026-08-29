@@ -111,7 +111,7 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
     marketIndex,
     quarterlyReport,
     i1.idxStockMasterIndustry,
-    i2.idxDailyPriceDate,
+    i2.idxDailyPriceDateSymbol,
     i3.idxDailyInstitutionalDate,
     i4.idxNewsItemPublishedAt,
     i4.idxNewsItemSource,

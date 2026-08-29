@@ -4,7 +4,12 @@ import 'package:daredevil/data/database/tables/stock_master.dart';
 
 /// 每日 OHLCV 價格資料 Table
 @DataClassName('DailyPriceEntry')
-@TableIndex(name: 'idx_daily_price_date', columns: {#date})
+// (date, symbol) 複合(2026-08-29 效能稽核 #5):date-range GROUP BY 類
+// 查詢(getPriceCountsByDayAndMarket、getSymbolsWithSufficientData、
+// countPricesByDateAndMarket)免回表抓 symbol,DB 副本實測 counts 查詢
+// 1,374→275ms、EQP 轉 COVERING;體積 +27.6MB、一次性建索引 0.3s。
+// 舊單欄 (date) 版為本索引左前綴 → 進 legacyRedundantIndexes 清除。
+@TableIndex(name: 'idx_daily_price_date_symbol', columns: {#date, #symbol})
 class DailyPrice extends Table {
   /// 股票代碼
   TextColumn get symbol =>

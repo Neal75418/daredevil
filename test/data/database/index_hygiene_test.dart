@@ -49,6 +49,9 @@ void main() {
   /// 對抗審查 mutation 實測:第一版測試只建回 4 條,其餘 23 條的 DROP
   /// 拿掉任一條都不會紅;此表讓每一條 DROP 都被守住。
   const legacyDdl = <String, String>{
+    // 2026-08-29 由 (date) 升級為 (date, symbol) 複合(covering):舊單欄
+    // 版與新索引同 leading column、純冗餘,既有 DB 由 hygiene 清除
+    'idx_daily_price_date': 'daily_price (date)',
     'idx_daily_analysis_symbol_date': 'daily_analysis (symbol, date)',
     'idx_daily_price_symbol_date': 'daily_price (symbol, date)',
     'idx_shareholding_symbol_date': 'shareholding (symbol, date)',
@@ -151,7 +154,12 @@ void main() {
       expect(names, isNot(contains(legacy)), reason: '$legacy 應被清除');
     }
     // date-leading / 複合活索引保留
-    expect(names, contains('idx_daily_price_date'));
+    expect(names, contains('idx_daily_price_date_symbol'));
+    expect(
+      names,
+      isNot(contains('idx_daily_price_date')),
+      reason: '單欄舊版是複合索引的左前綴,升級後屬純寫入稅',
+    );
     expect(names, contains('idx_daily_analysis_date_score_short'));
     expect(names, contains('idx_daily_analysis_date_score_long'));
     // daily_reason 補上 date 索引(mode tab 三個消費者按日查)
@@ -178,6 +186,7 @@ void main() {
       expect(names, isNot(contains(legacy)), reason: '$legacy 不應存在於新裝機');
     }
     expect(names, contains('idx_daily_reason_date'));
+    expect(names, contains('idx_daily_price_date_symbol'));
     expect(names, contains('idx_daily_analysis_date_score_short'));
     expect(names, contains('idx_daily_analysis_date_score_long'));
     await db.close();

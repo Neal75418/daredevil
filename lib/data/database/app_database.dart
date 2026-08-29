@@ -402,12 +402,20 @@ class AppDatabase extends $AppDatabase
       'CREATE INDEX IF NOT EXISTS idx_daily_reason_date '
       'ON daily_reason (date)',
     );
+    // (date, symbol) covering(2026-08-29 稽核 #5):新裝機由 drift 宣告
+    // 建立,既有 DB 由此補建(一次性 ~0.3s);舊單欄版在上方清單清除
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_daily_price_date_symbol '
+      'ON daily_price (date, symbol)',
+    );
   }
 
   /// [_ensureIndexHygiene] 的清除名單。@visibleForTesting 供不變量測試
   /// 斷言「與現行宣告索引零交集」。
   @visibleForTesting
   static const List<String> legacyRedundantIndexes = [
+    // 被 (date, symbol) 複合取代的左前綴(2026-08-29 效能稽核 #5)
+    'idx_daily_price_date',
     // = PK
     'idx_daily_analysis_symbol_date',
     'idx_daily_price_symbol_date',
