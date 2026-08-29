@@ -7,7 +7,8 @@ void main() {
   group('MarketSentimentService.calculate', () {
     // 固定輸入：5 項子指標皆可計算，且各自分數不同以便辨識權重變動。
     //
-    // - advanceRatio: ratio 0.5 → _linearMap(0.5, 0.2, 0.8) = 50.0
+    // - advanceRatio: ratio 0.5（分母不含平盤）→
+    //   _linearMap(0.5, 0.15, 0.80) = 53.846…
     // - institutional: 常數序列 std=0、last>0 → 75.0
     // - volumeMomentum: today/avg = 1.0 → _linearMap(1.0, 0.5, 2.0) = 33.333…
     // - marginChange: 無變動 changePct=0 → _linearMap(0, -0.05, 0.05) = 50.0
@@ -60,9 +61,9 @@ void main() {
 
       // 5 項全到齊 ⇒ totalWeight=1.0 ⇒ 綜合分數 == 加權平均（無正規化放大）。
       // 以已知子分數手算加權平均驗證權重總和為 1.0：
-      // 0.35*50 + 0.25*75 + 0.15*(100/3) + 0.15*50 + 0.10*50
+      // 0.35*(35/65*100) + 0.25*75 + 0.15*(100/3) + 0.15*50 + 0.10*50
       const expected =
-          0.35 * 50.0 +
+          0.35 * (35.0 / 65.0 * 100.0) +
           0.25 * 75.0 +
           0.15 * (100.0 / 3.0) +
           0.15 * 50.0 +
@@ -71,12 +72,94 @@ void main() {
       expect(result.score, closeTo(expected, 1e-9));
     });
 
-    test('固定輸入回歸：綜合分數 = 53.75', () {
+    test('固定輸入回歸：綜合分數 = 55.096…', () {
       final result = computeFixedInput();
 
-      // 權重重新分配後（advanceRatio 0.25→0.35、移除 limitRatio 0.10）的定錨值
-      expect(result.score, closeTo(53.75, 1e-9));
+      // 定錨值。歷次變動：權重重分配（advanceRatio 0.25→0.35、移除
+      // limitRatio 0.10）→ 53.75；漲跌比分母排除平盤 + 下界 0.20→0.15
+      // （2026-08-29 稽核 H2）→ 55.096…
+      expect(result.score, closeTo(55.09615384615385, 1e-9));
       expect(result.level, SentimentLevel.neutral);
+    });
+
+    // ================================================================
+    // 漲跌比的分母（2026-08-29 領域稽核 H2）
+    //
+    // `AdvanceDecline.total = advance + decline + unchanged`，而 unchanged
+    // 是真實計數（`market_overview_dao` 的 `price_change = 0`，實測佔上市櫃
+    // 股 7.8–11.1%）。`_linearMap(v, lo, hi)` 的中點對應 50 分，所以設計上的
+    // 「中性」是 ratio 落在上下界中點——但把平盤算進分母，那個中點就需要
+    // 遠超過半數的股票上漲才達得到。
+    //
+    // 實測 597 個市場日：含平盤的中位 ratio 是 0.435、排除平盤是 0.481。
+    // 舊界 (0.2, 0.8) 下中位日讀 39.2 分（偏恐慌側），而它是**最大權重的
+    // 子指標**（0.35），缺指標時有效權重正規化還會把偏差放大到 8 分。
+    // 2026-08-27 TWSE 589 漲 / 521 跌（真的偏多）卻讀 46.7。
+    //
+    // 修法兩件一起做——只改分母是半套，因為上下界是配著舊分母定的：
+    //   分母排除平盤 + 下界 0.20 → **0.15**（新口徑實測 p5 = 0.149）
+    //   上界 0.80 不動（新口徑實測 p95 = 0.801，本來就對）
+    // 飽和率由 9.5%/2.8%（不對稱）變成 5%/5%，中位日從讀 39.2 變成讀 50.9。
+    // 錨定方法與籌碼集中度那次相同：量母體分布、取百分位，不憑感覺選數字。
+    // ================================================================
+    test('🚨 平盤不得算進漲跌比的分母(稽核 H2)', () {
+      // 2026-08-27 TWSE 實測值
+      const withFlats = AdvanceDecline(
+        advance: 589,
+        decline: 521,
+        unchanged: 117,
+      );
+      final score = MarketSentimentService.calculate(
+        advanceDecline: withFlats,
+        institutionalNetHistory: const [],
+        turnoverHistory: const [],
+        marginBalanceHistory: const [],
+      ).subScores['advanceRatio']!;
+
+      expect(score, greaterThan(50), reason: '589 漲 vs 521 跌是真的偏多,不該落在中性線的恐慌側');
+    });
+
+    test('🚨 平盤家數不得改變漲跌比的分數', () {
+      double scoreOf(int unchanged) => MarketSentimentService.calculate(
+        advanceDecline: AdvanceDecline(
+          advance: 600,
+          decline: 400,
+          unchanged: unchanged,
+        ),
+        institutionalNetHistory: const [],
+        turnoverHistory: const [],
+        marginBalanceHistory: const [],
+      ).subScores['advanceRatio']!;
+
+      // 漲跌家數完全相同,只有平盤數不同 → 分數必須一致
+      final base = scoreOf(0);
+      for (final u in [50, 100, 200, 500]) {
+        expect(scoreOf(u), closeTo(base, 1e-9), reason: 'unchanged=$u');
+      }
+    });
+
+    test('🚨 中位日應讀在中性線附近(實測 ratio 0.481)', () {
+      // 597 個市場日的中位 advance/(advance+decline) = 0.481
+      final score = MarketSentimentService.calculate(
+        advanceDecline: const AdvanceDecline(advance: 481, decline: 519),
+        institutionalNetHistory: const [],
+        turnoverHistory: const [],
+        marginBalanceHistory: const [],
+      ).subScores['advanceRatio']!;
+
+      expect(score, closeTo(50, 3), reason: '典型的一天應該讀在 50 附近,舊界下讀 39.2');
+    });
+
+    test('邊界:極端日仍要飽和(確認不是把量表拉平)', () {
+      double scoreOf(int a, int d) => MarketSentimentService.calculate(
+        advanceDecline: AdvanceDecline(advance: a, decline: d),
+        institutionalNetHistory: const [],
+        turnoverHistory: const [],
+        marginBalanceHistory: const [],
+      ).subScores['advanceRatio']!;
+
+      expect(scoreOf(900, 100), 100.0); // ratio 0.9 > 上界 0.8
+      expect(scoreOf(100, 900), 0.0); // ratio 0.1 < 下界 0.15
     });
 
     test('子指標缺漏時有效權重自動正規化', () {

@@ -56,6 +56,19 @@ class MarketSentiment {
 class MarketSentimentService {
   const MarketSentimentService._();
 
+  /// 漲跌比子指標的線性映射下界／上界（ratio = advance / (advance+decline)）。
+  ///
+  /// **依實測母體百分位錨定**（2026-08-29 稽核 H2，597 個市場日）：
+  /// 排除平盤後的 ratio 分布 p5 = 0.149、p95 = 0.801。上界 0.80 沿用舊值
+  /// （本來就等於 p95）；下界由 0.20 下修到 0.15，飽和率因此從 9.5%/2.8%
+  /// （不對稱、偏向恐慌側）變成 5%/5%，而中位日（ratio 0.481）從讀 39.2 分
+  /// 變成讀 50.9 分。
+  ///
+  /// **兩件事必須一起改**：只換分母是半套——上下界原本是配著含平盤的分母
+  /// 定的。錨定方法與籌碼集中度門檻那次相同（量母體、取百分位）。
+  static const double advanceRatioFloor = 0.15;
+  static const double advanceRatioCeil = 0.80;
+
   /// 回溯計算歷史情緒分數所需的最少對齊交易日數。
   ///
   /// 等同 Z-score（法人動向子指標）的最小樣本數：少於此日數無法產生有意義的
@@ -74,11 +87,23 @@ class MarketSentimentService {
   }) {
     final subScores = <String, double>{};
 
-    // 1. 漲跌比 (35%) — advance / total 線性映射
-    final adTotal = advanceDecline.total;
-    if (adTotal > 0) {
-      final ratio = advanceDecline.advance / adTotal;
-      subScores['advanceRatio'] = _linearMap(ratio, 0.2, 0.8);
+    // 1. 漲跌比 (35%) — advance / (advance + decline) 線性映射
+    //
+    // **分母不含平盤**（2026-08-29 稽核 H2）：`AdvanceDecline.total` 含
+    // unchanged，而那是真實計數（實測佔上市櫃股 7.8–11.1%）。[_linearMap]
+    // 的中點對應 50 分，把平盤算進分母就需要遠超過半數的股票上漲才達得到
+    // ——實測 597 個市場日的中位 ratio：含平盤 0.435、排除平盤 0.481。
+    // 舊界下中位日讀 39.2 分（偏恐慌側），而這是**權重最大**的子指標（0.35），
+    // 其他指標缺席時的有效權重正規化還會把偏差放大到約 8 分。
+    // 具體：2026-08-27 TWSE 589 漲 / 521 跌（真的偏多）卻讀 46.7。
+    final adDirectional = advanceDecline.advance + advanceDecline.decline;
+    if (adDirectional > 0) {
+      final ratio = advanceDecline.advance / adDirectional;
+      subScores['advanceRatio'] = _linearMap(
+        ratio,
+        advanceRatioFloor,
+        advanceRatioCeil,
+      );
     }
 
     // 2. 法人動向 (25%) — 近10日淨額 Z-score → 0-100

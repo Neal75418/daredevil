@@ -57,13 +57,20 @@ class AnalysisSummaryService {
     }
 
     // 訊號匯流偵測
-    final bullishConfluence = _confluenceDetector.detect(
-      reasons,
-      bullish: true,
-    );
+    //
+    // **空方先跑**（2026-08-29 稽核 M9）：多空兩組模式共用
+    // `{PE_UNDERVALUED, PBR_UNDERVALUED}` 這個 signalGroup，兩次獨立偵測會
+    // 讓同一檔股票同時被判「價值投資」與「價值陷阱」。兩者同時成立時空方
+    // 資訊嚴格較多（「便宜」兩邊都知道，陷阱那條額外說便宜不夠），所以由
+    // 空方先消耗，多方拿不到就不合成。
     final bearishConfluence = _confluenceDetector.detect(
       reasons,
       bullish: false,
+    );
+    final bullishConfluence = _confluenceDetector.detect(
+      reasons,
+      bullish: true,
+      alreadyConsumed: bearishConfluence.consumedTypes,
     );
 
     // 衝突偵測

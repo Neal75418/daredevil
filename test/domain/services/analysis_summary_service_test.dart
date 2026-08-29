@@ -37,6 +37,54 @@ void main() {
       expect(result.overallParts.first.key, 'summary.noSignals');
     });
 
+    test('🚨 不得同時給出「價值投資」與「價值陷阱」(稽核 M9)', () {
+      // 兩組匯流模式共用 `{PE_UNDERVALUED, PBR_UNDERVALUED}` 這個
+      // signalGroup。detect() 呼叫兩次、消耗集各自獨立時，同一檔股票會拿到
+      // 兩個互相矛盾的合成結論，而共用的 PE_UNDERVALUED 又被從多空兩份
+      // 原始清單裡剝掉——使用者連底下那個訊號都看不到。
+      //
+      // 這條釘的是**呼叫順序的接線**：signal_confluence_test 只測得到
+      // detect() 本身接不接受 alreadyConsumed，測不到這裡有沒有傳。
+      final result = service.generate(
+        analysis: createTestAnalysis(trendState: 'DOWN', score: 20),
+        reasons: [
+          createTestReason(reasonType: 'PE_UNDERVALUED', ruleScore: 10),
+          createTestReason(
+            reasonType: 'HIGH_DIVIDEND_YIELD',
+            rank: 2,
+            ruleScore: 8,
+          ),
+          createTestReason(
+            reasonType: 'MA_ALIGNMENT_BEARISH',
+            rank: 3,
+            ruleScore: -15,
+          ),
+        ],
+        latestPrice: null,
+        priceChange: -1.0,
+        institutionalHistory: [],
+        revenueHistory: [],
+        latestPER: null,
+        horizon: Horizon.short,
+      );
+
+      final texts = [
+        ...result.keySignals.map((e) => e.key),
+        ...result.riskFactors.map((e) => e.key),
+        ...result.overallParts.map((e) => e.key),
+      ];
+      expect(
+        texts,
+        contains('summary.confluenceValueTrap'),
+        reason: '前提:空方的價值陷阱必須成立(否則本測試什麼都沒驗)',
+      );
+      expect(
+        texts,
+        isNot(contains('summary.confluenceValueInvestment')),
+        reason: '同一檔股票不得同時被判價值投資與價值陷阱',
+      );
+    });
+
     test('prepends market-regime context line when marketStage given', () {
       final result = service.generate(
         analysis: createTestAnalysis(trendState: 'UP', score: 70),

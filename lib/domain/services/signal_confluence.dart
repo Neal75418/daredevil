@@ -62,13 +62,27 @@ class SignalConfluenceDetector {
   ///
   /// [reasons] 觸發的規則列表
   /// [bullish] true = 只偵測多頭模式，false = 只偵測空頭模式
+  /// [alreadyConsumed] 已被另一個方向消耗掉的 reasonType——不得再參與合成
+  ///
+  /// **為什麼需要 [alreadyConsumed]**（2026-08-29 領域稽核 M9）：
+  /// `confluenceValueInvestment`（多）與 `confluenceValueTrap`（空）的第一個
+  /// signalGroup 完全相同 `{PE_UNDERVALUED, PBR_UNDERVALUED}`。本方法被呼叫
+  /// 兩次、消耗集各自獨立，於是同一檔股票可以同時拿到「價值投資」與「價值
+  /// 陷阱」兩個互相矛盾的合成結論；而 `analysis_summary_service` 會把共用的
+  /// PE_UNDERVALUED 從多空**兩份**原始清單裡剝掉，使用者連底下那個共用訊號
+  /// 都看不到（實測 13 個 stock-day / 7 檔，4763 連續四天）。
+  ///
+  /// **空方優先**：兩個結論同時成立時，「便宜」是兩邊都知道的事，陷阱那條
+  /// 額外告訴你便宜不夠——資訊嚴格較多。呼叫端先跑 `bullish: false`，再把
+  /// 它的 [ConfluenceResult.consumedTypes] 傳進 `bullish: true` 那次。
   ConfluenceResult detect(
     List<DailyReasonEntry> reasons, {
     required bool bullish,
+    Set<String> alreadyConsumed = const {},
   }) {
     final activeTypes = reasons.map((r) => r.reasonType).toSet();
     final keys = <String>[];
-    final consumed = <String>{};
+    final consumed = <String>{...alreadyConsumed};
 
     final patterns = bullish ? _bullishPatterns : _bearishPatterns;
 
@@ -83,7 +97,9 @@ class SignalConfluenceDetector {
 
     return ConfluenceResult(
       summaryKeys: keys,
-      consumedTypes: consumed,
+      // 只回報**本次**消耗的——呼叫端用它剝除原始清單，把別人消耗的算進來
+      // 會讓對方那邊的訊號在自己這側也憑空消失。
+      consumedTypes: consumed.difference(alreadyConsumed),
       matchedCount: keys.length,
     );
   }
