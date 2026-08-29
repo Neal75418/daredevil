@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/sentinel.dart';
@@ -79,6 +82,22 @@ class IndustryEpsState {
 class IndustryEpsNotifier extends Notifier<IndustryEpsState> {
   @override
   IndustryEpsState build() {
+    // 保活機制：keepAliveMin 內返回同一頁面時使用快取（與 stock_detail
+    // 同一樣板）。窗過期即 dispose——這不只是記憶體整潔：本 provider 掛
+    // epoch listener，keepAlive 版本讓「進過一次畫面」變成「每次每日更新
+    // 都打一次 TPEx API 直到 app 關掉」（2026-08-29 稽核實證），listener
+    // 的壽命必須跟著畫面走，而 epoch 規約 #2 禁止在 listener 內加條件
+    // 判斷——所以由 autoDispose 收生命週期，不加 guard。
+    final link = ref.keepAlive();
+    final timer = Timer(const Duration(minutes: ApiConfig.keepAliveMin), () {
+      try {
+        link.close();
+      } catch (_) {
+        // link 可能已在 dispose 時關閉，忽略此例外
+      }
+    });
+    ref.onDispose(timer.cancel);
+
     // M6 follow-up：runUpdate 完成後 bump dataUpdateEpoch；產業 EPS
     // 畫面開著時自動 reload，否則只在使用者重新進入頁面才更新。
     ref.listen(dataUpdateEpochProvider, (_, _) {
@@ -122,6 +141,6 @@ class IndustryEpsNotifier extends Notifier<IndustryEpsState> {
 // ==================================================
 
 final industryEpsProvider =
-    NotifierProvider<IndustryEpsNotifier, IndustryEpsState>(
+    NotifierProvider.autoDispose<IndustryEpsNotifier, IndustryEpsState>(
       IndustryEpsNotifier.new,
     );
