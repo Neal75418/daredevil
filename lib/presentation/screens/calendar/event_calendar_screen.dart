@@ -904,12 +904,21 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
       if (mounted) {
         // syncDividendEvents 不 throw reload 失敗，但會設定 state.error
         final reloadError = ref.read(eventCalendarProvider).error;
-        final message = 'calendar.syncDetailComplete'.tr(
+        var message = 'calendar.syncDetailComplete'.tr(
           namedArgs: {
             'exDividend': '${result.exDividend}',
             'exRights': '${result.exRights}',
           },
         );
+        // 靜默稽核 #8:附帶來源失敗要說出來——這顆按鈕是停券預告/法說會/
+        // 處置出關唯一的同步入口,半殘不得報成功
+        if (result.failedSources.isNotEmpty) {
+          final names = result.failedSources
+              .map((k) => 'calendar.source.$k'.tr())
+              .join('、');
+          message =
+              '$message;${'calendar.syncPartialFail'.tr(namedArgs: {'sources': names})}';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

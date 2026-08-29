@@ -51,8 +51,11 @@ class FakeEventCalendarNotifier extends EventCalendarNotifier {
   Future<void> deleteEvent(int id) async {}
 
   @override
-  Future<({int exDividend, int exRights, int total})>
-  syncDividendEvents() async => (exDividend: 0, exRights: 0, total: 0);
+  Future<
+    ({int exDividend, int exRights, int total, List<String> failedSources})
+  >
+  syncDividendEvents() async =>
+      (exDividend: 0, exRights: 0, total: 0, failedSources: const <String>[]);
 
   @override
   void toggleEventType(EventType type) {

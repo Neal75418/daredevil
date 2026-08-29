@@ -454,37 +454,58 @@ class EventCalendarNotifier extends Notifier<EventCalendarState> {
   ///
   /// 與 [addEvent]/[deleteEvent] 不同，此方法回傳結果 record 供 UI 顯示，
   /// 重載失敗時 state.error 已被設定，呼叫端可據此顯示警告而不影響 record 結果。
-  Future<({int exDividend, int exRights, int total})>
+  Future<
+    ({int exDividend, int exRights, int total, List<String> failedSources})
+  >
   syncDividendEvents() async {
-    if (state.isSyncing) return (exDividend: 0, exRights: 0, total: 0);
+    if (state.isSyncing) {
+      return (
+        exDividend: 0,
+        exRights: 0,
+        total: 0,
+        failedSources: const <String>[],
+      );
+    }
     state = state.copyWith(isSyncing: true);
     try {
       final result = await _repo.syncDividendEvents();
-      // 兩個附帶同步皆 fail-soft：任何一個失敗都不得吞掉已完成的
-      // 除權息結果、也不得跳過後面的 reload
+      // 三個附帶同步皆 fail-soft:任何一個失敗都不得吞掉已完成的除權息
+      // 結果、也不得跳過後面的 reload。但**失敗要列名**(靜默稽核 #8):
+      // 這顆按鈕是這些事件唯一的同步入口(daily pipeline 不呼叫),只
+      // log 的話 snackbar 照報成功,「行事曆上沒有停券事件」與「同步
+      // 掛了」不可分。source key 由畫面映射 i18n。
+      final failedSources = <String>[];
       try {
-        // 處置出關（資料源：trading_warning，成本極低）
+        // 處置出關(資料源:trading_warning,成本極低)
         await _repo.syncDisposalEndEvents();
       } catch (e) {
         AppLogger.warning('EventCalendar', '處置出關同步失敗', e);
+        failedSources.add('disposalEnd');
       }
       try {
-        // 停券預告走網路（BFI84U）
+        // 停券預告走網路(BFI84U)
         await _repo.syncShortSuspensionEvents();
       } catch (e) {
         AppLogger.warning('EventCalendar', '停券預告同步失敗', e);
+        failedSources.add('shortSuspension');
       }
       try {
-        // 法說會（自重大訊息 t187ap04_L 抽取，累積式）
+        // 法說會(自重大訊息 t187ap04_L 抽取,累積式)
         await _repo.syncInvestorConferenceEvents();
       } catch (e) {
         AppLogger.warning('EventCalendar', '法說會同步失敗', e);
+        failedSources.add('investorConference');
       }
       if (state.focusedMonth != null) {
         await loadMonthEvents(state.focusedMonth!);
       }
       await _loadUpcomingEvents();
-      return result;
+      return (
+        exDividend: result.exDividend,
+        exRights: result.exRights,
+        total: result.total,
+        failedSources: failedSources,
+      );
     } finally {
       state = state.copyWith(isSyncing: false);
     }

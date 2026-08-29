@@ -1419,7 +1419,13 @@
     "typeDisposalEnd": "處置出關",
     "typeShortSuspension": "停券預告",
     "noUpcomingWatchlistEvents": "未來 14 天內無符合目前篩選的事件（可按同步更新，或切換篩選）",
-    "showAllEvents": "查看全市場"
+    "showAllEvents": "查看全市場",
+    "syncPartialFail": "{sources}同步失敗",
+    "source": {
+      "disposalEnd": "處置出關",
+      "shortSuspension": "停券預告",
+      "investorConference": "法說會"
+    }
   },
   "warning": {
     "disposal": "處置",

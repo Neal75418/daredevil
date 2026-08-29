@@ -1419,7 +1419,13 @@
     "typeDisposalEnd": "Disposal ends",
     "typeShortSuspension": "Short-sell halt",
     "noUpcomingWatchlistEvents": "No events in the next 14 days for the current filter (sync to refresh, or switch filter)",
-    "showAllEvents": "Show all markets"
+    "showAllEvents": "Show all markets",
+    "syncPartialFail": "{sources} sync failed",
+    "source": {
+      "disposalEnd": "disposal-end",
+      "shortSuspension": "short-suspension",
+      "investorConference": "investor conference"
+    }
   },
   "warning": {
     "disposal": "Disposal",

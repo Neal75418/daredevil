@@ -476,6 +476,56 @@ void main() {
       verify(() => mockEventRepo.syncInvestorConferenceEvents()).called(1);
     });
 
+    test('🚨 附帶來源失敗要列在 failedSources——半殘不得報成功(靜默稽核 #8)', () async {
+      // 這顆按鈕是停券預告/法說會/處置出關唯一的同步入口(daily pipeline
+      // 不呼叫);失敗只 log 的話,該類事件永遠停在舊狀態而 snackbar 照報
+      // 成功——「行事曆上沒有停券事件」與「同步掛了」不可分。
+      when(
+        () => mockEventRepo.getEventsInRange(
+          any(),
+          any(),
+          symbols: any(named: 'symbols'),
+        ),
+      ).thenAnswer((_) async => []);
+      when(
+        () => mockEventRepo.syncDividendEvents(),
+      ).thenAnswer((_) async => (exDividend: 3, exRights: 2, total: 5));
+      when(
+        () => mockEventRepo.syncShortSuspensionEvents(),
+      ).thenThrow(Exception('BFI84U down'));
+      when(
+        () => mockEventRepo.syncInvestorConferenceEvents(),
+      ).thenThrow(Exception('t187ap04_L down'));
+
+      final notifier = container.read(eventCalendarProvider.notifier);
+      await notifier.init();
+      final result = await notifier.syncDividendEvents();
+
+      expect(result.total, 5, reason: '除權息結果不得被附帶失敗吞掉');
+      expect(result.failedSources, [
+        'shortSuspension',
+        'investorConference',
+      ], reason: '哪些來源半殘要說出來,snackbar 據此顯示');
+    });
+
+    test('附帶來源全成功 → failedSources 為空(不誤報)', () async {
+      when(
+        () => mockEventRepo.getEventsInRange(
+          any(),
+          any(),
+          symbols: any(named: 'symbols'),
+        ),
+      ).thenAnswer((_) async => []);
+      when(
+        () => mockEventRepo.syncDividendEvents(),
+      ).thenAnswer((_) async => (exDividend: 1, exRights: 0, total: 1));
+
+      final notifier = container.read(eventCalendarProvider.notifier);
+      await notifier.init();
+      final result = await notifier.syncDividendEvents();
+      expect(result.failedSources, isEmpty);
+    });
+
     test('disposal 出關同步失敗不吞除權息結果（fail-soft）', () async {
       when(
         () => mockEventRepo.syncDividendEvents(),
