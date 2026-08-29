@@ -11,7 +11,17 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
+
+/// 固定在 fixture 的年代——凍結守衛比對「資料日 vs 現在」，存檔的真實
+/// payload 日期固定，牆鐘一走過 stale 窗（7 天）測試就整批變紅。
+class _FixedClock implements AppClock {
+  const _FixedClock(this._now);
+  final DateTime _now;
+  @override
+  DateTime now() => _now;
+}
 
 class MockDio extends Mock implements Dio {}
 
@@ -21,7 +31,7 @@ void main() {
 
   setUp(() {
     dio = MockDio();
-    client = TpexClient(dio: dio);
+    client = TpexClient(dio: dio, clock: _FixedClock(DateTime(2026, 8, 23)));
   });
 
   /// 真實回應形狀：兩張表，第二張才是逐檔

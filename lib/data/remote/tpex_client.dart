@@ -4,6 +4,7 @@ import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/api_endpoints.dart';
 import 'package:daredevil/core/constants/stock_patterns.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
+import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/lru_cache.dart';
@@ -28,8 +29,14 @@ export 'package:daredevil/data/models/tpex/models.dart';
 /// - 每日股價: https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php
 /// - 法人買賣: https://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge_result.php
 class TpexClient {
-  TpexClient({Dio? dio})
-    : _dio = dio ?? MarketClientMixin.createDio(ApiEndpoints.tpexBaseUrl);
+  TpexClient({Dio? dio, AppClock clock = const SystemClock()})
+    : _dio = dio ?? MarketClientMixin.createDio(ApiEndpoints.tpexBaseUrl),
+      _clock = clock;
+
+  /// 當沖凍結偵測的時間來源。可注入：守衛比對「資料日 vs 現在」，測試用
+  /// 固定 payload（存檔的真實回應）時牆鐘一走過 stale 窗就整批變紅——
+  /// 2026-08-29 實發：8/23 寫的測試因 fixture 日期滿 8 天全數炸掉。
+  final AppClock _clock;
 
   static const String _tag = 'TPEX';
 
@@ -1363,7 +1370,7 @@ class TpexClient {
       // 那道「回應日期 ≠ 請求日期就丟棄」的守衛（端點無視請求日期），而那道
       // 守衛同時兼任「端點凍結偵測器」。本檔已有兩個端點靜默凍在某一天的
       // 前例，故在此補回下界；未來日期一律拒收（會寫出永遠讀不到的列）。
-      final now = DateContext.normalize(DateTime.now());
+      final now = DateContext.normalize(_clock.now());
       if (dataDate.isAfter(now)) {
         AppLogger.warning(_tag, '當沖回應日期 $dataDate 在未來，整批丟棄');
         return const <TpexDayTrading>[];
