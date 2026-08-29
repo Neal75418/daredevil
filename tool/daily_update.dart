@@ -131,6 +131,10 @@ Future<void> main(List<String> args) async {
     print(s);
     exit(1);
   } finally {
+    // ⚠️ 實際不可達:上方兩條路徑都以 exit() 收尾,Dart 的 exit() 不
+    // unwind(2026-08-29 review 實測)。DB 關閉由 runHeadlessUpdate 在
+    // 每條路徑負責(含非交易日早退);保留此行僅作萬一 exit 前拋出的
+    // 兜底語意,不要把它當成活的防線。
     await database?.close();
   }
 }

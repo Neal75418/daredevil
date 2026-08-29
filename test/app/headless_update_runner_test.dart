@@ -82,6 +82,7 @@ void main() {
             required tpexClient,
             required tdccClient,
             required rssParser,
+            required clock,
           }) => fail('非交易日不得建服務圖'),
     );
     expect(result.skipped, isTrue);
@@ -110,6 +111,7 @@ void main() {
             required tpexClient,
             required tdccClient,
             required rssParser,
+            required clock,
           }) {
             capturedToken = finMindClient.token;
             return mockService;
@@ -149,6 +151,7 @@ void main() {
               required tpexClient,
               required tdccClient,
               required rssParser,
+              required clock,
             }) => mockService,
       ),
       throwsStateError,
@@ -171,6 +174,11 @@ void main() {
               ).readAsStringSync(),
             )
             as Map<String, dynamic>;
+    expect(
+      (shortJson['rules'] as Map<String, dynamic>),
+      contains('WEEK_52_HIGH'),
+      reason: '資產若移除此規則,這裡先報名字,而非 cast 錯誤怪測試',
+    );
     ((shortJson['rules'] as Map<String, dynamic>)['WEEK_52_HIGH']
             as Map<String, dynamic>)['score'] =
         37;
@@ -202,6 +210,7 @@ void main() {
             required tpexClient,
             required tdccClient,
             required rssParser,
+            required clock,
           }) => mockService,
     );
 

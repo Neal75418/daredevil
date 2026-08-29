@@ -80,7 +80,10 @@ void main() {
             'base class BaseModRule extends StockRule {',
             'interface class IfaceRule extends StockRule {',
             'mixin class MixinRule extends StockRule {',
-            'class WrappedRule',
+            // 非 Rule 後綴名——不走名稱分支,唯一路徑是換行 extends 的
+            // pendingName 機制(review 實測:Rule 後綴的 wrapped fixture
+            // 會被名稱分支先接走,pendingName 刪掉照樣全綠)
+            'class MomentumBreakout',
             '    extends StockRule {',
             'class GenericRule<T> extends StockRule {',
           ]),
@@ -90,7 +93,7 @@ void main() {
             'BaseModRule',
             'IfaceRule',
             'MixinRule',
-            'WrappedRule',
+            'MomentumBreakout',
             'GenericRule',
           },
         );

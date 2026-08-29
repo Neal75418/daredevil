@@ -57,7 +57,15 @@ typedef HeadlessServiceBuilder =
       required TpexClient tpexClient,
       required TdccClient tdccClient,
       required RssParser rssParser,
+      required AppClock clock,
     });
+
+// 型別相容守衛(2026-08-29 review):seam 簽名與 factory 漂移時在**編譯期**
+// 炸——factory 新增 required 參數或改型別,這行就不再可指派。clock 放進
+// typedef 讓兩條分支共享同一個時鐘契約(review 實測:預設分支的
+// clock 轉傳原本零覆蓋,刪掉也全綠)。
+// ignore: unused_element
+const HeadlessServiceBuilder _seamMatchesFactory = UpdateServiceFactory.build;
 
 Future<UpdateResult> runHeadlessUpdate({
   required AppDatabase database,
@@ -70,8 +78,10 @@ Future<UpdateResult> runHeadlessUpdate({
   if (!TaiwanCalendar.isTradingDay(now)) {
     AppLogger.info(_tag, '非交易日，跳過更新');
     // docstring 契約「runner 會在 finally 呼叫 db.close()」原本在這條
-    // 早退路徑漏掉——CLI 端靠自己的 finally 補刀、bg isolate 靠 isolate
-    // 結束回收才沒出事。補上讓契約在每條路徑成立（2026-08-29 稽核）。
+    // 早退路徑漏掉。⚠️ 別以為 CLI 端的 finally 是兜底——tool/daily_update
+    // 以 exit() 收尾,Dart 的 exit() **不 unwind**,那個 finally 在每條
+    // 路徑都不可達(review 實測);修好前兩個呼叫端實際都靠 process
+    // teardown。補上讓契約在每條路徑成立(2026-08-29 稽核+review)。
     await database.close();
     return UpdateResult(date: now)
       ..success = true
@@ -129,24 +139,15 @@ Future<UpdateResult> runHeadlessUpdate({
 
       // 透過 UpdateServiceFactory 統一裝配，與 foreground
       // `updateServiceProvider` 共享同一條 wiring 路徑避免漂移。
-      final updateService = buildService != null
-          ? buildService(
-              database: database,
-              finMindClient: finMindClient,
-              twseClient: twseClient,
-              tpexClient: tpexClient,
-              tdccClient: tdccClient,
-              rssParser: rssParser,
-            )
-          : UpdateServiceFactory.build(
-              database: database,
-              finMindClient: finMindClient,
-              twseClient: twseClient,
-              tpexClient: tpexClient,
-              tdccClient: tdccClient,
-              rssParser: rssParser,
-              clock: clock,
-            );
+      final updateService = (buildService ?? UpdateServiceFactory.build)(
+        database: database,
+        finMindClient: finMindClient,
+        twseClient: twseClient,
+        tpexClient: tpexClient,
+        tdccClient: tdccClient,
+        rssParser: rssParser,
+        clock: clock,
+      );
 
       return await updateService.runDailyUpdate();
     } finally {
