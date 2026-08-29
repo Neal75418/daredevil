@@ -51,6 +51,8 @@
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:meta/meta.dart';
+
 import 'package:drift/drift.dart' show Value, Variable;
 
 import 'package:daredevil/core/constants/calibration_thresholds.dart';
@@ -60,6 +62,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
+import 'package:daredevil/domain/services/update/batch_data_builder.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
 
 // ============================================================================
@@ -272,7 +275,23 @@ class ReplayCalibrator {
     // 1. Load 所有資料
     _log('▶️  Loading backfilled data from DB...');
     final loadStart = DateTime.now();
-    final data = await _loadData();
+    var data = await _loadData();
+    // **生產一致性 (a)**：市場已同步、個股無活動的日子補零列——與
+    // BatchDataLoader 走同一個生產函式。不補的話 streak 規則會把不相鄰
+    // 兩天焊成連續（生產修掉的 bug 在校準語料復活）。
+    data = data.withInstitutional(
+      BatchDataBuilder.fillNoActivityDays(
+        data.institutionalBySymbol,
+        data.pricesBySymbol,
+      ),
+    );
+    // **生產一致性 (b)**：per-date regime map——與 scoring_isolate 同一判定
+    // 的逐日等價版。不傳的話回檔規則永不被 gate，校準樣本含生產會壓掉的
+    // 空頭觸發。
+    final uptrendByDate = computeMarketUptrendByDate(
+      data.pricesBySymbol,
+      SectorParams.regimeLookbackDays,
+    );
     _log(
       '✅ Loaded: ${data.pricesBySymbol.length} symbols with prices '
       '(${_formatDuration(DateTime.now().difference(loadStart))})',
@@ -337,7 +356,13 @@ class ReplayCalibrator {
 
     for (final symbol in data.pricesBySymbol.keys) {
       symbolsProcessed++;
-      final result = _replaySymbol(symbol, data, ruleStats, universeMeans);
+      final result = _replaySymbol(
+        symbol,
+        data,
+        ruleStats,
+        universeMeans,
+        uptrendByDate,
+      );
       daysProcessed += result.days;
       totalFirings += result.firings;
 
@@ -400,11 +425,50 @@ class ReplayCalibrator {
   /// 2. 確保 forward window 夠（i + 60 < length）
   /// 3. 呼叫 analysisService + ruleEngine
   /// 4. 對每個 firing 計算 5d + 60d forward return 並累加進 ruleStats
+  /// per-date 市場 regime map——[PriceCalculator.marketUptrendOrNull] 的逐日
+  /// 等價版（parity 見 test/tool/replay_production_parity_test.dart）。
+  ///
+  /// 等價論證：生產對「截至日 D 的各檔歷史」以 `last` vs `len-1-lookback` 算
+  /// lookback 報酬、並以 asOf 過濾「最後一根 bar 就是 D」的股票。逐日版對每檔
+  /// 每根 bar i ≥ lookback 貢獻 close[i] vs close[i−lookback] 到該 bar 日——
+  /// 「有 bar 在 D 的股票」恰是生產 asOf 過濾後的集合，索引 i−lookback 恰是
+  /// 截斷歷史的 len−1−lookback。null close／old ≤ 0 同樣跳過；
+  /// n < [SectorParams.regimeMinEligibleStocks] 回 null（permissive）。
+  ///
+  /// O(總列數) 一次算完全部日期；逐日呼叫生產函式是 O(日數 × 總列數)，
+  /// 3M 列 × 1,400 日跑不動。
+  @visibleForTesting
+  static Map<DateTime, bool?> computeMarketUptrendByDate(
+    Map<String, List<DailyPriceEntry>> pricesBySymbol,
+    int lookbackDays,
+  ) {
+    final sum = <DateTime, double>{};
+    final n = <DateTime, int>{};
+    for (final history in pricesBySymbol.values) {
+      for (var i = lookbackDays; i < history.length; i++) {
+        final latest = history[i].close;
+        final old = history[i - lookbackDays].close;
+        if (latest == null || old == null || old <= 0) continue;
+        final d = history[i].date;
+        final key = DateTime(d.year, d.month, d.day);
+        sum[key] = (sum[key] ?? 0) + (latest - old) / old;
+        n[key] = (n[key] ?? 0) + 1;
+      }
+    }
+    return {
+      for (final k in sum.keys)
+        k: n[k]! < SectorParams.regimeMinEligibleStocks
+            ? null
+            : sum[k]! / n[k]! > 0,
+    };
+  }
+
   _PerSymbolResult _replaySymbol(
     String symbol,
     _BackfilledData data,
     Map<String, RuleStats> ruleStats,
     _UniverseMeans? universeMeans,
+    Map<DateTime, bool?> uptrendByDate,
   ) {
     final prices = data.pricesBySymbol[symbol];
     if (prices == null || prices.length < config.minHistoryDays) {
@@ -471,6 +535,13 @@ class ReplayCalibrator {
         analysisResult,
         priceHistory: pricesUpToDay,
         evaluationTime: currentPrice.date,
+        // 生產一致性 (b)：與 scoring_isolate 相同的 regime gate 輸入
+        isMarketUptrend:
+            uptrendByDate[DateTime(
+              currentPrice.date.year,
+              currentPrice.date.month,
+              currentPrice.date.day,
+            )],
         // 其餘 marketData 欄位（外資持股／集保／警示／內部人）仍為 null——
         // 那些資料 backfill 根本沒抓，對應規則本來就 no-fire。
         marketData: dtRatio == null
@@ -639,8 +710,15 @@ class ReplayCalibrator {
     required List<DailyPriceEntry> pricesUpToDay,
     required DateTime currentDate,
   }) {
+    // 生產一致性 (c)：與 BatchDataLoader 相同的 streak 專用窗。餵全歷史會
+    // 讓 streakTruncated 與長度門檻語意和生產不一致。
+    final instStart = currentDate.subtract(
+      const Duration(days: InstitutionalParams.institutionalStreakLookbackDays),
+    );
     final institutional = data.institutionalBySymbol[symbol]
-        ?.where((e) => !e.date.isAfter(currentDate))
+        ?.where(
+          (e) => !e.date.isAfter(currentDate) && !e.date.isBefore(instStart),
+        )
         .toList();
 
     // look-ahead 修正：月營收次月 10 號才公布，故以「公布日」而非「營收月」
@@ -1155,6 +1233,19 @@ class ReplayCalibrator {
 // ============================================================================
 
 class _BackfilledData {
+  /// 換掉法人 map（fillNoActivityDays 用）——其餘欄位原樣保留
+  _BackfilledData withInstitutional(
+    Map<String, List<DailyInstitutionalEntry>> filled,
+  ) => _BackfilledData(
+    pricesBySymbol: pricesBySymbol,
+    institutionalBySymbol: filled,
+    revenueBySymbol: revenueBySymbol,
+    epsBySymbol: epsBySymbol,
+    roeBySymbol: roeBySymbol,
+    valuationBySymbol: valuationBySymbol,
+    dayTradingBySymbol: dayTradingBySymbol,
+  );
+
   const _BackfilledData({
     required this.pricesBySymbol,
     required this.institutionalBySymbol,
