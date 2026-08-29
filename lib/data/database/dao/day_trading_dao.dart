@@ -125,10 +125,16 @@ mixin DayTradingDaoMixin on $AppDatabase {
     // date 索引全廢，實測 app DB 40 天窗 3.2s、寬窗 33s，且它跑在**每次每日
     // 更新**上。EXCEPT 版兩側各掃一次 date range，同窗實測 146ms／708ms。
     //
-    // 語意等價的前提：第二側加了 `dt.date >= ?`，成立是因為 [since] 已
-    // normalize 到本地午夜，而同曆日的任何 timestamp（含歷史變體如 08:00）
-    // 必 ≥ 該日午夜——所以不會把「窗內曆日、變體時戳」的當沖列漏在 EXCEPT
-    // 右側之外。
+    // 第二側的 `dt.date >= ?` 有兩個身分：
+    // 1. **效能載重**——它讓右側走 idx_day_trading_date 的 range SEARCH；
+    //    拿掉後 EXPLAIN 變成 SCAN stock_master + 對 1.8M 列逐 symbol probe，
+    //    這條 SQL 的 46× 加速有一半來自它。語意上它確實可刪（刪了只是
+    //    右側集合變大、anti-join 更保守）——**正因如此才要寫明**，否則
+    //    正確推理的人會刪掉它、測試全綠、效能靜默退化。
+    // 2. 語意安全：[since] 已 normalize 到本地午夜，同曆日的任何 timestamp
+    //    （含歷史變體如 08:00）必 ≥ 該日午夜，不會把窗內曆日的當沖列漏在
+    //    EXCEPT 右側之外——test/tool/day_trading_gap_detection_test.dart
+    //    的「變體時戳」測試釘住這個邊界。
     final rows = await customSelect(
       'SELECT DISTINCT substr(dp.date, 1, 10) AS d '
       'FROM daily_price dp '

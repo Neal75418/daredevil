@@ -146,7 +146,7 @@ class TpexClient {
       final cached = _cache.get(cacheKey) as List<TpexDailyPrice>?;
       if (cached != null) return cached;
 
-      final targetDate = date ?? DateTime.now();
+      final targetDate = date ?? _clock.now();
       final rocDateStr = TwParseUtils.toRocDateString(targetDate);
 
       final response = await _dio.get(
@@ -228,7 +228,7 @@ class TpexClient {
       final cached = _cache.get(cacheKey) as List<TpexInstitutional>?;
       if (cached != null) return cached;
 
-      final targetDate = date ?? DateTime.now();
+      final targetDate = date ?? _clock.now();
       final rocDateStr = TwParseUtils.toRocDateString(targetDate);
 
       final response = await _dio.get(
@@ -325,7 +325,7 @@ class TpexClient {
   /// [date] 可選，指定日期。省略則取最新。
   Future<TpexInstitutionalAmounts?> getInstitutionalAmounts({DateTime? date}) {
     return MarketClientMixin.executeRequest(_tag, '法人金額統計', () async {
-      final targetDate = date ?? DateTime.now();
+      final targetDate = date ?? _clock.now();
       final rocDateStr = TwParseUtils.toRocDateString(targetDate);
 
       final response = await _dio.get(
@@ -399,9 +399,9 @@ class TpexClient {
       final cached = _cache.get(cacheKey) as List<TpexValuation>?;
       if (cached != null) return cached;
 
-      // 估值 API 不回傳統一交易日，且過去 fallback 用 DateTime.now()（含時間戳）→
+      // 估值 API 不回傳統一交易日，且過去 fallback 用 _clock.now()（含時間戳）→
       // 同日多次同步會產生不同 PK、無法去重。正規化到當日 00:00（同 daily_price 口徑）。
-      final targetDate = DateContext.normalize(date ?? DateTime.now());
+      final targetDate = DateContext.normalize(date ?? _clock.now());
 
       // TPEX OpenAPI 只回傳最新資料，不接受日期參數
       final response = await _dio.get(
@@ -529,7 +529,7 @@ class TpexClient {
       // 沒帶日期 → table.date == sentinel ≠ 請求日期 → 下方守衛擋掉。
       final table = MarketClientMixin.extractTpexTable(
         data,
-        date != null ? _unknownDateSentinel : DateTime.now(),
+        date != null ? _unknownDateSentinel : _clock.now(),
         _tag,
         '融資融券',
       );

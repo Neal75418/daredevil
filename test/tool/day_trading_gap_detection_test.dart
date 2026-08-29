@@ -108,4 +108,25 @@ void main() {
 
     expect(gaps, isEmpty);
   });
+
+  test('🚨 since 當日的變體時戳(08:00)不得被判成缺口', () async {
+    // EXCEPT 右側帶 dt.date >= since——歷史上存在非午夜的變體時戳,
+    // 這條釘住「同曆日任何時戳必 ≥ 午夜」的邊界前提。
+    final d = DateTime(2026, 8, 1);
+    await seedPrice('6104', d);
+    await db.insertDayTradingData([
+      DayTradingCompanion.insert(
+        symbol: '6104',
+        date: DateTime(2026, 8, 1, 8), // 變體時戳
+        buyVolume: const Value(1),
+        sellVolume: const Value(1),
+        dayTradingRatio: const Value(10),
+        tradeVolume: const Value(1),
+      ),
+    ]);
+
+    final gaps = await db.findDayTradingGapDates(market: 'TPEx', since: d);
+
+    expect(gaps, isEmpty, reason: '該日有當沖資料(僅時戳非午夜),不是缺口');
+  });
 }
