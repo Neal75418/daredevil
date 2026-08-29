@@ -353,7 +353,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       final failedSections = <String>{};
       final allTasks = (
         (
-          _loadIndices(),
+          _loadIndices(failedSections: failedSections),
           _loadIndexHistory(failedSections: failedSections),
           _loadAdvanceDeclineByMarket(
             dataDate,
@@ -436,7 +436,14 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
         );
         // 結束 loading 指示器，讓 UI 可互動
         if (_active && _loadGeneration == myGen) {
-          state = state.copyWith(isLoading: false, dataDate: dataDate);
+          // 傳當輪快照:不傳的話 banner 在新一輪 in-flight 期間掛著
+          // **上一輪**的數字(review 2026-08-29)。此刻 loader 尚未全數
+          // 完成故為部分結果——複本避免 state 持有仍在變動的集合。
+          state = state.copyWith(
+            isLoading: false,
+            dataDate: dataDate,
+            failedSections: Set.of(failedSections),
+          );
         }
         // 背景繼續等待 API 回應，完成後靜默更新
         unawaited(
@@ -603,7 +610,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       ),
       chipAnomaliesByMarket: chipAnomalies.byMarket,
       chipAnomalyFailedDetectors: chipAnomalies.failedDetectors,
-      failedSections: failedSections,
+      failedSections: Set.unmodifiable(failedSections),
       dataDate: dataDate,
       sectionDates: sectionDates,
     );
@@ -658,8 +665,9 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   /// 盤中 API 掛掉時 Hero 卡原本把**昨收**當即時值顯示、混合失敗時同畫面
   /// 一半今天一半昨天——同檔的 advanceDeclineStaleDates 早就對漲跌家數做
   /// 了回退標記,指數這條漏掉,防護不對稱。
-  Future<({List<TwseMarketIndex> data, Set<String> staleNames})>
-  _loadIndices() async {
+  Future<({List<TwseMarketIndex> data, Set<String> staleNames})> _loadIndices({
+    required Set<String> failedSections,
+  }) async {
     try {
       // 獨立呼叫 TWSE 和 TPEx API，避免一方失敗拖垮另一方
       List<TwseMarketIndex> twseIndices = [];
@@ -680,6 +688,10 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       // API 全部失敗時，從 DB 取最新指數作為備援——全部標 stale
       if (twseIndices.isEmpty && tpexIndices.isEmpty) {
         final dbIndices = await _loadIndicesFromDb();
+        // DB 備援也空 → staleNames 為空、error 未設、指數卡整張消失:
+        // 三條揭露管道同時靜默(2026-08-29 review 實測)。補進
+        // failedSections 讓標題 banner 至少說得出來。
+        if (dbIndices.isEmpty) failedSections.add('indices');
         return (
           data: dbIndices,
           staleNames: {for (final i in dbIndices) i.name},
@@ -723,10 +735,12 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
         }
       }
 
+      if (filtered.isEmpty) failedSections.add('indices');
       return (data: filtered, staleNames: staleNames);
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入大盤指數失敗', e);
       final dbIndices = await _loadIndicesFromDb();
+      if (dbIndices.isEmpty) failedSections.add('indices');
       return (data: dbIndices, staleNames: {for (final i in dbIndices) i.name});
     }
   }

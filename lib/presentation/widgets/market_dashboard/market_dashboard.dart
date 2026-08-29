@@ -404,6 +404,20 @@ class _MarketDashboardState extends State<MarketDashboard> {
                 [],
           ),
         );
+      } else {
+        // 上櫃分支與 parallel 檢視都有兜底文案,唯獨這裡沒有——指數全掛
+        // 時 Hero 卡整張消失且零文案(2026-08-29 review)
+        sections.add(
+          Padding(
+            padding: const EdgeInsets.all(DesignTokens.spacing16),
+            child: Text(
+              'marketOverview.noData'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        );
       }
     } else {
       // 上櫃：顯示櫃買指數 Hero

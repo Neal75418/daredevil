@@ -244,9 +244,66 @@ void main() {
 
     test('全部正常 → failedSections 為空(不誤報)', () async {
       setupEmptyDefaults();
+      // 健康日必須有指數:`setupEmptyDefaults` 的空指數會讓畫面根本沒有
+      // Hero 卡,那不是「正常」——它現在(正確地)被列進 failedSections
+      when(() => mockTwse.getMarketIndices()).thenAnswer(
+        (_) async => [
+          TwseMarketIndex(
+            date: testDate,
+            name: MarketIndexNames.taiex,
+            close: 20000,
+            change: 150,
+            changePercent: 0.75,
+          ),
+        ],
+      );
       final notifier = container.read(marketOverviewProvider.notifier);
       await notifier.loadData();
       expect(container.read(marketOverviewProvider).failedSections, isEmpty);
+    });
+
+    test('🚨 API 成功但無可用指數(名稱漂移/TPEx 空)→ 同樣列名', () async {
+      // 與「API 全掛」不同路徑:TWSE 有回應但名稱全不在 dashboardIndices
+      // (端點改名),TPEx 空、DB 也空 → filtered 收尾仍為空。使用者看到的
+      // 同樣是沒有 Hero 卡,揭露不能只綁「API 拋例外」
+      setupEmptyDefaults();
+      when(() => mockTwse.getMarketIndices()).thenAnswer(
+        (_) async => [
+          TwseMarketIndex(
+            date: testDate,
+            name: '某個沒人認得的指數',
+            close: 100,
+            change: 1,
+            changePercent: 1,
+          ),
+        ],
+      );
+      when(() => mockTpex.getTpexIndex()).thenAnswer((_) async => []);
+
+      final notifier = container.read(marketOverviewProvider.notifier);
+      await notifier.loadData();
+
+      final state = container.read(marketOverviewProvider);
+      expect(state.indices, isEmpty);
+      expect(state.failedSections, contains('indices'));
+    });
+
+    test('🚨 指數 API 全掛且 DB 也空 → failedSections 說出來(review 補洞)', () async {
+      // staleNames 只在 DB 拿得到資料時才有內容:兩者皆空時三條揭露管道
+      // (indices/staleNames/error)同時靜默,而 mobile TWSE 分支連兜底
+      // 文案都沒有——2026-08-29 review 實測的形狀
+      setupEmptyDefaults();
+      when(() => mockTwse.getMarketIndices()).thenThrow(Exception('down'));
+      when(() => mockTpex.getTpexIndex()).thenThrow(Exception('down'));
+
+      final notifier = container.read(marketOverviewProvider.notifier);
+      await notifier.loadData();
+
+      final state = container.read(marketOverviewProvider);
+      expect(state.indices, isEmpty, reason: '前提:連 DB 備援都沒資料');
+      expect(state.indexStaleNames, isEmpty, reason: '前提:staleNames 此時幫不上忙');
+      expect(state.error, isNull, reason: '前提:主流程仍成功——原本因此全靜默');
+      expect(state.failedSections, contains('indices'));
     });
 
     test('🚨 指數 API 全掛 → DB 備援全部列入 indexStaleNames(靜默稽核 #3)', () async {
