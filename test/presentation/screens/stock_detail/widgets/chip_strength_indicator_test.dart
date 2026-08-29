@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/semantic_colors.dart';
+import 'package:daredevil/core/constants/chip_scoring_params.dart';
 import 'package:daredevil/core/constants/chip_strength.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/chip_strength_indicator.dart';
 
@@ -140,14 +141,18 @@ void main() {
       );
     });
 
-    testWidgets('🚨 資料不足 → 顯示「資料不足」,不得渲染假的弱勢評級', (tester) async {
+    testWidgets('🚨 資料不足 → 顯示「資料不足」,不得渲染無輸入的預設評級', (tester) async {
+      // baseline 50 之後,稀疏股實際會到 UI 的狀態是 score=50/neutral
+      // (無輸入下的預設值,不是量測結果)——舊 fixture 的 score=0/weak 在
+      // measuredDomains=1 下已結構性不可達(單域最大負值 −27 → 最低 23),
+      // 守的是不存在的狀態(2026-08-29 review)。
       widenViewport(tester);
       await tester.pumpWidget(
         buildTestApp(
           const ChipStrengthIndicator(
             strength: ChipStrengthResult(
-              score: 0,
-              rating: ChipRating.weak, // fromScore(0) 的產物——不得顯示
+              score: ChipScoringParams.baselineScore,
+              rating: ChipRating.neutral, // fromScore(baseline) 的產物——不得顯示
               attitude: InstitutionalAttitude.neutral,
               measuredDomains: 1,
             ),
@@ -157,11 +162,15 @@ void main() {
 
       expect(find.textContaining('chip.insufficientCaption'), findsOneWidget);
       expect(
-        find.text('chip.ratingWeak'),
+        find.text('chip.ratingNeutral'),
         findsNothing,
-        reason: '「沒被量測」與「實測極弱」不得逐 pixel 相同',
+        reason: '「沒被量測」與「實測中性」不得逐 pixel 相同',
       );
-      expect(find.text('0'), findsNothing, reason: '分數 0 是捏造的,不得顯示');
+      expect(
+        find.text('${ChipScoringParams.baselineScore}'),
+        findsNothing,
+        reason: '分數是無輸入下的預設值,不得顯示',
+      );
     });
   });
 }

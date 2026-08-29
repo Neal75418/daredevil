@@ -146,20 +146,50 @@ class ChipScoringParams {
   // 5. Holding Concentration (股權分散)
   // ==================================================
 
-  /// 大戶持股集中度高門檻（%）
-  static const double concentrationHighThresholdPct = 60.0;
+  /// 大戶持股集中度門檻——**母體百分位錨定、對稱雙向計分**（2026-08-29 重定）
+  ///
+  /// ### 為何重定：舊 ≥60 加分的 60 恰為母體中位數
+  /// production DB 2,573 檔最新 TDCC 週實測（2026-08-29）：大戶（400 張+）
+  /// 持股佔比 p10=29.4、p25=45.2、**p50=60.6**、p75=74.4、p90=84.0。舊制
+  /// ≥60 → +20 讓 50.9% 股票拿「高度集中」加分、78.9% 帶永久加分，且該域
+  /// 是六域中唯一**只加不減**又鍵在靜態屬性上的——是籌碼分數 3.4× 偏多
+  /// 偏斜的唯一來源（review 對 2,138 檔逐域實測；其餘五域淨訊號均值僅
+  /// +0.25）。與當沖舊門檻 35%=p52 同一種語意破產：把中位數叫「過高」。
+  ///
+  /// ### 重定原則
+  /// 靜態屬性要當訊號用，就必須對母體常態保持中性——觸發率設計
+  /// 10/15/50/15/10（實測 9.0/15.0/51.4/14.3/10.4%，域貢獻均值 −0.22）。
+  /// 高度集中＝籌碼安定偏多；高度分散＝散戶盤、籌碼凌亂偏空（台股籌碼
+  /// 分析慣例，雙向皆有語意）。
+  ///
+  /// ### 重量法（數值隨母體漂移，重定時跑同一查詢再圓整到整數）
+  /// 對 `holding_distribution` 每檔**最新日**的列，加總 level 含「以上」
+  /// 或首數字 ≥ [largeHolderMinLot] 的 percent，取母體百分位。
+  static const double concentrationVeryHighThresholdPct = 85.0;
 
-  /// 大戶持股集中度中門檻（%）
-  static const double concentrationMediumThresholdPct = 40.0;
+  /// 偏集中門檻（p75）
+  static const double concentrationHighThresholdPct = 75.0;
+
+  /// 偏分散門檻（p25）——**低於**此值扣分
+  static const double concentrationLowThresholdPct = 45.0;
+
+  /// 高度分散門檻（p10）——**低於**此值重扣
+  static const double concentrationVeryLowThresholdPct = 30.0;
 
   /// 大戶判定最低張數（張）— 400 張以上視為大戶
   static const int largeHolderMinLot = 400;
 
-  /// 大戶持股比例 >= concentrationHighThresholdPct 加分
-  static const int concentrationHighBonus = 20;
+  /// 大戶持股比例 >= [concentrationVeryHighThresholdPct] 加分
+  static const int concentrationVeryHighBonus = 20;
 
-  /// 大戶持股比例 >= concentrationMediumThresholdPct 加分
-  static const int concentrationMediumBonus = 8;
+  /// 大戶持股比例 >= [concentrationHighThresholdPct] 加分
+  static const int concentrationHighBonus = 8;
+
+  /// 大戶持股比例 <= [concentrationLowThresholdPct] 扣分
+  static const int concentrationLowPenalty = -8;
+
+  /// 大戶持股比例 <= [concentrationVeryLowThresholdPct] 扣分
+  static const int concentrationVeryLowPenalty = -20;
 
   // ==================================================
   // 6. Insider Holding (內部人)

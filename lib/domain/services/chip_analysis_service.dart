@@ -68,7 +68,9 @@ class ChipAnalysisService {
       // 連增判定需 marginStreakDays 個連續 pair → 至少 streak+1 列
       marginHistory.length >= ChipScoringParams.marginStreakDays + 1,
       dayTradingHistory.isNotEmpty,
-      holdingDistribution.isNotEmpty,
+      // 集中度另有完整性前提(大戶列存在且無缺值)——雙向計分後,把
+      // 不完整資料當已量測會捏造「分散」懲罰
+      _concentrationMeasurable(holdingDistribution),
       insiderHistory.isNotEmpty,
     ].where((has) => has).length;
 
@@ -229,25 +231,48 @@ class ChipAnalysisService {
   // 5. 持股集中度
   // ==================================================
 
-  int _concentrationAdjustment(List<HoldingDistributionEntry> entries) {
-    if (entries.isEmpty) return 0;
+  /// 集中度可計算的前提:至少一列大戶級距、且大戶列的 percent 無缺值。
+  ///
+  /// 雙向計分後缺值的代價變重(2026-08-29):舊制 null 頂多少加分,現在
+  /// 部分加總會把「缺值」算成低集中 → 扣分;同理「整包只有小級距列」的
+  /// 加總 0% 不是「極度分散」而是資料不完整。兩者都判為不可計算——
+  /// 調整回 0,measuredDomains 也不計入。
+  bool _concentrationMeasurable(List<HoldingDistributionEntry> entries) {
+    var hasLarge = false;
+    for (final entry in entries) {
+      if (_isLargeHolder(entry.level)) {
+        if (entry.percent == null) return false;
+        hasLarge = true;
+      }
+    }
+    return hasLarge;
+  }
 
-    // 大戶持股佔比加總
+  int _concentrationAdjustment(List<HoldingDistributionEntry> entries) {
+    if (!_concentrationMeasurable(entries)) return 0;
+
+    // 大戶持股佔比加總(跨級距:400-600、600-800、800-1,000、1,000以上)
     double largeHolderPercent = 0;
     for (final entry in entries) {
-      // 解析級距："1000以上" 或 "800-999" 等
-      final level = entry.level;
-      if (_isLargeHolder(level)) {
-        largeHolderPercent += entry.percent ?? 0;
+      if (_isLargeHolder(entry.level)) {
+        largeHolderPercent += entry.percent!;
       }
     }
 
+    // 百分位對稱五帶(門檻依據見 ChipScoringParams 的重量法註解)
+    if (largeHolderPercent >=
+        ChipScoringParams.concentrationVeryHighThresholdPct) {
+      return ChipScoringParams.concentrationVeryHighBonus;
+    }
     if (largeHolderPercent >= ChipScoringParams.concentrationHighThresholdPct) {
       return ChipScoringParams.concentrationHighBonus;
     }
-    if (largeHolderPercent >=
-        ChipScoringParams.concentrationMediumThresholdPct) {
-      return ChipScoringParams.concentrationMediumBonus;
+    if (largeHolderPercent <=
+        ChipScoringParams.concentrationVeryLowThresholdPct) {
+      return ChipScoringParams.concentrationVeryLowPenalty;
+    }
+    if (largeHolderPercent <= ChipScoringParams.concentrationLowThresholdPct) {
+      return ChipScoringParams.concentrationLowPenalty;
     }
     return 0;
   }

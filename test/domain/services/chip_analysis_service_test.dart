@@ -331,7 +331,7 @@ void main() {
             symbol: '6104',
             date: DateTime(2026, 8, 20),
             level: '1,000以上',
-            percent: 65.0,
+            percent: 90.0, // ≥85(p90)拿最高檔加分——門檻百分位錨定後 65 落中帶
           ),
         ],
       );
@@ -341,7 +341,7 @@ void main() {
         r.score,
         ChipScoringParams.baselineScore +
             ChipScoringParams.insiderBuyBonus +
-            ChipScoringParams.concentrationHighBonus,
+            ChipScoringParams.concentrationVeryHighBonus,
       );
     });
 
@@ -381,6 +381,83 @@ void main() {
         ).measuredDomains,
         1,
       );
+    });
+  });
+
+  group('集中度百分位錨定(2026-08-29 review Critical:3.4× 偏多來源)', () {
+    // 舊制 ≥60 加分,但 60 恰為母體中位數 p50.9(production DB 2,573 檔
+    // 實測)——過半股票帶「高度集中」加分、域只加不減,是籌碼分數 3.4×
+    // 偏多偏斜的唯一來源。重定為百分位對稱錨定:
+    //   ≥85(p90)+20 | ≥75(p75)+8 | 45–75 中性 | ≤45(p25)−8 | ≤30(p10)−20
+    final service = const ChipAnalysisService();
+
+    int scoreWith(List<HoldingDistributionEntry> holding) => service
+        .compute(
+          institutionalHistory: [],
+          shareholdingHistory: [],
+          marginHistory: [],
+          dayTradingHistory: [],
+          holdingDistribution: holding,
+          insiderHistory: [],
+        )
+        .score;
+
+    HoldingDistributionEntry big(double? pct, {String level = '1,000以上'}) =>
+        HoldingDistributionEntry(
+          symbol: '2330',
+          date: DateTime(2026, 8, 28),
+          level: level,
+          percent: pct,
+        );
+
+    test('五帶邊界(含等於的方向與生產語意一致)', () {
+      const base = ChipScoringParams.baselineScore;
+      expect(scoreWith([big(85.0)]), base + 20, reason: '≥85 → +20');
+      expect(scoreWith([big(84.9)]), base + 8, reason: '75–85 → +8');
+      expect(scoreWith([big(75.0)]), base + 8);
+      expect(scoreWith([big(74.9)]), base, reason: '中帶(45–75)不動分');
+      expect(scoreWith([big(45.1)]), base);
+      expect(scoreWith([big(45.0)]), base - 8, reason: '≤45 → −8');
+      expect(scoreWith([big(30.1)]), base - 8);
+      expect(scoreWith([big(30.0)]), base - 20, reason: '≤30 → −20');
+    });
+
+    test('跨級距加總維持既有行為:40+46=86 → +20', () {
+      expect(
+        scoreWith([big(40.0, level: '800-999'), big(46.0)]),
+        ChipScoringParams.baselineScore + 20,
+      );
+    });
+
+    test('🚨 大戶列 percent 為 null → 不可計算,禁止捏造「分散」懲罰', () {
+      // 雙向計分後 null 的代價變重:舊制 null 頂多少加分,現在部分加總
+      // 會把「缺值」算成低集中 → 扣分——null 不是 0(專案反覆踩過的坑)
+      final r = service.compute(
+        institutionalHistory: [],
+        shareholdingHistory: [],
+        marginHistory: [],
+        dayTradingHistory: [],
+        holdingDistribution: [
+          big(null),
+          big(90.0, level: '800-999'),
+        ],
+        insiderHistory: [],
+      );
+      expect(r.score, ChipScoringParams.baselineScore, reason: '缺值 → 不動分');
+      expect(r.measuredDomains, 0, reason: '不可計算 = 未量測');
+    });
+
+    test('🚨 無任何大戶級距列 → 不可計算,不是「大戶 0% = 極度分散」', () {
+      final r = service.compute(
+        institutionalHistory: [],
+        shareholdingHistory: [],
+        marginHistory: [],
+        dayTradingHistory: [],
+        holdingDistribution: [big(30.0, level: '100-200')],
+        insiderHistory: [],
+      );
+      expect(r.score, ChipScoringParams.baselineScore);
+      expect(r.measuredDomains, 0);
     });
   });
 
@@ -428,7 +505,7 @@ void main() {
             symbol: '2330',
             date: DateTime(2026, 8, 24),
             level: '1,000以上',
-            percent: 30.0,
+            percent: 60.0, // 中帶(45–75)——恰為母體中位數,「常態」不動分
           ),
         ],
         insiderHistory: [

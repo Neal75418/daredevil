@@ -16,10 +16,10 @@ class ChipStrengthIndicator extends StatelessWidget {
     final theme = Theme.of(context);
     final color = _ratingColor(strength.rating);
 
-    // 資料不足:六域幾乎全空時 score=0 會被評成「弱勢」——「沒被量測」與
-    // 「實測極弱」逐 pixel 相同,使用者可能因假評級放棄一檔只是沒資料的
-    // 股票(上櫃的持股/當沖/融資覆蓋系統性稀疏,正是重災區)。此時只給
-    // 中性的「資料不足」,分數/進度條/法人態度全不顯示(那些都是捏造的 0)。
+    // 資料不足:六域幾乎全空時分數停在 baseline、會被評成「中性」——
+    // 「沒被量測」與「實測中性」逐 pixel 相同,仍是謊報(上櫃的持股/當沖/
+    // 融資覆蓋系統性稀疏,正是重災區)。此時只給「資料不足」,分數/進度條/
+    // 法人態度全不顯示(那些是無輸入下的預設值,不是量測結果)。
     if (strength.isInsufficient) {
       return Container(
         padding: const EdgeInsets.all(DesignTokens.spacing16),
