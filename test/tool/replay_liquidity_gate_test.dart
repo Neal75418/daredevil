@@ -6,6 +6,14 @@
 // 放行)。replay 原本評 stock_master 全部——實測 64% 校準語料是生產永不
 // 評分的 stock-day。
 //
+// ⚠️ **這組測試證明的是「與生產一致」,不是「生產是對的」**
+// (2026-08-29 domain 稽核 Critical 1)。生產的單日閘門有一道
+// `volume >= 1,000,000 股` 的**股數**門檻,它不是流動性而是反向的價格
+// 指標:實測 5274 信驊在 2026-08-28 成交 53.9 億元卻被判 LOW_VOLUME,
+// 全庫 71.3% 的 stock-day 由這道門檻剔除、其中 25% 是已經通過 3,000 萬
+// 成交額門檻的。若那道門檻要改,**改生產的 LiquidityChecker 即可**——
+// applySignalDayGate 直接呼叫它本尊,校準語料會自動跟上。
+//
 // **ground truth = 生產 DAO 本身**:(d-1) 對每個 (symbol, 交易日) 全掃,
 // 把 computeLiquidityEligibility 的判定與 getMedianTurnoverBatch 逐對比對
 // ——任何窗界/中位數/permissive 語意的漂移都會在剖面差異處現形。

@@ -7,6 +7,18 @@
 //   (b) 缺 regime gate：回檔規則的校準樣本含生產會壓掉的空頭觸發
 //   (c) 法人窗不同：生產裁到 institutionalStreakLookbackDays，replay 餵全歷史
 //
+// ⚠️ **這組測試證明的是「等價」,不是「正確」**(2026-08-29 domain 稽核)。
+// 生產端的 `PriceCalculator.marketUptrendOrNull` 用等權平均判多空,而
+// 該稽核實測:1,373 個可判定日裡有 **381 日(27.7%)** 說「多頭」但同期
+// 上漲家數不到一半,偏差**單向**(改用中位數會讓這 381 日全部翻成空頭、
+// 反向零日)。最極端的 2024-11-14:n=2,070、平均 +0.05%、只有 35% 上漲,
+// 拿掉貢獻最大的 10 檔(0.48% 的宇宙)平均變 −1.06% 直接翻面。
+// 若估計量要改,**兩邊一起改**——這組測試會照樣綠,因為它比的是兩份
+// 實作而不是市場事實。
+//
+// 另一個已知盲區:下方 fixture 讓所有股票走**同一條價格路徑**,此時
+// 平均恆等於中位數,所以這組測試對上述偏斜結構性看不見。
+//
 // 已知存活的 mutation（結構性免疫，記錄原因而非硬造 fixture）：
 //   computeMarketUptrendByDate 的錨點索引 ±1（119 vs 120 根 lookback）。
 //   平滑序列下 ±1 根只把均值零交叉平移 ~0.2 天，整數日邊界不動、boolean
@@ -385,5 +397,53 @@ void main() {
         );
       }
     }
+  });
+
+  test('🚨 (b-4) 400 天錨點守衛:停牌久的股票不得用窗外舊錨點', () async {
+    // 2026-08-29 稽核抓到:守衛是那天加的,而 fixture 最長 200 天——
+    // 觸發條件(錨點與當根 bar 相距 > 400 日曆天)**永遠不成立**,
+    // 實測把守衛整段刪掉這個檔案照樣全綠。守衛正是兩份實作之間唯一的
+    // 結構性差異(生產只載 400 日曆天窗、窗內不足 lookback+1 根就整檔
+    // 跳過),沒被釘住等於白加。
+    //
+    // 這裡造一檔「前 120 根密集、然後停牌兩年、再恢復」的股票:
+    // 恢復後的 bar 其 i−120 錨點落在停牌之前,日曆距離 > 400 天。
+    const lookback = 120;
+    final gapSym = 'GAP1';
+    await db.upsertStocks([
+      StockMasterCompanion.insert(symbol: gapSym, name: gapSym, market: 'TWSE'),
+    ]);
+    final rows = <DailyPriceEntry>[
+      // 停牌前:緩跌
+      for (var i = 0; i < lookback + 1; i++)
+        DailyPriceEntry(
+          symbol: gapSym,
+          date: first.add(Duration(days: i)),
+          close: 200.0 - i * 0.5,
+          volume: 1000000,
+        ),
+      // 停牌 800 天後恢復,價格暴漲——若用窗外舊錨點會算出巨大正報酬
+      for (var i = 0; i < 5; i++)
+        DailyPriceEntry(
+          symbol: gapSym,
+          date: first.add(Duration(days: lookback + 1 + 800 + i)),
+          close: 900.0 + i,
+          volume: 1000000,
+        ),
+    ];
+
+    final uptrend = ReplayCalibrator.computeMarketUptrendByDate({
+      gapSym: rows,
+    }, lookback);
+    // 恢復後的日子:錨點跨越 800 天停牌 → 守衛應讓它整個不貢獻,
+    // 因此該日沒有任何有效樣本 → 不在 map 內
+    final resumedDay = rows[lookback + 1].date;
+    expect(
+      uptrend.containsKey(resumedDay),
+      isFalse,
+      reason: '錨點距今 800+ 天(> historyRequiredDays)——生產端此檔整檔跳過',
+    );
+    // 對照:停牌前的正常日子照常有判定(守衛不得誤殺)
+    expect(uptrend.containsKey(rows[lookback].date), isTrue);
   });
 }
