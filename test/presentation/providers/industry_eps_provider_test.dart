@@ -1,10 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/core/constants/api_config.dart';
-import 'package:daredevil/data/models/tpex/tpex_industry_eps.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/industry_eps_provider.dart';
@@ -67,6 +68,112 @@ void main() {
     container.read(dataUpdateEpochProvider.notifier).bump();
     await tester.pump();
     verifyNever(() => mock.getIndustryEps());
+  });
+
+  testWidgets(
+    '🚨 loadData 在途中 dispose:不得拋 UnmountedRefException、不得種假失敗 breadcrumb',
+    (tester) async {
+      // review 重現(2026-08-29):3 分鐘窗過後 epoch 觸發 loadData、使用者
+      // 在 TPEx 請求 in-flight 時離頁 → notifier dispose → post-await 的
+      // state= 拋 UnmountedRefException → catch 記「載入失敗」(API 其實
+      // 成功)→ catch 內再讀 state 二次拋、逸出成 unhandled。修法=
+      // comparison_provider 的 _active guard(epoch 規約 #2 禁的是 listener
+      // 內的條件判斷,notifier 自身的早退 guard 是它明文要求的)。
+      final mock = _MockTpexClient();
+      final gate = Completer<List<TpexIndustryEps>>();
+      when(() => mock.getIndustryEps()).thenAnswer((_) => gate.future);
+
+      final watching = ValueNotifier(true);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [tpexClientProvider.overrideWithValue(mock)],
+          child: MaterialApp(
+            home: ValueListenableBuilder<bool>(
+              valueListenable: watching,
+              builder: (context, isWatching, _) => isWatching
+                  ? Consumer(
+                      builder: (context, ref, _) {
+                        ref.watch(industryEpsProvider);
+                        return const SizedBox();
+                      },
+                    )
+                  : const SizedBox(),
+            ),
+          ),
+        ),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MaterialApp)),
+      );
+
+      // 啟動 loadData(卡在 gate 上),隨即離頁並讓 keepAlive 窗過期
+      final pending = container.read(industryEpsProvider.notifier).loadData();
+      watching.value = false;
+      await tester.pump();
+      await tester.pump(
+        const Duration(minutes: ApiConfig.keepAliveMin, seconds: 5),
+      );
+
+      // 請求此刻才完成——notifier 已 dispose
+      gate.complete(const []);
+      await pending;
+      await tester.pump();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'dispose 後的 state 寫入必須早退,不得逸出 UnmountedRefException',
+      );
+    },
+  );
+
+  testWidgets('🚨 loadData 在途中 dispose 且 API 失敗:catch 也必須先 guard', (
+    tester,
+  ) async {
+    // 對稱情境:真 API 錯誤落在 dispose 之後——catch 若不 guard,會記
+    // 一筆與畫面無關的失敗、且 state 寫入照樣 throw 逸出。
+    // (catch 的 guard 同時是成功路徑的兜底:post-await guard 被移除時
+    // UnmountedRefException 會被這裡吸收——該突變因此行為等價存活,
+    // post-await guard 的價值是不拿例外當控制流,非唯一防線)
+    final mock = _MockTpexClient();
+    final gate = Completer<List<TpexIndustryEps>>();
+    when(() => mock.getIndustryEps()).thenAnswer((_) => gate.future);
+
+    final watching = ValueNotifier(true);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [tpexClientProvider.overrideWithValue(mock)],
+        child: MaterialApp(
+          home: ValueListenableBuilder<bool>(
+            valueListenable: watching,
+            builder: (context, isWatching, _) => isWatching
+                ? Consumer(
+                    builder: (context, ref, _) {
+                      ref.watch(industryEpsProvider);
+                      return const SizedBox();
+                    },
+                  )
+                : const SizedBox(),
+          ),
+        ),
+      ),
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MaterialApp)),
+    );
+
+    final pending = container.read(industryEpsProvider.notifier).loadData();
+    watching.value = false;
+    await tester.pump();
+    await tester.pump(
+      const Duration(minutes: ApiConfig.keepAliveMin, seconds: 5),
+    );
+
+    gate.completeError(StateError('API down'));
+    await pending;
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('keepAlive 窗內返回畫面沿用快取,不重打 API', (tester) async {

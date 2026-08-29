@@ -80,8 +80,18 @@ class IndustryEpsState {
 // ==================================================
 
 class IndustryEpsNotifier extends Notifier<IndustryEpsState> {
+  /// autoDispose 後的必要配套(review 重現 2026-08-29):3 分鐘窗過後
+  /// loadData 在途中 dispose,post-await 的 state 寫入會拋
+  /// UnmountedRefException——catch 還會記「載入失敗」的假 breadcrumb
+  /// (API 其實成功)再二次拋逸出。與 comparison_provider 同一 guard;
+  /// epoch 規約 #2 禁的是 listener 內的條件,notifier 自身早退 guard
+  /// 是它明文要求的。
+  bool _active = true;
+
   @override
   IndustryEpsState build() {
+    _active = true;
+    ref.onDispose(() => _active = false);
     // 保活機制：keepAliveMin 內返回同一頁面時使用快取（與 stock_detail
     // 同一樣板）。窗過期即 dispose——這不只是記憶體整潔：本 provider 掛
     // epoch listener，keepAlive 版本讓「進過一次畫面」變成「每次每日更新
@@ -108,6 +118,7 @@ class IndustryEpsNotifier extends Notifier<IndustryEpsState> {
 
   /// 從 TPEX API 載入產業 EPS 資料
   Future<void> loadData() async {
+    if (!_active) return; // 讀 state.isLoading 之前——dispose 後讀 state 也 throw
     if (state.isLoading) return;
 
     state = state.copyWith(isLoading: true, error: null);
@@ -115,6 +126,7 @@ class IndustryEpsNotifier extends Notifier<IndustryEpsState> {
     try {
       final tpex = ref.read(tpexClientProvider);
       final data = await tpex.getIndustryEps();
+      if (!_active) return; // dispose 後寫 state 會 throw
 
       state = state.copyWith(
         allData: data,
@@ -122,6 +134,9 @@ class IndustryEpsNotifier extends Notifier<IndustryEpsState> {
         fetchedAt: DateTime.now(),
       );
     } catch (e) {
+      // 真 API 錯誤也可能落在 dispose 之後——先 guard 再碰 state,
+      // 否則這裡的 warning 是假失敗(或二次 throw 逸出)
+      if (!_active) return;
       AppLogger.warning('IndustryEpsNotifier', '載入產業 EPS 失敗', e);
       state = state.copyWith(error: ErrorDisplay.message(e), isLoading: false);
     }
