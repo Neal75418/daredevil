@@ -76,4 +76,31 @@ void main() {
       );
     });
   });
+
+  group('候選檔名隔離(2026-08-29 tool 稽核 #6)', () {
+    test('🚨 不得與 recalibrate 的 production/candidate 檔名相撞', () {
+      // 本工具每條規則只有 score + active,沒有 avg_return / t_stat。
+      // parseJson 不會抱怨(drift guard 只在 backtest 存在時比對),於是
+      // 檔案乾淨載入——但負證據歸零需要那兩個欄位才成立,promote 進
+      // production 檔名等於把 28/44 條規則無聲彈回手調正分。
+      for (final horizon in ['short', 'long']) {
+        final path = regimeCandidatePath(horizon);
+        expect(
+          path,
+          isNot('assets/rule_scores_calibrated_${horizon}_candidate.json'),
+          reason: 'recalibrate 的 candidate 檔名',
+        );
+        expect(
+          path,
+          isNot('assets/rule_scores_calibrated_$horizon.json'),
+          reason: 'production 檔名',
+        );
+        expect(path, contains('regime'), reason: '檔名要能一眼看出產出者');
+      }
+    });
+
+    test('short/long 各自獨立檔名', () {
+      expect(regimeCandidatePath('short'), isNot(regimeCandidatePath('long')));
+    });
+  });
 }

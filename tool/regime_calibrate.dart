@@ -248,8 +248,14 @@ Future<int> runRegimeCalibrateCli(List<String> args) async {
     _writeCandidate(newShort, 'short');
     _writeCandidate(newLong, 'long');
     print('');
-    print('✅ 候選 JSON 已寫 assets/rule_scores_calibrated_*_candidate.json');
-    print('   （人工 review + 上面驗證認可後才 mv 成 production）');
+    print(
+      '✅ 候選 JSON 已寫 ${regimeCandidatePath('short')} / '
+      '${regimeCandidatePath('long')}',
+    );
+    print('   ⚠️ 這**不是** recalibrate 的產物:本檔每條規則只有 score +');
+    print('   active,沒有 avg_return / t_stat,promote 進 production 檔名會');
+    print('   讓負證據歸零失效(生產檔現有 28/44 條靠它壓著)且無任何警告。');
+    print('   （人工 review + 上面驗證認可後才決定怎麼用）');
     return 0;
   } finally {
     await db.close();
@@ -292,6 +298,19 @@ void _printTop(
   }
 }
 
+/// 本工具的候選檔名——**刻意與 recalibrate 的產物分開**
+/// (2026-08-29 tool 稽核 #6)。
+///
+/// 兩支曾經寫同一個 `rule_scores_calibrated_{horizon}_candidate.json`,
+/// 但 schema 不同:本工具每條規則只有 `score` + `active`,沒有
+/// `avg_return` / `t_stat` / `backtest`。CalibratedScoresTable.parseJson
+/// **不會抱怨**(drift guard 只在 backtest 存在時才比對),於是檔案乾淨
+/// 載入——但負證據歸零需要 avg_return 與 t_stat 才成立(實測生產檔
+/// 28/44 條規則靠它壓著),promote 進去等於把那 28 條無聲彈回手調正分,
+/// 正是三態 lookup 當初要修的那個 bug,而且全鏈路零診斷輸出。
+String regimeCandidatePath(String horizon) =>
+    'assets/rule_scores_calibrated_${horizon}_regime_candidate.json';
+
 void _writeCandidate(Map<String, int> scores, String horizon) {
   final rules = <String, dynamic>{
     for (final e in scores.entries)
@@ -304,7 +323,10 @@ void _writeCandidate(Map<String, int> scores, String horizon) {
     'rules': rules,
   };
   const encoder = JsonEncoder.withIndent('  ');
-  File(
-    'assets/rule_scores_calibrated_${horizon}_candidate.json',
-  ).writeAsStringSync(encoder.convert(payload));
+  // 原子寫入(同 recalibrate:1051):中途被 kill 會留下截斷的 JSON,
+  // 而 parseJson 對壞檔是整份拒收 → 全部規則 fallback 到 hardcoded,
+  // 同樣無聲。
+  final target = regimeCandidatePath(horizon);
+  final tmp = File('$target.tmp')..writeAsStringSync(encoder.convert(payload));
+  tmp.renameSync(target);
 }
