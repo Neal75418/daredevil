@@ -77,6 +77,67 @@ abstract final class MarketClientMixin {
 
   /// 統一的 API 請求錯誤處理（含自動重試）。
   ///
+  /// 六業別 openapi 端點的逐一取用 + per-variant 隔離。
+  ///
+  /// TWSE/TPEx 的季報與資產負債表都是「同一份資料切成 6 個業別 endpoint」，
+  /// 骨架原本抄了四份（2026-08-29 稽核；且已現漂移——TPEx 兩個端點的
+  /// Accept header 一度不一致）。語意由
+  /// `test/data/remote/industry_variant_isolation_test.dart` 逐條釘住：
+  ///
+  /// - **單一業別失敗記 warning、其餘照收**——金融業別平日常態零星，
+  ///   單端點異常不該砍掉整份清單
+  /// - **全滅才拋**（拋第一個錯）——全空不得偽裝成「今天沒資料」
+  /// - [RateLimitException] 一律直接 rethrow，不降級成 warning
+  /// - 非 200 / 非 List 型別：記為該業別失敗，其餘照收
+  ///
+  /// [endpointFor] 由 suffix 產生 URL；[parseRow] 把一列 JSON 轉成 0..n
+  /// 個結果（季報一列一筆、資產負債表一列多筆）。
+  static Future<List<T>> fetchIndustryVariants<T>({
+    required String tag,
+    required String label,
+    required Dio dio,
+    required List<String> suffixes,
+    required String Function(String suffix) endpointFor,
+    required Iterable<T> Function(Map<String, dynamic> row) parseRow,
+    Options? options,
+  }) async {
+    final results = <T>[];
+    var okVariants = 0;
+    Object? firstError;
+    for (final suffix in suffixes) {
+      try {
+        final response = await dio.get(endpointFor(suffix), options: options);
+        if (response.statusCode != 200) {
+          throw ApiException(
+            '$tag OpenData API error: ${response.statusCode}',
+            response.statusCode,
+          );
+        }
+        final data = response.data;
+        if (data is! List) {
+          AppLogger.warning(tag, '$label($suffix): 非預期資料型別');
+          continue;
+        }
+        for (final item in data) {
+          if (item is! Map<String, dynamic>) continue;
+          results.addAll(parseRow(item));
+        }
+        okVariants++;
+      } on RateLimitException {
+        rethrow;
+      } catch (e) {
+        AppLogger.warning(tag, '$label($suffix)失敗，其餘業別照收', e);
+        firstError ??= e;
+      }
+    }
+    if (okVariants == 0 && firstError != null) throw firstError;
+    AppLogger.info(
+      tag,
+      '$label: ${results.length} 筆($okVariants/${suffixes.length} 業別)',
+    );
+    return results;
+  }
+
   /// 包裝 [fn] 的執行，將 [DioException] 轉換為 [NetworkException]，
   /// 並記錄錯誤日誌。[tag] 為日誌標籤（如 'TWSE'），[operation] 為操作描述。
   ///

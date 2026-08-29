@@ -935,43 +935,16 @@ class TwseClient {
       final cached = _cache.get(cacheKey) as List<QuarterlyReportEntry>?;
       if (cached != null) return cached;
 
-      final results = <QuarterlyReportEntry>[];
-      var okVariants = 0;
-      Object? firstError;
-      for (final suffix in ApiEndpoints.quarterlyReportIndustrySuffixes) {
-        try {
-          final response = await _dio.get(
-            ApiEndpoints.twseQuarterlyReport(suffix),
-          );
-          if (response.statusCode != 200) {
-            throw ApiException(
-              '$_tag OpenData API error: ${response.statusCode}',
-              response.statusCode,
-            );
-          }
-          final data = response.data;
-          if (data is! List) {
-            AppLogger.warning(_tag, '季報($suffix): 非預期資料型別');
-            continue;
-          }
-          for (final item in data) {
-            if (item is! Map<String, dynamic>) continue;
-            final parsed = QuarterlyReportEntry.tryFromJson(item);
-            if (parsed != null) results.add(parsed);
-          }
-          okVariants++;
-        } on RateLimitException {
-          rethrow;
-        } catch (e) {
-          AppLogger.warning(_tag, '季報($suffix)失敗,其餘業別照收', e);
-          firstError ??= e;
-        }
-      }
-      if (okVariants == 0 && firstError != null) throw firstError;
-      AppLogger.info(
-        _tag,
-        '季報: ${results.length} 筆($okVariants/'
-        '${ApiEndpoints.quarterlyReportIndustrySuffixes.length} 業別)',
+      final results = await MarketClientMixin.fetchIndustryVariants(
+        tag: _tag,
+        label: '季報',
+        dio: _dio,
+        suffixes: ApiEndpoints.quarterlyReportIndustrySuffixes,
+        endpointFor: ApiEndpoints.twseQuarterlyReport,
+        parseRow: (row) {
+          final parsed = QuarterlyReportEntry.tryFromJson(row);
+          return parsed == null ? const <QuarterlyReportEntry>[] : [parsed];
+        },
       );
       _cache.put(cacheKey, results);
       return results;
@@ -992,43 +965,13 @@ class TwseClient {
       final cached = _cache.get(cacheKey) as List<MarketWideFinancial>?;
       if (cached != null) return cached;
 
-      final results = <MarketWideFinancial>[];
-      var okVariants = 0;
-      Object? firstError;
-      for (final suffix in ApiEndpoints.quarterlyReportIndustrySuffixes) {
-        try {
-          final response = await _dio.get(
-            ApiEndpoints.twseBalanceSheet(suffix),
-          );
-          if (response.statusCode != 200) {
-            throw ApiException(
-              '$_tag OpenData API error: ${response.statusCode}',
-              response.statusCode,
-            );
-          }
-          final data = response.data;
-          if (data is! List) {
-            AppLogger.warning(_tag, '資產負債表($suffix): 非預期資料型別');
-            continue;
-          }
-          for (final item in data) {
-            if (item is! Map<String, dynamic>) continue;
-            results.addAll(MarketWideFinancial.parseBalance(item));
-          }
-          okVariants++;
-        } on RateLimitException {
-          rethrow;
-        } catch (e) {
-          AppLogger.warning(_tag, '資產負債表($suffix)失敗,其餘業別照收', e);
-          firstError ??= e;
-        }
-      }
-      if (okVariants == 0 && firstError != null) throw firstError;
-
-      AppLogger.info(
-        _tag,
-        '資產負債表: ${results.length} 筆'
-        '($okVariants/${ApiEndpoints.quarterlyReportIndustrySuffixes.length} 業別)',
+      final results = await MarketClientMixin.fetchIndustryVariants(
+        tag: _tag,
+        label: '資產負債表',
+        dio: _dio,
+        suffixes: ApiEndpoints.quarterlyReportIndustrySuffixes,
+        endpointFor: ApiEndpoints.twseBalanceSheet,
+        parseRow: MarketWideFinancial.parseBalance,
       );
       _cache.put(cacheKey, results);
       return results;
