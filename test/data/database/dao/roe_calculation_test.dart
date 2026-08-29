@@ -144,6 +144,29 @@ void main() {
     );
   });
 
+  test('🚨 跨檔隔離:別檔的去年權益不得被借用(per-symbol 分組重構的守門)', () async {
+    // 2026-08-29 效能重構:年比查找從「全體 equity 線性掃」改「先按
+    // symbol 分組」——分組錯檔的症狀正是這條:A 檔缺去年權益,B 檔在
+    // 同一時點有一筆巨大權益;A 必須走期末權益 fallback,不得借 B 的。
+    await db.upsertStocks([
+      StockMasterCompanion.insert(symbol: '2222', name: '別檔', market: 'TWSE'),
+    ]);
+    // A(1111):四季淨利齊、只有期末權益
+    await seedFull(
+      symbol: '1111',
+      quarterlyNet: [10, 10, 10, 10],
+      equityNow: 400,
+      equityYearAgo: 0, // 會被「權益 ≤ 0 跳過」濾掉 → 等同缺去年權益
+    );
+    // B(2222):在 A 的去年同季時點有一筆巨大權益——借用會讓 A 的
+    // avgEquity 變 (400+8000)/2 = 4200,ROE 從 10% 崩成 0.95%
+    await put('2222', DateTime(2025, 6, 30), 'BALANCE', 'Equity', 8000);
+
+    final roe = await db.getROEHistoryBatch(['1111', '2222']);
+    final a = roe['1111']!.single;
+    expect(a.value, closeTo(40 / 400 * 100, 0.001), reason: '期末權益 fallback');
+  });
+
   test('權益為 0 或負 → 跳過(不除零、不產生負 ROE 噪音)', () async {
     await seedFull(
       symbol: '1111',

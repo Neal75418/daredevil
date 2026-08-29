@@ -206,6 +206,14 @@ mixin FinancialDataDaoMixin on $AppDatabase {
       bySymbol.putIfAbsent(ni.symbol, () => []).add(ni);
     }
 
+    // 年比權益查找先按 symbol 分組一次(2026-08-29 效能稽核):原本每個
+    // 四季視窗對**全體** equity 列線性掃(~6,900 視窗 × 11,640 列 ≈ 80M
+    // 次比較,跑在 main isolate 上),分組後每視窗只掃該檔 ~8 列(~1500×)
+    final equityBySymbol = <String, List<FinancialDataEntry>>{};
+    for (final e in equityEntries) {
+      equityBySymbol.putIfAbsent(e.symbol, () => []).add(e);
+    }
+
     final result = <String, List<FinancialDataEntry>>{};
     for (final entry in bySymbol.entries) {
       final list = entry.value; // 已由查詢按 date DESC 排序
@@ -222,8 +230,7 @@ mixin FinancialDataDaoMixin on $AppDatabase {
         // 平均權益需要去年同季期末；查無時退回期末權益（分子仍是四季合計，
         // 不會退化成舊口徑）。日期用容差比對——實際落庫日有 ±1 天漂移。
         final equityYearAgo = _findEquityAboutOneYearBefore(
-          equityEntries,
-          entry.key,
+          equityBySymbol[entry.key] ?? const [],
           asOf,
         );
         final avgEquity = equityYearAgo == null
@@ -267,16 +274,18 @@ mixin FinancialDataDaoMixin on $AppDatabase {
     return true;
   }
 
-  /// 找 [symbol] 在 [asOf] 約一年前的權益（350~380 天容差，取最接近者）。
+  /// 找 [asOf] 約一年前的權益（350~380 天容差，取最接近者）。
+  ///
+  /// [symbolEquityEntries] 必須是**單一檔**的 equity 列（caller 已按
+  /// symbol 分組）——跨檔隔離由 roe_calculation_test 的守門測試釘住。
   static double? _findEquityAboutOneYearBefore(
-    List<FinancialDataEntry> equityEntries,
-    String symbol,
+    List<FinancialDataEntry> symbolEquityEntries,
     DateTime asOf,
   ) {
     double? best;
     int? bestDelta;
-    for (final e in equityEntries) {
-      if (e.symbol != symbol || e.value == null || e.value! <= 0) continue;
+    for (final e in symbolEquityEntries) {
+      if (e.value == null || e.value! <= 0) continue;
       final days = asOf.difference(e.date).inDays;
       if (days < 350 || days > 380) continue;
       final delta = (days - 365).abs();
