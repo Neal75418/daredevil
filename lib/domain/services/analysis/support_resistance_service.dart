@@ -38,9 +38,28 @@ class SupportResistanceService {
     final resistanceZones = _clusterSwingPoints(highs, prices.length);
     final supportZones = _clusterSwingPoints(lows, prices.length);
 
-    // ATR-based 動態距離：高波動股用更寬的搜尋半徑
+    // ATR-based 動態距離：高波動股用更寬的搜尋半徑，但**有上界**。
+    //
+    // （2026-08-29 稽核 H3）舊碼的 ATR 版完全沒有上界，而它取代的常數
+    // [TrendParams.maxSupportResistanceDistance] 文件寫著「超過此距離的
+    // 壓力/支撐將被忽略」。實測 2,135 檔：54.3% 的半徑比 8% 寬、p90 = 17.3%、
+    // **max = 181.5%**——半徑 > 100% 時 `minSupport` 變成負數，現價下方的
+    // 每一個 zone 都「在範圍內」，等於完全沒有下界（合成 fixture 實測回過
+    // 一個 −60.0 的「支撐」）。
+    //
+    // 上界不是另外選的數字：`8% × 3.0`（[TrendParams.atrDistanceMultiplier]，
+    // ATR 本身就用這個倍數）= 24%，語意是「動態半徑最多放寬到靜態的 3 倍」，
+    // 而它幾乎正好等於實測 p99（22.9%，已排除價格斷點股）。
+    //
+    // **不加下界**：低波動股用窄半徑正是 ATR 縮放的用意，不是缺陷。
     final atrDistance = _calculateATRDistance(prices, currentClose);
-    final maxDistance = atrDistance ?? TrendParams.maxSupportResistanceDistance;
+    final maxDistance =
+        atrDistance?.clamp(
+          0.0,
+          TrendParams.maxSupportResistanceDistance *
+              TrendParams.atrDistanceMultiplier,
+        ) ??
+        TrendParams.maxSupportResistanceDistance;
 
     final maxResistance = currentClose * (1 + maxDistance);
     final minSupport = currentClose * (1 - maxDistance);

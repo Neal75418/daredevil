@@ -16,6 +16,7 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/services/analysis/support_resistance_service.dart';
 
@@ -110,6 +111,92 @@ void main() {
       }
       if (support != null) {
         expect(support, greaterThanOrEqualTo(minLow * 0.999));
+      }
+    });
+  });
+
+  // ==========================================
+  // ATR 動態半徑的上界（2026-08-29 稽核 H3）
+  // ==========================================
+  //
+  // `maxDistance = atrDistance ?? maxSupportResistanceDistance` —— ATR 版
+  // **完全沒有上界**，而它取代的那個常數（0.08）文件寫著「超過此距離的
+  // 壓力/支撐將被忽略，8% 可偵測近期水位並過濾無關水位」。
+  //
+  // 實測 2,135 檔:54.3% 的半徑比文件的 8% 寬、p90 = 17.3%、**max = 181.5%**
+  // （5904，未還原的價格斷點把 ATR 撐爆）。半徑 > 100% 時 `minSupport` 變成
+  // 負數，現價下方的**每一個** zone 都「在範圍內」。排除近 20 根有斷點者後
+  // max 降到 51.9%、p99 = 22.9%。
+  //
+  // **上界不發明新數字**：`maxSupportResistanceDistance (0.08) ×
+  // atrDistanceMultiplier (3.0) = 0.24` —— 語意是「動態半徑最多放寬到靜態的
+  // 3 倍，與 ATR 本身用的倍數一致」，而它幾乎正好等於實測 p99（22.9%）。
+  // 兩個獨立錨點吻合。
+  //
+  // **不加下界**：低波動股用窄半徑是 ATR 縮放的用意，不是缺陷。
+  group('ATR 動態半徑必須有上界', () {
+    /// 每天大幅震盪 → ATR 極大;[swing] 控制單日振幅
+    List<DailyPriceEntry> wildRange({required double swing}) {
+      final now = DateTime.now();
+      return [
+        for (var i = 0; i < 60; i++)
+          createTestPrice(
+            date: now.subtract(Duration(days: 60 - i)),
+            close: 100 + (i.isEven ? swing : -swing),
+            high: 100 + swing * 2,
+            low: 100 - swing * 2,
+            volume: 1000,
+          ),
+      ];
+    }
+
+    double cap() =>
+        TrendParams.maxSupportResistanceDistance *
+        TrendParams.atrDistanceMultiplier;
+
+    test('上界由既有兩個常數推得,不是另外選的數字', () {
+      expect(cap(), closeTo(0.24, 1e-9));
+    });
+
+    test('🚨 高波動股的關卡不得超出上界', () {
+      final prices = wildRange(swing: 30); // ATR ≈ 120 → 未設限時半徑約 3.6 倍
+      final close = prices.last.close!;
+      final (support, resistance) = service.findSupportResistance(prices);
+
+      if (support != null) {
+        expect(
+          (close - support) / close,
+          lessThanOrEqualTo(cap() + 1e-9),
+          reason:
+              '離現價 ${((close - support) / close * 100).toStringAsFixed(1)}% 的支撐不可用於停損',
+        );
+      }
+      if (resistance != null) {
+        expect((resistance - close) / close, lessThanOrEqualTo(cap() + 1e-9));
+      }
+    });
+
+    test('🚨 半徑不得大到讓 minSupport 變成負數', () {
+      // 未設限時 5904 的半徑是 181.5%,minSupport = close × (1 − 1.815) < 0
+      // ——現價下方的每一個 zone 都「在範圍內」,等於沒有下界。
+      final prices = wildRange(swing: 80);
+      final close = prices.last.close!;
+      final (support, _) = service.findSupportResistance(prices);
+      if (support != null) {
+        expect(support, greaterThan(close * (1 - cap()) - 1e-9));
+      }
+    });
+
+    test('低波動股維持窄半徑(不加下界——那是 ATR 縮放的用意)', () {
+      final prices = wildRange(swing: 0.5);
+      final close = prices.last.close!;
+      final (support, resistance) = service.findSupportResistance(prices);
+      // 只要不 crash、且落在遠比 8% 更窄的範圍內即可
+      if (support != null) {
+        expect((close - support) / close, lessThan(0.08));
+      }
+      if (resistance != null) {
+        expect((resistance - close) / close, lessThan(0.08));
       }
     });
   });
