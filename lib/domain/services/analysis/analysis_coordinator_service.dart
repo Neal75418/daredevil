@@ -36,12 +36,20 @@ class AnalysisCoordinatorService {
 
   /// 分析單一股票並回傳分析結果
   ///
-  /// 需至少 [RuleParams.rangeLookback] 天的價格歷史
+  /// 需至少 [RuleParams.swingWindow] + 1 天的價格歷史。
+  ///
+  /// **為什麼是 +1**：下方為避開前視偏差會截掉最後一根才餵給
+  /// [TrendDetectionService.detectTrendState]，而後者自己也要求
+  /// `>= swingWindow`。若這裡只擋 `< swingWindow`，恰好 20 根的股票會
+  /// 通過每一道閘門、拿到一個**未經計算**的 `TrendState.range` ——那個值
+  /// 會落庫成 `daily_analysis.trend_state` 並被渲染成「盤整」，把「資料
+  /// 不足」講成一個趨勢主張。回 null 則由呼叫端的 `skippedNoAnalysis`
+  /// 計數，不會無聲消失。
   ///
   /// 為了避免前視偏差，支撐/壓力/區間使用「過去」價格計算，
   /// 反轉狀態則使用完整價格（包含今日）與過去關卡做比較
   AnalysisResult? analyzeStock(List<DailyPriceEntry> priceHistory) {
-    if (priceHistory.length < RuleParams.swingWindow) {
+    if (priceHistory.length < RuleParams.swingWindow + 1) {
       return null; // 資料不足
     }
 

@@ -256,6 +256,32 @@ void main() {
 
         expect(result, isNull);
       });
+
+      test('🚨 恰好 swingWindow 根:不得回傳「未經計算的盤整」(稽核 M4)', () {
+        // analyzeStock 的閘門是 `length >= swingWindow`,但它接著把資料
+        // 截掉最後一根(避開前視偏差)才餵給 detectTrendState——而後者
+        // 自己也要求 `>= swingWindow`。同一個常數、list 短一根,於是
+        // 恰好 20 根的股票通過每一道閘門,最後拿到一個**沒算過**的 range。
+        //
+        // 那個值會落庫成 daily_analysis.trend_state 並渲染成「盤整」,
+        // 把「資料不足」講成一個趨勢主張——而 stock_detail_header 的註解
+        // 正好在論證這件事不可以發生。
+        final justEnough = generateUptrendPrices(
+          days: RuleParams.swingWindow + 1,
+        );
+        expect(
+          analysisService.analyzeStock(justEnough)?.trendState,
+          TrendState.up,
+          reason: '多一根就足以計算,且必須真的算出上升趨勢(證明對照組有效)',
+        );
+
+        final oneShort = generateUptrendPrices(days: RuleParams.swingWindow);
+        expect(
+          analysisService.analyzeStock(oneShort),
+          isNull,
+          reason: '算不出來要回 null（由 skippedNoAnalysis 計數），不是假裝盤整',
+        );
+      });
     });
 
     group('buildContext', () {

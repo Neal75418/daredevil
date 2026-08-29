@@ -12,6 +12,8 @@
 //
 // 影響:alert_evaluation_service 的突破/跌破警示直接用 currentPrice 與
 // 這個值比較,1.9% 的偏移在台股一根 K 內就能跨過。
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
@@ -109,6 +111,129 @@ void main() {
       if (support != null) {
         expect(support, greaterThanOrEqualTo(minLow * 0.999));
       }
+    });
+  });
+
+  // ==========================================
+  // 末根停牌時的參考價（2026-08-29 稽核 M10）
+  // ==========================================
+  //
+  // `findSupportResistance` 在 `prices.last.close == null` 時走一條
+  // **完全沒有邊界、也沒有方向檢查**的回退：直接回最後一個 swing 高/低點。
+  // 症狀有兩種:回報一個在現價**上方**的「支撐」,或一個離現價 28% 遠的值。
+  //
+  // 觸發前提確實存在:上游 `classifyCandidate` + `LiquidityChecker` 只保證
+  // **完整歷史**的末根有收盤,而 `analysis_coordinator_service` 傳進來的是
+  // **priorHistory**——末根是倒數第二根,不受那道保證涵蓋(2026-08-28 實測
+  // 20 檔倒數第二根停牌)。⚠️ 那 20 檔當天都沒真的進到 analyzeStock(全被
+  // 流動性門檻擋掉);可達性來自自選股的 `exemptFromLiquidity` 豁免路徑。
+  group('末根停牌不得改變支撐壓力', () {
+    /// 正弦擺盪 + 一個**深谷**,末根停牌。
+    ///
+    /// 深谷讓「最近的 swing low」落在離現價 28% 的地方——舊回退直接回它
+    /// （無界）,新路徑則因超出 ATR 半徑而改取擺盪區的低點。兩者都非 null
+    /// 且方向正確,但差很多,所以這組 fixture 能真的分辨修法。
+    List<DailyPriceEntry> sineWithDipThenHalt({bool halt = true}) {
+      final now = DateTime.now();
+      const len = 52;
+      return [
+        for (var i = 0; i < len; i++)
+          () {
+            final halted = halt && i == len - 1;
+            final close = halted
+                ? null
+                : (i == 37 ? 70.0 : 96 + 4 * sin(2 * pi * i / 25));
+            return createTestPrice(
+              date: now.subtract(Duration(days: len - i)),
+              close: close,
+              high: close == null ? null : close * 1.01,
+              low: close == null ? null : close * 0.99,
+              volume: halted ? 0 : 1000,
+            );
+          }(),
+      ];
+    }
+
+    /// 擺盪 → 急跌 → 末根停牌。急跌段落在 swing 偵測窗之外（右側需留
+    /// halfWindow=10 根），所以最後一個 swing low 會停在**高檔擺盪區**，
+    /// 而最後一個有效收盤在低檔 → 舊回退給出「高於現價的支撐」。
+    List<DailyPriceEntry> plungeThenHalt() {
+      final now = DateTime.now();
+      final out = <DailyPriceEntry>[];
+      var day = 0;
+      DailyPriceEntry bar(double? close) => createTestPrice(
+        date: now.subtract(Duration(days: 200 - day++)),
+        close: close,
+        high: close,
+        low: close == null ? null : close * 0.99,
+        volume: close == null ? 0 : 1000,
+      );
+      for (var i = 0; i < 30; i++) {
+        out.add(bar(i.isEven ? 105.0 : 95.0));
+      }
+      for (var i = 0; i < 14; i++) {
+        out.add(bar(95 - i * (15 / 13)));
+      }
+      out.add(bar(null));
+      return out;
+    }
+
+    double lastValidClose(List<DailyPriceEntry> p) =>
+        p.map((e) => e.close).whereType<double>().last;
+
+    test('對照組:末根有收盤時算得出雙邊關卡,且方向正確', () {
+      // 無條件斷言（不是 `if (x != null)`）——這條若退化成「什麼都沒驗」,
+      // 後面那條「停牌不得改變答案」就會變成兩個 null 相等的套套邏輯。
+      final prices = sineWithDipThenHalt(halt: false);
+      final close = lastValidClose(prices);
+      final (support, resistance) = service.findSupportResistance(prices);
+
+      expect(support, isNotNull);
+      expect(resistance, isNotNull);
+      expect(support!, lessThan(close));
+      expect(resistance!, greaterThan(close));
+    });
+
+    test('🚨 末根停牌時,關卡必須與「把停牌根拿掉」時完全相同', () {
+      final halted = sineWithDipThenHalt();
+      expect(halted.last.close, isNull, reason: 'fixture 必須真的以停牌根結尾');
+      final withoutHalt = halted.sublist(0, halted.length - 1);
+
+      final fromHalted = service.findSupportResistance(halted);
+      final fromClean = service.findSupportResistance(withoutHalt);
+
+      expect(fromHalted.$1, isNotNull, reason: '停牌根不得讓支撐整個消失');
+      expect(fromHalted.$2, isNotNull);
+      expect(fromHalted, fromClean, reason: '多附一根沒有交易的 K 棒,不該改變這檔股票的支撐壓力');
+    });
+
+    test('🚨 末根停牌時,支撐不得高於最後一個有效收盤', () {
+      // 舊回退在這組 fixture 上回 94.05,而最後有效收盤是 80.0
+      // ——一條畫在現價下方、實際卻在上方的「支撐」線。
+      final prices = plungeThenHalt();
+      final close = lastValidClose(prices);
+      final (support, resistance) = service.findSupportResistance(prices);
+
+      if (support != null) {
+        expect(
+          support,
+          lessThan(close),
+          reason: '「支撐」高於現價會被畫成下方的線,並被 BreakdownRule 拿去比較',
+        );
+      }
+      if (resistance != null) expect(resistance, greaterThan(close));
+    });
+
+    test('完全沒有有效收盤 → 回 (null, null)（契約,非迴歸守門）', () {
+      // 舊碼在這個輸入上也回 (null, null)（highs/lows 皆空）,所以這條
+      // **不會**因還原生產碼而轉紅。留著是為了釘住「沒有參考價就不給關卡」
+      // 這個契約,不要誤以為它守著 M10。
+      final now = DateTime.now();
+      final prices = List.generate(
+        45,
+        (i) => createTestPrice(date: now.subtract(Duration(days: 45 - i))),
+      );
+      expect(service.findSupportResistance(prices), (null, null));
     });
   });
 }

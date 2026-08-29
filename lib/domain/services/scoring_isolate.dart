@@ -173,7 +173,12 @@ class ScoringBatchResult {
   /// 最後一根 bar 不是評分日——DB 缺當日資料，不得拿昨日 K 棒算今日訊號
   final int skippedStaleBar;
 
-  /// 技術分析回傳 null——異常路徑，非預期結果
+  /// 技術分析回傳 null——資料量不足以判定趨勢。
+  ///
+  /// **正常但很窄**：`classifyCandidate` 要求 `>= swingWindow`，而
+  /// `analyzeStock` 要求 `>= swingWindow + 1`（它會截掉最後一根才做趨勢
+  /// 判定）。兩道閘門差 1，於是恰好 swingWindow 根的股票落在這裡——
+  /// 典型是剛上市滿 20 根的新股，隔一天就會正常評分。
   final int skippedNoAnalysis;
 
   /// 規則引擎未觸發任何訊號——正常結果（多數股票屬此類）
@@ -285,15 +290,13 @@ ScoringBatchResult evaluateStocksIsolated(ScoringIsolateInput input) {
     final turnover = latest.close! * latest.volume!;
 
     // 3. 技術分析
-    // 回 null 屬異常（資格檢查已保證資料量），必須計數避免無聲消失。
+    // 回 null 表示資料量不足以計算趨勢，必須計數避免無聲消失。
     //
-    // ⚠️ **目前不可達**：`analyzeStock` 唯一的 null 路徑是
-    // `priceHistory.length < RuleParams.swingWindow`
-    // （analysis_coordinator_service.dart:44），而 `classifyCandidate`
-    // 上游已用**同一個常數**檢查過（scoring_pipeline.dart:27）。故此計數器
-    // 是 defense-in-depth：若日後有人調整任一側門檻、或 analyzeStock 新增
-    // 別的 null 路徑，這裡是唯一的偵測手段。不可達也代表**無法從公開 API
-    // 建構觸發情境**，計數器語意改由 DTO 層測試把關。
+    // **可達，且窄**（2026-08-29 稽核 M4 後）：`classifyCandidate` 要求
+    // `>= swingWindow`（scoring_pipeline.dart），而 `analyzeStock` 要求
+    // `>= swingWindow + 1`——它會截掉最後一根才做趨勢判定。兩道閘門差 1，
+    // 於是**恰好 swingWindow 根**的股票會走到這裡。此前這種股票拿到的是
+    // 一個未經計算的 `TrendState.range`，並以「盤整」之名落庫。
     final analysisResult = analysisService.analyzeStock(prices);
     if (analysisResult == null) {
       skippedNoAnalysis++;

@@ -505,6 +505,128 @@ void main() {
       expect(container.read(scanProvider).industryFilter, isNull);
     });
 
+    group('🚨 產業篩選必須保留排序(稽核 C1)', () {
+      // applyFilter 回傳**新 list**、applySort 是**就地排序**——兩個相反的
+      // mutation 契約。於是每次 applyFilter 都丟掉上一次的排序,而只有
+      // setFilter 記得補呼叫 applySort,setIndustryFilter 漏了。
+      //
+      // 後果不是「順序有點不一樣」:實測 2026-08-28 的掃描主清單(422 檔,
+      // 述詞見 loadData 的 `(scoreLong>0 && isScanSignal) || isScanRiskVisible`),
+      // 點一下產業籤 → 第一頁 top-20 只剩 2 檔重疊、中位排名位移 103 名。
+      // 而且排序籤仍寫著「60日相對強度」,清單其實落回 DAO 的
+      // `ORDER BY score DESC`——ScanSort 自己的文件記載 score 排序
+      // 「corr ≈ 0.17 近乎無鑑別力」、60D RS 才是「+6.3% 單調、有實證
+      // edge 的排序鍵」。無聲從有 edge 的鍵掉到沒有的那個。
+
+      /// 61 根 K 棒:首收 100、末收 [lastClose] → ret60d = lastClose - 100 (%)
+      List<DailyPriceEntry> history(String symbol, double lastClose) => [
+        for (var i = 0; i < 61; i++)
+          DailyPriceEntry(
+            symbol: symbol,
+            date: testDate.subtract(Duration(days: 61 - i)),
+            open: 100,
+            high: 100,
+            low: 100,
+            close: i == 60 ? lastClose : 100,
+            volume: 1000000,
+            priceChange: null,
+          ),
+      ];
+
+      /// 三種順序**兩兩互異**,才能分辨清單實際用的是哪一個鍵：
+      ///   DAO 回傳序(= 排序遺失時的落點)  1111 → 3333 → 2222
+      ///   rs60Desc（預設）                3333 → 2222 → 1111
+      ///   scoreAsc                        2222 → 3333 → 1111
+      void setupRankingDivergence() {
+        setupLoadDataDefaults(
+          analyses: [
+            // DAO 回傳序 = score DESC（生產行為）
+            createAnalysis(symbol: '1111', score: 90),
+            createAnalysis(symbol: '3333', score: 80),
+            createAnalysis(symbol: '2222', score: 70),
+          ],
+        );
+        when(
+          () => mockDb.getPriceHistoryBatch(
+            any(),
+            startDate: any(named: 'startDate'),
+            endDate: any(named: 'endDate'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            '1111': history('1111', 101), // ret60 = +1%
+            '2222': history('2222', 105), // ret60 = +5%
+            '3333': history('3333', 110), // ret60 = +10%
+          },
+        );
+        when(
+          () => mockDb.getSymbolsByIndustry('半導體業'),
+        ).thenAnswer((_) async => {'1111', '2222', '3333'});
+      }
+
+      /// rs60Desc（預設排序）下的正確順序：報酬高的在前 = 分數序的相反
+      const expectedByRs60 = ['3333', '2222', '1111'];
+
+      List<String> currentOrder() =>
+          container.read(scanProvider).stocks.map((s) => s.symbol).toList();
+
+      test('baseline: loadData 後依 60D RS 排序(證明 fixture 有鑑別力)', () async {
+        setupRankingDivergence();
+        final notifier = container.read(scanProvider.notifier);
+        await notifier.loadData();
+
+        expect(currentOrder(), expectedByRs60);
+      });
+
+      test('🚨 套用產業篩選後,排序不得落回分數序', () async {
+        setupRankingDivergence();
+        final notifier = container.read(scanProvider.notifier);
+        await notifier.loadData();
+
+        await notifier.setIndustryFilter('半導體業');
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          currentOrder(),
+          expectedByRs60,
+          reason: '排序籤仍顯示 60日相對強度,清單卻回到 score DESC',
+        );
+      });
+
+      test('🚨 清除產業篩選後,排序同樣不得落回分數序', () async {
+        setupRankingDivergence();
+        final notifier = container.read(scanProvider.notifier);
+        await notifier.loadData();
+
+        await notifier.setIndustryFilter('半導體業');
+        await Future<void>.delayed(Duration.zero);
+        await notifier.setIndustryFilter(null);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(currentOrder(), expectedByRs60);
+      });
+
+      test('非預設排序也要被保留(不是只有 rs60Desc 這條路)', () async {
+        setupRankingDivergence();
+        final notifier = container.read(scanProvider.notifier);
+        await notifier.loadData();
+
+        notifier.setSort(ScanSort.scoreAsc);
+        await Future<void>.delayed(Duration.zero);
+        // scoreAsc 與 rs60Desc、與 DAO 序皆不同 → 能分辨用的是哪個鍵
+        expect(currentOrder(), ['2222', '3333', '1111']);
+
+        await notifier.setIndustryFilter('半導體業');
+        await Future<void>.delayed(Duration.zero);
+
+        expect(currentOrder(), [
+          '2222',
+          '3333',
+          '1111',
+        ], reason: '產業籤必須保留使用者當下選的排序鍵,不是只保留預設鍵');
+      });
+    });
+
     test('setIndustryFilter race condition: latest call wins', () async {
       setupLoadDataDefaults(
         analyses: [createAnalysis(symbol: '2330', score: 85)],

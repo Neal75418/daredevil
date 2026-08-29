@@ -2,6 +2,7 @@ import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/utils/list_helper.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/services/price_calculator.dart';
 import 'package:daredevil/domain/services/technical_indicator_service.dart';
 
 /// 趨勢檢測服務
@@ -252,20 +253,33 @@ class TrendDetectionService {
 
   /// 檢查量能確認
   ///
-  /// 近期平均成交量需高於前期平均成交量的 [TrendParams.reversalVolumeConfirm] 倍
+  /// 近期平均成交量需高於前期平均成交量的 [TrendParams.reversalVolumeConfirm] 倍。
+  ///
+  /// **停牌日必須濾除**（2026-08-29 稽核 M5）：0 量被當成「成交量為 0 的交易日」
+  /// 會稀釋分母——除的是固定窗口長度而非有效交易日數。前期停牌越多、前期均量
+  /// 被壓得越低，1.5 倍門檻就越容易成立，於是剛從長停牌復牌的股票會純粹因為
+  /// 停牌日被算成 0 而拿到反轉訊號（實測 40 根窗口中兩半停牌數不對稱者
+  /// 107/2,137 檔，其中 5 檔當日結論反轉）。
+  ///
+  /// 這與 [PriceCalculator.isVolumeAboveAverage] 是同一個缺陷——那支已於
+  /// 2026-08-15 修正，此處是同一契約漏掉的第二個履行點。
   bool _hasVolumeConfirmation(
     List<DailyPriceEntry> recentPrices,
     List<DailyPriceEntry> priorPrices,
   ) {
-    final recentVol =
-        recentPrices.map((p) => p.volume ?? 0).reduce((a, b) => a + b) /
-        recentPrices.length;
+    final recentVol = PriceCalculator.calculateAverageVolume(
+      recentPrices,
+      days: recentPrices.length,
+      filterZero: true,
+    );
+    final priorVol = PriceCalculator.calculateAverageVolume(
+      priorPrices,
+      days: priorPrices.length,
+      filterZero: true,
+    );
 
-    final priorVol =
-        priorPrices.map((p) => p.volume ?? 0).reduce((a, b) => a + b) /
-        priorPrices.length;
-
-    if (priorVol <= 0) return false;
+    // null = 該半窗全部停牌，無從比較
+    if (recentVol == null || priorVol == null || priorVol <= 0) return false;
 
     return recentVol >= priorVol * TrendParams.reversalVolumeConfirm;
   }

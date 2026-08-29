@@ -126,15 +126,13 @@ class ScoringService {
       final turnover = latest.close! * latest.volume!;
 
       // 執行分析
-      // 回 null 屬異常（資格檢查已保證資料量），必須計數避免無聲消失。
+      // 回 null 表示資料量不足以計算趨勢，必須計數避免無聲消失。
       //
-      // ⚠️ **目前不可達**：`analyzeStock` 唯一的 null 路徑是
-      // `priceHistory.length < RuleParams.swingWindow`
-      // （analysis_coordinator_service.dart:44），而 `classifyCandidate`
-      // 上游已用**同一個常數**檢查過（scoring_pipeline.dart:27）。故此計數器
-      // 是 defense-in-depth：若日後有人調整任一側門檻、或 analyzeStock 新增
-      // 別的 null 路徑，這裡是唯一的偵測手段。不可達也代表**無法從公開 API
-      // 建構觸發情境**，計數器語意改由 DTO 層測試把關。
+      // **可達，且窄**（2026-08-29 稽核 M4 後）：`classifyCandidate` 要求
+      // `>= swingWindow`（scoring_pipeline.dart），而 `analyzeStock` 要求
+      // `>= swingWindow + 1`——它會截掉最後一根才做趨勢判定。兩道閘門差 1，
+      // 於是**恰好 swingWindow 根**的股票會走到這裡。此前這種股票拿到的是
+      // 一個未經計算的 `TrendState.range`，並以「盤整」之名落庫。
       final analysisResult = _analysisService.analyzeStock(prices);
       if (analysisResult == null) {
         skippedNoAnalysis++;
@@ -516,10 +514,10 @@ class ScoringService {
 
     // 與 isolate 路徑同一診斷契約（見 _logScoringResultsFromIsolate）
     if (skippedNoAnalysis > 0) {
-      AppLogger.warning(
+      AppLogger.info(
         'ScoringService',
-        '技術分析失敗 $skippedNoAnalysis 檔（資格檢查已過仍回 null，'
-            '可能為價格資料異常）',
+        '趨勢資料不足 $skippedNoAnalysis 檔（歷史恰好 '
+            '${RuleParams.swingWindow} 根，差一根才能判趨勢）',
       );
     }
     if (scored.length + skippedTotal != candidateCount) {
@@ -549,13 +547,15 @@ class ScoringService {
           '分數不足 ${result.skippedLowScore}) (Isolate)',
     );
 
-    // 技術分析回 null 屬異常路徑：資格檢查已保證資料量，仍失敗代表資料有問題。
-    // 過去此路徑無聲 continue，股票在帳目上消失且無跡可循。
+    // 趨勢資料不足：兩道閘門差 1（見 AnalysisCoordinatorService.analyzeStock），
+    // 恰好 swingWindow 根的股票落在這裡。**刻意保留計數**——過去此路徑無聲
+    // continue，股票在帳目上消失且無跡可循；但它是設計上的正常結果，
+    // 不是資料損毀，故用 info 而非 warning。
     if (result.skippedNoAnalysis > 0) {
-      AppLogger.warning(
+      AppLogger.info(
         'ScoringService',
-        '技術分析失敗 ${result.skippedNoAnalysis} 檔（資格檢查已過仍回 null，'
-            '可能為價格資料異常）',
+        '趨勢資料不足 ${result.skippedNoAnalysis} 檔（歷史恰好 '
+            '${RuleParams.swingWindow} 根，差一根才能判趨勢）',
       );
     }
 

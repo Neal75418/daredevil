@@ -9,7 +9,6 @@ class SignalConfluence {
   const SignalConfluence({
     required this.signalGroups,
     required this.summaryKey,
-    this.isBullish = true,
   });
 
   /// 訊號群組：每個群組中至少須匹配一個 reasonType
@@ -21,9 +20,6 @@ class SignalConfluence {
 
   /// 匯流摘要的 localization key
   final String summaryKey;
-
-  /// 是否為偏多模式（用於分類到 keySignals vs riskFactors）
-  final bool isBullish;
 
   /// 檢查此模式是否被觸發
   ///
@@ -188,7 +184,6 @@ class SignalConfluenceDetector {
         },
       ],
       summaryKey: 'summary.confluenceTopReversal',
-      isBullish: false,
     ),
 
     // 技術面崩跌：跌破支撐 + 空頭排列
@@ -198,7 +193,6 @@ class SignalConfluenceDetector {
         {SignalName.maAlignmentBearish, SignalName.kdDeathCross},
       ],
       summaryKey: 'summary.confluenceBearishBreakdown',
-      isBullish: false,
     ),
 
     // 低估陷阱：估值偏低但趨勢轉弱
@@ -213,7 +207,6 @@ class SignalConfluenceDetector {
         },
       ],
       summaryKey: 'summary.confluenceValueTrap',
-      isBullish: false,
     ),
 
     // 法人棄守：法人賣超 + 外資減持
@@ -223,7 +216,6 @@ class SignalConfluenceDetector {
         {SignalName.foreignExodus, SignalName.foreignShareholdingDecreasing},
       ],
       summaryKey: 'summary.confluenceInstitutionalExit',
-      isBullish: false,
     ),
   ];
 }

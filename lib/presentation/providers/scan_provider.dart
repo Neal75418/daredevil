@@ -331,8 +331,7 @@ class ScanNotifier extends Notifier<ScanState> {
       }
 
       // 套用現有篩選條件（保留 filter + industry）+ 預設排序
-      _applyGlobalFilter(state.filter);
-      _applyGlobalSort(state.sort);
+      _applyFilterAndSort(state.filter);
 
       // 取得自選股清單供比對（主清單 + 觀察區共用）
       final watchlist = await _db.getWatchlist();
@@ -428,8 +427,7 @@ class ScanNotifier extends Notifier<ScanState> {
     }
 
     // 套用全域篩選
-    _applyGlobalFilter(filter);
-    _applyGlobalSort(state.sort);
+    _applyFilterAndSort(filter);
 
     // 篩選切換使用 isFiltering（輕量 indicator），不替換為全骨架
     state = state.copyWith(filter: filter, isFiltering: true, stocks: []);
@@ -463,7 +461,7 @@ class ScanNotifier extends Notifier<ScanState> {
     if (state.filter != ScanFilter.all) {
       await _ensureReasonsLoaded();
     }
-    _applyGlobalFilter(state.filter);
+    _applyFilterAndSort(state.filter);
     _reloadFirstPage(++_reloadSeq);
   }
 
@@ -504,14 +502,23 @@ class ScanNotifier extends Notifier<ScanState> {
     _allReasons = await _cachedDb.getReasonsBatch(allSymbols, dateCtx.today);
   }
 
-  /// 套用全域篩選（_allAnalyses → _filteredAnalyses）
-  void _applyGlobalFilter(ScanFilter filter) {
+  /// 套用全域篩選 + 排序（_allAnalyses → _filteredAnalyses）
+  ///
+  /// **兩者必須綁在一起**：`applyFilter` 回傳新 list、`applySort` 是就地排序，
+  /// 所以每一次重新篩選都會丟掉上一次的排序。曾有 3 個呼叫點、其中
+  /// `setIndustryFilter` 漏了補排序，清單無聲落回 DAO 的 `ORDER BY score DESC`
+  /// ——而排序籤仍顯示使用者選的鍵（2026-08-28 實測 422 檔主清單下 top-20
+  /// 只剩 2 檔重疊、中位排名位移 103 名）。
+  /// 合併為單一入口後，新增呼叫點繞不過排序；守門見
+  /// `scan_filter_sort_coupling_guard_test.dart`。
+  void _applyFilterAndSort(ScanFilter filter) {
     _filteredAnalyses = _service.applyFilter(
       allAnalyses: _allAnalyses,
       filter: filter,
       allReasons: _allReasons,
       industrySymbols: _industrySymbols,
     );
+    _applyGlobalSort(state.sort);
   }
 
   /// 載入一批分析的詳細股票資料

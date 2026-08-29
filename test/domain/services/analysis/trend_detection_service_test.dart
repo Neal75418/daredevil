@@ -288,4 +288,85 @@ void main() {
       );
     });
   });
+
+  // ==========================================
+  // 量能確認的分母（2026-08-29 稽核 M5）
+  // ==========================================
+  //
+  // `_hasVolumeConfirmation` 把停牌日當成「成交量 0 的交易日」計入平均：
+  // 除的是固定的窗口長度,不是有效交易日數。於是前期停牌越多、前期均量
+  // 被壓得越低,「近期量能達前期 1.5 倍」就越容易成立——一檔剛從長停牌
+  // 復牌的股票會純粹因為停牌日被算成 0 而拿到反轉訊號。
+  //
+  // 專案本身已有正確的 primitive:`PriceCalculator.calculateAverageVolume`
+  // 的 `filterZero` 旗標,文件寫著「是否過濾停牌日（成交量為 0）」。
+  group('量能確認不得把停牌日算成零量交易日', () {
+    /// 40 根 K 棒（= reversalMinDataPoints）。前 20 根其中 [priorGaps] 根
+    /// 停牌（volume=0），其餘 [priorVolume]；後 20 根固定 [recentVolume]。
+    List<DailyPriceEntry> withPriorGaps({
+      required int priorGaps,
+      double priorVolume = 10000,
+      double recentVolume = 13000,
+    }) {
+      final now = DateTime.now();
+      return List.generate(40, (i) {
+        final isRecent = i >= 20;
+        final isGap = !isRecent && i < priorGaps;
+        return createTestPrice(
+          date: now.subtract(Duration(days: 40 - i)),
+          close: 100,
+          volume: isRecent ? recentVolume : (isGap ? 0 : priorVolume),
+        );
+      });
+    }
+
+    /// 突破區間頂 + 需量能確認 → 回傳值即量能確認的結果
+    bool confirms(List<DailyPriceEntry> prices) => service.checkWeakToStrong(
+      prices,
+      104.0, // > rangeTop 100 * 1.03
+      trendState: TrendState.range,
+      rangeTop: 100.0,
+    );
+
+    test('對照組:無停牌時 1.3 倍量不足以確認(證明 fixture 落在門檻下方)', () {
+      // 13000 / 10000 = 1.30 < 1.5
+      expect(confirms(withPriorGaps(priorGaps: 0)), isFalse);
+    });
+
+    test('🚨 前期停牌不得把同一組量能推過 1.5 倍門檻(稽核 M5)', () {
+      // 前期 3 天停牌。以交易日計仍是 13000/10000 = 1.30（不該確認）；
+      // 但把停牌日算成 0 → 170000/20 = 8500 → 13000/8500 = 1.53 ≥ 1.5。
+      expect(
+        confirms(withPriorGaps(priorGaps: 3)),
+        isFalse,
+        reason: '唯一的差別是前期多了 3 天沒有交易——真實量能完全沒變',
+      );
+    });
+
+    test('停牌天數不得改變量能確認的結論', () {
+      for (final gaps in [0, 1, 3, 7]) {
+        expect(
+          confirms(withPriorGaps(priorGaps: gaps)),
+          isFalse,
+          reason: 'priorGaps=$gaps 改變了結論',
+        );
+      }
+    });
+
+    test('真正的放量仍要確認得出來(確認不是把功能關掉)', () {
+      // 20000 / 10000 = 2.0 ≥ 1.5，且停牌與否都應成立
+      expect(
+        confirms(withPriorGaps(priorGaps: 0, recentVolume: 20000)),
+        isTrue,
+      );
+      expect(
+        confirms(withPriorGaps(priorGaps: 5, recentVolume: 20000)),
+        isTrue,
+      );
+    });
+
+    test('前期全部停牌 → 無法比較,不得確認', () {
+      expect(confirms(withPriorGaps(priorGaps: 20)), isFalse);
+    });
+  });
 }

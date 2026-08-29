@@ -102,10 +102,22 @@ class ScanFilterService {
           }
           return a.symbol.compareTo(b.symbol);
         });
+      // 同分以 symbol ASC 決勝（deterministic，與上面兩個分支一致）：
+      // List.sort 無穩定性保證，而真實資料同分群很大——2026-08-28 的 422 檔
+      // 主清單只有 63 個相異 scoreLong，其中 146 檔是雙 0 的風控可見層。
+      // 少了決勝鍵，desc→asc→desc 來回切會讓同分群每次落在不同位置。
       case ScanSort.scoreAsc:
-        analyses.sort((a, b) => scoreOf(a).compareTo(scoreOf(b)));
+        analyses.sort((a, b) {
+          final byScore = scoreOf(a).compareTo(scoreOf(b));
+          if (byScore != 0) return byScore;
+          return a.symbol.compareTo(b.symbol);
+        });
       case ScanSort.scoreDesc:
-        analyses.sort((b, a) => scoreOf(a).compareTo(scoreOf(b)));
+        analyses.sort((a, b) {
+          final byScore = scoreOf(b).compareTo(scoreOf(a));
+          if (byScore != 0) return byScore;
+          return a.symbol.compareTo(b.symbol);
+        });
     }
   }
 

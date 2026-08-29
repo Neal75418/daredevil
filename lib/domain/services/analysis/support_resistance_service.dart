@@ -18,13 +18,21 @@ class SupportResistanceService {
     // 找出所有波段高點與低點
     final (:highs, :lows) = _detectSwingPoints(prices);
 
-    // 取得當前價格作為參考
-    final currentClose = prices.last.close;
-    if (currentClose == null) {
-      final resistance = highs.isNotEmpty ? highs.last.price : null;
-      final support = lows.isNotEmpty ? lows.last.price : null;
-      return (support, resistance);
-    }
+    // 取得當前價格作為參考。
+    //
+    // **末根停牌時退回最後一個有效收盤**（2026-08-29 稽核 M10）：舊碼在
+    // `prices.last.close == null` 時直接回最後一個 swing 高/低點，那條路徑
+    // 既沒有距離上界、也沒有檢查方向，於是會回報「高於現價的支撐」
+    // （實測 fixture：最後有效收盤 80.0、回報支撐 94.05）。
+    //
+    // 觸發前提確實存在：上游 `classifyCandidate` 只保證**完整歷史**的末根
+    // 有收盤，而 `analysis_coordinator_service` 傳進來的是 priorHistory
+    // ——末根是倒數第二根，不受那道保證涵蓋（2026-08-28 實測 20 檔倒數第二
+    // 根停牌）。⚠️ 那 20 檔當天都沒真的走到這裡（末根量 0–23,065 股，全被
+    // `LiquidityChecker` 擋在 `analyzeStock` 之外）；可達性來自自選股的
+    // `exemptFromLiquidity` 豁免——被豁免的正是這種低量標的。
+    final currentClose = _lastValidClose(prices);
+    if (currentClose == null) return (null, null);
 
     // 聚類波段點並找出最顯著的關卡
     final resistanceZones = _clusterSwingPoints(highs, prices.length);
@@ -241,6 +249,18 @@ class SupportResistanceService {
     }
 
     return bestPrice;
+  }
+
+  /// 由新到舊找出第一個可用的收盤價（跳過停牌根）
+  ///
+  /// 全部停牌／無有效收盤時回 null——此時沒有任何可參照的價位，
+  /// 關卡只能是 null，不能拿波段點硬湊。
+  double? _lastValidClose(List<DailyPriceEntry> prices) {
+    for (var i = prices.length - 1; i >= 0; i--) {
+      final close = prices[i].close;
+      if (close != null && close > 0) return close;
+    }
+    return null;
   }
 
   /// 計算 ATR-based 動態距離

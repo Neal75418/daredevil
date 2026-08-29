@@ -229,19 +229,54 @@ void main() {
       expect(analyses[2].symbol, equals('B'));
     });
 
-    test('stable sort preserves order for equal scores', () {
-      final analyses = [
-        createAnalysis(symbol: 'A', score: 50),
-        createAnalysis(symbol: 'B', score: 50),
-        createAnalysis(symbol: 'C', score: 50),
+    test('🚨 同分時以 symbol ASC 決勝——與輸入順序無關(稽核 M6)', () {
+      // 原測試斷言「Dart's sort is stable, so order should be preserved」,
+      // **那個註解是錯的**:List.sort 沒有穩定性保證,只是 n<32 時走插入
+      // 排序才碰巧成立。2026-08-28 的 422 檔掃描主清單只有 63 個相異
+      // scoreLong,最大同分群 146 檔(全是雙 0 的風控可見層)——遠超過那個
+      // 門檻,tied block 會被打散。
+      //
+      // 而 setSort 是就地重排已排過的 list,所以 desc→asc→desc 來回切
+      // 會讓同分群每次落在不同位置,第一頁的成員跟著變。
+      // rs60Desc 與 priceChange 兩個手足分支都有 symbol tiebreak,
+      // 只有 score 這兩支漏掉。
+      List<DailyAnalysisEntry> tied() => [
+        for (var i = 0; i < 40; i++)
+          createAnalysis(symbol: 'T${i.toString().padLeft(2, '0')}', score: 50),
       ];
 
-      service.applySort(analyses, ScanSort.scoreDesc);
+      final ascending = tied();
+      final descending = tied().reversed.toList();
 
-      // Dart's sort is stable, so order should be preserved
-      expect(analyses[0].symbol, equals('A'));
-      expect(analyses[1].symbol, equals('B'));
-      expect(analyses[2].symbol, equals('C'));
+      service.applySort(ascending, ScanSort.scoreDesc);
+      service.applySort(descending, ScanSort.scoreDesc);
+
+      expect(
+        ascending.map((a) => a.symbol).toList(),
+        descending.map((a) => a.symbol).toList(),
+        reason: '同一組資料、不同輸入順序,排序結果必須一致',
+      );
+      expect(ascending.first.symbol, 'T00');
+      expect(ascending.last.symbol, 'T39');
+    });
+
+    test('🚨 scoreAsc 同分同樣以 symbol ASC 決勝(稽核 M6)', () {
+      List<DailyAnalysisEntry> tied() => [
+        for (var i = 0; i < 40; i++)
+          createAnalysis(symbol: 'T${i.toString().padLeft(2, '0')}', score: 50),
+      ];
+
+      final ascending = tied();
+      final descending = tied().reversed.toList();
+
+      service.applySort(ascending, ScanSort.scoreAsc);
+      service.applySort(descending, ScanSort.scoreAsc);
+
+      expect(
+        ascending.map((a) => a.symbol).toList(),
+        descending.map((a) => a.symbol).toList(),
+      );
+      expect(ascending.first.symbol, 'T00');
     });
 
     test('default horizon (short) 仍依 scoreShort 排序（回歸保護）', () {

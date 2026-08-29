@@ -130,12 +130,17 @@ class RevenueTable extends StatelessWidget {
     );
   }
 
+  /// [revenue] 單位為**千元**（見 `FinMindRevenue.revenue` 的欄位慣例）。
+  ///
+  /// 千元 → 億元 要 ÷100,000；千元 → 萬元 要 **÷10**（曾誤寫成 ÷10,000，
+  /// 使該區間的數字小 1000 倍：99,976 千元（約 1 億）顯示成「10.0萬」。
+  /// 破綻是交界處——R 從 99,999 走到 100,000，畫面從「10.0萬」跳成「1.0億」。
+  /// 實測 1,976 檔中有 465 檔的最新月營收落在該區間）。
   String _formatRevenue(double revenue) {
-    // 營收單位為千元，轉換為億
     if (revenue >= 100000) {
       return '${(revenue / 100000).toStringAsFixed(1)}${'stockDetail.unitBillion'.tr()}';
     } else if (revenue >= 10000) {
-      return '${(revenue / 10000).toStringAsFixed(1)}${'stockDetail.unitTenThousand'.tr()}';
+      return '${(revenue / 10).toStringAsFixed(1)}${'stockDetail.unitTenThousand'.tr()}';
     }
     return '${revenue.toStringAsFixed(0)}${'stockDetail.unitThousand'.tr()}';
   }
