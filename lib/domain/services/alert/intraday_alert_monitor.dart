@@ -16,6 +16,12 @@ typedef MonitorResult = ({
   List<TriggeredAlert> fired,
   int quotesFetched,
   int symbolsWanted,
+
+  /// pending 提醒中「主檔查不到市場別」的檔數（下市／isActive=false／主檔
+  /// 同步異常）。**不能只從分母剔除**：那樣覆蓋率照算 100%、heartbeat 印
+  /// ok，該提醒既不觸發也不報錯、永遠掛著——「觸價=開始觀察」的紀律無聲
+  /// 失效。>0 時 CLI 以 PARTIAL 收場（exit 1）。
+  int symbolsUnresolvable,
   List<String> quoteErrors,
 });
 
@@ -70,6 +76,7 @@ class IntradayAlertMonitor {
         fired: const <TriggeredAlert>[],
         quotesFetched: 0,
         symbolsWanted: 0,
+        symbolsUnresolvable: 0,
         quoteErrors: const <String>[],
       );
     }
@@ -78,15 +85,29 @@ class IntradayAlertMonitor {
     final stocks = await _db.getAllActiveStocks();
     final marketBySymbol = {for (final s in stocks) s.symbol: s.market};
     final wanted = <String, String>{};
+    final unresolvable = <String>{};
     for (final a in pending) {
       final market = marketBySymbol[a.symbol];
-      if (market != null) wanted[a.symbol] = market;
+      if (market != null) {
+        wanted[a.symbol] = market;
+      } else {
+        unresolvable.add(a.symbol);
+      }
+    }
+    if (unresolvable.isNotEmpty) {
+      AppLogger.warning(
+        'IntradayAlertMonitor',
+        '${unresolvable.length} 檔提醒的 symbol 不在主檔,無法監控: '
+            '${unresolvable.take(5).join(', ')}'
+            '${unresolvable.length > 5 ? ' …' : ''}',
+      );
     }
     if (wanted.isEmpty) {
       return (
         fired: const <TriggeredAlert>[],
         quotesFetched: 0,
         symbolsWanted: 0,
+        symbolsUnresolvable: unresolvable.length,
         quoteErrors: const <String>[],
       );
     }
@@ -122,6 +143,7 @@ class IntradayAlertMonitor {
       fired: fired,
       quotesFetched: quotes.length,
       symbolsWanted: wanted.length,
+      symbolsUnresolvable: unresolvable.length,
       quoteErrors: errors,
     );
   }

@@ -193,23 +193,17 @@ void main() {
   });
 
   test('🚨 日期是未來 → 回空（會寫出永遠讀不到的列）', () async {
-    final future = DateTime.now().add(const Duration(days: 3));
-    final ymd =
-        '${future.year}'
-        '${future.month.toString().padLeft(2, '0')}'
-        '${future.day.toString().padLeft(2, '0')}';
-    stub(body(date: ymd));
+    // 錨定在凍結時鐘(2026-08-23)之後 3 天——不可用 DateTime.now():
+    // 資料日走牆鐘、時鐘凍結,耦合只是被反轉,牆鐘走遠就爆
+    stub(body(date: '20260826'));
 
     expect(await client.getAllDayTradingData(), isEmpty);
   });
 
   test('🚨 日期過期太久 → 回空（端點凍結偵測）', () async {
-    final old = DateTime.now().subtract(const Duration(days: 30));
-    final ymd =
-        '${old.year}'
-        '${old.month.toString().padLeft(2, '0')}'
-        '${old.day.toString().padLeft(2, '0')}';
-    stub(body(date: ymd));
+    // 凍結時鐘前 30 天。原版用 DateTime.now()-30d 對凍結的 2026-08-23 比——
+    // 2026-09-15 起 staleDays 掉到 ≤7 就會集體變紅(時間炸彈掃描抓到)
+    stub(body(date: '20260724'));
 
     expect(
       await client.getAllDayTradingData(),

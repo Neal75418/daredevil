@@ -177,12 +177,25 @@ Future<void> main(List<String> args) async {
       exit(1);
     }
 
+    // 主檔查不到的提醒:不影響其他檔的報價可信度(fired 照常通知),但
+    // 本輪不能以 ok 收場——那些提醒既不觸發也不報錯,唯一的可見性就是這裡。
+    final unres = result.symbolsUnresolvable;
+    final unresSuffix = unres > 0 ? ',⚠️ $unres 檔不在主檔無法監控' : '';
+    if (unres > 0) {
+      stderr.writeln(
+        '[intraday_alert] $unres 檔提醒的 symbol 不在主檔(下市/停用/主檔異常),'
+        '該提醒永遠不會觸發——請檢查提醒清單',
+      );
+    }
+
     if (fired.isEmpty) {
       beat(
-        'ok(無觸價,報價 ${result.quotesFetched}/${result.symbolsWanted}'
-        '${errorKinds.isEmpty ? '' : ',批次錯誤 ${errorKinds.length} 種'})',
+        '${unres > 0 ? 'PARTIAL' : 'ok'}'
+        '(無觸價,報價 ${result.quotesFetched}/${result.symbolsWanted}'
+        '${errorKinds.isEmpty ? '' : ',批次錯誤 ${errorKinds.length} 種'}'
+        '$unresSuffix)',
       );
-      exit(0);
+      exit(unres > 0 ? 1 : 0);
     }
 
     var notified = 0;
@@ -224,9 +237,12 @@ Future<void> main(List<String> args) async {
     }
     // ⚠️ 措辭不可斷言「已送達」:osascript 即使通知被 Focus 模式或系統
     // 設定抑制也回 exit 0,我們只知道它「接受」了,不知道使用者看到沒
-    beat('觸價 ${fired.length} 筆,osascript 接受 $notified 筆(未確認送達)');
+    beat(
+      '觸價 ${fired.length} 筆,osascript 接受 $notified 筆(未確認送達)'
+      '$unresSuffix',
+    );
     await database.close();
-    exit(notified == fired.length ? 0 : 1);
+    exit(notified == fired.length && unres == 0 ? 0 : 1);
   } catch (e, s) {
     // AppLogger 在 `dart run` 下是 no-op(輸出包在 assert 內、asserts
     // 未啟用)——堆疊必須自己印,否則故障現場只剩一行訊息

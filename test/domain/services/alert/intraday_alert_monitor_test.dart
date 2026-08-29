@@ -219,4 +219,35 @@ void main() {
     expect(r.quotesFetched, 0);
     expect(r.quoteErrors, const ['DioException.connectionTimeout: MIS 沒回']);
   });
+
+  test('🚨 symbol 不在主檔 → 必須計入 symbolsUnresolvable,不得靜默消失', () async {
+    // 全面稽核發現:pending 提醒的 symbol 若不在 getAllActiveStocks
+    // (下市/isActive=false/主檔同步異常),它連分母都進不去——CLI 覆蓋率
+    // 閘門算出 100%、heartbeat 印 ok,該提醒永遠掛著且無任何可見症狀。
+    // 「觸價=開始觀察」的紀律整個落空。
+    when(() => db.getActiveAlerts()).thenAnswer(
+      (_) async => [alert(id: 1, symbol: '3231'), alert(id: 2, symbol: '9999')],
+    );
+    when(() => client.fetchQuotes(any())).thenAnswer(
+      (_) async =>
+          (quotes: {'3231': quote('3231', 181.0)}, errors: const <String>[]),
+    );
+
+    final result = await monitor.check();
+
+    expect(result.symbolsUnresolvable, 1, reason: '9999 不在主檔');
+    expect(result.symbolsWanted, 1, reason: '3231 照常監控,不受牽連');
+  });
+
+  test('🚨 全部 symbol 都查不到 → unresolvable=全數,不得回「空場一切正常」', () async {
+    when(() => db.getActiveAlerts()).thenAnswer(
+      (_) async => [alert(id: 1, symbol: '9998'), alert(id: 2, symbol: '9999')],
+    );
+
+    final result = await monitor.check();
+
+    expect(result.symbolsUnresolvable, 2);
+    expect(result.symbolsWanted, 0);
+    verifyNever(() => client.fetchQuotes(any()));
+  });
 }

@@ -244,7 +244,7 @@ void main() {
     test('triggers when dividend yield is in valid range', () {
       final valuation = createTestValuation(
         dividendYield: 7.0, // 5.5 <= 7.0 <= 20
-        date: DateTime.now(), // fresh data
+        date: DateTime(2025, 5, 30), // evaluationTime 前 2 天=真的新鮮
       );
       final data = createTestStockData(latestValuation: valuation);
       final context = AnalysisContext(
@@ -262,7 +262,7 @@ void main() {
     test('does not trigger when yield is below threshold', () {
       final valuation = createTestValuation(
         dividendYield: 3.0, // < 5.5
-        date: DateTime.now(),
+        date: DateTime(2025, 5, 30),
       );
       final data = createTestStockData(latestValuation: valuation);
       final context = AnalysisContext(
@@ -276,7 +276,7 @@ void main() {
     test('does not trigger when yield is abnormally high', () {
       final valuation = createTestValuation(
         dividendYield: 25.0, // > 20.0 (scanDividendYieldMax)
-        date: DateTime.now(),
+        date: DateTime(2025, 5, 30),
       );
       final data = createTestStockData(latestValuation: valuation);
       final context = AnalysisContext(
@@ -325,7 +325,7 @@ void main() {
       final prices = _generatePricesAboveMA(maPeriod: 20);
       final valuation = createTestValuation(
         per: 8.0, // 0 < 8 <= 10
-        date: DateTime.now(),
+        date: DateTime(2025, 5, 30),
       );
       final data = createTestStockData(
         prices: prices,
@@ -346,7 +346,10 @@ void main() {
 
     test('does not trigger when PE is above threshold', () {
       final prices = _generatePricesAboveMA(maPeriod: 20);
-      final valuation = createTestValuation(per: 15.0, date: DateTime.now());
+      final valuation = createTestValuation(
+        per: 15.0,
+        date: DateTime(2025, 5, 30),
+      );
       final data = createTestStockData(
         prices: prices,
         latestValuation: valuation,
@@ -361,7 +364,10 @@ void main() {
 
     test('does not trigger when PE is negative', () {
       final prices = _generatePricesAboveMA(maPeriod: 20);
-      final valuation = createTestValuation(per: -5.0, date: DateTime.now());
+      final valuation = createTestValuation(
+        per: -5.0,
+        date: DateTime(2025, 5, 30),
+      );
       final data = createTestStockData(
         prices: prices,
         latestValuation: valuation,
@@ -394,7 +400,7 @@ void main() {
       });
       final valuation = createTestValuation(
         per: 120.0, // >= 100
-        date: DateTime.now(),
+        date: DateTime(2025, 5, 30),
       );
       final data = createTestStockData(
         prices: prices,
@@ -423,7 +429,10 @@ void main() {
           volume: 1000,
         );
       });
-      final valuation = createTestValuation(per: 50.0, date: DateTime.now());
+      final valuation = createTestValuation(
+        per: 50.0,
+        date: DateTime(2025, 5, 30),
+      );
       final data = createTestStockData(
         prices: prices,
         latestValuation: valuation,
@@ -439,7 +448,10 @@ void main() {
     test('does not trigger when RSI is not overbought', () {
       // Downtrend prices → RSI < 75
       final prices = generateDowntrendPrices(days: 30);
-      final valuation = createTestValuation(per: 120.0, date: DateTime.now());
+      final valuation = createTestValuation(
+        per: 120.0,
+        date: DateTime(2025, 5, 30),
+      );
       final data = createTestStockData(
         prices: prices,
         latestValuation: valuation,
@@ -462,7 +474,7 @@ void main() {
     test('triggers when PBR is low and positive', () {
       final valuation = createTestValuation(
         pbr: 0.6, // 0 < 0.6 <= 0.8
-        date: DateTime.now(),
+        date: DateTime(2025, 5, 30),
       );
       final data = createTestStockData(latestValuation: valuation);
       final context = AnalysisContext(
@@ -478,7 +490,10 @@ void main() {
     });
 
     test('does not trigger when PBR is above threshold', () {
-      final valuation = createTestValuation(pbr: 1.5, date: DateTime.now());
+      final valuation = createTestValuation(
+        pbr: 1.5,
+        date: DateTime(2025, 5, 30),
+      );
       final data = createTestStockData(latestValuation: valuation);
       final context = AnalysisContext(
         evaluationTime: DateTime(2025, 6, 1),
@@ -489,7 +504,10 @@ void main() {
     });
 
     test('does not trigger when PBR is zero or negative', () {
-      final valuation = createTestValuation(pbr: 0.0, date: DateTime.now());
+      final valuation = createTestValuation(
+        pbr: 0.0,
+        date: DateTime(2025, 5, 30),
+      );
       final data = createTestStockData(latestValuation: valuation);
       final context = AnalysisContext(
         evaluationTime: DateTime(2025, 6, 1),
