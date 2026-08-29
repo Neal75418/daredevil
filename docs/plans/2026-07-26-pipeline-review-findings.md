@@ -747,6 +747,26 @@ process，故分開處理。
 
 **工作量**：small
 
+
+### 47. 校準語料含 64% 生產永不評分的 stock-day（流動性宇宙分岔）
+
+**狀態**：📋 已記錄未修（2026-08-29 review 量測；待決策）
+
+**證據**：生產只評分 CandidateSelector 產出（`candidate_selector.dart:48-58`，
+20 日中位成交值 ≥ 3,000 萬，isolate 內二次把關 `scoring_isolate.dart:547-553`）；
+replay 評 `stock_master` 全部（`test/tool/run_replay.dart` 預設無 whitelist）。
+`tool/calibration.db` 近 20 個交易日：2,090 檔有 bar，1,347 檔（64%）過不了
+流動性門檻。低流動股同樣餵進 regime universe。
+
+**對分析判斷的影響**：calibrated scores 有約三分之二樣本來自生產永遠不會
+評分的股票——比 2026-08-29 修掉的三處分岔（補零列／regime gate／法人窗）
+加總都大。分數的統計性質（hit rate、t 值、cut 判定）被低流動股的行為拉動。
+
+**為何不逕行修**：讓 replay 套同一道門檻是「校準語料定義」的變更——樣本大幅
+縮小、所有規則統計重算、與歷次校準結果不可比。walk-forward 已用 top-400
+流動樣本，方向一致但口徑不同。需要一次明確決策（含是否同步改 regime
+universe），不適合夾帶在修 bug 的 commit 裡。
+
 ---
 
 ## 待遇到再決定的 UI 取捨

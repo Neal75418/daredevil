@@ -48,6 +48,14 @@
 // Writes to `rule_accuracy` table in the same calibration DB. The existing
 // `tool/recalibrate.dart` reads from this table as its input.
 
+// ⚠️ **與生產分布的已知殘餘分岔（2026-08-29 review 量測）**：生產只評分
+// CandidateSelector 的產出（20 日中位成交值 ≥ 3,000 萬），replay 評
+// stock_master 全部——實測近 20 個交易日 2,090 檔有 bar、其中 1,347 檔
+// （64%）過不了流動性門檻。約三分之二的校準語料是生產永遠不會評分的
+// stock-day，且同樣餵進 regime universe。這比 (a)(b)(c) 三處修掉的分岔
+// 加總都大；是否讓 replay 套同一道流動性門檻是**校準語料的定義問題**
+// （會大幅縮小樣本、改變所有規則的統計），列為待決策而非逕行修改。
+// 追蹤：docs/plans/2026-07-26-pipeline-review-findings.md #47。
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -276,22 +284,6 @@ class ReplayCalibrator {
     _log('▶️  Loading backfilled data from DB...');
     final loadStart = DateTime.now();
     var data = await _loadData();
-    // **生產一致性 (a)**：市場已同步、個股無活動的日子補零列——與
-    // BatchDataLoader 走同一個生產函式。不補的話 streak 規則會把不相鄰
-    // 兩天焊成連續（生產修掉的 bug 在校準語料復活）。
-    data = data.withInstitutional(
-      BatchDataBuilder.fillNoActivityDays(
-        data.institutionalBySymbol,
-        data.pricesBySymbol,
-      ),
-    );
-    // **生產一致性 (b)**：per-date regime map——與 scoring_isolate 同一判定
-    // 的逐日等價版。不傳的話回檔規則永不被 gate，校準樣本含生產會壓掉的
-    // 空頭觸發。
-    final uptrendByDate = computeMarketUptrendByDate(
-      data.pricesBySymbol,
-      SectorParams.regimeLookbackDays,
-    );
     _log(
       '✅ Loaded: ${data.pricesBySymbol.length} symbols with prices '
       '(${_formatDuration(DateTime.now().difference(loadStart))})',
@@ -320,6 +312,23 @@ class ReplayCalibrator {
         duration: DateTime.now().difference(overallStart),
       );
     }
+
+    // **生產一致性 (a)**：市場已同步、個股無活動的日子補零列——與
+    // BatchDataLoader 走同一個生產函式。不補的話 streak 規則會把不相鄰
+    // 兩天焊成連續（生產修掉的 bug 在校準語料復活）。放在 dryRun 早退
+    // 之後——只印計畫的路徑不為它付費。
+    data = data.withInstitutional(
+      BatchDataBuilder.fillNoActivityDays(
+        data.institutionalBySymbol,
+        data.pricesBySymbol,
+      ),
+    );
+    // **生產一致性 (b)**：per-date regime map。不傳的話回檔規則永不被
+    // gate，校準樣本含生產會壓掉的空頭觸發。
+    final uptrendByDate = computeMarketUptrendByDate(
+      data.pricesBySymbol,
+      SectorParams.regimeLookbackDays,
+    );
 
     // 2a. 橫斷面 universe 均值 forward return（每個交易日一個值）— 供超額
     // 報酬扣除多空 beta 用。只在 excessReturn 模式下計算。
@@ -425,8 +434,14 @@ class ReplayCalibrator {
   /// 2. 確保 forward window 夠（i + 60 < length）
   /// 3. 呼叫 analysisService + ruleEngine
   /// 4. 對每個 firing 計算 5d + 60d forward return 並累加進 ruleStats
-  /// per-date 市場 regime map——[PriceCalculator.marketUptrendOrNull] 的逐日
-  /// 等價版（parity 見 test/tool/replay_production_parity_test.dart）。
+  /// per-date 市場 regime map——與**生產路徑**逐日等價（parity 見
+  /// test/tool/replay_production_parity_test.dart）。
+  ///
+  /// ⚠️ 等價對象是「生產的呼叫方式」而非裸函式：生產只載
+  /// [RuleParams.historyRequiredDays]（400 日曆天）窗內的歷史，窗內不足
+  /// lookback+1 根的股票整檔跳過。逐 bar 版必須複製這個截斷——review 對
+  /// 1,383 個交易日實測，不加 400 天守衛時有 1 日（2026-07-30）gate 反向
+  /// （replay 放行、生產壓掉），來源正是停牌久的股票用到窗外的舊錨點。
   ///
   /// 等價論證：生產對「截至日 D 的各檔歷史」以 `last` vs `len-1-lookback` 算
   /// lookback 報酬、並以 asOf 過濾「最後一根 bar 就是 D」的股票。逐日版對每檔
@@ -446,11 +461,16 @@ class ReplayCalibrator {
     final n = <DateTime, int>{};
     for (final history in pricesBySymbol.values) {
       for (var i = lookbackDays; i < history.length; i++) {
+        final anchor = history[i - lookbackDays];
+        // 生產只看 400 日曆天窗：錨點落在窗外的股票在生產端整檔被跳過
+        if (history[i].date.difference(anchor.date).inDays >
+            RuleParams.historyRequiredDays) {
+          continue;
+        }
         final latest = history[i].close;
-        final old = history[i - lookbackDays].close;
+        final old = anchor.close;
         if (latest == null || old == null || old <= 0) continue;
-        final d = history[i].date;
-        final key = DateTime(d.year, d.month, d.day);
+        final key = _dateKey(history[i].date);
         sum[key] = (sum[key] ?? 0) + (latest - old) / old;
         n[key] = (n[key] ?? 0) + 1;
       }
@@ -536,12 +556,7 @@ class ReplayCalibrator {
         priceHistory: pricesUpToDay,
         evaluationTime: currentPrice.date,
         // 生產一致性 (b)：與 scoring_isolate 相同的 regime gate 輸入
-        isMarketUptrend:
-            uptrendByDate[DateTime(
-              currentPrice.date.year,
-              currentPrice.date.month,
-              currentPrice.date.day,
-            )],
+        isMarketUptrend: uptrendByDate[_dateKey(currentPrice.date)],
         // 其餘 marketData 欄位（外資持股／集保／警示／內部人）仍為 null——
         // 那些資料 backfill 根本沒抓，對應規則本來就 no-fire。
         marketData: dtRatio == null

@@ -7,6 +7,13 @@
 //   (b) 缺 regime gate：回檔規則的校準樣本含生產會壓掉的空頭觸發
 //   (c) 法人窗不同：生產裁到 institutionalStreakLookbackDays，replay 餵全歷史
 //
+// 已知存活的 mutation（結構性免疫，記錄原因而非硬造 fixture）：
+//   computeMarketUptrendByDate 的錨點索引 ±1（119 vs 120 根 lookback）。
+//   平滑序列下 ±1 根只把均值零交叉平移 ~0.2 天，整數日邊界不動、boolean
+//   逐日不變；要殺它需要「交叉恰落在日界 ±0.2 天內」的鋸齒 fixture，脆且
+//   讀不懂。實質風險有界：窗長差 0.8%，且 (b-2) 已對 4 組序列 × 逐日釘住
+//   與生產函式的 boolean 相等。
+//
 // 斷言點＝replay 傳給 rule engine / buildContext 的實物（mock 捕捉），
 // 對照生產端同一批函式（BatchDataBuilder.fillNoActivityDays、
 // PriceCalculator.marketUptrendOrNull）的輸出。
@@ -172,8 +179,11 @@ void main() {
     // day 0 反而在窗內——mutation 存活抓到這個算術錯誤。
     final days = InstitutionalParams.institutionalStreakLookbackDays + 90;
     await seedPrices('1111', days);
-    // day 0 在窗外;day 100 在窗內(防「整串被濾光」的空集合假綠)
-    await seedInst('1111', [0, 100]);
+    // day 0 在窗外;day 100 在窗內(防「整串被濾光」的空集合假綠);
+    // day 29/28 = 最後評估日(119)的窗界兩側——生產查詢是 >= evalDate-90,
+    // 恰在界上的要留、界外一天的要丟。review 實測:窗常數 -30 的 mutation
+    // 在只有 0/100 兩列時存活,這兩列釘住常數本身。
+    await seedInst('1111', [0, 28, 29, 100]);
 
     await makeCalibrator().run();
 
@@ -195,6 +205,17 @@ void main() {
       last.institutional!.map((e) => e.date),
       contains(first.add(const Duration(days: 100))),
       reason: '窗內的資料必須還在——整串空集合會讓上一條斷言假綠',
+    );
+    final dates = last.institutional!.map((e) => e.date).toSet();
+    expect(
+      dates,
+      contains(first.add(const Duration(days: 29))),
+      reason: '恰在窗界上(evalDate-90)的列必須保留——生產查詢是 >=',
+    );
+    expect(
+      dates,
+      isNot(contains(first.add(const Duration(days: 28)))),
+      reason: '窗界外一天的列必須裁掉——此斷言釘住窗常數的值',
     );
   });
 
@@ -239,6 +260,77 @@ void main() {
     );
   });
 
+  test('(b-3) 釘一個評估日:捕到的 regime == 生產函式在該日截斷歷史的輸出', () async {
+    // review 的 mutation 實測:lookup key 平移 ±3 天、錨點索引 ±1 都能在
+    // (b-1)/(b-2) 存活——粗粒度斷言只綁「有 false」。此測試把單一評估日的
+    // 捕獲值跟生產函式(歷史截到該日、asOf=該日)逐值對齊,任何 key 平移
+    // 都是把「別天(甚至未來)的 regime」餵給該日,是 look-ahead——本檔案
+    // 的老毛病(audit finding #6)。
+    final prices = <String, List<DailyPriceEntry>>{};
+    for (var k = 0; k < 55; k++) {
+      final sym = '8${k.toString().padLeft(3, '0')}';
+      await db.upsertStocks([
+        StockMasterCompanion.insert(symbol: sym, name: sym, market: 'TWSE'),
+      ]);
+      final list = [
+        for (var i = 0; i < 200; i++)
+          DailyPriceEntry(
+            symbol: sym,
+            date: first.add(Duration(days: i)),
+            close: i < 120 ? 100.0 + i * 0.05 : 106.0 - (i - 120) * 1.0,
+            volume: 1000000,
+          ),
+      ];
+      prices[sym] = list;
+      await db.insertPrices([
+        for (final e in list)
+          DailyPriceCompanion.insert(
+            symbol: e.symbol,
+            date: e.date,
+            close: Value(e.close),
+            volume: const Value(1000000),
+          ),
+      ]);
+    }
+
+    await makeCalibrator().run();
+
+    final captured = verify(
+      () => mockAnalysis.buildContext(
+        any(),
+        priceHistory: any(named: 'priceHistory'),
+        marketData: any(named: 'marketData'),
+        evaluationTime: captureAny(named: 'evaluationTime'),
+        isMarketUptrend: captureAny(named: 'isMarketUptrend'),
+      ),
+    ).captured;
+    // captured 交錯排列:[evalTime, uptrend, ...]。驗**每一個**評估日——
+    // 只釘單日的話,lookup key ±N 在區域性恆值段全數存活;逐日驗證讓
+    // 轉折日附近的平移必然露餡。
+    expect(captured, isNotEmpty, reason: '前提:有評估發生');
+    final checked = <DateTime>{};
+    for (var i = 0; i + 1 < captured.length; i += 2) {
+      final t = captured[i] as DateTime;
+      if (!checked.add(t)) continue;
+      final idx = t.difference(first).inDays;
+      final truncated = {
+        for (final e in prices.entries) e.key: e.value.sublist(0, idx + 1),
+      };
+      expect(
+        captured[i + 1] as bool?,
+        PriceCalculator.marketUptrendOrNull(
+          truncated,
+          SectorParams.regimeLookbackDays,
+          asOf: t,
+        ),
+        reason:
+            'day $idx 的 regime 必須等於生產函式對「截至該日」歷史的輸出'
+            '——不等=把別天(甚至未來)的 regime 餵給該日',
+      );
+    }
+    expect(checked.length, greaterThan(30), reason: '前提:涵蓋足夠多評估日');
+  });
+
   test('(b-2) per-date regime map 與生產函式逐日一致(parity)', () {
     // 40 檔、160 天:前 120 天緩漲、後 40 天急跌 → 後段 uptrend 應為 false
     // (40 檔 < regimeMinEligibleStocks=50 → 兩邊都該回 null;
@@ -256,14 +348,25 @@ void main() {
         ],
     };
 
-    for (final (symbols, slope) in [(40, -2.0), (60, -2.0), (60, 2.0)]) {
+    // 最後一組是「刀鋒坡度」:-0.12/天 讓 120 日均值以 ~0.05%/天 的速度
+    // 穿越零點,轉折橫跨多日——錨點索引 ±1(位移同量級)在陡坡序列翻不了
+    // 任何一天的正負,只有刀鋒組殺得死那個 mutation。
+    for (final (symbols, slope) in [
+      (40, -2.0),
+      (60, -2.0),
+      (60, 2.0),
+      (60, -0.12),
+    ]) {
       final map = build(symbols, slope);
       final byDate = ReplayCalibrator.computeMarketUptrendByDate(
         map,
         SectorParams.regimeLookbackDays,
       );
-      // 抽三個代表日與生產函式對照:歷史截到該日、asOf=該日
-      for (final dayIdx in [125, 140, 159]) {
+      // 掃全部評估日與生產函式對照(歷史截到該日、asOf=該日)。
+      // 不抽樣:合成序列的 regime 是區域性恆值,抽樣點離轉折遠時
+      // key/索引 ±N 的 mutation 全部存活(review 實測 3 個都活);
+      // 全掃保證轉折日(約 day 125-126)被涵蓋,任何平移在那裡必然翻值。
+      for (var dayIdx = 120; dayIdx < 160; dayIdx++) {
         final d = first.add(Duration(days: dayIdx));
         final truncated = {
           for (final e in map.entries) e.key: e.value.sublist(0, dayIdx + 1),
