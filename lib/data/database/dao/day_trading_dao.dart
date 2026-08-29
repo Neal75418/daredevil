@@ -120,22 +120,27 @@ mixin DayTradingDaoMixin on $AppDatabase {
     required String market,
     required DateTime since,
   }) async {
+    // Set-based 反 join（EXCEPT）而非相關子查詢。舊寫法對每個外層列跑一次
+    // 「SCAN stock_master + substr 等值」子查詢——substr 讓 day_trading 的
+    // date 索引全廢，實測 app DB 40 天窗 3.2s、寬窗 33s，且它跑在**每次每日
+    // 更新**上。EXCEPT 版兩側各掃一次 date range，同窗實測 146ms／708ms。
+    //
+    // 語意等價的前提：第二側加了 `dt.date >= ?`，成立是因為 [since] 已
+    // normalize 到本地午夜，而同曆日的任何 timestamp（含歷史變體如 08:00）
+    // 必 ≥ 該日午夜——所以不會把「窗內曆日、變體時戳」的當沖列漏在 EXCEPT
+    // 右側之外。
     final rows = await customSelect(
       'SELECT DISTINCT substr(dp.date, 1, 10) AS d '
       'FROM daily_price dp '
       'INNER JOIN stock_master sm ON dp.symbol = sm.symbol '
-      'WHERE sm.market = ? AND dp.date >= ? '
-      'AND NOT EXISTS ('
-      '  SELECT 1 FROM day_trading dt '
-      '  INNER JOIN stock_master s2 ON dt.symbol = s2.symbol '
-      '  WHERE s2.market = ? AND substr(dt.date, 1, 10) = substr(dp.date, 1, 10)'
-      ') '
+      'WHERE sm.market = ?1 AND dp.date >= ?2 '
+      'EXCEPT '
+      'SELECT DISTINCT substr(dt.date, 1, 10) '
+      'FROM day_trading dt '
+      'INNER JOIN stock_master s2 ON dt.symbol = s2.symbol '
+      'WHERE s2.market = ?1 AND dt.date >= ?2 '
       'ORDER BY d',
-      variables: [
-        Variable.withString(market),
-        Variable.withDateTime(since),
-        Variable.withString(market),
-      ],
+      variables: [Variable.withString(market), Variable.withDateTime(since)],
       readsFrom: {dailyPrice, dayTrading, stockMaster},
     ).get();
     return [for (final r in rows) DateTime.parse(r.read<String>('d'))];
