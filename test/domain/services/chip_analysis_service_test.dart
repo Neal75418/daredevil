@@ -22,9 +22,10 @@ void main() {
         insiderHistory: [],
       );
 
-      // Base score is 0 (no signals = no score)
-      expect(result.score, 0);
-      expect(result.rating, ChipRating.weak);
+      // 無訊號 = 停在 baseline 中點(50);全空輸入下 isInsufficient 為
+      // true,UI 不會渲染這個評級,但分數語意仍須誠實:無訊號≠極弱
+      expect(result.score, ChipScoringParams.baselineScore);
+      expect(result.rating, ChipRating.neutral);
       expect(result.attitude, InstitutionalAttitude.neutral);
     });
 
@@ -49,8 +50,8 @@ void main() {
         insiderHistory: [],
       );
 
-      // Base 0 + 30 (Large Bonus) = 30
-      expect(result.score, 30);
+      // Base 50 + 30 (Large Bonus) = 80
+      expect(result.score, 80);
       expect(result.attitude, InstitutionalAttitude.aggressiveBuy);
     });
 
@@ -74,8 +75,9 @@ void main() {
         insiderHistory: [],
       );
 
-      // Base 0 - 12 (Margin Increase Penalty) = 0 (clamped)
-      expect(result.score, 0);
+      // Base 50 - 12 (Margin Increase Penalty) = 38——舊制被 clamp 夾成 0,
+      // 與無訊號無法區分
+      expect(result.score, 38);
     });
 
     test('High day trading ratio penalizes score', () {
@@ -96,8 +98,8 @@ void main() {
         insiderHistory: [],
       );
 
-      // Base 0 - 8 (Day Trading Penalty) = 0 (clamped)
-      expect(result.score, 0);
+      // Base 50 - 8 (Day Trading Penalty) = 42
+      expect(result.score, 42);
     });
 
     // 2026-07-18 門檻由 35% 移到 60%（TWSE 注意交易資訊異常標準）。
@@ -106,8 +108,9 @@ void main() {
     // 把中位數叫「過熱」在語意上站不住腳。
     // 60% 為 p98.4、觸發率 1.64%，且與 TWSE 注意股當沖標準同基準（成交量）。
     //
-    // 這兩筆測試用法人連買 +30 當基底，讓 −8 可被觀測
-    // （原測試 base 0 會被 clamp(0,100) 夾成 0，扣或不扣都是 0、無鑑別力）。
+    // 這兩筆測試用法人連買 +30 疊在 baseline 上,讓 −8 可被觀測。
+    // (baseline 50 之前這裡是為了逃 clamp 的 workaround;現在 baseline
+    // 本身已可觀測,保留連買基底是為了同時釘住「加分與扣分不互相干擾」)
     group('當沖扣分門檻 — 監管錨定 60%', () {
       List<DailyInstitutionalEntry> buyStreak() =>
           List<DailyInstitutionalEntry>.generate(
@@ -139,21 +142,21 @@ void main() {
           .score;
 
       test('40% 不再扣分（舊 35% 門檻會誤扣；40% 僅 p83.8）', () {
-        // 30 (法人連買) + 0 = 30
-        expect(scoreWithRatio(40.0), 30);
+        // 50 + 30 (法人連買) + 0 = 80
+        expect(scoreWithRatio(40.0), 80);
       });
 
       test('65% 仍扣分（超過監管 60% 注意標準）', () {
-        // 30 (法人連買) − 8 (當沖扣分) = 22
-        expect(scoreWithRatio(65.0), 22);
+        // 50 + 30 (法人連買) − 8 (當沖扣分) = 72
+        expect(scoreWithRatio(65.0), 72);
       });
 
       test('剛好 60% 觸發扣分（邊界）', () {
-        expect(scoreWithRatio(60.0), 22);
+        expect(scoreWithRatio(60.0), 72);
       });
 
       test('59.9% 不扣分（邊界下緣）', () {
-        expect(scoreWithRatio(59.9), 30);
+        expect(scoreWithRatio(59.9), 80);
       });
     });
 
@@ -178,8 +181,8 @@ void main() {
         insiderHistory: [],
       );
 
-      // Base 0 + 15 (Small Bonus) = 15
-      expect(result.score, 15);
+      // Base 50 + 15 (Small Bonus) = 65
+      expect(result.score, 65);
     });
 
     test('Institutional sell streak == 2 days penalizes score', () {
@@ -203,8 +206,8 @@ void main() {
         insiderHistory: [],
       );
 
-      // Base 0 - 12 (Small Penalty) = 0 (clamped); 2 sell days → neutral attitude
-      expect(result.score, 0);
+      // Base 50 - 12 (Small Penalty) = 38; 2 sell days → neutral attitude
+      expect(result.score, 38);
       expect(result.attitude, InstitutionalAttitude.neutral);
     });
 
@@ -229,17 +232,17 @@ void main() {
         insiderHistory: [],
       );
 
-      // Base 0 - 25 (Large Penalty) = 0 (clamped); attitude should be aggressiveSell
-      expect(result.score, 0);
+      // Base 50 - 25 (Large Penalty) = 25; attitude should be aggressiveSell
+      expect(result.score, 25);
       expect(result.attitude, InstitutionalAttitude.aggressiveSell);
     });
   });
 
   group('資料充足性(全面稽核 MEDIUM-HIGH #1)', () {
-    // score 從 0 起算、六個輸入全空時各調整項回 0 → 0 分被 fromScore 判成
-    // weak(極弱)直接渲染。上櫃股的持股/當沖/融資覆蓋系統性稀疏——「沒被
-    // 量測」與「實測極弱」在 UI 上逐 pixel 相同,使用者可能因假評級放棄
-    // 一檔只是沒資料的股票。
+    // 六個輸入全空時各調整項回 0 → 分數停在 baseline、被判成「中性」。
+    // 上櫃股的持股/當沖/融資覆蓋系統性稀疏——「沒被量測」與「實測中性」
+    // 在 UI 上逐 pixel 相同,仍是謊報,使用者可能據此誤讀一檔只是沒資料
+    // 的股票。
     final service = ChipAnalysisService();
 
     ChipStrengthResult run({
@@ -336,7 +339,8 @@ void main() {
       expect(r.isInsufficient, isFalse);
       expect(
         r.score,
-        ChipScoringParams.insiderBuyBonus +
+        ChipScoringParams.baselineScore +
+            ChipScoringParams.insiderBuyBonus +
             ChipScoringParams.concentrationHighBonus,
       );
     });
@@ -377,6 +381,112 @@ void main() {
         ).measuredDomains,
         1,
       );
+    });
+  });
+
+  group('baseline 50 重定標(2026-08-29 review 射程外發現)', () {
+    // 六個調整項是**有正負號的雙向訊號**,但從 0 起算再 clamp(0,100) 等於
+    // 砍掉負半軸:「法人連賣的極弱股」與「什麼訊號都沒有的中性股」都是
+    // 0 分、同一顆「極弱」徽章——與「沒資料畫成極弱」同一類謊言,主角
+    // 換成 neutral。baseline 移到 50 後:中性=50=中性帶、偏空的扣分終於
+    // 看得見、排序單調性保持。
+    final service = const ChipAnalysisService();
+
+    test('🚨 六域齊全且全部中性 → baseline 分、評「中性」,不得評「極弱」', () {
+      DailyInstitutionalEntry inst(int d) => DailyInstitutionalEntry(
+        symbol: '2330',
+        date: DateTime(2026, 8, d),
+        foreignNet: 0,
+      );
+      ShareholdingEntry share(int d) => ShareholdingEntry(
+        symbol: '2330',
+        date: DateTime(2026, 8, d),
+        foreignSharesRatio: 20.0,
+      );
+      MarginTradingEntry margin(int d) => MarginTradingEntry(
+        symbol: '2330',
+        date: DateTime(2026, 8, d),
+        marginBalance: 1000,
+        shortBalance: 100,
+      );
+      final r = service.compute(
+        institutionalHistory: [inst(20), inst(21)],
+        shareholdingHistory: [share(20), share(21)],
+        marginHistory: List.generate(
+          ChipScoringParams.marginStreakDays + 1,
+          (i) => margin(20 + i),
+        ),
+        dayTradingHistory: [
+          DayTradingEntry(
+            symbol: '2330',
+            date: DateTime(2026, 8, 24),
+            dayTradingRatio: 10.0,
+          ),
+        ],
+        holdingDistribution: [
+          HoldingDistributionEntry(
+            symbol: '2330',
+            date: DateTime(2026, 8, 24),
+            level: '1,000以上',
+            percent: 30.0,
+          ),
+        ],
+        insiderHistory: [
+          InsiderHoldingEntry(
+            symbol: '2330',
+            date: DateTime(2026, 8, 24),
+            sharesChange: 0,
+            pledgeRatio: 0,
+          ),
+        ],
+      );
+      expect(r.isInsufficient, isFalse);
+      expect(r.score, ChipScoringParams.baselineScore);
+      expect(r.rating, ChipRating.neutral);
+    });
+
+    test('🚨 偏空訊號不再被 clamp 吃掉——極弱與中性可區分', () {
+      // 法人連賣 4 天(−25):舊制 0−25 clamp 成 0,與中性股逐 pixel 相同
+      final sells = List.generate(
+        ChipScoringParams.instStreakLargeDays,
+        (i) => DailyInstitutionalEntry(
+          symbol: '2330',
+          date: DateTime(2026, 8, 20 + i),
+          foreignNet: -1000,
+        ),
+      );
+      final r = service.compute(
+        institutionalHistory: sells,
+        shareholdingHistory: [],
+        marginHistory: [],
+        dayTradingHistory: [
+          DayTradingEntry(
+            symbol: '2330',
+            date: DateTime(2026, 8, 24),
+            dayTradingRatio: 10.0,
+          ),
+        ],
+        holdingDistribution: [],
+        insiderHistory: [],
+      );
+      expect(
+        r.score,
+        ChipScoringParams.baselineScore +
+            ChipScoringParams.instSellStreakLargePenalty,
+      );
+      expect(r.rating, ChipRating.bearish);
+      expect(r.score, lessThan(ChipScoringParams.baselineScore));
+    });
+
+    test('分帶邊界:±9 中性、±10~29 偏多/偏空、±30 起極強/極弱(對稱)', () {
+      expect(ChipRating.fromScore(80), ChipRating.strong);
+      expect(ChipRating.fromScore(79), ChipRating.bullish);
+      expect(ChipRating.fromScore(60), ChipRating.bullish);
+      expect(ChipRating.fromScore(59), ChipRating.neutral);
+      expect(ChipRating.fromScore(41), ChipRating.neutral);
+      expect(ChipRating.fromScore(40), ChipRating.bearish);
+      expect(ChipRating.fromScore(21), ChipRating.bearish);
+      expect(ChipRating.fromScore(20), ChipRating.weak);
     });
   });
 }

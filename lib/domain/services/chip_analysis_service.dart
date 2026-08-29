@@ -29,7 +29,9 @@ class ChipAnalysisService {
     final sortedInsider = List<InsiderHoldingEntry>.from(insiderHistory)
       ..sort((a, b) => a.date.compareTo(b.date));
 
-    int score = 0;
+    // 從中點起算:調整項有正負號,0-based + clamp 會砍掉負半軸,讓「極弱」
+    // 與「無訊號」同分(見 ChipScoringParams.baselineScore)
+    int score = ChipScoringParams.baselineScore;
 
     // 1. 法人連續買賣超
     final instAdj = _institutionalAdjustment(sortedInst);
