@@ -59,12 +59,12 @@ class ScoringService {
     final calibratedScores = CalibratedScoresRegistry.instance
         .snapshotForIsolate();
 
-    // 大盤 regime（供回檔類規則 gate）：候選池 120 交易日平均報酬。
+    // 大盤 regime（供回檔類規則 gate）：候選池 120 交易日**中位數**報酬。
     // 有效股 < 50（fresh DB / 歷史不足）視為未知 → null、規則不擋。
     final marketUptrend = PriceCalculator.marketUptrendOrNull(
       batchData.pricesMap,
       SectorParams.regimeLookbackDays,
-      // 只用當日 bar：半市場日不得把昨日的另一半混進 regime 平均
+      // 只用當日 bar：半市場日不得把昨日的另一半混進 regime 母體
       asOf: date,
     );
 

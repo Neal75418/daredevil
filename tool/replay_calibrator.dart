@@ -532,7 +532,8 @@ class ReplayCalibrator {
   }) {
     // 逐日收集報酬再取中位數(生產一致性:與 marketUptrendOrNull 同語意,
     // 且共用 PriceCalculator.median 的 tie 規則——見該函式的說明)。
-    // 記憶體 O(合格 (symbol, day) 數) ≈ 2.8M double ≈ 22 MB,可接受。
+    // 記憶體是 O(合格 (symbol, day) 對數),與輸入同一個數量級
+    // ——上界就是 daily_price 的列數。未實測位元組數,不在此處給估計值。
     final returnsByDate = <DateTime, List<double>>{};
     for (final entry in pricesBySymbol.entries) {
       final history = entry.value;
@@ -642,8 +643,8 @@ class ReplayCalibrator {
 
   /// 生產一致性 (e)：scoring 層的**單日**流動性閘門疊在中位數閘之上。
   ///
-  /// 直接呼叫生產的 [LiquidityChecker.checkCandidateLiquidity]（股數 ≥
-  /// 100 萬、成交額 ≥ 3,000 萬；close/volume 缺值=noData 同樣 skip，與
+  /// 直接呼叫生產的 [LiquidityChecker.checkCandidateLiquidity]（成交額 ≥
+  /// 3,000 萬；股數門檻已於 2026-08-29 移除；close/volume 缺值=noData 同樣 skip，與
   /// 中位數層的 permissive **相反**——生產的 MISSING_DATA 連自選豁免都
   /// 不吃），不重寫語意。RuleParams 註解明言兩道互補：中位數擋「殭屍股
   /// 單日爆量假通過」，單日擋「當日縮量」。

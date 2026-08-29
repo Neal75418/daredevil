@@ -102,7 +102,10 @@ void main() {
     // 飽和率由 9.5%/2.8%（不對稱）變成 5%/5%，中位日從讀 39.2 變成讀 50.9。
     // 錨定方法與籌碼集中度那次相同：量母體分布、取百分位，不憑感覺選數字。
     // ================================================================
-    test('🚨 平盤不得算進漲跌比的分母(稽核 H2)', () {
+    // ⚠️ 本條只在**分母與上下界同時 revert** 時才紅（只 revert 分母 → 50.77、
+    // 只 revert 界 → 55.1，兩者都 > 50）。真正隔離分母的是下一條「平盤家數不得
+    // 改變分數」，隔離下界的是本檔的定錨值 55.096… 與權重測試裡的 35.0/65.0。
+    test('🚨 8/27 TWSE 的實測值必須落在中性線的偏多側(稽核 H2)', () {
       // 2026-08-27 TWSE 實測值
       const withFlats = AdvanceDecline(
         advance: 589,
@@ -147,7 +150,25 @@ void main() {
         marginBalanceHistory: const [],
       ).subScores['advanceRatio']!;
 
-      expect(score, closeTo(50, 3), reason: '典型的一天應該讀在 50 附近,舊界下讀 39.2');
+      // 39.2 是**含平盤**的中位日；本 fixture 的 unchanged 為 0，舊碼在此讀
+      // 46.83，離容差下緣 47.0 只有 0.17 分——會紅，但邊界很窄。
+      expect(score, closeTo(50, 3), reason: '典型的一天應該讀在 50 附近,舊碼讀 46.83');
+    });
+
+    // ⚠️ 這條對**界的 revert 免疫**：ratio 0.9 與 0.1 在 (0.2,0.8) 與
+    // (0.15,0.80) 下都飽和。它釘的是「量表沒有被拉平」，不是新的界。
+    test('🚨 全場平盤時 advanceRatio 整條缺席,不得算成 0 分', () {
+      // 邊界語意改變(稽核 A4):舊碼 `total > 0` 在 advance=decline=0、
+      // unchanged>0 時算出 ratio 0 → 0 分＝「極度恐慌」。沒有漲跌家數
+      // 就不該宣稱方向,缺席比 0 分誠實。
+      final r = MarketSentimentService.calculate(
+        advanceDecline: const AdvanceDecline(unchanged: 900),
+        institutionalNetHistory: const [100, 100, 100, 100, 100],
+        turnoverHistory: const [],
+        marginBalanceHistory: const [],
+      );
+      expect(r.subScores.containsKey('advanceRatio'), isFalse);
+      expect(r.subScores.keys, ['institutional']);
     });
 
     test('邊界:極端日仍要飽和(確認不是把量表拉平)', () {
@@ -159,7 +180,7 @@ void main() {
       ).subScores['advanceRatio']!;
 
       expect(scoreOf(900, 100), 100.0); // ratio 0.9 > 上界 0.8
-      expect(scoreOf(100, 900), 0.0); // ratio 0.1 < 下界 0.15
+      expect(scoreOf(100, 900), 0.0); // ratio 0.1 遠低於下界
     });
 
     test('子指標缺漏時有效權重自動正規化', () {

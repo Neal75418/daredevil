@@ -81,6 +81,7 @@ dart format .                                                  # 格式化 (pre-
 | `lib/domain/services/thesis/`                    | 釘選論點失效（timeStop；hardStop/trendBreak 被 gate 砍）                                                                                 |
 | `lib/core/theme/semantic_colors.dart`            | 色彩語意分類（紅綠專屬股價，見守門測試）                                                                                                 |
 | `lib/core/theme/color_contrast.dart`             | WCAG 對比度／色相／疊色計算——**色彩守門測試專用公式庫**（執行期生產碼不 import；留在 lib/ 是為與色彩宣告同住、供未來生產消費者直接取用） |
+| `lib/domain/services/price_continuity.dart`       | 價格水位斷點偵測（除權息／減資／分割）——**目前刻意未接進評分鏈**，等三種設計的決策；檔頭有取捨與實測代價。死碼審計時勿逕行刪除 |
 
 ---
 

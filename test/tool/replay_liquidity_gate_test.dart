@@ -9,8 +9,8 @@
 // ⚠️ **這組測試證明的是「與生產一致」,不是「生產是對的」**
 // (2026-08-29 domain 稽核 Critical 1)。當時生產的單日閘門另有一道
 // `volume >= 1,000,000 股` 的**股數**門檻,它不是流動性而是反向的價格
-// 指標:5274 信驊 2026-08-28 成交 53.9 億元卻被判 LOW_VOLUME,全庫 68.9%
-// 的 stock-day 由它剔除、其中 25.7% 已通過 3,000 萬成交額門檻。
+// 指標:5274 信驊 2026-08-28 成交 53.9 億元卻被判 LOW_VOLUME;它剔除有效列
+// 的 68.9%,而通過 3,000 萬成交額門檻的 236,105 筆裡有 25.7% 被它殺掉。
 //
 // ✅ **已於 2026-08-29 整條移除**(理由與量測見 `LiquidityChecker` 檔頭)。
 // 因為 applySignalDayGate 呼叫的是生產函式本尊,校準語料自動跟著變——
@@ -344,10 +344,12 @@ void main() {
 
   group('(e) 生產一致性:scoring 層單日流動性閘門(review Critical 二補)', () {
     // 生產除了候選層 20 日中位數,對訊號日當根 bar 還有
-    // LiquidityChecker.checkCandidateLiquidity(股數 ≥ 100 萬、成交額
-    // ≥ 3,000 萬、close/volume 缺值=noData 同樣 skip)。review 實測只套
-    // 中位數層時剩餘語料仍有 28–39% 是生產當日 skip 的 stock-day,且
-    // 系統性偏向高價薄量股。replay 直接呼叫生產函式判定,不重寫語意。
+    // LiquidityChecker.checkCandidateLiquidity(成交額 ≥ 3,000 萬、
+    // close/volume 缺值=noData 同樣 skip)。review 實測只套中位數層時剩餘
+    // 語料仍有 28–39% 是生產當日 skip 的 stock-day——那次量測時單日閘還含
+    // 一道股數門檻,偏差因此系統性指向高價薄量股;該門檻已於 2026-08-29
+    // 移除,單日閘現在與中位數閘同口徑、只差窗長。
+    // replay 直接呼叫生產函式判定,不重寫語意。
     DailyPriceEntry bar(int d, {double? close, double? volume}) =>
         DailyPriceEntry(
           symbol: 'X',
@@ -365,9 +367,14 @@ void main() {
           bar(3, close: 100.0), // volume null → noData,擋(非 permissive!)
           bar(4, volume: 2000000), // close null → 同上
           bar(5, close: 100.0, volume: 2000000), // 全過
+          // 5274 信驊 2026-08-28 實測:收 15,630、量 345,184 股 → 53.9 億。
+          // 這是整組改動的**主題剖面**(高價、低股數、高成交額);移除股數
+          // 門檻前它被判 LOW_VOLUME,現在必須放行。少了這一根,整組 (e)
+          // 就沒有任何一個 bar 走這條路。
+          bar(6, close: 15630.0, volume: 345184),
         ],
       };
-      final medianAllPass = {'X': List<bool>.filled(6, true)};
+      final medianAllPass = {'X': List<bool>.filled(7, true)};
       expect(ReplayCalibrator.applySignalDayGate(prices, medianAllPass)['X'], [
         true,
         false,
@@ -375,13 +382,15 @@ void main() {
         false,
         false,
         true,
+        true,
       ]);
       // 合成:中位數閘不過的 bar,單日閘再好也不得放行
       final medianLastFail = {
-        'X': [true, true, true, true, true, false],
+        'X': [true, true, true, true, true, false, false],
       };
       expect(ReplayCalibrator.applySignalDayGate(prices, medianLastFail)['X'], [
         true,
+        false,
         false,
         false,
         false,

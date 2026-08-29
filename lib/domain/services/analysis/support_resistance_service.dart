@@ -47,18 +47,19 @@ class SupportResistanceService {
     // 每一個 zone 都「在範圍內」，等於完全沒有下界（合成 fixture 實測回過
     // 一個 −60.0 的「支撐」）。
     //
-    // 上界不是另外選的數字：`8% × 3.0`（[TrendParams.atrDistanceMultiplier]，
-    // ATR 本身就用這個倍數）= 24%，語意是「動態半徑最多放寬到靜態的 3 倍」，
-    // 而它幾乎正好等於實測 p99（22.9%，已排除價格斷點股）。
+    // 上界依實測 p99 錨定，見 [TrendParams.maxAtrSupportResistanceDistance]
+    // （刻意獨立成常數，不寫成 `靜態界 × ATR 倍數`——那會讓兩個旋鈕綁死）。
+    //
+    // ⚠️ 被夾住的股票**多半是關卡整個消失**（回 null），不是拿到比較近的
+    // 關卡。下游對 null 的處理不對稱：`BreakdownRule` 退回 20 日低點（於是
+    // 跌破訊號變得**可能**觸發——夾住之前那個荒謬的支撐讓它永遠不可能），
+    // `BreakoutRule` 沒有 fallback（維持不觸發）。兩者都比「拿一個離現價
+    // 181% 的價位當關卡」好，但這是行為改變。
     //
     // **不加下界**：低波動股用窄半徑正是 ATR 縮放的用意，不是缺陷。
     final atrDistance = _calculateATRDistance(prices, currentClose);
     final maxDistance =
-        atrDistance?.clamp(
-          0.0,
-          TrendParams.maxSupportResistanceDistance *
-              TrendParams.atrDistanceMultiplier,
-        ) ??
+        atrDistance?.clamp(0.0, TrendParams.maxAtrSupportResistanceDistance) ??
         TrendParams.maxSupportResistanceDistance;
 
     final maxResistance = currentClose * (1 + maxDistance);

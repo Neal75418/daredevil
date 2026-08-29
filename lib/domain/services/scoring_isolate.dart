@@ -246,7 +246,7 @@ ScoringBatchResult evaluateStocksIsolated(ScoringIsolateInput input) {
   final marketUptrend = PriceCalculator.marketUptrendOrNull(
     input.pricesMap,
     SectorParams.regimeLookbackDays,
-    // 只用當日 bar：半市場日不得把昨日的另一半混進 regime 平均
+    // 只用當日 bar：半市場日不得把昨日的另一半混進 regime 母體
     asOf: input.date,
   );
 

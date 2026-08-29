@@ -83,6 +83,15 @@ void main() {
         isNot(contains('summary.confluenceValueInvestment')),
         reason: '同一檔股票不得同時被判價值投資與價值陷阱',
       );
+      // 釘住 `consumedTypes.difference(alreadyConsumed)`：detect() 只回報
+      // **本次**消耗的訊號。若把別人消耗的也算進來，呼叫端剝除原始清單時
+      // 會讓 PE_UNDERVALUED 在多方那側憑空消失——那正是這次要修的症狀本身。
+      // 沒有這條，把 `.difference()` 拿掉全套測試仍會綠。
+      expect(
+        texts,
+        contains('summary.peUndervalued'),
+        reason: '共用訊號被空方消耗後，仍必須留在多方的原始訊號清單裡',
+      );
     });
 
     test('prepends market-regime context line when marketStage given', () {

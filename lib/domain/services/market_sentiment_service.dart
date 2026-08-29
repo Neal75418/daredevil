@@ -66,6 +66,10 @@ class MarketSentimentService {
   ///
   /// **兩件事必須一起改**：只換分母是半套——上下界原本是配著含平盤的分母
   /// 定的。錨定方法與籌碼集中度門檻那次相同（量母體、取百分位）。
+  ///
+  /// 專案早有同樣的區分：`MarketReadingService` 的內部家數判定寫著「分母
+  /// **刻意排除持平**……門檻常數是依『排除持平』的比例校準」——門檻判定排除
+  /// 持平、顯示（漲/平/跌三段堆疊條）保留它。情緒儀表原本是唯一的例外。
   static const double advanceRatioFloor = 0.15;
   static const double advanceRatioCeil = 0.80;
 
@@ -96,6 +100,10 @@ class MarketSentimentService {
     // 舊界下中位日讀 39.2 分（偏恐慌側），而這是**權重最大**的子指標（0.35），
     // 其他指標缺席時的有效權重正規化還會把偏差放大到約 8 分。
     // 具體：2026-08-27 TWSE 589 漲 / 521 跌（真的偏多）卻讀 46.7。
+    // ⚠️ 條件由 `total > 0` 改成 `advance + decline > 0`，這也改了一個邊界
+    // 語意：**全場平盤**（advance = decline = 0、unchanged > 0）時本子指標
+    // 整條缺席，由有效權重正規化把其餘四項放大；舊碼會算出 ratio 0 → 0 分
+    // ＝「極度恐慌」。沒有漲跌家數就不該宣稱方向，缺席比 0 分誠實。
     final adDirectional = advanceDecline.advance + advanceDecline.decline;
     if (adDirectional > 0) {
       final ratio = advanceDecline.advance / adDirectional;
@@ -177,6 +185,23 @@ class MarketSentimentService {
   }
 
   /// 計算歷史情緒分數序列（供趨勢 sparkline）
+  ///
+  /// ⚠️ **輸入口徑與 [calculate] 不一致，目前無害但要知道**（2026-08-29）：
+  /// 本函式把 [advanceRatioHistory] 重建成 `AdvanceDecline(advance: r*1000,
+  /// decline: (1-r)*1000)` 再交給 [calculate]，也就是**當作排除持平的比例**
+  /// 在用；而唯一的來源 `market_overview_provider` 的 `historyTrends
+  /// .advanceRatio` 算的是 `advance / (advance + decline + unchanged)`
+  /// ——**含持平**。於是歷史的 advanceRatio 子指標會比現況儀表系統性偏低約
+  /// 11.8 分（子指標權重 0.35 → 五項齊備時綜合分數差約 4.1 分）。
+  ///
+  /// 為什麼不順手改來源：同一個序列還餵給 `AdvanceDeclineGauge` 的
+  /// sparkline，而那裡「含持平」才與它自己的漲/平/跌三段堆疊條一致——
+  /// 門檻判定與顯示需要不同口徑（`MarketReadingService` 也是這樣分的）。
+  /// 真要修就得拆成兩條序列，而本函式的輸出**目前不渲染**
+  /// （`SentimentGaugeSection.sentimentHistory` 的 dartdoc 記載視覺 pass
+  /// 已移除趨勢 sparkline），為零收益付兩條序列的代價不值得。
+  ///
+  /// 🚧 **若要重新啟用 sparkline，先修這個口徑**。
   ///
   /// 利用 30 日歷史資料回溯計算每日情緒分數。
   /// 歷史日缺少 industries（權重 10%），已有指標的權重會自動正規化，

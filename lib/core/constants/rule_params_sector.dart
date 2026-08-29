@@ -15,7 +15,8 @@ abstract final class SectorParams {
   /// 全期 gate**（別只看近期窗 — 這就是當初誤啟用的教訓）。
   static const double tiltWeight = 0.0;
 
-  /// regime gate 的市場趨勢回看天數：全市場 [regimeLookbackDays]D 平均報酬 > 0 視為
+  /// regime gate 的市場趨勢回看天數：全市場 [regimeLookbackDays]D **中位數**
+  /// 報酬 > 0 視為
   /// 上升 regime、才套 tilt。用長窗（120D）而非短窗：short window 會把空頭反彈誤判
   /// 為上升（backtest 實測短窗 leak 22 個空頭反彈日、長窗只 leak 4 個）。
   static const int regimeLookbackDays = 120;

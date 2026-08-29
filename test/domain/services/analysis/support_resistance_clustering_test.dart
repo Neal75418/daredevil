@@ -128,76 +128,92 @@ void main() {
   // 負數，現價下方的**每一個** zone 都「在範圍內」。排除近 20 根有斷點者後
   // max 降到 51.9%、p99 = 22.9%。
   //
-  // **上界不發明新數字**：`maxSupportResistanceDistance (0.08) ×
-  // atrDistanceMultiplier (3.0) = 0.24` —— 語意是「動態半徑最多放寬到靜態的
-  // 3 倍，與 ATR 本身用的倍數一致」，而它幾乎正好等於實測 p99（22.9%）。
-  // 兩個獨立錨點吻合。
+  // **上界依實測百分位錨定**：排除價格斷點股後（N=2,118）的 p99 = 22.9%，
+  // 取整到 24%，實際只夾住 17 檔（0.8%）。它恰好也等於
+  // `maxSupportResistanceDistance × atrDistanceMultiplier`，但**刻意獨立成
+  // 常數**——寫成乘積會讓「縮放倍數」與「上界」變成同一個旋鈕。
   //
   // **不加下界**：低波動股用窄半徑是 ATR 縮放的用意，不是缺陷。
   group('ATR 動態半徑必須有上界', () {
-    /// 每天大幅震盪 → ATR 極大;[swing] 控制單日振幅
-    List<DailyPriceEntry> wildRange({required double swing}) {
+    /// 兩組波段谷:**遠谷 −40%(界外)觸及 8 次、近谷 −18%(界內)觸及 3 次**,
+    /// 最後 20 根提供 ATR。兩組相隔超過 swing 偵測的 ±10 窗,否則近谷會被
+    /// 遠谷蓋掉而偵測不到。
+    ///
+    /// 遠谷的觸及次數刻意調到能贏過 distanceFactor 對近端的偏袒
+    /// （score = touches × (1+recency) × 1/(1+距離比×10)）——**未夾時遠谷
+    /// 勝出、夾住後只剩近谷**,兩種狀態的回傳都非 null,所以斷言真的會執行。
+    /// 若只造一組界外的谷,夾住後回 null,`if (x != null)` 包住的斷言會一條
+    /// 都不跑(本檔上一版就是這個形狀)。
+    List<DailyPriceEntry> twoZones({required double atrPad}) {
       final now = DateTime.now();
-      return [
-        for (var i = 0; i < 60; i++)
-          createTestPrice(
-            date: now.subtract(Duration(days: 60 - i)),
-            close: 100 + (i.isEven ? swing : -swing),
-            high: 100 + swing * 2,
-            low: 100 - swing * 2,
-            volume: 1000,
-          ),
-      ];
+      final out = <DailyPriceEntry>[];
+      var day = 0;
+      void bar(double close, double high, double low) => out.add(
+        createTestPrice(
+          date: now.subtract(Duration(days: 300 - day++)),
+          close: close,
+          high: high,
+          low: low,
+          volume: 1000,
+        ),
+      );
+      for (var i = 0; i < 10; i++) {
+        bar(100, 100, 100);
+      }
+      for (var k = 0; k < 8; k++) {
+        bar(100, 100, 100);
+        bar(60, 60, 60); // 遠谷:離現價 40%
+      }
+      for (var i = 0; i < 12; i++) {
+        bar(100, 100, 100); // 隔開 >10 根
+      }
+      for (var k = 0; k < 3; k++) {
+        bar(100, 100, 100);
+        bar(82, 82, 82); // 近谷:離現價 18%
+      }
+      for (var i = 0; i < 20; i++) {
+        bar(100, 100 + atrPad, 100 - atrPad); // ATR 來源
+      }
+      return out;
     }
 
-    double cap() =>
-        TrendParams.maxSupportResistanceDistance *
-        TrendParams.atrDistanceMultiplier;
-
-    test('上界由既有兩個常數推得,不是另外選的數字', () {
-      expect(cap(), closeTo(0.24, 1e-9));
+    test('上界是獨立常數,不與 ATR 縮放倍數綁在一起', () {
+      // 兩個旋鈕分開:調 atrDistanceMultiplier 想收窄動態半徑時,
+      // 上界不該跟著悄悄變。
+      expect(TrendParams.maxAtrSupportResistanceDistance, 0.24);
+      expect(
+        TrendParams.maxAtrSupportResistanceDistance,
+        lessThan(1.0),
+        reason: '上界 ≥ 100% 會讓 minSupport 變成負數,現價下方所有區都「在範圍內」',
+      );
     });
 
-    test('🚨 高波動股的關卡不得超出上界', () {
-      final prices = wildRange(swing: 30); // ATR ≈ 120 → 未設限時半徑約 3.6 倍
-      final close = prices.last.close!;
-      final (support, resistance) = service.findSupportResistance(prices);
-
-      if (support != null) {
-        expect(
-          (close - support) / close,
-          lessThanOrEqualTo(cap() + 1e-9),
-          reason:
-              '離現價 ${((close - support) / close * 100).toStringAsFixed(1)}% 的支撐不可用於停損',
-        );
-      }
-      if (resistance != null) {
-        expect((resistance - close) / close, lessThanOrEqualTo(cap() + 1e-9));
-      }
-    });
-
-    test('🚨 半徑不得大到讓 minSupport 變成負數', () {
-      // 未設限時 5904 的半徑是 181.5%,minSupport = close × (1 − 1.815) < 0
-      // ——現價下方的每一個 zone 都「在範圍內」,等於沒有下界。
-      final prices = wildRange(swing: 80);
+    test('🚨 超出上界的價格區不得被選中(稽核 H3)', () {
+      // atrPad=15 → 未夾半徑 90%,遠谷(−40%)在範圍內且分數勝出
+      final prices = twoZones(atrPad: 15);
       final close = prices.last.close!;
       final (support, _) = service.findSupportResistance(prices);
-      if (support != null) {
-        expect(support, greaterThan(close * (1 - cap()) - 1e-9));
-      }
+
+      expect(support, isNotNull, reason: '前提:上界內仍有可回報的關卡,否則本測試一條斷言都不會執行');
+      expect(support, closeTo(82.0, 0.01), reason: '舊碼(無上界)會選離現價 40% 的 60.0');
+      expect(
+        (close - support!) / close,
+        lessThanOrEqualTo(TrendParams.maxAtrSupportResistanceDistance + 1e-9),
+      );
+    });
+
+    test('未達上界時不受影響(對照組)', () {
+      // atrPad=4 → 未夾半徑恰 24%,遠谷剛好在界上、近谷勝出;夾與不夾同值
+      final prices = twoZones(atrPad: 4);
+      final (support, _) = service.findSupportResistance(prices);
+      expect(support, closeTo(82.0, 0.01));
     });
 
     test('低波動股維持窄半徑(不加下界——那是 ATR 縮放的用意)', () {
-      final prices = wildRange(swing: 0.5);
-      final close = prices.last.close!;
-      final (support, resistance) = service.findSupportResistance(prices);
-      // 只要不 crash、且落在遠比 8% 更窄的範圍內即可
-      if (support != null) {
-        expect((close - support) / close, lessThan(0.08));
-      }
-      if (resistance != null) {
-        expect((resistance - close) / close, lessThan(0.08));
-      }
+      // atrPad=0.2 → 半徑 1.2%,連 −18% 的近谷都在界外 → 無支撐
+      final prices = twoZones(atrPad: 0.2);
+      final (support, _) = service.findSupportResistance(prices);
+      expect(support, isNull, reason: '窄半徑濾掉遠處水位正是 ATR 縮放的用意,不該補下界把它拉回來');
     });
   });
 

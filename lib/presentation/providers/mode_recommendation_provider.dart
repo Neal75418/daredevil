@@ -174,11 +174,11 @@ Map<String, double> computeIndustryMomentum({
   return result;
 }
 
-/// 市場是否處於上升 regime：載入 universe 的 [lookbackDays]D 平均報酬 > 0。
+/// 市場是否處於上升 regime：載入 universe 的 [lookbackDays]D **中位數**報酬 > 0。
 ///
 /// 產業領導 tilt 僅在上升 regime 套用 — backtest 顯示族群動能因子持續多頭有效
 /// （IC +0.054）、空頭/轉折反向（IC −0.078 = momentum crash）。用全市場長窗
-/// （[SectorParams.regimeLookbackDays]）平均報酬當趨勢訊號，可整段排除空頭（含反彈、
+/// （[SectorParams.regimeLookbackDays]）**中位數**報酬當趨勢訊號，可整段排除空頭（含反彈、
 /// 短窗會誤判）。有效股 < 50 視為資料不足 → 保守回 false（不套 tilt）。
 @visibleForTesting
 bool isMarketUptrend(

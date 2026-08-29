@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/services/liquidity_checker.dart';
 
 void main() {
   late AppDatabase db;
@@ -67,6 +68,45 @@ void main() {
         ]);
 
         expect(await db.getTradeableUniverseCount(today), 3);
+      });
+
+      test('🚨 與 LiquidityChecker 逐列同判(兩個口徑必須一致)', () async {
+        // 兩邊的 dartdoc 都寫「必須一起改」,但各自硬寫期望值時漂了也不會紅。
+        // 這條拿同一批列跑兩邊:DAO 數一次、`checkCandidateLiquidity` 數一次,
+        // 斷言相等——任何一邊改了門檻、另一邊沒跟上就立刻現形。
+        const rows = [
+          (symbol: '2330', close: 100.0, volume: 2000000.0), // 2 億 → 過
+          (symbol: '2317', close: 100.0, volume: 500000.0), // 5,000 萬 → 過
+          (symbol: '6488', close: 10.0, volume: 1500000.0), // 1,500 萬 → 擋
+          (symbol: '3293', close: 12500.0, volume: 234633.0), // 川湖型 → 過
+        ];
+        await db.insertPrices([
+          for (final r in rows)
+            DailyPriceCompanion.insert(
+              symbol: r.symbol,
+              date: today,
+              close: Value(r.close),
+              volume: Value(r.volume),
+            ),
+        ]);
+
+        final byChecker = rows
+            .where(
+              (r) =>
+                  LiquidityChecker.checkCandidateLiquidity(
+                    DailyPriceEntry(
+                      symbol: r.symbol,
+                      date: today,
+                      close: r.close,
+                      volume: r.volume,
+                    ),
+                  ) ==
+                  null,
+            )
+            .length;
+
+        expect(byChecker, 3, reason: '前提:這批列必須有過有不過,否則兩邊同為 0 也會相等');
+        expect(await db.getTradeableUniverseCount(today), byChecker);
       });
 
       test('成交額邊界:剛好 3,000 萬計入、少 1 元不計入', () async {

@@ -101,6 +101,22 @@ abstract final class TrendParams {
   /// 使用 ATR × 此乘數 / 現價 作為動態搜尋距離。
   static const double atrDistanceMultiplier = 3.0;
 
+  /// ATR 動態搜尋半徑的**上界**（24%）
+  ///
+  /// [atrDistanceMultiplier] 把 ATR/價格比放大後當搜尋半徑，而那個結果原本
+  /// 完全沒有上界——實測 2,135 檔（本機 DB，2025-06-10～2026-08-28）：54.3%
+  /// 的半徑比靜態的 [maxSupportResistanceDistance] 寬、p90 = 17.3%、
+  /// **max = 181.5%**。半徑超過 100% 時 `minSupport` 變成負數，現價下方的
+  /// 每一個價格區都「在範圍內」，等於完全沒有下界。
+  ///
+  /// **24% 的依據**：排除價格斷點股後（N=2,118）該分布的 p99 = 22.9%，取整到
+  /// 24%。以生產母體重算（N=2,137 = `prices.length >= 40` 且 ATR 可算者，
+  /// 其 p99 = 23.0%）實際只夾住 **16 檔（0.75%）**。它恰好也等於
+  /// `maxSupportResistanceDistance × atrDistanceMultiplier`，但**刻意獨立成
+  /// 常數而不是那樣寫**——那會讓「動態半徑的縮放倍數」與「上界」變成同一個
+  /// 旋鈕，日後有人把倍數調成 2.0 想收窄半徑，上界會跟著悄悄收到 16%。
+  static const double maxAtrSupportResistanceDistance = 0.24;
+
   /// 支撐壓力距離衰減因子
   ///
   /// 用於計算 distanceFactor = 1 / (1 + (distance/price) * factor)。

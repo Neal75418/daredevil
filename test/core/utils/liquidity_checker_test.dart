@@ -8,9 +8,10 @@
 //  15,630 元 →  156 億(信驊)
 //
 // 同一個「流動性」概念,門檻在不同價位差 500 倍——那不是流動性標準,是把
-// 成交額門檻偷偷變成與股價成正比。實測它擋掉全庫 68.9% 的 stock-day,其中
-// 25.7% 是**已經通過成交額門檻**的(2026-08-28: 2059 川湖 62 億、3653 健策
-// 54 億、5274 信驊 54 億全被判 LOW_VOLUME)。
+// 成交額門檻偷偷變成與股價成正比。實測它擋掉**有效列**的 68.9%(分母 =
+// close/volume 皆非 null 的 613,240 列);反過來看更刺眼:**通過成交額門檻的
+// 236,105 筆 stock-day 裡有 25.7% 被股數閘殺掉**(2026-08-28: 2059 川湖
+// 62 億、3653 健策 54 億、5274 信驊 54 億全被判 LOW_VOLUME)。
 //
 // 兩條成交額門檻都有實測依據寫在常數旁邊（P50、砍掉多少無效運算、誤傷多少
 // 訊號股）;股數那條只有一行「1000 張」,沒有任何依據。
@@ -87,15 +88,15 @@ void main() {
       expect(LiquidityChecker.checkCandidateLiquidity(entry), isNull);
     });
 
-    test('全庫實測最小的合格量(33 張)也要通過', () {
-      // 7734 高得 2026-07-01:收 3,085、量 35,000 股 → 1.08 億
-      final entry = makePrice(close: 3085.0, volume: 35000);
+    test('全庫最緊的一筆合格列(只高過門檻 9.45%)也要通過', () {
+      // 7734 印能科技 2025-10-22:收 995、量 33,000 股 → 3,283.5 萬,
+      // 是全庫通過成交額門檻的 236,105 筆裡成交額最接近門檻的一筆。
+      final entry = makePrice(close: 995.0, volume: 33000);
       expect(LiquidityChecker.checkCandidateLiquidity(entry), isNull);
     });
 
     test('returns LOW_TURNOVER when turnover below threshold', () {
-      // volume passes (1,500,000 >= 1,000,000)
-      // but turnover = 10 * 1,500,000 = 15M < 30M
+      // turnover = 10 * 1,500,000 = 1,500 萬 < 3,000 萬
       final entry = makePrice(close: 10.0, volume: 1500000);
       expect(
         LiquidityChecker.checkCandidateLiquidity(entry),
@@ -117,8 +118,7 @@ void main() {
     });
 
     test('passes at exact turnover threshold', () {
-      // volume = 1,500,000 (passes)
-      // turnover = 20 * 1,500,000 = 30M = minCandidateTurnover
+      // turnover = 20 * 1,500,000 = 3,000 萬 = minCandidateTurnover（邊界）
       final entry = makePrice(
         close: RuleParams.minCandidateTurnover / 1500000,
         volume: 1500000,

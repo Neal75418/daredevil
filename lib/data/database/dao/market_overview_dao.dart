@@ -528,7 +528,7 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
   ///
   /// 本地 DB 部分日子僅同步候選子集（約半市場 ~545 檔），與完整日（~1200 檔）
   /// 等權重混入 sparkline 會使漲跌比逐日跳動失真（曾出現完整日 0.557 ↔
-  /// 半套日 0.279/0.677），且污染情緒歷史（advanceRatio 佔 25% 權重）。
+  /// 半套日 0.279/0.677），且污染情緒歷史（advanceRatio 佔 35% 權重）。
   /// 故以 [minCoverage]（預設 [kMinSymbolsForCompleteTradingDay]）濾除半套
   /// 日，只保留個股報價數達門檻的完整日。完整日約佔交易日 4-5 成，故回看窗口
   /// 放寬至 days*5 以確保能取到足夠完整日。

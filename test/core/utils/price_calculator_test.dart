@@ -443,7 +443,7 @@ void main() {
             asOf: today,
           ),
           isFalse,
-          reason: '只有今日 bar 該進平均；混入昨日會把下跌 regime 讀成上漲',
+          reason: '只有今日 bar 該進 regime 母體；混入昨日會把下跌 regime 讀成上漲',
         );
       });
 
@@ -601,14 +601,14 @@ void main() {
         );
       });
 
-      test('≥ 50 檔且平均報酬 > 0 → true', () {
+      test('≥ 50 檔且中位數報酬 > 0 → true', () {
         expect(
           PriceCalculator.marketUptrendOrNull(universe(60, 10, 121), 120),
           isTrue,
         );
       });
 
-      test('≥ 50 檔且平均報酬 < 0 → false', () {
+      test('≥ 50 檔且中位數報酬 < 0 → false', () {
         expect(
           PriceCalculator.marketUptrendOrNull(universe(60, -10, 121), 120),
           isFalse,

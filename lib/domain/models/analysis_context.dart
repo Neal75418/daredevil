@@ -26,7 +26,9 @@ class AnalysisContext {
   final MarketDataContext? marketData;
   final TechnicalIndicators? indicators;
 
-  /// 大盤是否處於上升 regime（全市場 120 交易日平均報酬 > 0）。
+  /// 大盤是否處於上升 regime（全市場 120 交易日**中位數**報酬 > 0，
+  /// 等價於「過半股票在漲」；2026-08-29 由等權平均改，見
+  /// [PriceCalculator.marketUptrendOrNull]）。
   ///
   /// null = 不知道（資料不足）→ 規則採 permissive 不擋。
   /// 回檔類規則（buy-the-dip）在空頭 regime 一律不觸發——2026-07-10
