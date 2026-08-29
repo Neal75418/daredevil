@@ -68,26 +68,46 @@ class ChipAnomalyService {
   /// 的 `droppedEtf`）的宇宙定義理由：本 app 規則設計皆針對個股行為，ETF
   /// 走勢平滑、非個股籌碼訊號的適用對象（實例：006203 元大MSCI台灣曾出現在
   /// 法人集中買賣、00940 元大台灣價值高息曾出現在融券暴增）。
-  Future<Map<String, List<ChipAnomaly>>> detectAnomaliesByMarket(
-    DateTime date,
-  ) async {
+  Future<
+    ({Map<String, List<ChipAnomaly>> byMarket, List<String> failedDetectors})
+  >
+  detectAnomaliesByMarket(DateTime date) async {
     final result = <String, List<ChipAnomaly>>{
       MarketCode.twse: [],
       MarketCode.tpex: [],
     };
+    // 靜默稽核 #4:單一偵測器壞掉時,儀表板其他類別照常顯示——「今天
+    // 沒有高質押異動」與「高質押偵測壞了」逐 pixel 相同。per-detector
+    // 失敗列名,dashboard 據此掛「N 類未偵測」。detector 內層不再自吞
+    // (catch 統一在這層,雙層 catch 會讓列名永遠空)。
+    final failedDetectors = <String>[];
+    Future<List<ChipAnomaly>> guard(
+      String key,
+      Future<List<ChipAnomaly>> Function() run,
+    ) async {
+      try {
+        return await run();
+      } catch (e) {
+        AppLogger.warning(_tag, '$key 偵測失敗', e);
+        failedDetectors.add(key);
+        return const [];
+      }
+    }
 
     try {
       final anomaliesFuture = Future.wait([
-        _detectHighPledge(),
-        _detectInsiderTransfers(date),
-        _detectForeignNearLimit(),
-        _detectShortSurge(date),
-        _detectInstitutionalSurge(date),
+        guard('highPledge', _detectHighPledge),
+        guard('insiderTransfer', () => _detectInsiderTransfers(date)),
+        guard('foreignNearLimit', _detectForeignNearLimit),
+        guard('shortSurge', () => _detectShortSurge(date)),
+        guard('institutionalSurge', () => _detectInstitutionalSurge(date)),
       ]);
       final etfSymbolsFuture = _loadEtfSymbols();
 
       final anomalies = await anomaliesFuture;
-      final etfSymbols = await etfSymbolsFuture;
+      final etfSymbolsOrNull = await etfSymbolsFuture;
+      if (etfSymbolsOrNull == null) failedDetectors.add('etfFilter');
+      final etfSymbols = etfSymbolsOrNull ?? const <String>{};
 
       // 「取前 N」在此處、且排在 ETF 排除**之後**——各 detector 依自己的
       // ORDER BY 回傳全部，不自行截斷。若先截斷再排除（原行為），ETF 佔住的
@@ -113,24 +133,38 @@ class ChipAnomalyService {
         });
       }
     } catch (e) {
+      // guard 已把 per-detector 失敗接走,這裡只剩彙總/排序的純運算——
+      // 真走到代表全部結果不可信,全列名
       AppLogger.warning(_tag, '偵測籌碼異動失敗', e);
+      return (
+        byMarket: result,
+        failedDetectors: const [
+          'highPledge',
+          'insiderTransfer',
+          'foreignNearLimit',
+          'shortSurge',
+          'institutionalSurge',
+          'etfFilter',
+        ],
+      );
     }
 
-    return result;
+    return (byMarket: result, failedDetectors: failedDetectors);
   }
 
   /// 載入 ETF 股票代碼集合，供 [detectAnomaliesByMarket] 彙總時單點過濾用。
   ///
-  /// 查詢失敗時回傳空集合（permissive、不因這次查詢失敗擋掉其餘正常籌碼
-  /// 異動），與其餘 `_detect*` 方法的錯誤處理風格一致。
-  Future<Set<String>> _loadEtfSymbols() async {
+  /// 失敗回 null(靜默稽核 #4):舊版回空集合=過濾靜默失效,異動榜
+  /// **混入 ETF** 而無任何症狀——null 讓彙總層把 etfFilter 列進
+  /// failedDetectors,榜單照出、註記帶著。
+  Future<Set<String>?> _loadEtfSymbols() async {
     try {
       const query = "SELECT symbol FROM stock_master WHERE industry = 'ETF'";
       final rows = await _db.customSelect(query).get();
       return rows.map((row) => row.read<String>('symbol')).toSet();
     } catch (e) {
       AppLogger.warning(_tag, '載入 ETF 清單失敗', e);
-      return {};
+      return null;
     }
   }
 
@@ -147,8 +181,7 @@ class ChipAnomalyService {
   /// 洗版）。個股層級的持續性顯示（風險徽章、自選清單警示、股票詳情頁）
   /// 不受影響，見 [FundamentalParams.kPledgeAlertDeltaPp] 文件。
   Future<List<ChipAnomaly>> _detectHighPledge() async {
-    try {
-      const query = '''
+    const query = '''
         WITH ranked AS (
           SELECT ih.symbol, ih.pledge_ratio,
                  ROW_NUMBER() OVER (PARTITION BY ih.symbol ORDER BY ih.date DESC) AS rn
@@ -170,55 +203,46 @@ class ChipAnomalyService {
         ORDER BY l.latest_ratio DESC
       ''';
 
-      final rows = await _db
-          .customSelect(
-            query,
-            variables: [
-              const Variable<double>(
-                FundamentalParams.highPledgeRatioThreshold,
-              ),
-              const Variable<double>(
-                FundamentalParams.highPledgeRatioThreshold,
-              ),
-              const Variable<double>(FundamentalParams.kPledgeAlertDeltaPp),
-            ],
-          )
-          .get();
+    final rows = await _db
+        .customSelect(
+          query,
+          variables: [
+            const Variable<double>(FundamentalParams.highPledgeRatioThreshold),
+            const Variable<double>(FundamentalParams.highPledgeRatioThreshold),
+            const Variable<double>(FundamentalParams.kPledgeAlertDeltaPp),
+          ],
+        )
+        .get();
 
-      return rows.map((row) {
-        final ratio = row.read<double>('latest_ratio');
-        final ratioStr = ratio.toStringAsFixed(1);
-        return ChipAnomaly(
-          type: ChipAnomalyType.highPledge,
-          severity: ChipSeverity.high,
-          symbol: row.read<String>('symbol'),
-          stockName: row.read<String>('name'),
-          market: row.read<String>('market'),
-          keyValue: '$ratioStr%',
-        );
-      }).toList();
-    } catch (e) {
-      AppLogger.warning(_tag, '偵測高質押失敗', e);
-      return [];
-    }
+    return rows.map((row) {
+      final ratio = row.read<double>('latest_ratio');
+      final ratioStr = ratio.toStringAsFixed(1);
+      return ChipAnomaly(
+        type: ChipAnomalyType.highPledge,
+        severity: ChipSeverity.high,
+        symbol: row.read<String>('symbol'),
+        stockName: row.read<String>('name'),
+        market: row.read<String>('market'),
+        keyValue: '$ratioStr%',
+      );
+    }).toList();
   }
 
   /// 內部人轉讓：近 [ChipAnomalyParams.insiderTransferLookbackDays] 天內有申報轉讓記錄
   ///
   /// 每檔一列，股數為窗內所有內部人**合計**（多位申報時 keyValue 附註筆數）。
   Future<List<ChipAnomaly>> _detectInsiderTransfers(DateTime date) async {
-    try {
-      final since = date.subtract(
-        const Duration(days: ChipAnomalyParams.insiderTransferLookbackDays),
-      );
+    final since = date.subtract(
+      const Duration(days: ChipAnomalyParams.insiderTransferLookbackDays),
+    );
 
-      // 一列 = 一檔公司，數字＝窗內**所有內部人合計**申報股數。
-      // 原本用 ROW_NUMBER + rn = 1 取每檔最大單筆，其餘申報人整筆消失：
-      // 實測 4568 科際精密 07-23 三位不同經理人（100k/50k/35k）只顯示 100張、
-      // 低報 45.9%；且跨檔排名也用被低估的值，2643 捷迅（2 筆合計 79,738）
-      // 因此輸給 8155 博智（單筆 50,000）而被截掉。
-      // 區塊副標「董監事或大股東申報轉讓股票」與 docstring 皆為公司層級語意。
-      const query = '''
+    // 一列 = 一檔公司，數字＝窗內**所有內部人合計**申報股數。
+    // 原本用 ROW_NUMBER + rn = 1 取每檔最大單筆，其餘申報人整筆消失：
+    // 實測 4568 科際精密 07-23 三位不同經理人（100k/50k/35k）只顯示 100張、
+    // 低報 45.9%；且跨檔排名也用被低估的值，2643 捷迅（2 筆合計 79,738）
+    // 因此輸給 8155 博智（單筆 50,000）而被截掉。
+    // 區塊副標「董監事或大股東申報轉讓股票」與 docstring 皆為公司層級語意。
+    const query = '''
         SELECT it.symbol, s.name, s.market,
                SUM(it.transfer_shares) AS transfer_shares,
                COUNT(*)                AS filings
@@ -229,32 +253,27 @@ class ChipAnomalyService {
         ORDER BY transfer_shares DESC
       ''';
 
-      final rows = await _db
-          .customSelect(query, variables: [Variable.withDateTime(since)])
-          .get();
+    final rows = await _db
+        .customSelect(query, variables: [Variable.withDateTime(since)])
+        .get();
 
-      return rows.map((row) {
-        final shares = row.read<int>('transfer_shares');
-        final filings = row.read<int>('filings');
-        return ChipAnomaly(
-          type: ChipAnomalyType.insiderTransfer,
-          severity: ChipSeverity.medium,
-          symbol: row.read<String>('symbol'),
-          stockName: row.read<String>('name'),
-          market: row.read<String>('market'),
-          keyValue: _formatInsiderShares(shares, filings: filings),
-        );
-      }).toList();
-    } catch (e) {
-      AppLogger.warning(_tag, '偵測內部人轉讓失敗', e);
-      return [];
-    }
+    return rows.map((row) {
+      final shares = row.read<int>('transfer_shares');
+      final filings = row.read<int>('filings');
+      return ChipAnomaly(
+        type: ChipAnomalyType.insiderTransfer,
+        severity: ChipSeverity.medium,
+        symbol: row.read<String>('symbol'),
+        stockName: row.read<String>('name'),
+        market: row.read<String>('market'),
+        keyValue: _formatInsiderShares(shares, filings: filings),
+      );
+    }).toList();
   }
 
   /// 外資逼近持股上限：持股比 > 上限 × 90%
   Future<List<ChipAnomaly>> _detectForeignNearLimit() async {
-    try {
-      const query = '''
+    const query = '''
         SELECT sh.symbol, sh.foreign_shares_ratio, sh.foreign_upper_limit_ratio,
                s.name, s.market
         FROM shareholding sh
@@ -271,25 +290,21 @@ class ChipAnomalyService {
         ORDER BY (sh.foreign_shares_ratio / sh.foreign_upper_limit_ratio) DESC
       ''';
 
-      final rows = await _db.customSelect(query).get();
+    final rows = await _db.customSelect(query).get();
 
-      return rows.map((row) {
-        final ratio = row.read<double>('foreign_shares_ratio');
-        final limit = row.read<double>('foreign_upper_limit_ratio');
-        final pct = (ratio / limit * 100).toStringAsFixed(1);
-        return ChipAnomaly(
-          type: ChipAnomalyType.foreignNearLimit,
-          severity: ChipSeverity.medium,
-          symbol: row.read<String>('symbol'),
-          stockName: row.read<String>('name'),
-          market: row.read<String>('market'),
-          keyValue: '$pct%',
-        );
-      }).toList();
-    } catch (e) {
-      AppLogger.warning(_tag, '偵測外資逼近上限失敗', e);
-      return [];
-    }
+    return rows.map((row) {
+      final ratio = row.read<double>('foreign_shares_ratio');
+      final limit = row.read<double>('foreign_upper_limit_ratio');
+      final pct = (ratio / limit * 100).toStringAsFixed(1);
+      return ChipAnomaly(
+        type: ChipAnomalyType.foreignNearLimit,
+        severity: ChipSeverity.medium,
+        symbol: row.read<String>('symbol'),
+        stockName: row.read<String>('name'),
+        market: row.read<String>('market'),
+        keyValue: '$pct%',
+      );
+    }).toList();
   }
 
   /// 融券暴增：當日融券賣出 > 近 5 日均融券賣出 × [ChipAnomalyParams.shortSurgeMultiplier]
@@ -302,16 +317,15 @@ class ChipAnomalyService {
   /// avg5d 一律先以最低均量地板（HighVolMinAvgLots=3 張）HAVING 預過濾，排除近零
   /// 基期爆值（如 3528 均 0.333 張的 687 倍噪音）。
   Future<List<ChipAnomaly>> _detectShortSurge(DateTime date) async {
-    try {
-      final dateLowerBound = date.subtract(
-        const Duration(days: ChipAnomalyParams.shortSurgeLookbackDays),
-      );
-      final disposalLookback = date.subtract(
-        const Duration(days: ChipAnomalyParams.disposalExclusionLookbackDays),
-      );
+    final dateLowerBound = date.subtract(
+      const Duration(days: ChipAnomalyParams.shortSurgeLookbackDays),
+    );
+    final disposalLookback = date.subtract(
+      const Duration(days: ChipAnomalyParams.disposalExclusionLookbackDays),
+    );
 
-      const query =
-          '''
+    const query =
+        '''
         WITH recent AS (
           SELECT mt.symbol, mt.date, mt.short_sell,
                  s.name, s.market,
@@ -350,49 +364,44 @@ class ChipAnomalyService {
         ORDER BY ratio DESC
       ''';
 
-      final rows = await _db
-          .customSelect(
-            query,
-            variables: [
-              Variable.withDateTime(date), // recent: mt.date <= ?
-              Variable.withDateTime(dateLowerBound), // recent: mt.date >= ?
-              Variable.withDateTime(date), // today: date = ?
-              Variable.withDateTime(disposalLookback), // DISPOSAL 排除
-            ],
-          )
-          .get();
+    final rows = await _db
+        .customSelect(
+          query,
+          variables: [
+            Variable.withDateTime(date), // recent: mt.date <= ?
+            Variable.withDateTime(dateLowerBound), // recent: mt.date >= ?
+            Variable.withDateTime(date), // today: date = ?
+            Variable.withDateTime(disposalLookback), // DISPOSAL 排除
+          ],
+        )
+        .get();
 
-      return rows.map((row) {
-        final ratio = row.read<double>('ratio');
-        return ChipAnomaly(
-          type: ChipAnomalyType.shortSurge,
-          severity: ChipSeverity.medium,
-          symbol: row.read<String>('symbol'),
-          stockName: row.read<String>('name'),
-          market: row.read<String>('market'),
-          keyValue: '${ratio.toStringAsFixed(1)}倍',
-        );
-      }).toList();
-    } catch (e) {
-      AppLogger.warning(_tag, '偵測融券暴增失敗', e);
-      return [];
-    }
+    return rows.map((row) {
+      final ratio = row.read<double>('ratio');
+      return ChipAnomaly(
+        type: ChipAnomalyType.shortSurge,
+        severity: ChipSeverity.medium,
+        symbol: row.read<String>('symbol'),
+        stockName: row.read<String>('name'),
+        market: row.read<String>('market'),
+        keyValue: '${ratio.toStringAsFixed(1)}倍',
+      );
+    }).toList();
   }
 
   /// 法人集中大買/賣：單日絕對淨額 > 均值 × [ChipAnomalyParams.institutionalSurgeMultiplier]
   ///
   /// 使用倍率門檻替代 Z-score，避免 SQLite 中計算標準差的複雜度。
   Future<List<ChipAnomaly>> _detectInstitutionalSurge(DateTime date) async {
-    try {
-      final dateLowerBound = date.subtract(
-        const Duration(days: ChipAnomalyParams.institutionalSurgeLookbackDays),
-      );
-      final disposalLookback = date.subtract(
-        const Duration(days: ChipAnomalyParams.disposalExclusionLookbackDays),
-      );
+    final dateLowerBound = date.subtract(
+      const Duration(days: ChipAnomalyParams.institutionalSurgeLookbackDays),
+    );
+    final disposalLookback = date.subtract(
+      const Duration(days: ChipAnomalyParams.disposalExclusionLookbackDays),
+    );
 
-      const query =
-          '''
+    const query =
+        '''
         WITH recent AS (
           SELECT di.symbol, di.date,
                  COALESCE(di.foreign_net, 0) + COALESCE(di.investment_trust_net, 0) + COALESCE(di.dealer_net, 0) AS total_net,
@@ -428,60 +437,56 @@ class ChipAnomalyService {
         ORDER BY surge_ratio DESC
       ''';
 
-      final rows = await _db
-          .customSelect(
-            query,
-            variables: [
-              Variable.withDateTime(date), // recent: di.date <= ?
-              Variable.withDateTime(dateLowerBound), // recent: di.date >= ?
-              Variable.withDateTime(date), // today: date = ?
-              Variable.withDateTime(disposalLookback), // DISPOSAL 排除
-            ],
-          )
-          .get();
+    final rows = await _db
+        .customSelect(
+          query,
+          variables: [
+            Variable.withDateTime(date), // recent: di.date <= ?
+            Variable.withDateTime(dateLowerBound), // recent: di.date >= ?
+            Variable.withDateTime(date), // today: date = ?
+            Variable.withDateTime(disposalLookback), // DISPOSAL 排除
+          ],
+        )
+        .get();
 
-      // 流動性閘門——與 CandidateSelector 同一組常數與慣例（3,000 萬 / 20 日
-      // 中位數，2026-07-11 實測校準）。純比值判準的分母對法人幾乎不參與的
-      // 股票趨近於零，任何微小成交都破表：實測 5523 豐謙當日 13 張、均量
-      // 1.6 張 → 8.1 倍過關，而它每天只成交約 130 萬元。
-      //
-      // **必須在取前 N 之前過濾**：maxResultsPerType 是全域上限且依倍數排序，
-      // 若先取前 N 再過濾，名單只會變短、真訊號永遠遞補不上來（實測 8 個顯示
-      // 位置有 6 個不可交易，而中位成交 25.66 億的華星光排第 9）。
-      final medianTurnover = await _db.getMedianTurnoverBatch(
-        endDate: date,
-        windowDays: RuleParams.liquidityMedianWindowDays,
-        minDataDays: RuleParams.liquidityMinDataDays,
-      );
-      final watchlist = (await _db.getWatchlist()).map((w) => w.symbol).toSet();
-      bool isTradeable(String symbol) {
-        if (watchlist.contains(symbol)) return true; // 自選豁免：使用者主動追蹤
-        final median = medianTurnover[symbol];
-        // map 內沒有 = 有效天數不足、無法判定 → permissive 放行
-        return median == null ||
-            median >= RuleParams.liquidityMinMedianTurnoverNtd;
-      }
-
-      return rows.where((row) => isTradeable(row.read<String>('symbol'))).map((
-        row,
-      ) {
-        final totalNet = row.read<double>('total_net');
-        final isBuy = totalNet > 0;
-        // DB 以「股」為單位，除以 1000 轉換為「張」後格式化
-        final formatted = _formatSheets(totalNet.abs() / 1000);
-        return ChipAnomaly(
-          type: ChipAnomalyType.institutionalSurge,
-          severity: ChipSeverity.high,
-          symbol: row.read<String>('symbol'),
-          stockName: row.read<String>('name'),
-          market: row.read<String>('market'),
-          keyValue: '${isBuy ? '+' : '-'}$formatted',
-        );
-      }).toList();
-    } catch (e) {
-      AppLogger.warning(_tag, '偵測法人集中買賣失敗', e);
-      return [];
+    // 流動性閘門——與 CandidateSelector 同一組常數與慣例（3,000 萬 / 20 日
+    // 中位數，2026-07-11 實測校準）。純比值判準的分母對法人幾乎不參與的
+    // 股票趨近於零，任何微小成交都破表：實測 5523 豐謙當日 13 張、均量
+    // 1.6 張 → 8.1 倍過關，而它每天只成交約 130 萬元。
+    //
+    // **必須在取前 N 之前過濾**：maxResultsPerType 是全域上限且依倍數排序，
+    // 若先取前 N 再過濾，名單只會變短、真訊號永遠遞補不上來（實測 8 個顯示
+    // 位置有 6 個不可交易，而中位成交 25.66 億的華星光排第 9）。
+    final medianTurnover = await _db.getMedianTurnoverBatch(
+      endDate: date,
+      windowDays: RuleParams.liquidityMedianWindowDays,
+      minDataDays: RuleParams.liquidityMinDataDays,
+    );
+    final watchlist = (await _db.getWatchlist()).map((w) => w.symbol).toSet();
+    bool isTradeable(String symbol) {
+      if (watchlist.contains(symbol)) return true; // 自選豁免：使用者主動追蹤
+      final median = medianTurnover[symbol];
+      // map 內沒有 = 有效天數不足、無法判定 → permissive 放行
+      return median == null ||
+          median >= RuleParams.liquidityMinMedianTurnoverNtd;
     }
+
+    return rows.where((row) => isTradeable(row.read<String>('symbol'))).map((
+      row,
+    ) {
+      final totalNet = row.read<double>('total_net');
+      final isBuy = totalNet > 0;
+      // DB 以「股」為單位，除以 1000 轉換為「張」後格式化
+      final formatted = _formatSheets(totalNet.abs() / 1000);
+      return ChipAnomaly(
+        type: ChipAnomalyType.institutionalSurge,
+        severity: ChipSeverity.high,
+        symbol: row.read<String>('symbol'),
+        stockName: row.read<String>('name'),
+        market: row.read<String>('market'),
+        keyValue: '${isBuy ? '+' : '-'}$formatted',
+      );
+    }).toList();
   }
 }
 

@@ -111,7 +111,7 @@ void main() {
   }
 
   Future<List<String>> surgeSymbols() async {
-    final byMarket = await service.detectAnomaliesByMarket(asOf);
+    final byMarket = (await service.detectAnomaliesByMarket(asOf)).byMarket;
     return [
       for (final list in byMarket.values)
         for (final a in list)
@@ -243,7 +243,7 @@ void main() {
     }
 
     Future<List<String>> shortSurgeSymbols() async {
-      final byMarket = await service.detectAnomaliesByMarket(asOf);
+      final byMarket = (await service.detectAnomaliesByMarket(asOf)).byMarket;
       return [
         for (final list in byMarket.values)
           for (final a in list)
@@ -317,7 +317,7 @@ void main() {
     ]);
 
     Future<List<String>> shortSurgeSymbols() async {
-      final byMarket = await service.detectAnomaliesByMarket(asOf);
+      final byMarket = (await service.detectAnomaliesByMarket(asOf)).byMarket;
       return [
         for (final list in byMarket.values)
           for (final a in list)
@@ -402,7 +402,7 @@ void main() {
     ]);
 
     Future<List<ChipAnomaly>> insiderRows() async {
-      final byMarket = await service.detectAnomaliesByMarket(asOf);
+      final byMarket = (await service.detectAnomaliesByMarket(asOf)).byMarket;
       return [
         for (final list in byMarket.values)
           for (final a in list)

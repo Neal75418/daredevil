@@ -23,7 +23,12 @@ class ChipAnomalyRow extends StatelessWidget {
     required this.anomalies,
     this.onStockTap,
     this.warningCounts,
+    this.failedDetectorCount = 0,
   });
+
+  /// 偵測失敗的類別數(靜默稽核 #4)。>0 時標題下掛「N 類未偵測」——
+  /// 「今天沒有該類異動」與「該類偵測壞了」不得逐 pixel 相同。
+  final int failedDetectorCount;
 
   final List<ChipAnomaly> anomalies;
 
@@ -39,7 +44,10 @@ class ChipAnomalyRow extends StatelessWidget {
     final hasAnomalies = anomalies.isNotEmpty;
     final warnings = warningCounts;
     final hasWarnings = warnings != null && warnings.total > 0;
-    if (!hasAnomalies && !hasWarnings) return const SizedBox.shrink();
+    // 有偵測失敗時本區塊必須現身:安靜的市場與壞掉的偵測不可同貌
+    if (!hasAnomalies && !hasWarnings && failedDetectorCount == 0) {
+      return const SizedBox.shrink();
+    }
 
     final theme = Theme.of(context);
 
@@ -100,6 +108,20 @@ class ChipAnomalyRow extends StatelessWidget {
             ],
           ],
         ),
+        if (failedDetectorCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              'marketOverview.chipAnomaly.partialFail'.tr(
+                namedArgs: {'count': '$failedDetectorCount'},
+              ),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.brightness == Brightness.light
+                    ? WarningColors.warningOnLight
+                    : WarningColors.warning,
+              ),
+            ),
+          ),
 
         if (hasAnomalies) ...[
           const SizedBox(height: DesignTokens.spacing8),

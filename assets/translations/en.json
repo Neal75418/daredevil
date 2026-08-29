@@ -253,7 +253,8 @@
       "subtitleShortSurge": "Single-day short selling surged, watch for downside pressure",
       "subtitleInstitutionalSurge": "Single-day institutional net flow exceeds 5x recent average",
       "moreItems": "Show all ({count} more)",
-      "collapse": "Collapse"
+      "collapse": "Collapse",
+      "partialFail": "{count} anomaly detectors failed"
     }
   },
   "stockSearch": {

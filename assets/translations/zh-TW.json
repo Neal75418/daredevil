@@ -253,7 +253,8 @@
       "subtitleShortSurge": "當日融券賣出暴增，注意空頭壓力",
       "subtitleInstitutionalSurge": "法人單日買賣超越近期均值 5 倍",
       "moreItems": "展開全部（還有 {count} 檔）",
-      "collapse": "收合"
+      "collapse": "收合",
+      "partialFail": "{count} 類異動未偵測(資料查詢失敗)"
     }
   },
   "stockSearch": {

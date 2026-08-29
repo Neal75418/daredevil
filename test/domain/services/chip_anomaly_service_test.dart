@@ -51,7 +51,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -75,7 +75,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.highPledge),
@@ -97,7 +97,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final anomaly = result['TWSE']!.firstWhere(
           (a) => a.type == ChipAnomalyType.highPledge,
         );
@@ -121,7 +121,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.highPledge),
@@ -138,7 +138,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.highPledge),
@@ -160,7 +160,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.highPledge),
@@ -182,7 +182,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.highPledge),
@@ -204,7 +204,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.highPledge),
@@ -226,7 +226,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.highPledge),
@@ -248,7 +248,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.highPledge),
@@ -275,7 +275,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -299,7 +299,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.insiderTransfer),
@@ -320,7 +320,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final anomaly = result['TWSE']!.firstWhere(
           (a) => a.type == ChipAnomalyType.insiderTransfer,
         );
@@ -341,7 +341,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final anomaly = result['TWSE']!.firstWhere(
           (a) => a.type == ChipAnomalyType.insiderTransfer,
         );
@@ -362,7 +362,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final anomaly = result['TWSE']!.firstWhere(
           (a) => a.type == ChipAnomalyType.insiderTransfer,
         );
@@ -386,7 +386,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -408,7 +408,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -428,7 +428,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final anomaly = result['TWSE']!.firstWhere(
           (a) => a.type == ChipAnomalyType.foreignNearLimit,
         );
@@ -470,7 +470,7 @@ void main() {
         // avg5d = 100，today = 400 > 100 × 3 = 300 ✓
         await insertShortSurgeData(todayShortSell: 400.0);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -484,7 +484,7 @@ void main() {
         // avg5d = 100，today = 250 <= 100 × 3 = 300 ✗
         await insertShortSurgeData(todayShortSell: 250.0);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.shortSurge),
@@ -496,7 +496,7 @@ void main() {
         // avg5d = 100，today = 400，ratio = 4.0
         await insertShortSurgeData(todayShortSell: 400.0);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final anomaly = result['TWSE']!.firstWhere(
           (a) => a.type == ChipAnomalyType.shortSurge,
         );
@@ -512,7 +512,7 @@ void main() {
           historyShortSell: 0.333,
         );
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.shortSurge),
@@ -526,7 +526,7 @@ void main() {
         // 雖達倍率但當日絕對量過低 → 應被濾除
         await insertShortSurgeData(todayShortSell: 40.0, historyShortSell: 1.0);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.shortSurge),
@@ -543,7 +543,7 @@ void main() {
           historyShortSell: 87.33,
         );
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -562,7 +562,7 @@ void main() {
           historyShortSell: 5.0,
         );
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -581,7 +581,7 @@ void main() {
           historyShortSell: 2.0,
         );
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any((a) => a.type == ChipAnomalyType.shortSurge),
@@ -630,7 +630,7 @@ void main() {
         // historyAvg = 1,000,000，today = 6,000,000 > 5,000,000 ✓
         await insertInstitutionalData(todayNet: 6000000.0);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -653,7 +653,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -676,7 +676,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -693,7 +693,7 @@ void main() {
         // historyAvg = 1,000,000，today = 4,000,000 <= 5,000,000 ✗
         await insertInstitutionalData(todayNet: 4000000.0);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -706,7 +706,7 @@ void main() {
       test('大買顯示正號（+）', () async {
         await insertInstitutionalData(todayNet: 6000000.0);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final anomaly = result['TWSE']!.firstWhere(
           (a) => a.type == ChipAnomalyType.institutionalSurge,
         );
@@ -717,7 +717,7 @@ void main() {
       test('大賣顯示負號（-）', () async {
         await insertInstitutionalData(todayNet: -6000000.0);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final anomaly = result['TWSE']!.firstWhere(
           (a) => a.type == ChipAnomalyType.institutionalSurge,
         );
@@ -729,7 +729,7 @@ void main() {
         // 6,000,000 股 = 6,000 張，不應顯示 6000000
         await insertInstitutionalData(todayNet: 6000000.0);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final anomaly = result['TWSE']!.firstWhere(
           (a) => a.type == ChipAnomalyType.institutionalSurge,
         );
@@ -742,7 +742,7 @@ void main() {
         // 9 天歷史 → COUNT = 9 < 10 → 不觸發
         await insertInstitutionalData(todayNet: 6000000.0, historyDays: 9);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(
           result['TWSE']!.any(
@@ -782,7 +782,7 @@ void main() {
           ),
         ]);
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(result['TWSE']!.any((a) => a.symbol == '2330'), isTrue);
         expect(result['TPEx']!.any((a) => a.symbol == '6488'), isTrue);
@@ -791,7 +791,7 @@ void main() {
       });
 
       test('無資料時回傳空列表', () async {
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
 
         expect(result['TWSE'], isEmpty);
         expect(result['TPEx'], isEmpty);
@@ -846,7 +846,7 @@ void main() {
         await insertSurgeData('2330');
         await insertSurgeData('006203');
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final twse = result['TWSE']!;
 
         expect(
@@ -896,7 +896,7 @@ void main() {
         await insertShortSurgeData('2330');
         await insertShortSurgeData('00940');
 
-        final result = await service.detectAnomaliesByMarket(today);
+        final result = (await service.detectAnomaliesByMarket(today)).byMarket;
         final twse = result['TWSE']!;
 
         expect(
@@ -914,6 +914,22 @@ void main() {
           reason: '非 ETF 個股同資料應正常偵測（驗證過濾未誤殺其他標的）',
         );
       });
+    });
+  });
+
+  group('per-detector 失敗列名(2026-08-29 靜默稽核 #4)', () {
+    test('🚨 單一偵測器故障 → 列名,其餘類別照常', () async {
+      // 真實故障注入:drop 內部人轉讓表 → 該 detector 的 SQL 當場炸,
+      // 其他 detector 不受影響
+      await db.customStatement('DROP TABLE insider_transfer');
+      final result = await service.detectAnomaliesByMarket(today);
+      expect(result.failedDetectors, ['insiderTransfer']);
+      expect(result.byMarket, isNotEmpty, reason: '其餘偵測結果照常回傳');
+    });
+
+    test('全部正常 → failedDetectors 為空(不誤報)', () async {
+      final result = await service.detectAnomaliesByMarket(today);
+      expect(result.failedDetectors, isEmpty);
     });
   });
 }

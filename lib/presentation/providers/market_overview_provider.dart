@@ -66,6 +66,7 @@ class MarketOverviewState {
     this.adLineByMarket = const {},
     this.historyTrends = const HistoryTrends(),
     this.chipAnomaliesByMarket = const {},
+    this.chipAnomalyFailedDetectors = const [],
     this.isLoading = false,
     this.error,
     this.dataDate,
@@ -142,6 +143,10 @@ class MarketOverviewState {
   /// 籌碼異動摘要（依市場分組）
   final Map<String, List<ChipAnomaly>> chipAnomaliesByMarket;
 
+  /// 籌碼異動偵測的失敗類別 key(靜默稽核 #4)——非空時儀表板掛
+  /// 「N 類未偵測」註記,「今天沒異動」與「偵測壞了」不再逐 pixel 相同
+  final List<String> chipAnomalyFailedDetectors;
+
   final bool isLoading;
   final String? error;
 
@@ -190,6 +195,7 @@ class MarketOverviewState {
     Map<String, List<double>>? adLineByMarket,
     HistoryTrends? historyTrends,
     Map<String, List<ChipAnomaly>>? chipAnomaliesByMarket,
+    List<String>? chipAnomalyFailedDetectors,
     bool? isLoading,
     Object? error = sentinel,
     DateTime? dataDate,
@@ -221,6 +227,8 @@ class MarketOverviewState {
       historyTrends: historyTrends ?? this.historyTrends,
       chipAnomaliesByMarket:
           chipAnomaliesByMarket ?? this.chipAnomaliesByMarket,
+      chipAnomalyFailedDetectors:
+          chipAnomalyFailedDetectors ?? this.chipAnomalyFailedDetectors,
       isLoading: isLoading ?? this.isLoading,
       error: error == sentinel ? this.error : error as String?,
       dataDate: dataDate ?? this.dataDate,
@@ -267,7 +275,7 @@ typedef _OverviewSnapshot = (
   (
     Map<String, ({List<DatedValue> margin, List<double> short})>,
     Map<String, List<DatedValue>>,
-    Map<String, List<ChipAnomaly>>,
+    ({Map<String, List<ChipAnomaly>> byMarket, List<String> failedDetectors}),
     Map<String, List<double>>,
     Map<String, ({int newHighs, int newLows})>,
     Map<String, List<double>>,
@@ -524,7 +532,8 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
         },
         advanceRatio: advRatioHistory,
       ),
-      chipAnomaliesByMarket: chipAnomalies,
+      chipAnomaliesByMarket: chipAnomalies.byMarket,
+      chipAnomalyFailedDetectors: chipAnomalies.failedDetectors,
       dataDate: dataDate,
       sectionDates: sectionDates,
     );
@@ -1221,16 +1230,28 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     }
   }
 
-  /// 載入籌碼異動偵測結果（依市場分組）
-  Future<Map<String, List<ChipAnomaly>>> _loadChipAnomalies(
-    DateTime date,
-  ) async {
+  /// 載入籌碼異動偵測結果（依市場分組 + per-detector 失敗列名）
+  Future<
+    ({Map<String, List<ChipAnomaly>> byMarket, List<String> failedDetectors})
+  >
+  _loadChipAnomalies(DateTime date) async {
     try {
       final service = ChipAnomalyService(database: _db);
       return await service.detectAnomaliesByMarket(date);
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入籌碼異動失敗', e);
-      return {};
+      // 服務層連建構都失敗=六類全不可信(靜默稽核 #4)
+      return (
+        byMarket: <String, List<ChipAnomaly>>{},
+        failedDetectors: const [
+          'highPledge',
+          'insiderTransfer',
+          'foreignNearLimit',
+          'shortSurge',
+          'institutionalSurge',
+          'etfFilter',
+        ],
+      );
     }
   }
 

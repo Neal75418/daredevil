@@ -319,4 +319,27 @@ void main() {
       expect(find.byType(Text), findsNothing);
     });
   });
+
+  group('per-detector 失敗註記(2026-08-29 靜默稽核 #4)', () {
+    testWidgets('🚨 有偵測失敗 → 區塊現身並顯示「N 類未偵測」', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(
+          const ChipAnomalyRow(anomalies: [], failedDetectorCount: 2),
+        ),
+      );
+      expect(
+        find.text('marketOverview.chipAnomaly.partialFail'),
+        findsOneWidget,
+        reason: '零異動+有失敗:安靜的市場與壞掉的偵測不可同貌',
+      );
+    });
+
+    testWidgets('無異動無失敗 → 區塊隱藏(既有行為不變)', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(const ChipAnomalyRow(anomalies: [])),
+      );
+      expect(find.text('marketOverview.chipAnomaly.partialFail'), findsNothing);
+      expect(find.text('marketOverview.chipAnomaly.title'), findsNothing);
+    });
+  });
 }

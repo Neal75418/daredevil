@@ -488,12 +488,15 @@ class _MarketDashboardState extends State<MarketDashboard> {
 
     // 籌碼異動（標題列併入 注意/處置 徽章，取代原本獨立一列）
     final chipAnomalies = widget.state.chipAnomaliesByMarket[marketKey];
+    final anomalyFailures = widget.state.chipAnomalyFailedDetectors.length;
     if ((chipAnomalies != null && chipAnomalies.isNotEmpty) ||
-        (warningCounts != null && warningCounts.total > 0)) {
+        (warningCounts != null && warningCounts.total > 0) ||
+        anomalyFailures > 0) {
       sections.add(
         ChipAnomalyRow(
           anomalies: chipAnomalies ?? const [],
           warningCounts: warningCounts,
+          failedDetectorCount: anomalyFailures,
           onStockTap: (symbol) => context.push(AppRoutes.stockDetail(symbol)),
         ),
       );
@@ -833,12 +836,14 @@ class _MarketDashboardState extends State<MarketDashboard> {
   Widget? _buildChipAnomalySection(String market) {
     final chipAnomalies = widget.state.chipAnomaliesByMarket[market];
     final warningCounts = widget.state.warningCountsByMarket[market];
+    final anomalyFailures = widget.state.chipAnomalyFailedDetectors.length;
     final hasAnomalies = chipAnomalies != null && chipAnomalies.isNotEmpty;
     final hasWarnings = warningCounts != null && warningCounts.total > 0;
-    if (!hasAnomalies && !hasWarnings) return null;
+    if (!hasAnomalies && !hasWarnings && anomalyFailures == 0) return null;
     return ChipAnomalyRow(
       anomalies: chipAnomalies ?? const [],
       warningCounts: warningCounts,
+      failedDetectorCount: anomalyFailures,
       onStockTap: (symbol) => context.push(AppRoutes.stockDetail(symbol)),
     );
   }
