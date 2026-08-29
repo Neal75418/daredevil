@@ -81,9 +81,6 @@ abstract final class RuleParams {
   /// [liquidityMinMedianTurnoverNtd]（防單日爆量假通過），兩者互補。
   static const double minCandidateTurnover = 30000000;
 
-  /// 候選股最低成交量（1000 張 = 1,000,000 股）
-  static const double minCandidateVolumeShares = 1000000;
-
   /// 高當沖規則最低成交量（10,000 張 = 10,000,000 股）
   static const double minDayTradingVolumeShares = 10000000;
 

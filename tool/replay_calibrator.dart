@@ -62,10 +62,14 @@
 //
 // **生產一致性 (e)——scoring 層單日閘（2026-08-29 review 二補）**：生產在
 // 中位數閘之外，對訊號日當根 bar 還有 [LiquidityChecker
-// .checkCandidateLiquidity]（股數 ≥ 100 萬、成交額 ≥ 3,000 萬、close/
-// volume 缺值同樣 skip——與中位數層的 permissive **相反**）。review 實測
-// 只套中位數層時剩餘語料仍有 28–39% 是生產當日 skip 的 stock-day，且系統
-// 性偏向高價薄量股（股數門檻對高價股綁最緊）。由 [applySignalDayGate]
+// .checkCandidateLiquidity]（成交額 ≥ 3,000 萬、close/volume 缺值同樣
+// skip——與中位數層的 permissive **相反**）。review 實測只套中位數層時
+// 剩餘語料仍有 28–39% 是生產當日 skip 的 stock-day。
+//
+// ⚠️ 那次量測時單日閘還含一道 `volume ≥ 100 萬股` 的股數門檻，偏差因此
+// 系統性指向高價薄量股；該門檻已於 2026-08-29 移除（見 `LiquidityChecker`
+// 檔頭），單日閘現在純看成交額，與中位數閘同口徑、只差窗長。由
+// [applySignalDayGate]
 // 直接呼叫生產函式判定；套用於評估、universe 均值、baseline H0——
 // **regime 除外**：生產的 marketUptrendOrNull 對候選批次全體計算，單日
 // skip 發生在其後的逐股 classify（scoring_isolate 的順序），regime 只套

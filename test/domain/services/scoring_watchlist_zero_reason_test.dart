@@ -74,8 +74,8 @@ void main() {
 
   /// 60 天完全持平的價格——刻意選「什麼規則都不會觸發」的資料
   ///
-  /// 量與額必須過得了單檔流動性門檻（`minCandidateVolumeShares` 100 萬股、
-  /// `minCandidateTurnover` 3000 萬元），否則會停在 lowLiquidity 而根本走不到
+  /// 成交額必須過得了單檔流動性門檻（`minCandidateTurnover` 3,000 萬元；
+  /// 股數門檻已於 2026-08-29 移除），否則會停在 lowLiquidity 而根本走不到
   /// 「零訊號」那一步——本檔第一條「前提」測試就是為了擋住這種假測試。
   List<DailyPriceEntry> flat(String symbol) => generateConstantPrices(
     days: 60,

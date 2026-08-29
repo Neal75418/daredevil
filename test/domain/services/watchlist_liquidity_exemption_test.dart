@@ -12,6 +12,12 @@
 // 過濾 — 使用者主動追蹤）」,但那個豁免只作用在中位數成交額那道;評分迴圈
 // 的單日檢查沒對齊,於是上游給的豁免被下游吃掉。
 //
+// 📌 **2026-08-29 後續**:當時的修法只讓自選股繞過那道門檻,門檻本身留著擋
+// 全市場。領域稽核 C1 證明它擋掉 68.9% 的 stock-day、其中 25.7% 已通過成交額
+// 門檻,且它的唯一獨立效果是「把成交額門檻變成與股價成正比」——已整條移除。
+// 於是川湖那組輸入現在**全市場都會通過**,本檔的對照組改為釘住這件事。
+// 豁免本身仍在,現在跳過的是**成交額**門檻(讓使用者主動追蹤的冷門股留下分析列)。
+//
 // **MISSING_DATA 不可豁免**:下游 `prices.last.close!` / `volume!` 依賴這道
 // 保證,豁免它會變成 null 崩潰。
 import 'package:flutter_test/flutter_test.dart';
@@ -30,19 +36,36 @@ void main() {
     symbol: '2059',
   );
 
-  test('🚨 非自選股維持原行為:股數不足即擋下(對照組)', () {
+  /// 真正的低流動性:成交額 1,000 萬(低於 3,000 萬門檻)
+  List<DailyPriceEntry> lowTurnover() => generateConstantPrices(
+    days: 60,
+    basePrice: 100,
+    volume: 100000,
+    symbol: 'THIN',
+  );
+
+  test('🚨 川湖型標的(高價、高成交額、低股數)全市場都該通過', () {
+    // 稽核 C1 後的新契約:這組輸入不再需要任何豁免。
+    // 若日後有人把股數門檻加回來,這條會轉紅。
     expect(
       classifyCandidate(highPriceLowShares()),
-      CandidateSkipReason.lowLiquidity,
-      reason: '全市場行為不得因這次修改而改變(實測另有 232 檔同型)',
+      isNull,
+      reason: '成交額 29 億不是低流動性,不該靠自選股豁免才看得到',
     );
   });
 
   test('🚨 自選股豁免單日流動性——上游步驟 1 的豁免必須貫穿到這裡', () {
+    // 豁免現在守的是**成交額**那道:日成交 1,000 萬的冷門股,
+    // 使用者主動追蹤時仍要留下分析列。
     expect(
-      classifyCandidate(highPriceLowShares(), exemptFromLiquidity: true),
+      classifyCandidate(lowTurnover()),
+      CandidateSkipReason.lowLiquidity,
+      reason: '對照組:非自選股的真低流動性仍要擋',
+    );
+    expect(
+      classifyCandidate(lowTurnover(), exemptFromLiquidity: true),
       isNull,
-      reason: '川湖成交額 29 億卻因股數門檻被擋，自選股不該受此限',
+      reason: '上游步驟 1 的豁免必須貫穿到單日檢查',
     );
   });
 

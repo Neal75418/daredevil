@@ -9,8 +9,9 @@ import 'package:daredevil/data/database/app_database.drift.dart';
 mixin MarketOverviewDaoMixin on $AppDatabase {
   /// 取得指定日期「可交易池」股數 —— 過流動性門檻的 daily_price 筆數。
   ///
-  /// 與 scoring 的 `LiquidityChecker` 同口徑（volume ≥ [RuleParams.minCandidateVolumeShares]
-  /// 且 turnover = close×volume ≥ [RuleParams.minCandidateTurnover]），供掃描頁顯示
+  /// 與 scoring 的 `LiquidityChecker` 同口徑（turnover = close×volume ≥
+  /// [RuleParams.minCandidateTurnover]；股數門檻已於 2026-08-29 移除，
+  /// 兩處必須維持同口徑），供掃描頁顯示
   /// 覆蓋透明度：「自 N 檔可交易股篩出 X 檔有訊號」，讓使用者知道清單是
   /// 訊號子集、非全市場。
   Future<int> getTradeableUniverseCount(DateTime date) async {
@@ -23,7 +24,6 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
     WHERE dp.date >= ? AND dp.date < ?
       AND dp.volume IS NOT NULL
       AND dp.close IS NOT NULL
-      AND dp.volume >= ?
       AND dp.close * dp.volume >= ?
   ''';
 
@@ -32,7 +32,6 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
       variables: [
         Variable.withDateTime(startOfDay),
         Variable.withDateTime(endOfDay),
-        Variable.withReal(RuleParams.minCandidateVolumeShares),
         Variable.withReal(RuleParams.minCandidateTurnover),
       ],
       readsFrom: {dailyPrice},

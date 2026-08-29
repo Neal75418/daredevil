@@ -31,16 +31,19 @@ void main() {
     });
 
     group('getTradeableUniverseCount', () {
-      test('只計入過流動性門檻（量≥100萬 且 成交額≥3000萬）的股', () async {
+      test('🚨 只計入過成交額門檻（≥3000萬）的股——不看股數', () async {
+        // 這個分母必須與 scoring 的 `LiquidityChecker` 同口徑。股數門檻
+        // 已於 2026-08-29 移除（稽核 C1：它把成交額門檻變成與股價成正比），
+        // 兩處要一起改，否則掃描頁的「自 N 檔篩出 X 檔」會與實際評分池分岔。
         await db.insertPrices([
-          // PASS：量 200萬、成交額 2 億
+          // PASS：成交額 2 億
           DailyPriceCompanion.insert(
             symbol: '2330',
             date: today,
             close: const Value(100.0),
             volume: const Value(2000000.0),
           ),
-          // FAIL：量 50萬 < 100萬
+          // PASS：量 50 萬但成交額 5,000 萬——舊碼在此判 FAIL
           DailyPriceCompanion.insert(
             symbol: '2317',
             date: today,
@@ -54,16 +57,34 @@ void main() {
             close: const Value(10.0),
             volume: const Value(1500000.0),
           ),
-          // PASS（邊界）：量剛好 100萬、成交額 2 億
+          // PASS：川湖型——高價、低股數、成交額 29 億
           DailyPriceCompanion.insert(
             symbol: '3293',
             date: today,
-            close: const Value(200.0),
-            volume: const Value(1000000.0),
+            close: const Value(12500.0),
+            volume: const Value(234633.0),
           ),
         ]);
 
-        expect(await db.getTradeableUniverseCount(today), 2);
+        expect(await db.getTradeableUniverseCount(today), 3);
+      });
+
+      test('成交額邊界:剛好 3,000 萬計入、少 1 元不計入', () async {
+        await db.insertPrices([
+          DailyPriceCompanion.insert(
+            symbol: '2330',
+            date: today,
+            close: const Value(30.0),
+            volume: const Value(1000000.0), // 恰 3,000 萬
+          ),
+          DailyPriceCompanion.insert(
+            symbol: '2317',
+            date: today,
+            close: const Value(29.999999),
+            volume: const Value(1000000.0), // 差一點
+          ),
+        ]);
+        expect(await db.getTradeableUniverseCount(today), 1);
       });
 
       test('null volume 或 close 不計入', () async {
