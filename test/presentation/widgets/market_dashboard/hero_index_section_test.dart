@@ -252,4 +252,20 @@ void main() {
       );
     });
   });
+
+  group('非即時角標(2026-08-29 靜默稽核 #3)', () {
+    testWidgets('🚨 isStale → 顯示「非即時」與資料日期', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(HeroIndexSection(index: createIndex(), isStale: true)),
+      );
+      expect(find.text('marketOverview.indexStale'), findsOneWidget);
+    });
+
+    testWidgets('即時資料 → 無角標(不誤標)', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(HeroIndexSection(index: createIndex())),
+      );
+      expect(find.text('marketOverview.indexStale'), findsNothing);
+    });
+  });
 }

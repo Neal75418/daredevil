@@ -50,6 +50,7 @@ List<double> cumulativeAdLine(List<double> dailyNet) {
 class MarketOverviewState {
   const MarketOverviewState({
     this.indices = const [],
+    this.indexStaleNames = const {},
     this.indexHistory = const {},
     this.indexStageHistory = const {},
     // 依市場分組的統計（預設空 Map）
@@ -80,6 +81,10 @@ class MarketOverviewState {
   static const kSectionMargin = 'margin';
 
   final List<TwseMarketIndex> indices;
+
+  /// 由 DB 備援補值(非即時)的指數名(靜默稽核 #3)。Hero 卡據此掛
+  /// 「非即時」角標——盤中 API 掛掉時不得把昨收當即時值
+  final Set<String> indexStaleNames;
 
   /// 指數名稱 → 近 30 日收盤值列表（供走勢圖使用）
   final Map<String, List<double>> indexHistory;
@@ -180,6 +185,7 @@ class MarketOverviewState {
 
   MarketOverviewState copyWith({
     List<TwseMarketIndex>? indices,
+    Set<String>? indexStaleNames,
     Map<String, List<double>>? indexHistory,
     Map<String, List<double>>? indexStageHistory,
     Map<String, AdvanceDecline>? advanceDeclineByMarket,
@@ -205,6 +211,7 @@ class MarketOverviewState {
   }) {
     return MarketOverviewState(
       indices: indices ?? this.indices,
+      indexStaleNames: indexStaleNames ?? this.indexStaleNames,
       indexHistory: indexHistory ?? this.indexHistory,
       indexStageHistory: indexStageHistory ?? this.indexStageHistory,
       advanceDeclineByMarket:
@@ -252,7 +259,7 @@ class MarketOverviewState {
 /// untyped `List<Object?>` + magic-index cast。
 typedef _OverviewSnapshot = (
   (
-    List<TwseMarketIndex>,
+    ({List<TwseMarketIndex> data, Set<String> staleNames}),
     Map<String, List<double>>,
     ({Map<String, AdvanceDecline> data, Map<String, DateTime> staleDates}),
     ({Map<String, InstitutionalTotals> data, DateTime dataDate}),
@@ -425,7 +432,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     // typed record pattern destructuring——順序/型別對不上會直接編譯錯誤
     final (
       (
-        indices,
+        indicesResult,
         rawHistory,
         advDecResult,
         instResult,
@@ -464,7 +471,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     };
 
     // 將即時 API 的今日收盤價追加到歷史資料，確保走勢圖與位階反映最新資料
-    for (final idx in indices) {
+    for (final idx in indicesResult.data) {
       final history = indexHistory[idx.name];
       if (history != null && history.isNotEmpty) {
         // 使用 epsilon 比較避免浮點數精度問題
@@ -505,7 +512,8 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     final marginIndexChange = await _loadIndexChangeOn(marginResult.dataDates);
 
     return MarketOverviewState(
-      indices: indices,
+      indices: indicesResult.data,
+      indexStaleNames: indicesResult.staleNames,
       indexHistory: indexHistory,
       indexStageHistory: indexStageHistory,
       marginIndexChangePercent: marginIndexChange,
@@ -584,7 +592,12 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     return apiPositive ? 1 : -1;
   }
 
-  Future<List<TwseMarketIndex>> _loadIndices() async {
+  /// 載入大盤指數。staleNames = 由 DB 備援補的指數名(靜默稽核 #3):
+  /// 盤中 API 掛掉時 Hero 卡原本把**昨收**當即時值顯示、混合失敗時同畫面
+  /// 一半今天一半昨天——同檔的 advanceDeclineStaleDates 早就對漲跌家數做
+  /// 了回退標記,指數這條漏掉,防護不對稱。
+  Future<({List<TwseMarketIndex> data, Set<String> staleNames})>
+  _loadIndices() async {
     try {
       // 獨立呼叫 TWSE 和 TPEx API，避免一方失敗拖垮另一方
       List<TwseMarketIndex> twseIndices = [];
@@ -602,9 +615,13 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
         AppLogger.warning('MarketOverviewNotifier', '載入 TPEx 指數失敗', e);
       }
 
-      // API 全部失敗時，從 DB 取最新指數作為備援
+      // API 全部失敗時，從 DB 取最新指數作為備援——全部標 stale
       if (twseIndices.isEmpty && tpexIndices.isEmpty) {
-        return _loadIndicesFromDb();
+        final dbIndices = await _loadIndicesFromDb();
+        return (
+          data: dbIndices,
+          staleNames: {for (final i in dbIndices) i.name},
+        );
       }
 
       // 精確名稱匹配，僅保留 Dashboard 需要的 TWSE 重點指數
@@ -618,12 +635,15 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       Future<List<TwseMarketIndex>> getDbCache() async =>
           dbCache ??= await _loadIndicesFromDb();
 
+      final staleNames = <String>{};
       // TWSE API 失敗但 TPEx 成功時，從 DB 補 TWSE 指數
       if (filtered.isEmpty) {
         final dbIndices = await getDbCache();
-        filtered.addAll(
-          dbIndices.where((idx) => targetNames.contains(idx.name)),
-        );
+        final patched = dbIndices
+            .where((idx) => targetNames.contains(idx.name))
+            .toList();
+        filtered.addAll(patched);
+        staleNames.addAll(patched.map((i) => i.name));
       }
 
       // 加入 TPEx 櫃買指數（取最新一筆作為即時資料）
@@ -635,13 +655,17 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
         final dbTpex = dbIndices
             .where((idx) => idx.name == MarketIndexNames.tpexIndex)
             .toList();
-        if (dbTpex.isNotEmpty) filtered.add(dbTpex.last);
+        if (dbTpex.isNotEmpty) {
+          filtered.add(dbTpex.last);
+          staleNames.add(dbTpex.last.name);
+        }
       }
 
-      return filtered;
+      return (data: filtered, staleNames: staleNames);
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入大盤指數失敗', e);
-      return _loadIndicesFromDb();
+      final dbIndices = await _loadIndicesFromDb();
+      return (data: dbIndices, staleNames: {for (final i in dbIndices) i.name});
     }
   }
 

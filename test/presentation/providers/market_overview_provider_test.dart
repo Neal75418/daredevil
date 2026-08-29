@@ -217,6 +217,62 @@ void main() {
       expect(state.indices, isEmpty);
     });
 
+    test('🚨 指數 API 全掛 → DB 備援全部列入 indexStaleNames(靜默稽核 #3)', () async {
+      // 盤中 API 掛掉時 Hero 卡原本把昨收當即時值——回退必須留下標記,
+      // 與同 provider 的 advanceDeclineStaleDates 防護對稱
+      setupEmptyDefaults();
+      when(() => mockTwse.getMarketIndices()).thenThrow(Exception('down'));
+      when(() => mockTpex.getTpexIndex()).thenThrow(Exception('down'));
+      when(
+        () => mockDb.getIndexHistoryBatch(any(), days: any(named: 'days')),
+      ).thenAnswer(
+        (_) async => {
+          '發行量加權股價指數': [
+            MarketIndexEntry(
+              id: 1,
+              name: '發行量加權股價指數',
+              date: testDate.subtract(const Duration(days: 1)),
+              close: 21000,
+              change: -100,
+              changePercent: -0.5,
+              createdAt: testDate,
+            ),
+          ],
+        },
+      );
+
+      final notifier = container.read(marketOverviewProvider.notifier);
+      await notifier.loadData();
+
+      final state = container.read(marketOverviewProvider);
+      expect(state.indices.map((i) => i.name), contains('發行量加權股價指數'));
+      expect(
+        state.indexStaleNames,
+        contains('發行量加權股價指數'),
+        reason: 'DB 補的昨收必須標 stale,不得與即時值同貌',
+      );
+    });
+
+    test('指數 API 正常 → indexStaleNames 為空(不誤標)', () async {
+      setupEmptyDefaults();
+      when(() => mockTwse.getMarketIndices()).thenAnswer(
+        (_) async => [
+          TwseMarketIndex(
+            date: testDate,
+            name: '發行量加權股價指數',
+            close: 20000,
+            change: 150,
+            changePercent: 0.75,
+          ),
+        ],
+      );
+
+      final notifier = container.read(marketOverviewProvider.notifier);
+      await notifier.loadData();
+
+      expect(container.read(marketOverviewProvider).indexStaleNames, isEmpty);
+    });
+
     test('loadData sets loading and loads all data in parallel', () async {
       setupEmptyDefaults();
 

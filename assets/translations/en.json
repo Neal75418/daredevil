@@ -255,7 +255,8 @@
       "moreItems": "Show all ({count} more)",
       "collapse": "Collapse",
       "partialFail": "{count} anomaly detectors failed"
-    }
+    },
+    "indexStale": "stale ({date})"
   },
   "stockSearch": {
     "tooltip": "Search stocks",

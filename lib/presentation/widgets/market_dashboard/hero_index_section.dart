@@ -26,7 +26,12 @@ class HeroIndexSection extends StatelessWidget {
     this.stageHistory = const [],
     this.totalReturnHistory = const [],
     this.reserveBadgeSpace = false,
+    this.isStale = false,
   });
+
+  /// 此指數為 DB 備援補值(非即時)——盤中 API 掛掉的回退(靜默稽核 #3)。
+  /// true 時名稱旁掛「非即時」角標並帶資料日期,昨收不得偽裝即時值。
+  final bool isStale;
 
   final TwseMarketIndex index;
   final List<double> historyData;
@@ -73,14 +78,35 @@ class HeroIndexSection extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    index.name == MarketIndexNames.tpexIndex
-                        ? 'marketOverview.tpexIndex'.tr()
-                        : 'marketOverview.taiex'.tr(),
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        index.name == MarketIndexNames.tpexIndex
+                            ? 'marketOverview.tpexIndex'.tr()
+                            : 'marketOverview.taiex'.tr(),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      // 非即時角標(靜默稽核 #3):API 掛掉回退 DB 昨收時,
+                      // 不得與即時值同貌——帶資料日期讓「多舊」可見
+                      if (isStale) ...[
+                        const SizedBox(width: DesignTokens.spacing4),
+                        Text(
+                          'marketOverview.indexStale'.tr(
+                            namedArgs: {
+                              'date': '${index.date.month}/${index.date.day}',
+                            },
+                          ),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.brightness == Brightness.light
+                                ? WarningColors.warningOnLight
+                                : WarningColors.warning,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   // 漲跌幅 badge
                   Container(

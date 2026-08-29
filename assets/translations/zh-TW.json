@@ -255,7 +255,8 @@
       "moreItems": "展開全部（還有 {count} 檔）",
       "collapse": "收合",
       "partialFail": "{count} 類異動未偵測(資料查詢失敗)"
-    }
+    },
+    "indexStale": "非即時({date})"
   },
   "stockSearch": {
     "tooltip": "搜尋股票",
