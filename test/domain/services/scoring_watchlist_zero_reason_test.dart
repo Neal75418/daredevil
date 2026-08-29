@@ -26,6 +26,7 @@ import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/scoring_batch_data.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
+import 'package:daredevil/core/constants/calibrated_scores/calibrated_score_context.dart';
 import 'package:daredevil/domain/services/scoring_isolate.dart';
 import 'package:daredevil/domain/services/scoring_service.dart';
 
@@ -113,7 +114,7 @@ void main() {
         date: today,
       );
       // 直接呼叫純函數,不 spawn isolate(確定性 + 快)
-      return ScoringBatchResult.fromMap(evaluateStocksIsolated(input.toMap()));
+      return evaluateStocksIsolated(input);
     }
 
     test('🚨 前提:這組資料確實零訊號(否則整個測試是空的)', () {
@@ -199,27 +200,34 @@ void main() {
       expect(result.accountingBalances, isTrue);
     });
 
-    test('watchlistSymbols 跨 isolate 邊界序列化', () {
-      const input = ScoringIsolateInput(
-        candidates: ['1111'],
-        pricesMap: {},
-        newsMap: {},
-        institutionalMap: {},
-        watchlistSymbols: ['1111', '2330'],
+    test('🚨 sendability:真 spawn isolate,全欄位滿載的 typed input 可跨界', () async {
+      // Map roundtrip 移除後(2026-08-29 效能稽核 #2,benchmark ~1.2s/次),
+      // 「可跨界性」是唯一只有真 Isolate.run 才驗得到的性質——純函數測試
+      // 不 spawn,欄位混入不可傳型別(closure/ReceivePort)只會在生產炸。
+      // 這條把所有 optional 欄位都填滿,任何欄位變不可傳當場紅。
+      final input = ScoringIsolateInput(
+        candidates: const ['1111'],
+        pricesMap: {'1111': flatHeavy('1111')},
+        newsMap: const {'1111': []},
+        institutionalMap: const {'1111': []},
+        revenueMap: const {},
+        valuationMap: const {},
+        revenueHistoryMap: const {'1111': []},
+        date: today,
+        dayTradingMap: const {'1111': 5.0},
+        shareholdingMap: const {},
+        warningMap: const {},
+        insiderMap: const {},
+        epsHistoryMap: const {'1111': []},
+        roeHistoryMap: const {'1111': []},
+        dividendHistoryMap: const {'1111': []},
+        maxHistoricalRevenueMap: const {'1111': 1.0},
+        calibratedScores: CalibratedScoreContext.empty,
+        watchlistSymbols: const ['1111', '2330'],
       );
-      final restored = ScoringIsolateInput.fromMap(input.toMap());
-      expect(restored.watchlistSymbols, ['1111', '2330']);
-    });
-
-    test('舊版 map 缺此欄位時降級為「無自選股」而非爆炸', () {
-      const input = ScoringIsolateInput(
-        candidates: ['1111'],
-        pricesMap: {},
-        newsMap: {},
-        institutionalMap: {},
-      );
-      final map = input.toMap()..remove('watchlistSymbols');
-      expect(ScoringIsolateInput.fromMap(map).watchlistSymbols, isEmpty);
+      final result = await evaluateStocksInIsolate(input);
+      expect(result.candidateCount, 1, reason: 'typed 輸入輸出雙向跨界成功');
+      expect(result.accountingBalances, isTrue);
     });
   });
 

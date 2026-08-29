@@ -12,7 +12,6 @@ import 'package:daredevil/domain/services/price_calculator.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/models.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
-import 'package:daredevil/domain/services/isolate_map_extensions.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
 import 'package:daredevil/domain/services/scoring_pipeline.dart';
@@ -96,213 +95,6 @@ class ScoringIsolateInput {
   /// `CandidateSelector` 步驟 4），全開會多寫上千列／日；自選股是 ≤36 檔。
   /// 與該檔步驟 1「自選清單優先、豁免流動性過濾——使用者主動追蹤」同一原則。
   final List<String> watchlistSymbols;
-
-  Map<String, dynamic> toMap() => {
-    'candidates': candidates,
-    'pricesMap': pricesMap.map(
-      (k, v) => MapEntry(k, v.map((e) => e.toIsolateMap()).toList()),
-    ),
-    'newsMap': newsMap.map(
-      (k, v) => MapEntry(k, v.map((e) => e.toIsolateMap()).toList()),
-    ),
-    'institutionalMap': institutionalMap.map(
-      (k, v) => MapEntry(k, v.map((e) => e.toIsolateMap()).toList()),
-    ),
-    'revenueMap': revenueMap?.map((k, v) => MapEntry(k, v.toIsolateMap())),
-    'valuationMap': valuationMap?.map((k, v) => MapEntry(k, v.toIsolateMap())),
-    'revenueHistoryMap': revenueHistoryMap?.map(
-      (k, v) => MapEntry(k, v.map((e) => e.toIsolateMap()).toList()),
-    ),
-    'date': date?.millisecondsSinceEpoch,
-    'dayTradingMap': dayTradingMap,
-    'shareholdingMap': shareholdingMap?.map((k, v) => MapEntry(k, v.toMap())),
-    'warningMap': warningMap?.map((k, v) => MapEntry(k, v.toMap())),
-    'insiderMap': insiderMap?.map((k, v) => MapEntry(k, v.toMap())),
-    'epsHistoryMap': epsHistoryMap?.map(
-      (k, v) => MapEntry(k, v.map((e) => e.toIsolateMap()).toList()),
-    ),
-    'roeHistoryMap': roeHistoryMap?.map(
-      (k, v) => MapEntry(k, v.map((e) => e.toIsolateMap()).toList()),
-    ),
-    'dividendHistoryMap': dividendHistoryMap?.map(
-      (k, v) => MapEntry(k, v.map((e) => e.toIsolateMap()).toList()),
-    ),
-    'maxHistoricalRevenueMap': maxHistoricalRevenueMap,
-    'calibratedScores': calibratedScores.toMap(),
-    'watchlistSymbols': watchlistSymbols,
-  };
-
-  factory ScoringIsolateInput.fromMap(Map<String, dynamic> map) {
-    return ScoringIsolateInput(
-      candidates: List<String>.from(map['candidates']),
-      pricesMap: _deserializeListMap(
-        map,
-        'pricesMap',
-        IsolateMappers.dailyPrice,
-      ),
-      newsMap: _deserializeListMap(map, 'newsMap', IsolateMappers.newsItem),
-      institutionalMap: _deserializeListMap(
-        map,
-        'institutionalMap',
-        IsolateMappers.dailyInstitutional,
-      ),
-      revenueMap: _deserializeSingleMap(
-        map,
-        'revenueMap',
-        IsolateMappers.monthlyRevenue,
-      ),
-      valuationMap: _deserializeSingleMap(
-        map,
-        'valuationMap',
-        IsolateMappers.stockValuation,
-      ),
-      revenueHistoryMap: _deserializeListMap<MonthlyRevenueEntry>(
-        map,
-        'revenueHistoryMap',
-        IsolateMappers.monthlyRevenue,
-      ).ifEmpty(null),
-      date: map['date'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['date'] as int)
-          : null,
-      dayTradingMap: map['dayTradingMap'] != null
-          ? Map<String, double>.from(map['dayTradingMap'])
-          : null,
-      shareholdingMap: map['shareholdingMap'] != null
-          ? _castTypedMap(
-              map['shareholdingMap'],
-              (m) => ShareholdingData.fromMap(m),
-            )
-          : null,
-      warningMap: map['warningMap'] != null
-          ? _castTypedMap(
-              map['warningMap'],
-              (m) => WarningDataContext.fromMap(m),
-            )
-          : null,
-      insiderMap: map['insiderMap'] != null
-          ? _castTypedMap(
-              map['insiderMap'],
-              (m) => InsiderDataContext.fromMap(m),
-            )
-          : null,
-      epsHistoryMap: _deserializeListMap<FinancialDataEntry>(
-        map,
-        'epsHistoryMap',
-        IsolateMappers.financialData,
-      ).ifEmpty(null),
-      roeHistoryMap: _deserializeListMap<FinancialDataEntry>(
-        map,
-        'roeHistoryMap',
-        IsolateMappers.financialData,
-      ).ifEmpty(null),
-      dividendHistoryMap: _deserializeListMap<DividendHistoryEntry>(
-        map,
-        'dividendHistoryMap',
-        IsolateMappers.dividendHistory,
-      ).ifEmpty(null),
-      maxHistoricalRevenueMap: map['maxHistoricalRevenueMap'] != null
-          ? Map<String, double>.from(map['maxHistoricalRevenueMap'])
-          : null,
-      calibratedScores: map['calibratedScores'] != null
-          ? CalibratedScoreContext.fromMap(
-              Map<String, dynamic>.from(map['calibratedScores'] as Map),
-            )
-          : CalibratedScoreContext.empty,
-      // 缺鍵時降級為「無自選股」而非爆炸——與 calibratedScores 同策略
-      watchlistSymbols: map['watchlistSymbols'] != null
-          ? List<String>.from(map['watchlistSymbols'] as List)
-          : const [],
-    );
-  }
-
-  /// Isolate 邊界反序列化：symbol → typed List
-  ///
-  /// Isolate 傳輸會遺失泛型資訊，需逐層手動轉型後透過 [mapper] 建立 typed DTO。
-  ///
-  /// **Fail-loud（M8 fix）**：per-entry mapper 拋例外時直接 wrap 成
-  /// [FormatException] 上拋。之前的 silent counter 會讓 schema drift 時
-  /// scoring isolate 收到漏 stock 的 input 但無 warning，使用者看到
-  /// 短少推薦無從追責。fail-loud 後寧可整批 abort 也不要靜默漏資料。
-  /// 若 [map] 中 key 不存在或為 null，回傳空 Map。
-  static Map<String, List<T>> _deserializeListMap<T>(
-    Map<String, dynamic> map,
-    String key,
-    T Function(Map<String, dynamic>) mapper,
-  ) {
-    final raw = map[key];
-    if (raw == null) return {};
-    final result = <String, List<T>>{};
-    for (final entry in (raw as Map).entries) {
-      final list = <T>[];
-      for (final item in entry.value as List) {
-        try {
-          list.add(mapper(Map<String, dynamic>.from(item as Map)));
-        } catch (e) {
-          throw FormatException(
-            'Failed to deserialize entry in "$key" '
-            '(symbol="${entry.key}"): $e',
-          );
-        }
-      }
-      result[entry.key.toString()] = list;
-    }
-    return result;
-  }
-
-  /// Isolate 邊界反序列化：symbol → T
-  ///
-  /// 同 [_deserializeListMap]：mapper fail 直接拋 [FormatException]。
-  /// 若 [map] 中 key 不存在或為 null，回傳 null。
-  static Map<String, T>? _deserializeSingleMap<T>(
-    Map<String, dynamic> map,
-    String key,
-    T Function(Map<String, dynamic>) mapper,
-  ) {
-    final raw = map[key];
-    if (raw == null) return null;
-    final result = <String, T>{};
-    for (final entry in (raw as Map).entries) {
-      try {
-        result[entry.key.toString()] = mapper(
-          Map<String, dynamic>.from(entry.value as Map),
-        );
-      } catch (e) {
-        throw FormatException(
-          'Failed to deserialize entry in "$key" '
-          '(symbol="${entry.key}"): $e',
-        );
-      }
-    }
-    return result;
-  }
-
-  /// Isolate 邊界型別轉換：symbol → typed DTO
-  ///
-  /// 同 [_deserializeListMap]：mapper fail 直接拋 [FormatException]。
-  /// `map` 非 [Map] 時也拋（不再 fallback 空 Map silently）。
-  static Map<String, T> _castTypedMap<T>(
-    dynamic map,
-    T Function(Map<String, dynamic>) fromMap,
-  ) {
-    if (map is! Map) {
-      throw FormatException(
-        'Expected Map for typed cast, got ${map.runtimeType}',
-      );
-    }
-    final result = <String, T>{};
-    for (final entry in map.entries) {
-      try {
-        result[entry.key as String] = fromMap(
-          Map<String, dynamic>.from(entry.value as Map),
-        );
-      } catch (e) {
-        throw FormatException(
-          'Failed to cast typed entry (symbol="${entry.key}"): $e',
-        );
-      }
-    }
-    return result;
-  }
 }
 
 /// Isolate 通訊邊界的 reason 型別安全封裝
@@ -323,24 +115,6 @@ class IsolateReasonOutput {
   final int scoreLong;
   final String description;
   final String evidenceJson;
-
-  Map<String, dynamic> toMap() => {
-    'type': type,
-    'scoreShort': scoreShort,
-    'scoreLong': scoreLong,
-    'description': description,
-    'evidenceJson': evidenceJson,
-  };
-
-  factory IsolateReasonOutput.fromMap(Map<String, dynamic> map) {
-    return IsolateReasonOutput(
-      type: map['type'] as String,
-      scoreShort: map['scoreShort'] as int,
-      scoreLong: map['scoreLong'] as int,
-      description: map['description'] as String,
-      evidenceJson: map['evidenceJson'] as String,
-    );
-  }
 }
 
 /// Isolate 評分輸出結果
@@ -369,34 +143,6 @@ class ScoringIsolateOutput {
   final double? supportLevel;
   final double? resistanceLevel;
   final List<IsolateReasonOutput> reasons;
-
-  Map<String, dynamic> toMap() => {
-    'symbol': symbol,
-    'scoreShort': scoreShort,
-    'scoreLong': scoreLong,
-    'turnover': turnover,
-    'trendState': trendState,
-    'reversalState': reversalState,
-    'supportLevel': supportLevel,
-    'resistanceLevel': resistanceLevel,
-    'reasons': reasons.map((r) => r.toMap()).toList(),
-  };
-
-  factory ScoringIsolateOutput.fromMap(Map<String, dynamic> map) {
-    return ScoringIsolateOutput(
-      symbol: map['symbol'] as String,
-      scoreShort: map['scoreShort'] as int,
-      scoreLong: map['scoreLong'] as int,
-      turnover: map['turnover'] as double,
-      trendState: map['trendState'] as String,
-      reversalState: map['reversalState'] as String,
-      supportLevel: map['supportLevel'] as double?,
-      resistanceLevel: map['resistanceLevel'] as double?,
-      reasons: (map['reasons'] as List)
-          .map((e) => IsolateReasonOutput.fromMap(Map<String, dynamic>.from(e)))
-          .toList(),
-    );
-  }
 }
 
 /// 批次評分結果
@@ -446,37 +192,6 @@ class ScoringBatchResult {
   /// 帳目是否平——false 代表有候選股未被任何分類認領（程式缺陷）
   bool get accountingBalances =>
       outputs.length + skippedTotal == candidateCount;
-
-  Map<String, dynamic> toMap() => {
-    'outputs': outputs.map((o) => o.toMap()).toList(),
-    'candidateCount': candidateCount,
-    'skippedNoData': skippedNoData,
-    'skippedInsufficientData': skippedInsufficientData,
-    'skippedLowLiquidity': skippedLowLiquidity,
-    'skippedStaleBar': skippedStaleBar,
-    'skippedNoAnalysis': skippedNoAnalysis,
-    'skippedNoReasons': skippedNoReasons,
-    'skippedLowScore': skippedLowScore,
-  };
-
-  factory ScoringBatchResult.fromMap(Map<String, dynamic> map) {
-    return ScoringBatchResult(
-      outputs: (map['outputs'] as List)
-          .map(
-            (e) => ScoringIsolateOutput.fromMap(Map<String, dynamic>.from(e)),
-          )
-          .toList(),
-      // 新欄位對舊 map 容錯（跨版本 isolate payload）
-      candidateCount: map['candidateCount'] as int? ?? 0,
-      skippedNoData: map['skippedNoData'] as int,
-      skippedInsufficientData: map['skippedInsufficientData'] as int,
-      skippedLowLiquidity: map['skippedLowLiquidity'] as int,
-      skippedStaleBar: map['skippedStaleBar'] as int? ?? 0,
-      skippedNoAnalysis: map['skippedNoAnalysis'] as int? ?? 0,
-      skippedNoReasons: map['skippedNoReasons'] as int? ?? 0,
-      skippedLowScore: map['skippedLowScore'] as int,
-    );
-  }
 }
 
 /// 在背景 Isolate 中執行批量評分
@@ -492,11 +207,16 @@ Future<ScoringBatchResult> evaluateStocksInIsolate(
   // 主 isolate 那一半(2026-08-16 code review 發現)。closure 捕捉的值會被
   // 複製過去,所以在 isolate 內重設一次即可。
   final forceOutput = AppLogger.forceOutput;
-  final resultMap = await Isolate.run(() {
+  // typed 物件直接跨界(2026-08-29 效能稽核 #2):Map 序列化 roundtrip
+  // benchmark 實測每次評分多付 ~1.2s(556k 列價格,serialize 382ms 在
+  // main isolate=更新中的 UI jank)。isolate 訊息傳遞本就能載任意純資料
+  // 物件;可跨界性由真 spawn 的 sendability 測試把關(scoring_watchlist_
+  // zero_reason_test),欄位若新增不可傳的型別(closure/port)會在該測試
+  // 當場炸,不會等到實機。
+  return Isolate.run(() {
     AppLogger.forceOutput = forceOutput;
-    return evaluateStocksIsolated(input.toMap());
+    return evaluateStocksIsolated(input);
   });
-  return ScoringBatchResult.fromMap(resultMap);
 }
 
 /// 在 Isolate 中執行的純運算函數
@@ -508,9 +228,7 @@ Future<ScoringBatchResult> evaluateStocksInIsolate(
 /// isolate）才能用**同一份輸入**斷言兩條路徑結果相同——見
 /// `scoring_watchlist_zero_reason_test.dart`。
 @visibleForTesting
-Map<String, dynamic> evaluateStocksIsolated(Map<String, dynamic> inputMap) {
-  final input = ScoringIsolateInput.fromMap(inputMap);
-
+ScoringBatchResult evaluateStocksIsolated(ScoringIsolateInput input) {
   // 在 Isolate 中建立服務（它們是無狀態的）
   final analysisService = AnalysisService();
   final ruleEngine = RuleEngine();
@@ -712,7 +430,7 @@ Map<String, dynamic> evaluateStocksIsolated(Map<String, dynamic> inputMap) {
     skippedNoAnalysis: skippedNoAnalysis,
     skippedNoReasons: skippedNoReasons,
     skippedLowScore: skippedLowScore,
-  ).toMap();
+  );
 }
 
 /// 從 input 建立市場資料上下文（警示、董監、外資、當沖）
@@ -765,11 +483,6 @@ _convertBatchData(ScoringIsolateInput input, String symbol) {
         : null,
     maxHistoricalRevenue: input.maxHistoricalRevenueMap?[symbol],
   );
-}
-
-/// 空 Map → null 轉換，用於 nullable 欄位的反序列化
-extension _MapIfEmpty<K, V> on Map<K, V> {
-  Map<K, V>? ifEmpty(Map<K, V>? fallback) => isEmpty ? fallback : this;
 }
 
 /// 建立 [IsolateReasonOutput]，為兩個 horizon 各自查 calibrated 後 fallback。

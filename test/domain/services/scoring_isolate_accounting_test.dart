@@ -41,43 +41,6 @@ void main() {
 
       expect(result.accountingBalances, isFalse);
     });
-
-    test('新欄位可跨 Isolate 邊界序列化', () {
-      const original = ScoringBatchResult(
-        outputs: [],
-        candidateCount: 9,
-        skippedNoData: 1,
-        skippedInsufficientData: 1,
-        skippedLowLiquidity: 1,
-        skippedNoAnalysis: 3,
-        skippedNoReasons: 2,
-        skippedLowScore: 1,
-      );
-
-      final restored = ScoringBatchResult.fromMap(original.toMap());
-
-      expect(restored.candidateCount, 9);
-      expect(restored.skippedNoAnalysis, 3);
-      expect(restored.skippedNoReasons, 2);
-      expect(restored.accountingBalances, isTrue);
-    });
-
-    test('fromMap 對缺欄位的舊 map 容錯（預設 0，不 throw）', () {
-      final legacy = <String, dynamic>{
-        'outputs': <dynamic>[],
-        'skippedNoData': 2,
-        'skippedInsufficientData': 0,
-        'skippedLowLiquidity': 0,
-        'skippedLowScore': 0,
-        // 無 candidateCount / skippedNoAnalysis / skippedNoReasons
-      };
-
-      final restored = ScoringBatchResult.fromMap(legacy);
-
-      expect(restored.skippedNoAnalysis, 0);
-      expect(restored.skippedNoReasons, 0);
-      expect(restored.candidateCount, 0);
-    });
   });
 
   group('evaluateStocksInIsolate 實跑帳目', () {

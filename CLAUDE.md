@@ -186,7 +186,7 @@ Data 層提供實作；`domain/repositories/` 介面**僅保留有真消費者�
 ### Isolate 通訊
 
 使用 typed DTO (`ShareholdingData`, `WarningDataContext`, `InsiderDataContext`)，避免 `Map<String, dynamic>`。
-已知例外：`scoring_isolate.dart` 內部仍走 Map 序列化 roundtrip（`isolate_map_extensions.dart`），typed 物件實際已直接跨界、Map 層疑似冗餘——待實機驗證後移除
+`scoring_isolate.dart` 的 Map 序列化 roundtrip 已於 2026-08-29 移除（benchmark：556k 列 ~1.2s/次評分，serialize 段在 main isolate＝更新中 UI jank）；typed 物件雙向直接跨界，**可跨界性由真 spawn 的 sendability 測試把關**（`scoring_watchlist_zero_reason_test`）——input 欄位不得混入 closure／ReceivePort 等不可傳型別
 
 ### 🚨 launchd 排程
 
