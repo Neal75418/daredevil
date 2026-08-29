@@ -24,11 +24,19 @@ class ChipAnomalyRow extends StatelessWidget {
     this.onStockTap,
     this.warningCounts,
     this.failedDetectorCount = 0,
+    this.etfFilterUnavailable = false,
   });
 
-  /// 偵測失敗的類別數(靜默稽核 #4)。>0 時標題下掛「N 類未偵測」——
-  /// 「今天沒有該類異動」與「該類偵測壞了」不得逐 pixel 相同。
+  /// 偵測失敗的類別數(靜默稽核 #4,**不含** ETF 過濾)。>0 時標題下掛
+  /// 「N 類未偵測」——「今天沒有該類異動」與「該類偵測壞了」不得逐
+  /// pixel 相同。
   final int failedDetectorCount;
+
+  /// ETF 清單載入失敗(review 更正 2026-08-29):方向與「未偵測」**相反**
+  /// ——榜單是完整的,問題是過濾失效、可能**混入 ETF**。借用未偵測文案
+  /// 會指向錯誤方向(且會出現「6 類未偵測」但總共只有 5 類的不可能數字),
+  /// 故獨立文案。
+  final bool etfFilterUnavailable;
 
   final List<ChipAnomaly> anomalies;
 
@@ -45,7 +53,10 @@ class ChipAnomalyRow extends StatelessWidget {
     final warnings = warningCounts;
     final hasWarnings = warnings != null && warnings.total > 0;
     // 有偵測失敗時本區塊必須現身:安靜的市場與壞掉的偵測不可同貌
-    if (!hasAnomalies && !hasWarnings && failedDetectorCount == 0) {
+    if (!hasAnomalies &&
+        !hasWarnings &&
+        failedDetectorCount == 0 &&
+        !etfFilterUnavailable) {
       return const SizedBox.shrink();
     }
 
@@ -115,6 +126,18 @@ class ChipAnomalyRow extends StatelessWidget {
               'marketOverview.chipAnomaly.partialFail'.tr(
                 namedArgs: {'count': '$failedDetectorCount'},
               ),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.brightness == Brightness.light
+                    ? WarningColors.warningOnLight
+                    : WarningColors.warning,
+              ),
+            ),
+          ),
+        if (etfFilterUnavailable)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              'marketOverview.chipAnomaly.etfFilterFail'.tr(),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.brightness == Brightness.light
                     ? WarningColors.warningOnLight

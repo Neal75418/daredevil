@@ -254,7 +254,8 @@
       "subtitleInstitutionalSurge": "Single-day institutional net flow exceeds 5x recent average",
       "moreItems": "Show all ({count} more)",
       "collapse": "Collapse",
-      "partialFail": "{count} anomaly detectors failed"
+      "partialFail": "{count} anomaly detectors failed",
+      "etfFilterFail": "ETF filter unavailable; list may include ETFs"
     },
     "indexStale": "stale ({date})"
   },
@@ -1428,7 +1429,8 @@
       "disposalEnd": "disposal-end",
       "shortSuspension": "short-suspension",
       "investorConference": "investor conference"
-    }
+    },
+    "sourceSeparator": ", "
   },
   "warning": {
     "disposal": "Disposal",

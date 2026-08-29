@@ -255,6 +255,15 @@ class EventCalendarState {
 // ==================================================
 
 class EventCalendarNotifier extends Notifier<EventCalendarState> {
+  /// 附帶同步來源的 key(= i18n 'calendar.source.*' 的子鍵)。新增來源時
+  /// 三處同步:此清單、syncDividendEvents 的 catch、兩語系 json——
+  /// i18n 齊全性由 event_calendar_provider_test 對此清單守門。
+  static const syncSourceKeys = [
+    'disposalEnd',
+    'shortSuspension',
+    'investorConference',
+  ];
+
   late final EventRepository _repo;
   late final AppDatabase _db;
   late final AppClock _clock;
@@ -475,6 +484,9 @@ class EventCalendarNotifier extends Notifier<EventCalendarState> {
       // log 的話 snackbar 照報成功,「行事曆上沒有停券事件」與「同步
       // 掛了」不可分。source key 由畫面映射 i18n。
       final failedSources = <String>[];
+      // key 對應 i18n 'calendar.source.*'——動態組 key 躲得過字面 parity
+      // 守門(review 2026-08-29),清單集中於 [syncSourceKeys],由測試
+      // 斷言兩語系齊全
       try {
         // 處置出關(資料源:trading_warning,成本極低)
         await _repo.syncDisposalEndEvents();

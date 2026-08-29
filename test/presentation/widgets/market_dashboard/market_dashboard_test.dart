@@ -407,4 +407,45 @@ void main() {
       reason: '用最新的 +0.12% 會誤判成「籌碼洗清，相對健康」——方向相反且更樂觀',
     );
   });
+
+  group('籌碼異動失敗閘門(2026-08-29 review:閘門原本零測試)', () {
+    testWidgets('🚨 零異動+有偵測失敗 → 區塊必須現身並顯示註記', (tester) async {
+      // 閘門在 dashboard 層——把 || anomalyFailures 拿掉時 Row 層測試照樣
+      // 全綠,而區塊在真實畫面上消失,正是原始症狀
+      final state = MarketOverviewState(
+        indices: [createIndex(MarketIndexNames.taiex, 22000, 150)],
+        chipAnomaliesByMarket: const {},
+        chipAnomalyFailedDetectors: const ['highPledge'],
+        dataDate: DateTime(2026, 2, 13),
+      );
+      await tester.pumpWidget(buildTestApp(MarketDashboard(state: state)));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('marketOverview.chipAnomaly.partialFail'), findsWidgets);
+    });
+
+    testWidgets('🚨 parallel 檢視(寬視口)同樣受閘門保護', (tester) async {
+      // mobile 與 parallel 是兩條獨立的建構路徑(:498 vs :847)——只測
+      // mobile 時 parallel 閘門的移除 mutation 存活(實測)
+      widenViewport(tester);
+      final state = MarketOverviewState(
+        indices: [createIndex(MarketIndexNames.taiex, 22000, 150)],
+        chipAnomaliesByMarket: const {},
+        chipAnomalyFailedDetectors: const ['highPledge'],
+        dataDate: DateTime(2026, 2, 13),
+      );
+      await tester.pumpWidget(buildTestApp(MarketDashboard(state: state)));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('marketOverview.chipAnomaly.partialFail'), findsWidgets);
+    });
+
+    testWidgets('零異動零失敗 → 區塊維持隱藏(既有行為)', (tester) async {
+      final state = MarketOverviewState(
+        indices: [createIndex(MarketIndexNames.taiex, 22000, 150)],
+        dataDate: DateTime(2026, 2, 13),
+      );
+      await tester.pumpWidget(buildTestApp(MarketDashboard(state: state)));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('marketOverview.chipAnomaly.partialFail'), findsNothing);
+    });
+  });
 }

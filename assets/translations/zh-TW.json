@@ -254,7 +254,8 @@
       "subtitleInstitutionalSurge": "法人單日買賣超越近期均值 5 倍",
       "moreItems": "展開全部（還有 {count} 檔）",
       "collapse": "收合",
-      "partialFail": "{count} 類異動未偵測(資料查詢失敗)"
+      "partialFail": "{count} 類異動未偵測(資料查詢失敗)",
+      "etfFilterFail": "ETF 過濾失效,榜單可能混入 ETF"
     },
     "indexStale": "非即時({date})"
   },
@@ -1428,7 +1429,8 @@
       "disposalEnd": "處置出關",
       "shortSuspension": "停券預告",
       "investorConference": "法說會"
-    }
+    },
+    "sourceSeparator": "、"
   },
   "warning": {
     "disposal": "處置",

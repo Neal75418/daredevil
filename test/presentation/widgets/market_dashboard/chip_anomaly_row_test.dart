@@ -334,6 +334,26 @@ void main() {
       );
     });
 
+    testWidgets('🚨 只有 ETF 過濾失效 → 掛「可能混入 ETF」,不得說「未偵測」', (tester) async {
+      // review 更正:ETF 過濾失效時榜單是完整的,問題方向相反——會多出
+      // 不該在榜上的 ETF。借「N 類未偵測」文案為假陳述(最壞會寫出
+      // 「6 類未偵測」但類別總共 5 類)。
+      await tester.pumpWidget(
+        buildTestApp(
+          const ChipAnomalyRow(anomalies: [], etfFilterUnavailable: true),
+        ),
+      );
+      expect(
+        find.text('marketOverview.chipAnomaly.etfFilterFail'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('marketOverview.chipAnomaly.partialFail'),
+        findsNothing,
+        reason: '沒有任何類別「未偵測」,不得誤用該文案',
+      );
+    });
+
     testWidgets('無異動無失敗 → 區塊隱藏(既有行為不變)', (tester) async {
       await tester.pumpWidget(
         buildTestApp(const ChipAnomalyRow(anomalies: [])),

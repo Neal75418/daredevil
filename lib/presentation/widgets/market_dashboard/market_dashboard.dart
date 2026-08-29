@@ -490,15 +490,18 @@ class _MarketDashboardState extends State<MarketDashboard> {
 
     // 籌碼異動（標題列併入 注意/處置 徽章，取代原本獨立一列）
     final chipAnomalies = widget.state.chipAnomaliesByMarket[marketKey];
-    final anomalyFailures = widget.state.chipAnomalyFailedDetectors.length;
+    final anomalyFails = widget.state.chipAnomalyFailedDetectors;
+    final detectorFails = anomalyFails.where((k) => k != 'etfFilter').length;
+    final etfFilterFailed = anomalyFails.contains('etfFilter');
     if ((chipAnomalies != null && chipAnomalies.isNotEmpty) ||
         (warningCounts != null && warningCounts.total > 0) ||
-        anomalyFailures > 0) {
+        anomalyFails.isNotEmpty) {
       sections.add(
         ChipAnomalyRow(
           anomalies: chipAnomalies ?? const [],
           warningCounts: warningCounts,
-          failedDetectorCount: anomalyFailures,
+          failedDetectorCount: detectorFails,
+          etfFilterUnavailable: etfFilterFailed,
           onStockTap: (symbol) => context.push(AppRoutes.stockDetail(symbol)),
         ),
       );
@@ -839,14 +842,16 @@ class _MarketDashboardState extends State<MarketDashboard> {
   Widget? _buildChipAnomalySection(String market) {
     final chipAnomalies = widget.state.chipAnomaliesByMarket[market];
     final warningCounts = widget.state.warningCountsByMarket[market];
-    final anomalyFailures = widget.state.chipAnomalyFailedDetectors.length;
+    final anomalyFails = widget.state.chipAnomalyFailedDetectors;
+    final detectorFails = anomalyFails.where((k) => k != 'etfFilter').length;
     final hasAnomalies = chipAnomalies != null && chipAnomalies.isNotEmpty;
     final hasWarnings = warningCounts != null && warningCounts.total > 0;
-    if (!hasAnomalies && !hasWarnings && anomalyFailures == 0) return null;
+    if (!hasAnomalies && !hasWarnings && anomalyFails.isEmpty) return null;
     return ChipAnomalyRow(
       anomalies: chipAnomalies ?? const [],
       warningCounts: warningCounts,
-      failedDetectorCount: anomalyFailures,
+      failedDetectorCount: detectorFails,
+      etfFilterUnavailable: anomalyFails.contains('etfFilter'),
       onStockTap: (symbol) => context.push(AppRoutes.stockDetail(symbol)),
     );
   }

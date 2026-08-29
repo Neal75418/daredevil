@@ -915,7 +915,7 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
         if (result.failedSources.isNotEmpty) {
           final names = result.failedSources
               .map((k) => 'calendar.source.$k'.tr())
-              .join('、');
+              .join('calendar.sourceSeparator'.tr());
           message =
               '$message;${'calendar.syncPartialFail'.tr(namedArgs: {'sources': names})}';
         }

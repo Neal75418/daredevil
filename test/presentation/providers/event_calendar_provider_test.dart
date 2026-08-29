@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -57,6 +59,26 @@ StockEventEntry createEvent({
 // ==========================================
 
 void main() {
+  test("syncSourceKeys 的 i18n 兩語系齊全(動態組 key 躲得過字面 parity 守門)", () {
+    for (final locale in ['zh-TW', 'en']) {
+      final j =
+          jsonDecode(
+                File('assets/translations/$locale.json').readAsStringSync(),
+              )
+              as Map<String, dynamic>;
+      final source =
+          (j['calendar'] as Map<String, dynamic>)['source']
+              as Map<String, dynamic>?;
+      for (final key in EventCalendarNotifier.syncSourceKeys) {
+        expect(
+          source,
+          contains(key),
+          reason: '$locale 缺 calendar.source.$key——snackbar 會畫出字面 key',
+        );
+      }
+    }
+  });
+
   late MockAppDatabase mockDb;
   late MockEventRepository mockEventRepo;
   late _FakeClock fakeClock;
