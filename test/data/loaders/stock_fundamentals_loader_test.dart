@@ -353,6 +353,60 @@ void main() {
       ).thenAnswer((_) async => <DividendHistoryEntry>[]);
     });
 
+    test('🚨 ROE 走 DAO 的唯一口徑,不得自己用「單季×4÷期末權益」', () async {
+      // 2026-08-15 的數值稽核把 ROE 改成「近四季淨利 ÷ 平均權益」並在
+      // financial_data_dao 註明舊口徑「量到的是台股獲利季節性而不是股東
+      // 權益報酬率」——但只改了 DAO,個股詳情頁的 loader 沒跟上
+      // (2026-08-29 DAO 稽核 H1)。實測 1,424 檔:中位差 3.59pp、p90
+      // 15.07pp、**159 檔(11.2%)正負號相反**;最糟 4123 舊法 −243.58
+      // vs DAO +6.00。使用者會看到 ROE_EXCELLENT 觸發、點進去卻是負的。
+      when(
+        () => mockDb.getEPSHistory(any()),
+      ).thenAnswer((_) async => [createEps()]);
+      when(
+        () => mockDb.getLatestQuarterMetrics(any()),
+      ).thenAnswer((_) async => {'IncomeAfterTaxes': 100.0});
+      when(() => mockDb.getROEHistoryBatch(any())).thenAnswer(
+        (_) async => {
+          '2330': [
+            FinancialDataEntry(
+              symbol: '2330',
+              date: DateTime(2026, 6, 30),
+              statementType: 'ROE',
+              dataType: 'ROE',
+              value: 6.0, // DAO 口徑
+              originName: null,
+            ),
+          ],
+        },
+      );
+
+      final result = await loader.loadAll('2330');
+
+      expect(result.quarterMetrics['ROE'], 6.0, reason: '詳情頁與評分引擎必須是同一個數字');
+      verifyNever(() => mockDb.getEquityHistory(any()));
+    });
+
+    test('DAO 算不出 ROE(資料不齊)→ 不顯示,不用可得資料湊 ×4 頂替', () async {
+      when(
+        () => mockDb.getEPSHistory(any()),
+      ).thenAnswer((_) async => [createEps()]);
+      when(
+        () => mockDb.getLatestQuarterMetrics(any()),
+      ).thenAnswer((_) async => {'IncomeAfterTaxes': 100.0});
+      when(
+        () => mockDb.getROEHistoryBatch(any()),
+      ).thenAnswer((_) async => <String, List<FinancialDataEntry>>{});
+
+      final result = await loader.loadAll('2330');
+
+      expect(
+        result.quarterMetrics.containsKey('ROE'),
+        isFalse,
+        reason: '「資料不齊不產生該季 ROE」正是新口徑的設計,不得回退舊公式',
+      );
+    });
+
     test('loads EPS and quarter metrics', () async {
       final epsData = [createEps()];
       when(() => mockDb.getEPSHistory(any())).thenAnswer((_) async => epsData);
@@ -378,30 +432,22 @@ void main() {
       verifyNever(() => mockDb.getLatestQuarterMetrics(any()));
     });
 
-    test('calculates ROE when IncomeAfterTaxes exists but ROE missing', () async {
-      // **2026-06-20 修正**：原用 'NetIncome'（DB 幻影字串、0 筆）→ 改正確欄位
-      // 'IncomeAfterTaxes'（稅後淨利、單季）。
-      final epsData = [createEps(date: DateTime(2025, 11, 14))];
-      when(() => mockDb.getEPSHistory(any())).thenAnswer((_) async => epsData);
+    test('DB 已有 ROE 時不覆寫(getLatestQuarterMetrics 先行)', () async {
+      // 本測試原本斷言 `IncomeAfterTaxes × 4 ÷ Equity × 100 = 100.0`——
+      // 那是舊口徑的**守護者**,把 2026-08-15 已判定為錯的公式釘死在
+      // 測試裡(2026-08-29 DAO 稽核 H1)。ROE 現在一律由
+      // getROEHistoryBatch 供應,這條改為釘「DB 已有值就不再取」。
+      when(
+        () => mockDb.getEPSHistory(any()),
+      ).thenAnswer((_) async => [createEps(date: DateTime(2025, 11, 14))]);
       when(
         () => mockDb.getLatestQuarterMetrics(any()),
-      ).thenAnswer((_) async => {'IncomeAfterTaxes': 50000.0});
-
-      final equityEntry = FinancialDataEntry(
-        symbol: '2330',
-        date: DateTime(2025, 11, 14), // Same date as latest EPS
-        statementType: 'BALANCE',
-        dataType: 'Equity',
-        value: 200000.0,
-      );
-      when(
-        () => mockDb.getEquityHistory(any()),
-      ).thenAnswer((_) async => [equityEntry]);
+      ).thenAnswer((_) async => {'ROE': 18.5, 'IncomeAfterTaxes': 50000.0});
 
       final result = await loader.loadAll('2330');
 
-      // ROE = IncomeAfterTaxes * 4 / Equity * 100 = 50000 * 4 / 200000 * 100 = 100.0
-      expect(result.quarterMetrics['ROE'], 100.0);
+      expect(result.quarterMetrics['ROE'], 18.5);
+      verifyNever(() => mockDb.getROEHistoryBatch(any()));
     });
 
     test('handles EPS error gracefully', () async {

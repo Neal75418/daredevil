@@ -1,3 +1,4 @@
+import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/core/utils/date_context.dart';
@@ -43,19 +44,21 @@ class StockChipLoader {
     String symbol, {
     int months = 12,
   }) async {
-    try {
-      final history = await _insiderRepo.getInsiderHoldingHistory(
-        symbol,
-        months: months,
-      );
+    final history = await _insiderRepo.getInsiderHoldingHistory(
+      symbol,
+      months: months,
+    );
 
-      // 依日期降序排列（最新在前）
-      history.sort((a, b) => b.date.compareTo(a.date));
-      return history;
-    } catch (e) {
-      AppLogger.warning('StockChipLoader', '$symbol: 載入董監持股資料失敗', e);
-      return [];
-    }
+    // 依日期降序排列（最新在前）
+    history.sort((a, b) => b.date.compareTo(a.date));
+    return history;
+    // 🚨 刻意不 catch(2026-08-29 DAO 稽核 H3):消費端
+    // (stock_detail_provider 的 loadInsiderData)有一個專屬的
+    // `insiderError` 欄位在等這個例外,而這裡先吃掉的話 DB 故障會以
+    // 「空清單」抵達——insiderError 永遠是 null,畫面顯示「沒有內部人
+    // 資料」。同檔的 loadAllChipData 本來就不 catch,兩個方法原本是相反
+    // 的契約而且沒有註解說明。
+    // 這個值還會餵進 ChipAnalysisService 的籌碼強度分數。
   }
 
   /// 載入完整籌碼分析資料並計算籌碼強度
@@ -146,6 +149,14 @@ class StockChipLoader {
       }).toList();
 
       return (data: entries, hasError: false);
+    } on RateLimitException {
+      // 限流是**全域狀態**,不是這一檔的資料問題:吞掉會讓 UI 顯示
+      // 「這檔沒有法人資料」,而使用者換一檔還是一樣(2026-08-29 DAO
+      // 稽核 H2;同專案的 StockFundamentalsLoader 四處都是這個寫法,
+      // 也是 CLAUDE.md 錯誤處理段的明文要求)。
+      rethrow;
+    } on NetworkException {
+      rethrow;
     } catch (e) {
       AppLogger.warning('StockChipLoader', '$symbol: 取得法人資料失敗', e);
       return (data: <DailyInstitutionalEntry>[], hasError: true);

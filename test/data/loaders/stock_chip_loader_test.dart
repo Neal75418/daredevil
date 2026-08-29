@@ -79,7 +79,12 @@ void main() {
       expect(result.first.date.isAfter(result.last.date), isTrue);
     });
 
-    test('returns empty list on error', () async {
+    test('🚨 DB 失敗要往上拋,不得回空清單', () async {
+      // 本測試原本斷言「出錯回空清單」——那正是讓消費端的 insiderError
+      // 欄位**永遠不可達**的行為(2026-08-29 DAO 稽核 H3):
+      // stock_detail_provider 的 loadInsiderData 包了 try/catch 專門要設
+      // insiderError,但 loader 先吃掉了,於是 DB 故障以「沒有內部人資料」
+      // 呈現。這個值還會餵進籌碼強度分數。
       when(
         () => mockInsiderRepo.getInsiderHoldingHistory(
           any(),
@@ -87,9 +92,10 @@ void main() {
         ),
       ).thenThrow(Exception('DB error'));
 
-      final result = await loader.loadInsiderFromDb('2330');
-
-      expect(result, isEmpty);
+      await expectLater(
+        loader.loadInsiderFromDb('2330'),
+        throwsA(isA<Exception>()),
+      );
     });
   });
 

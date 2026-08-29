@@ -259,22 +259,23 @@ class StockFundamentalsLoader {
       if (epsData.isNotEmpty) {
         quarterMetrics = await _db.getLatestQuarterMetrics(symbol);
       }
-      // 計算 ROE：從 Equity 歷史 join IncomeAfterTaxes（需同季日期對齊）
-      if (quarterMetrics.containsKey('IncomeAfterTaxes') &&
-          !quarterMetrics.containsKey('ROE') &&
-          epsData.isNotEmpty) {
-        final latestIncomeDate = epsData.first.date;
-        final equityEntries = await _db.getEquityHistory(symbol);
-        // 找到與最新 INCOME 同季的 Equity
-        for (final eq in equityEntries) {
-          if (eq.date == latestIncomeDate &&
-              eq.value != null &&
-              eq.value! > 0) {
-            // 年化 ROE：季度 IncomeAfterTaxes × 4 / Equity × 100
-            quarterMetrics['ROE'] =
-                quarterMetrics['IncomeAfterTaxes']! * 4 / eq.value! * 100;
-            break;
-          }
+      // ROE 一律走 [FinancialDataDaoMixin.getROEHistoryBatch]——那是全 app
+      // 唯一的口徑(近四季淨利 ÷ 平均權益)。
+      //
+      // 🚨 這裡曾自己算「單季淨利 × 4 ÷ 期末權益」,正是 2026-08-15 數值
+      // 稽核把 DAO 改掉的那個舊公式:它量到的是台股獲利季節性而不是股東
+      // 權益報酬率(Q4 旺季股必過、Q1 淡季股必漏)。DAO 修了、這裡沒跟上,
+      // 於是詳情頁與評分引擎對同一檔股票給出不同的數字——實測 1,424 檔
+      // 中位差 3.59pp、p90 15.07pp、**159 檔(11.2%)正負號相反**。症狀是
+      // ROE_EXCELLENT 觸發、點進去卻看到負的 ROE,而畫面上沒有任何線索說
+      // 那是兩個公式(2026-08-29 DAO 稽核 H1)。
+      //
+      // 資料不齊時 DAO **不產生**該季 ROE——此處也就不顯示,不得回退舊
+      // 公式頂替,那正是舊口徑的錯誤本身。
+      if (!quarterMetrics.containsKey('ROE') && epsData.isNotEmpty) {
+        final roe = (await _db.getROEHistoryBatch([symbol]))[symbol];
+        if (roe != null && roe.isNotEmpty && roe.first.value != null) {
+          quarterMetrics['ROE'] = roe.first.value!;
         }
       }
     } catch (e) {
