@@ -7,7 +7,23 @@ class ChipStrengthResult {
     required this.score,
     required this.rating,
     required this.attitude,
+    required this.measuredDomains,
   });
+
+  /// 評級所需的最少有資料域數
+  ///
+  /// score 從 0 起算、六個輸入全空時各調整項回 0——0 分會被 [ChipRating
+  /// .fromScore] 判成 weak（極弱）。「沒被量測」與「實測極弱」在 UI 上
+  /// 逐 pixel 相同；上櫃股的持股／當沖／融資覆蓋系統性稀疏，正是會被
+  /// 系統性誤標的那批。低於此門檻時 UI 顯示「資料不足」而非評級徽章。
+  static const int minMeasuredDomains = 2;
+
+  /// 六個輸入域（法人／外資持股／融資券／當沖／集中度／內部人）中
+  /// 實際有資料的域數（0–6）
+  final int measuredDomains;
+
+  /// 資料不足以評級——見 [minMeasuredDomains]
+  bool get isInsufficient => measuredDomains < minMeasuredDomains;
 
   /// 籌碼強度總分（0-100）
   final int score;

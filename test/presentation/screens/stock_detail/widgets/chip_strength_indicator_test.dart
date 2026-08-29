@@ -27,6 +27,7 @@ void main() {
               score: 75,
               rating: ChipRating.strong,
               attitude: InstitutionalAttitude.aggressiveBuy,
+              measuredDomains: 6,
             ),
           ),
         ),
@@ -44,6 +45,7 @@ void main() {
               score: 85,
               rating: ChipRating.strong,
               attitude: InstitutionalAttitude.aggressiveBuy,
+              measuredDomains: 6,
             ),
           ),
         ),
@@ -62,6 +64,7 @@ void main() {
               score: 5,
               rating: ChipRating.weak,
               attitude: InstitutionalAttitude.aggressiveSell,
+              measuredDomains: 6,
             ),
           ),
         ),
@@ -79,6 +82,7 @@ void main() {
               score: 40,
               rating: ChipRating.neutral,
               attitude: InstitutionalAttitude.neutral,
+              measuredDomains: 6,
             ),
           ),
         ),
@@ -104,6 +108,7 @@ void main() {
               score: 50,
               rating: rating,
               attitude: InstitutionalAttitude.neutral,
+              measuredDomains: 6,
             ),
           ),
         ),
@@ -133,6 +138,30 @@ void main() {
         await renderedRatingColor(tester, ChipRating.neutral),
         PriceColors.flat,
       );
+    });
+
+    testWidgets('🚨 資料不足 → 顯示「資料不足」,不得渲染假的弱勢評級', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          const ChipStrengthIndicator(
+            strength: ChipStrengthResult(
+              score: 0,
+              rating: ChipRating.weak, // fromScore(0) 的產物——不得顯示
+              attitude: InstitutionalAttitude.neutral,
+              measuredDomains: 1,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('chip.insufficientCaption'), findsOneWidget);
+      expect(
+        find.text('chip.ratingWeak'),
+        findsNothing,
+        reason: '「沒被量測」與「實測極弱」不得逐 pixel 相同',
+      );
+      expect(find.text('0'), findsNothing, reason: '分數 0 是捏造的,不得顯示');
     });
   });
 }

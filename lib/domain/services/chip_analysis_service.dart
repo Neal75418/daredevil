@@ -54,10 +54,20 @@ class ChipAnalysisService {
 
     final attitude = _deriveAttitude(sortedInst);
 
+    final measuredDomains = [
+      institutionalHistory.isNotEmpty,
+      shareholdingHistory.isNotEmpty,
+      marginHistory.isNotEmpty,
+      dayTradingHistory.isNotEmpty,
+      holdingDistribution.isNotEmpty,
+      insiderHistory.isNotEmpty,
+    ].where((has) => has).length;
+
     return ChipStrengthResult(
       score: score,
       rating: ChipRating.fromScore(score),
       attitude: attitude,
+      measuredDomains: measuredDomains,
     );
   }
 

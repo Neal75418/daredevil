@@ -1264,6 +1264,8 @@
     "ratingBullish": "Bullish",
     "ratingNeutral": "Neutral",
     "ratingBearish": "Bearish",
+    "ratingInsufficient": "Insufficient data",
+    "insufficientCaption": "Only {} of 6 chip data domains available — not enough to rate",
     "ratingWeak": "Weak",
     "institutionalAttitude": "Institutional Attitude",
     "attitudeAggressiveBuy": "Aggressive Buy",

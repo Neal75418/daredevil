@@ -16,6 +16,51 @@ class ChipStrengthIndicator extends StatelessWidget {
     final theme = Theme.of(context);
     final color = _ratingColor(strength.rating);
 
+    // 資料不足:六域幾乎全空時 score=0 會被評成「弱勢」——「沒被量測」與
+    // 「實測極弱」逐 pixel 相同,使用者可能因假評級放棄一檔只是沒資料的
+    // 股票(上櫃的持股/當沖/融資覆蓋系統性稀疏,正是重災區)。此時只給
+    // 中性的「資料不足」,分數/進度條/法人態度全不顯示(那些都是捏造的 0)。
+    if (strength.isInsufficient) {
+      return Container(
+        padding: const EdgeInsets.all(DesignTokens.spacing16),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
+          border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.battery_unknown,
+              size: 18,
+              color: theme.colorScheme.outline,
+            ),
+            const SizedBox(width: DesignTokens.spacing6),
+            Text(
+              'chip.strength'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Spacer(),
+            Flexible(
+              child: Text(
+                'chip.insufficientCaption'.tr(
+                  args: ['${strength.measuredDomains}'],
+                ),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+                textAlign: TextAlign.end,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(DesignTokens.spacing16),
       decoration: BoxDecoration(

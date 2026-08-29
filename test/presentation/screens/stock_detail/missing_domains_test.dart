@@ -50,6 +50,7 @@ void main() {
               score: 50,
               rating: ChipRating.neutral,
               attitude: InstitutionalAttitude.neutral,
+              measuredDomains: 6,
             )
           : null,
     ),

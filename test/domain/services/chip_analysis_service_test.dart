@@ -233,4 +233,70 @@ void main() {
       expect(result.attitude, InstitutionalAttitude.aggressiveSell);
     });
   });
+
+  group('資料充足性(全面稽核 MEDIUM-HIGH #1)', () {
+    // score 從 0 起算、六個輸入全空時各調整項回 0 → 0 分被 fromScore 判成
+    // weak(極弱)直接渲染。上櫃股的持股/當沖/融資覆蓋系統性稀疏——「沒被
+    // 量測」與「實測極弱」在 UI 上逐 pixel 相同,使用者可能因假評級放棄
+    // 一檔只是沒資料的股票。
+    final service = ChipAnalysisService();
+
+    ChipStrengthResult run({
+      List<DailyInstitutionalEntry> inst = const [],
+      List<ShareholdingEntry> share = const [],
+      List<MarginTradingEntry> margin = const [],
+    }) => service.compute(
+      institutionalHistory: inst,
+      shareholdingHistory: share,
+      marginHistory: margin,
+      dayTradingHistory: [],
+      holdingDistribution: [],
+      insiderHistory: [],
+    );
+
+    test('🚨 六域全空 → isInsufficient,不得評「極弱」當事實', () {
+      final r = run();
+      expect(r.measuredDomains, 0);
+      expect(
+        r.isInsufficient,
+        isTrue,
+        reason: '沒被量測 ≠ 實測極弱——UI 據此顯示「資料不足」而非 weak 徽章',
+      );
+    });
+
+    test('只有一域有資料 → 仍 insufficient(門檻 2)', () {
+      final r = run(
+        inst: [
+          DailyInstitutionalEntry(
+            symbol: '6104',
+            date: DateTime(2026, 8, 20),
+            foreignNet: 1000,
+          ),
+        ],
+      );
+      expect(r.measuredDomains, 1);
+      expect(r.isInsufficient, isTrue);
+    });
+
+    test('兩域有資料 → 可評級', () {
+      final r = run(
+        inst: [
+          DailyInstitutionalEntry(
+            symbol: '6104',
+            date: DateTime(2026, 8, 20),
+            foreignNet: 1000,
+          ),
+        ],
+        margin: [
+          MarginTradingEntry(
+            symbol: '6104',
+            date: DateTime(2026, 8, 20),
+            marginBuy: 100,
+          ),
+        ],
+      );
+      expect(r.measuredDomains, 2);
+      expect(r.isInsufficient, isFalse);
+    });
+  });
 }
