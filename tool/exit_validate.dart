@@ -11,6 +11,8 @@
 //
 // 設計：docs/plans/2026-07-11-exit-thesis-invalidation-design.md §2-§3
 // 結果：docs/plans/2026-07-12-exit-gate-report.md（81,989 樣本；hardStop/trendBreak 全負不上線）
+// ⚠️ 該報告屬 pre-gate epoch：2026-08-29 起 ReplayCalibrator 套生產流動性
+// 雙閘（樣本縮至約 1/4），重跑本工具的數字與舊報告不可比。
 //
 // ## 關鍵原則
 //

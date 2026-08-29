@@ -258,6 +258,10 @@ void main() {
               date: date,
               open: Value(value),
               close: Value(value),
+              // 本測試的意圖是釘 entry 價慣例;volume 缺值會被生產一致性
+              // (e) 的單日閘判 noData skip(2026-08-29),給足量能讓觀測
+              // 通過雙閘
+              volume: const Value(2000000),
             ),
           );
         }

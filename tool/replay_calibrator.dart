@@ -15,9 +15,11 @@
 // 被寫進 daily_reason／達不到 signal-tier，於是 calibration 看不到足夠的負訊號
 // rule 樣本，全部被 `sample_size < 30` 砍掉。
 //
-// 這支工具**直接迭代所有股票的所有交易日**，呼叫 `RuleEngine.evaluateStock`
+// 這支工具迭代**生產流動性宇宙內**的 stock-day（雙閘見下方生產一致性
+// (d)(e) 段；2026-08-29 前是全部 stock-day，該 epoch 的樣本對全市場
+// unbiased、但含 64% 生產永不評分的名字），呼叫 `RuleEngine.evaluateStock`
 // 收集每條 rule 的所有觸發，計算 forward return，寫入 `rule_accuracy`
-// 表。沒有任何 Top-20 過濾 → unbiased sample（entry price 另見 lookahead
+// 表。沒有任何 Top-20 過濾（entry price 另見 lookahead
 // bias fix，audit finding #6，2026-07-18：entry 用訊號隔日 open，不是訊號
 // 當日 close——真實使用者只能隔日進場。三處計算 entry 的地方
 // [_replaySymbol] / [_computeUniverseMeanReturns] / [_computeUniverseBaselineHit]
@@ -56,12 +58,26 @@
 // 現由 [ReplayCalibrator.computeLiquidityEligibility] 逐 (symbol, 評估日)
 // point-in-time 判定（窗界=全市場第 20 新交易日、有效日 < 10 → permissive
 // 放行——語意鏡射生產 DAO，parity 見 test/tool/replay_liquidity_gate_test
-// .dart），評估、regime、universe 均值三處同一母體。
+// .dart），評估、universe 均值、baseline H0、regime 四處同一母體。
 //
-// 與生產的**已知刻意 delta**：生產另有「自選清單豁免」（使用者主動追蹤的
-// 股票即使低流動也評分），replay 不模擬——把「今天的自選」注入全部歷史日
-// 等於 lookahead，且那是使用者 overlay、不是規則母體。影響面：自選股多為
-// 流動股，delta 實際近零。
+// **生產一致性 (e)——scoring 層單日閘（2026-08-29 review 二補）**：生產在
+// 中位數閘之外，對訊號日當根 bar 還有 [LiquidityChecker
+// .checkCandidateLiquidity]（股數 ≥ 100 萬、成交額 ≥ 3,000 萬、close/
+// volume 缺值同樣 skip——與中位數層的 permissive **相反**）。review 實測
+// 只套中位數層時剩餘語料仍有 28–39% 是生產當日 skip 的 stock-day，且系統
+// 性偏向高價薄量股（股數門檻對高價股綁最緊）。由 [applySignalDayGate]
+// 直接呼叫生產函式判定；套用於評估、universe 均值、baseline H0——
+// **regime 除外**：生產的 marketUptrendOrNull 對候選批次全體計算，單日
+// skip 發生在其後的逐股 classify（scoring_isolate 的順序），regime 只套
+// 中位數閘。staleBar 在 replay 恆不成立（bar 日=評估日）；
+// insufficientData 對應 config.minHistoryDays（預設同 RuleParams
+// .swingWindow）。
+//
+// 與生產的**已知刻意 delta**：生產的兩道閘各有「自選清單豁免」（候選層
+// CandidateSelector 步驟 1、scoring 層 exemptFromLiquidity——缺值造成的
+// noData 不豁免），replay 皆不模擬——把「今天的自選」注入全部歷史日等於
+// lookahead，且那是使用者 overlay、不是規則母體。影響面：自選股多為流動
+// 股，delta 實際近零。
 //
 // ⚠️ **epoch 斷代**：套用此門檻起，校準統計與歷次全語料的結果**不可比**
 // （樣本縮至約 36%、所有規則的 hit rate/t 值/cut 重算）。比較基準一律取
@@ -79,6 +95,7 @@ import 'package:daredevil/core/constants/scoring_mode.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
+import 'package:daredevil/domain/services/liquidity_checker.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/update/batch_data_builder.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
@@ -333,19 +350,35 @@ class ReplayCalibrator {
         data.pricesBySymbol,
       ),
     );
-    // **生產一致性 (d)**：流動性宇宙（findings #47）。生產只評分候選層
-    // 過門檻的股票——先算,讓 regime 與 universe 均值同一母體。
-    final liquidityEligible = computeLiquidityEligibility(data.pricesBySymbol);
-    var ineligibleDays = 0;
+    // **生產一致性 (d)+(e)**：流動性宇宙（findings #47）。中位數閘
+    // （medianEligible）給 regime 用；疊上 scoring 層單日閘
+    // （scoringEligible）給評估/universe 均值/baseline H0 用——與生產的
+    // 計算順序一致（regime 先於逐股 classify）。
+    final medianEligible = computeLiquidityEligibility(data.pricesBySymbol);
+    final scoringEligible = applySignalDayGate(
+      data.pricesBySymbol,
+      medianEligible,
+    );
+    var medianCut = 0;
+    var dayCut = 0;
     var totalDays = 0;
-    for (final flags in liquidityEligible.values) {
-      totalDays += flags.length;
-      ineligibleDays += flags.where((f) => !f).length;
+    for (final e in medianEligible.entries) {
+      final scoring = scoringEligible[e.key]!;
+      totalDays += e.value.length;
+      for (var i = 0; i < e.value.length; i++) {
+        if (!e.value[i]) {
+          medianCut++;
+        } else if (!scoring[i]) {
+          dayCut++;
+        }
+      }
     }
+    final t = totalDays == 0 ? 1 : totalDays;
     _log(
-      '🚰 Liquidity gate: $ineligibleDays/$totalDays stock-days '
-      '(${(ineligibleDays / (totalDays == 0 ? 1 : totalDays) * 100).toStringAsFixed(1)}%) '
-      'below candidate threshold — excluded from corpus/regime/universe',
+      '🚰 Liquidity gates: median-gate cut $medianCut/$totalDays '
+      '(${(medianCut / t * 100).toStringAsFixed(1)}%), signal-day gate cut '
+      'another $dayCut (${(dayCut / t * 100).toStringAsFixed(1)}%) — '
+      'corpus/universe use both, regime uses median only',
     );
 
     // **生產一致性 (b)**：per-date regime map。不傳的話回檔規則永不被
@@ -354,7 +387,7 @@ class ReplayCalibrator {
     final uptrendByDate = computeMarketUptrendByDate(
       data.pricesBySymbol,
       SectorParams.regimeLookbackDays,
-      eligibleBySymbol: liquidityEligible,
+      eligibleBySymbol: medianEligible,
     );
 
     // 2a. 橫斷面 universe 均值 forward return（每個交易日一個值）— 供超額
@@ -364,7 +397,7 @@ class ReplayCalibrator {
     if (config.excessReturn) {
       _log('');
       _log('▶️  Computing cross-sectional universe mean returns...');
-      universeMeans = _computeUniverseMeanReturns(data, liquidityEligible);
+      universeMeans = _computeUniverseMeanReturns(data, scoringEligible);
       _log(
         '✅ Universe means: ${universeMeans.mean5.length} days (5D), '
         '${universeMeans.mean60.length} days (60D)',
@@ -372,7 +405,7 @@ class ReplayCalibrator {
       baseline = _computeUniverseBaselineHit(
         data,
         universeMeans,
-        liquidityEligible,
+        scoringEligible,
       );
       _log(
         '✅ Universe baseline hit: '
@@ -402,7 +435,7 @@ class ReplayCalibrator {
         ruleStats,
         universeMeans,
         uptrendByDate,
-        liquidityEligible[symbol],
+        scoringEligible[symbol],
       );
       daysProcessed += result.days;
       totalFirings += result.firings;
@@ -541,6 +574,10 @@ class ReplayCalibrator {
   /// 生產另有「自選清單豁免」——**刻意不模擬**（檔頭有記載）：把今天的
   /// 自選注入全部歷史日等於 lookahead，且那是使用者 overlay、不是規則母體。
   ///
+  /// 前置條件：每個 list 須依日期**升冪**（[_loadData] 已排序；從別處呼叫
+  /// 未排序資料會靜默算錯窗）。「全市場座標系」只在全語料 run 成立——
+  /// REPLAY_SYMBOLS debug 白名單會讓座標系退化成白名單自身的日期集。
+  ///
   /// 回傳值與 pricesBySymbol 的每個 list 逐 index 對齊。
   @visibleForTesting
   static Map<String, List<bool>> computeLiquidityEligibility(
@@ -593,6 +630,31 @@ class ReplayCalibrator {
       result[entry.key] = eligible;
     }
     return result;
+  }
+
+  /// 生產一致性 (e)：scoring 層的**單日**流動性閘門疊在中位數閘之上。
+  ///
+  /// 直接呼叫生產的 [LiquidityChecker.checkCandidateLiquidity]（股數 ≥
+  /// 100 萬、成交額 ≥ 3,000 萬；close/volume 缺值=noData 同樣 skip，與
+  /// 中位數層的 permissive **相反**——生產的 MISSING_DATA 連自選豁免都
+  /// 不吃），不重寫語意。RuleParams 註解明言兩道互補：中位數擋「殭屍股
+  /// 單日爆量假通過」，單日擋「當日縮量」。
+  ///
+  /// 適用於評估語料、universe 均值、baseline H0；**regime 不套**（生產
+  /// 先對候選批次全體算 regime、才逐股 classify）。
+  @visibleForTesting
+  static Map<String, List<bool>> applySignalDayGate(
+    Map<String, List<DailyPriceEntry>> pricesBySymbol,
+    Map<String, List<bool>> medianEligible,
+  ) {
+    return {
+      for (final e in pricesBySymbol.entries)
+        e.key: [
+          for (var i = 0; i < e.value.length; i++)
+            (medianEligible[e.key]?[i] ?? true) &&
+                LiquidityChecker.checkCandidateLiquidity(e.value[i]) == null,
+        ],
+    };
   }
 
   _PerSymbolResult _replaySymbol(

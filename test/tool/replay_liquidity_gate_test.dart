@@ -250,12 +250,20 @@ void main() {
   });
 
   test('🚨 (d-7) excess 模式的 universe 均值與 baseline H0 同樣只含合格股', () async {
-    // 30 檔 A(+2%/日)+ 30 檔 B(+1%/日)全流動:均值恰在兩者之間 →
+    // 30 檔 A(+2%/日)+ 30 檔 B(+1%/日)雙閘全過:均值恰在兩者之間 →
     // A 全 hit、B 全 miss → baseline hit 恰 0.5(threshold=0,贏過大盤
-    // 即命中)。另 25 檔崩跌(−5%/日)+ 15 檔火箭(+2.83%/日)全不合格:
-    // - 均值漏 gate → 均值被拉低 → A、B 都變 hit → 1.0
-    // - baseline 計數漏 gate → 崩跌(miss)與火箭(hit)進分母 → 0.45
-    // 兩個方向都把 0.5 推離——0.5 是唯一「兩處都 gate」才會出現的值。
+    // 即命中)。兩組污染源:
+    // - C:25 檔 −5%/日、vol 10 萬股 → 中位數與單日閘**都**不過
+    // - R:15 檔 −3%/日、vol 999,999 股 → 成交額 ~100M 過中位數閘,
+    //   但股數差 1 股不過單日閘——單日閘漏接時唯一會現形的剖面
+    //
+    // 各 mutation 把 0.5 推去哪(independent 重算;60D 對「均值漏單日閘」
+    // 是**盲的**——R 只把 mean60 從 154.9 拉到 107,B(81.7)仍 miss;
+    // 5D 是它唯一的鑑別 horizon):
+    //   均值漏單日閘(medianEligible)→ hit5=1.0、hit60=0.5
+    //   均值全漏 → hit5=1.0、hit60=1.0
+    //   baseline 漏單日閘 → 兩 horizon 皆 30/75=0.4
+    //   baseline 全漏 → 兩 horizon 皆 30/100=0.3
     const days = 90;
     Future<void> seed(String sym, double dailyRate, double volume) async {
       await db.upsertStocks([
@@ -273,14 +281,14 @@ void main() {
     }
 
     for (var k = 0; k < 30; k++) {
-      await seed('A$k', 1.02, 1000000); // 流動,較強
-      await seed('B$k', 1.01, 1000000); // 流動,較弱
+      await seed('A$k', 1.02, 1000000); // 雙閘全過,較強
+      await seed('B$k', 1.01, 1000000); // 雙閘全過,較弱
     }
     for (var k = 0; k < 25; k++) {
-      await seed('C$k', 0.95, 100000); // 不合格,崩跌
+      await seed('C$k', 0.95, 100000); // 兩閘都不過,崩跌
     }
     for (var k = 0; k < 15; k++) {
-      await seed('R$k', 1.0283, 1000); // 不合格,火箭
+      await seed('R$k', 0.97, 999999); // 過中位數閘、差 1 股不過單日閘
     }
 
     final calibrator = ReplayCalibrator(
@@ -291,9 +299,10 @@ void main() {
         excessReturn: true,
         minUniverseSymbols: 10,
         persist: false,
-        // 只統計窗滿(day 19 起)之後的日子:前 19 日全市場 distinct 日不足
-        // 一個窗、gate permissive,不合格股會合法地混進均值
-        dateFilter: (start: day(25), end: null),
+        // 25..45:起點避開前 19 日的中位數閘 permissive 段;終點保住
+        // 「R 仍過中位數閘」的前提(R 成交額遞減,約 day 49 後中位數
+        // 跌破 3,000 萬,之後兩閘都擋、單日閘的漏接就照不出來了)
+        dateFilter: (start: day(25), end: day(45)),
       ),
       analysisService: mockAnalysis,
       ruleEngine: mockRuleEngine,
@@ -302,6 +311,166 @@ void main() {
 
     expect(result.universeBaselineHit5, 0.5);
     expect(result.universeBaselineHit60, 0.5);
+  });
+
+  group('(e) 生產一致性:scoring 層單日流動性閘門(review Critical 二補)', () {
+    // 生產除了候選層 20 日中位數,對訊號日當根 bar 還有
+    // LiquidityChecker.checkCandidateLiquidity(股數 ≥ 100 萬、成交額
+    // ≥ 3,000 萬、close/volume 缺值=noData 同樣 skip)。review 實測只套
+    // 中位數層時剩餘語料仍有 28–39% 是生產當日 skip 的 stock-day,且
+    // 系統性偏向高價薄量股。replay 直接呼叫生產函式判定,不重寫語意。
+    DailyPriceEntry bar(int d, {double? close, double? volume}) =>
+        DailyPriceEntry(
+          symbol: 'X',
+          date: day(d),
+          close: close,
+          volume: volume,
+        );
+
+    test('(e-1) 單日閘語意 + 與中位數閘的合成', () {
+      final prices = {
+        'X': [
+          bar(0, close: 30.0, volume: 1000000), // 恰 3,000 萬、恰 100 萬股 → 過
+          bar(1, close: 100.0, volume: 999999), // 成交額夠,股數差 1 股 → 擋
+          bar(2, close: 29.9, volume: 1000000), // 股數夠,成交額 29.9M → 擋
+          bar(3, close: 100.0), // volume null → noData,擋(非 permissive!)
+          bar(4, volume: 2000000), // close null → 同上
+          bar(5, close: 100.0, volume: 2000000), // 全過
+        ],
+      };
+      final medianAllPass = {'X': List<bool>.filled(6, true)};
+      expect(ReplayCalibrator.applySignalDayGate(prices, medianAllPass)['X'], [
+        true,
+        false,
+        false,
+        false,
+        false,
+        true,
+      ]);
+      // 合成:中位數閘不過的 bar,單日閘再好也不得放行
+      final medianLastFail = {
+        'X': [true, true, true, true, true, false],
+      };
+      expect(ReplayCalibrator.applySignalDayGate(prices, medianLastFail)['X'], [
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+      ]);
+    });
+
+    test('🚨 (e-2) run() 接線:過中位數閘但當日縮量的 stock-day 不進評估', () async {
+      // 單日 999,999 股(成交額仍 ~1 億,中位數閘無感)——被擋的必須
+      // 恰是那一天,前後日照常評估
+      const days = 100;
+      await db.upsertStocks([
+        StockMasterCompanion.insert(
+          symbol: 'GATE',
+          name: 'GATE',
+          market: 'TWSE',
+        ),
+      ]);
+      await db.insertPrices([
+        for (var i = 0; i < days; i++)
+          DailyPriceCompanion.insert(
+            symbol: 'GATE',
+            date: day(i),
+            open: const Value(100.0),
+            close: const Value(100.0),
+            volume: Value(i == 30 ? 999999.0 : 1500000.0),
+          ),
+      ]);
+      final calibrator = ReplayCalibrator(
+        db: db,
+        config: const ReplayConfig(
+          dbPath: ':memory:',
+          minHistoryDays: 20,
+          excessReturn: false,
+          persist: false,
+        ),
+        analysisService: mockAnalysis,
+        ruleEngine: mockRuleEngine,
+      );
+      await calibrator.run();
+
+      final evaluatedDates = verify(
+        () => mockAnalysis.buildContext(
+          any(),
+          priceHistory: any(named: 'priceHistory'),
+          marketData: any(named: 'marketData'),
+          evaluationTime: captureAny(named: 'evaluationTime'),
+          isMarketUptrend: any(named: 'isMarketUptrend'),
+        ),
+      ).captured.cast<DateTime>().toSet();
+      expect(evaluatedDates, contains(day(29)), reason: '前提:前一日照常評估');
+      expect(evaluatedDates, contains(day(31)), reason: '前提:後一日照常評估');
+      expect(
+        evaluatedDates,
+        isNot(contains(day(30))),
+        reason: '生產當日 skip(lowLiquidity)的 stock-day 不得進校準語料',
+      );
+    });
+
+    test('🚨 (e-3) regime universe 只套中位數閘,不套單日閘', () async {
+      // 生產的 marketUptrendOrNull 對候選批次**全體**計算,單日 skip 發生
+      // 在其後的逐股評分(scoring_isolate 先算 regime 再逐股 classify)。
+      // 5 檔雙閘全過 + 55 檔「過中位數、股數差 1 股」緩漲:regime 母體
+      // 應為 60(≥50 → 判定成立、多頭);若誤把單日閘也套進 regime,
+      // 母體剩 5 → 永遠 null。
+      const days = 200;
+      Future<void> seed(String sym, double volume) async {
+        await db.upsertStocks([
+          StockMasterCompanion.insert(symbol: sym, name: sym, market: 'TWSE'),
+        ]);
+        await db.insertPrices([
+          for (var i = 0; i < days; i++)
+            DailyPriceCompanion.insert(
+              symbol: sym,
+              date: day(i),
+              close: Value(50.0 + i * 0.1),
+              volume: Value(volume),
+            ),
+        ]);
+      }
+
+      for (var k = 0; k < 5; k++) {
+        await seed('L$k', 1500000); // 雙閘全過
+      }
+      for (var k = 0; k < 55; k++) {
+        await seed('M$k', 999999); // 過中位數(成交額 ~5,000 萬),不過單日
+      }
+      final calibrator = ReplayCalibrator(
+        db: db,
+        config: const ReplayConfig(
+          dbPath: ':memory:',
+          minHistoryDays: 20,
+          excessReturn: false,
+          persist: false,
+        ),
+        analysisService: mockAnalysis,
+        ruleEngine: mockRuleEngine,
+      );
+      await calibrator.run();
+
+      final uptrends = verify(
+        () => mockAnalysis.buildContext(
+          any(),
+          priceHistory: any(named: 'priceHistory'),
+          marketData: any(named: 'marketData'),
+          evaluationTime: any(named: 'evaluationTime'),
+          isMarketUptrend: captureAny(named: 'isMarketUptrend'),
+        ),
+      ).captured;
+      final defined = uptrends.whereType<bool>().toList();
+      expect(
+        defined,
+        isNotEmpty,
+        reason: 'regime 母體=60 檔過中位數閘者,lookback 滿後必有判定',
+      );
+      expect(defined, everyElement(isTrue), reason: '全體緩漲 → 多頭');
+    });
   });
 
   test('🚨 (d-6) regime universe 同樣只含合格股——低流動股不得拉動大盤 gate', () {
