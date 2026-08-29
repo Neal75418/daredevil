@@ -509,8 +509,14 @@ void main() {
   });
 
   test('🚨 (d-6) regime universe 同樣只含合格股——低流動股不得拉動大盤 gate', () {
-    // 55 檔合格緩漲 + 30 檔不合格崩跌:未 gate 的均值被崩跌股拉成負,
-    // gate 後應為正。eligibility 手工給定(判定邏輯由 d-1 釘,這裡釘接線)
+    // 55 檔合格緩漲 + 60 檔不合格崩跌:未 gate 時崩跌股佔多數、中位數為負,
+    // gate 後只剩緩漲股 → 為正。eligibility 手工給定(判定邏輯由 d-1 釘,
+    // 這裡釘接線)。
+    //
+    // 📌 為什麼污染組要是**多數**:regime 於 2026-08-29 從等權平均改為
+    // 中位數(稽核 C2),少數極端值再也拉不動結論——原本 30 檔崩跌就能把
+    // 85 檔的平均拉負,現在不行了。要照出「gate 沒接上」必須讓不合格組
+    // 過半,否則這條測試會對 mutation 免疫。
     final prices = <String, List<DailyPriceEntry>>{};
     final eligible = <String, List<bool>>{};
     List<DailyPriceEntry> series(String sym, double Function(int) close) => [
@@ -522,7 +528,7 @@ void main() {
       prices[sym] = series(sym, (i) => 100.0 + i * 0.05);
       eligible[sym] = List.filled(200, true);
     }
-    for (var k = 0; k < 30; k++) {
+    for (var k = 0; k < 60; k++) {
       final sym = 'X$k';
       prices[sym] = series(sym, (i) => 100.0 - i * 0.45); // −90% 到底
       eligible[sym] = List.filled(200, false);

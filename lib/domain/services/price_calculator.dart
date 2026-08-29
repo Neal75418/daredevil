@@ -8,7 +8,7 @@ import 'package:daredevil/data/database/app_database.dart';
 class PriceCalculator {
   PriceCalculator._();
 
-  /// 市場是否處於上升 regime：載入 universe 的 [lookbackDays]D 平均報酬 > 0。
+  /// 市場是否處於上升 regime：載入 universe 的 [lookbackDays]D **中位數**報酬 > 0。
   ///
   /// 產業領導 tilt 用。有效股不足視為資料不足 → 保守回 false（不套 tilt）。
   /// 規則 gate 場景用 [marketUptrendOrNull]（資料不足回 null、不擋規則）。
@@ -25,19 +25,34 @@ class PriceCalculator {
   ///
   /// [asOf] 給定時只計入「最後一根 bar 就是該日」的股票。單一市場資料缺漏
   /// 時（實測 TWSE 1225 / TPEx 904），有資料那半邊的 `last` 是今日、缺漏
-  /// 那半邊的 `last` 是昨日 —— 不過濾就會把「今日的一半」混「昨日的另一半」
-  /// 平均，是評分裡唯一真正被半市場污染的計算。過濾後半市場仍有千餘檔，
+  /// 那半邊的 `last` 是昨日 —— 不過濾就會把「今日的一半」與「昨日的另一半」
+  /// 混進同一個母體，是評分裡唯一真正被半市場污染的計算。過濾後半市場仍有千餘檔，
   /// 遠高於 [SectorParams.regimeMinEligibleStocks]，regime 照常算得出來
   /// 且變成正確的；真的不足則照既有語意回 null（permissive、不誤殺）。
   ///
   /// 與 `classifyCandidate` 的 staleBar 檢查同一套新鮮度概念。
+  ///
+  /// **為什麼是中位數而不是平均**（2026-08-29 領域稽核 C2）：報酬分布右偏
+  /// 得極端——下界被 −100% 綁住、上界無限——所以少數多倍股就能主導兩千檔的
+  /// 等權平均。實測（本機 DB、120 交易日回看）**180 個可判定日裡有 179 天
+  /// 判多頭**（99.4%），其中 40.6% 的日子過半股票其實在跌；2026-08-28 平均
+  /// +12.93%、中位數 +0.66%，貢獻最大的 3026(+578%)、7610(+418%)、
+  /// 6213(+356%) 都是**真行情**（價格序列連續無斷點），不是資料錯誤。
+  /// 一道 99.4% 時間都開著的 gate 不是 gate。
+  ///
+  /// 換中位數不需要選新門檻，因為 `中位數 > 0 ⟺ 過半股票上漲`（奇數檔嚴格
+  /// 成立；偶數檔取中間兩值平均，恰好半數上漲時取決於兩者幅度）。這道 gate
+  /// 自此在**定義上**等同市場寬度，而不是碰巧一致。
+  ///
+  /// ⚠️ `tool/replay_calibrator.dart` 的 [computeMarketUptrendByDate] 是同一
+  /// 語意的第二份實作（為了 O(總列數) 一次算完全部日期），**兩者必須一起改**
+  /// ——parity 測試在兩邊同時錯的時候仍然會綠。
   static bool? marketUptrendOrNull(
     Map<String, List<DailyPriceEntry>> priceHistories,
     int lookbackDays, {
     DateTime? asOf,
   }) {
-    var sum = 0.0;
-    var n = 0;
+    final returns = <double>[];
     for (final history in priceHistories.values) {
       if (history.length < lookbackDays + 1) continue;
       if (asOf != null) {
@@ -51,11 +66,25 @@ class PriceCalculator {
       final latest = history.last.close;
       final old = history[history.length - lookbackDays - 1].close;
       if (latest == null || old == null || old <= 0) continue;
-      sum += (latest - old) / old;
-      n++;
+      returns.add((latest - old) / old);
     }
-    if (n < SectorParams.regimeMinEligibleStocks) return null;
-    return sum / n > 0;
+    if (returns.length < SectorParams.regimeMinEligibleStocks) return null;
+    return median(returns) > 0;
+  }
+
+  /// 中位數（偶數取中間兩值平均）。**就地排序傳入的 list**。
+  ///
+  /// 抽成共用函式是刻意的：`tool/replay_calibrator.dart` 的
+  /// [computeMarketUptrendByDate] 為了效能有第二份 regime 實作，若兩邊各自
+  /// 寫一次排序與 tie 規則，偶數檔的取法就可能悄悄分岔——而 parity 測試在
+  /// 兩邊同時錯時仍會綠。
+  ///
+  /// 前置條件：[values] 不可為空。
+  static double median(List<double> values) {
+    assert(values.isNotEmpty, 'median of empty list');
+    values.sort();
+    final n = values.length;
+    return n.isOdd ? values[n ~/ 2] : (values[n ~/ 2 - 1] + values[n ~/ 2]) / 2;
   }
 
   /// 5 trading days 報酬（%）。回 null 當 history < 6 筆 / 端點 close null /

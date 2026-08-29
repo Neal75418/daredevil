@@ -343,6 +343,44 @@ void main() {
     expect(checked.length, greaterThan(30), reason: '前提:涵蓋足夠多評估日');
   });
 
+  /// 偏斜宇宙:多數緩跌、少數暴漲——**平均與中位數給相反答案**。
+  ///
+  /// (b-2) 原本的宇宙是同質的（每檔價格路徑相同）,那種形狀下平均恆等於
+  /// 中位數,parity 對「用哪個估計量」完全是盲的。regime 於 2026-08-29 從
+  /// 等權平均改為中位數（稽核 C2）,而**兩份實作必須一起改**——這個 fixture
+  /// 是讓 parity 看得見分岔的唯一形狀。
+  Map<String, List<DailyPriceEntry>> skewedUniverse(int losers, int winners) =>
+      {
+        for (var s = 0; s < losers + winners; s++)
+          'K$s': [
+            for (var i = 0; i < 160; i++)
+              DailyPriceEntry(
+                symbol: 'K$s',
+                date: first.add(Duration(days: i)),
+                // 緩跌者 120 日報酬 ≈ −2.4%;暴漲者 ≈ +150%
+                close: s < losers ? 100.0 - i * 0.02 : 100.0 + i * 2.0,
+                volume: 1000,
+              ),
+          ],
+      };
+
+  test('🚨 (b-4) replay 的 regime 用中位數,不是平均(稽核 C2)', () {
+    // parity 測不到這件事——兩邊同時用平均也會 parity 相等。這條直接
+    // 斷言 replay 端的估計量:50 檔緩跌 + 10 檔暴漲,
+    //   平均 = (50×(−2.4%) + 10×150%) / 60 ≈ +23%  → 平均會判多頭
+    //   中位數 = −2.4%（60 檔裡 50 檔在跌）        → 中位數判空頭
+    final byDate = ReplayCalibrator.computeMarketUptrendByDate(
+      skewedUniverse(50, 10),
+      SectorParams.regimeLookbackDays,
+    );
+    final probe = first.add(const Duration(days: 150));
+    expect(
+      byDate[DateTime(probe.year, probe.month, probe.day)],
+      isFalse,
+      reason: '60 檔裡 50 檔在跌,不該因 10 檔暴漲股而判多頭',
+    );
+  });
+
   test('(b-2) per-date regime map 與生產函式逐日一致(parity)', () {
     // 40 檔、160 天:前 120 天緩漲、後 40 天急跌 → 後段 uptrend 應為 false
     // (40 檔 < regimeMinEligibleStocks=50 → 兩邊都該回 null;
@@ -363,13 +401,16 @@ void main() {
     // 最後一組是「刀鋒坡度」:-0.12/天 讓 120 日均值以 ~0.05%/天 的速度
     // 穿越零點,轉折橫跨多日——錨點索引 ±1(位移同量級)在陡坡序列翻不了
     // 任何一天的正負,只有刀鋒組殺得死那個 mutation。
+    // 最後一組是**偏斜宇宙**:同質宇宙下平均恆等於中位數,parity 看不見
+    // 估計量;偏斜宇宙下若只有一邊改了估計量,這裡會立刻分岔。
     for (final (symbols, slope) in [
       (40, -2.0),
       (60, -2.0),
       (60, 2.0),
       (60, -0.12),
+      (0, 0.0), // 哨兵:改用 skewedUniverse
     ]) {
-      final map = build(symbols, slope);
+      final map = symbols == 0 ? skewedUniverse(50, 10) : build(symbols, slope);
       final byDate = ReplayCalibrator.computeMarketUptrendByDate(
         map,
         SectorParams.regimeLookbackDays,

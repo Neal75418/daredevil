@@ -546,7 +546,8 @@ final _modeAssignmentsProvider =
       //
       // **市場 regime gate**：tilt 僅在大盤上升趨勢套用。backtest 顯示族群動能因子
       // regime-dependent — 持續多頭 IC +0.054、空頭/轉折反向（IC −0.078，momentum
-      // crash）。用全市場 [regimeLookbackDays]D 平均報酬 > 0 判上升 regime；下降趨勢
+      // crash）。用全市場 [regimeLookbackDays]D **中位數**報酬 > 0 判上升 regime
+      // （2026-08-29 由等權平均改；等價於「過半股票在漲」）；下降趨勢
       // effectiveW=0（不套、不算 sectorStrength），避開空頭反向。tiltWeight=0
       // （rollback）同樣使 effectiveW=0。
       final effectiveW =

@@ -100,6 +100,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/liquidity_checker.dart';
+import 'package:daredevil/domain/services/price_calculator.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/update/batch_data_builder.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
@@ -529,8 +530,10 @@ class ReplayCalibrator {
     int lookbackDays, {
     Map<String, List<bool>>? eligibleBySymbol,
   }) {
-    final sum = <DateTime, double>{};
-    final n = <DateTime, int>{};
+    // 逐日收集報酬再取中位數(生產一致性:與 marketUptrendOrNull 同語意,
+    // 且共用 PriceCalculator.median 的 tie 規則——見該函式的說明)。
+    // 記憶體 O(合格 (symbol, day) 數) ≈ 2.8M double ≈ 22 MB,可接受。
+    final returnsByDate = <DateTime, List<double>>{};
     for (final entry in pricesBySymbol.entries) {
       final history = entry.value;
       // 生產一致性 (d)：regime 是對**候選批次**算的——當日流動性不合格的
@@ -548,15 +551,14 @@ class ReplayCalibrator {
         final old = anchor.close;
         if (latest == null || old == null || old <= 0) continue;
         final key = _dateKey(history[i].date);
-        sum[key] = (sum[key] ?? 0) + (latest - old) / old;
-        n[key] = (n[key] ?? 0) + 1;
+        (returnsByDate[key] ??= <double>[]).add((latest - old) / old);
       }
     }
     return {
-      for (final k in sum.keys)
-        k: n[k]! < SectorParams.regimeMinEligibleStocks
+      for (final e in returnsByDate.entries)
+        e.key: e.value.length < SectorParams.regimeMinEligibleStocks
             ? null
-            : sum[k]! / n[k]! > 0,
+            : PriceCalculator.median(e.value) > 0,
     };
   }
 

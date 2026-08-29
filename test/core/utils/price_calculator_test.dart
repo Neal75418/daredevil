@@ -447,6 +447,110 @@ void main() {
         );
       });
 
+      // ================================================================
+      // 離群值主導（2026-08-29 領域稽核 C2）
+      //
+      // 舊實作是**等權算術平均** > 0。報酬的分布右偏得極端——下界被 -100%
+      // 綁住、上界無限——所以少數多倍股就能主導兩千檔的平均。
+      //
+      // 實測(本機 DB、120 交易日回看):**180 個可判定日裡有 179 天判多頭**
+      // (99.4%)，其中 40.6% 的日子過半股票其實在跌。2026-08-28 平均
+      // +12.93%、中位數 +0.66%，貢獻最大的五檔是 3026(+578%)、7610(+418%)、
+      // 6213(+356%)、2059(+346%)、2426(+321%)——而且都是**真行情**(價格
+      // 序列連續、無斷點),不是資料錯誤。
+      //
+      // 換中位數不需要選新門檻,因為 `中位數 > 0 ⟺ 過半股票上漲`：這道
+      // gate 自此在定義上等同市場寬度,而不是碰巧一致。
+      // ================================================================
+
+      /// 依 [returns] 逐檔給不同的 120 日報酬（%）
+      Map<String, List<DailyPriceEntry>> mixedUniverse(List<double> returns) {
+        const len = 121;
+        final base = DateTime(2025);
+        return {
+          for (var i = 0; i < returns.length; i++)
+            'm$i': [
+              ...List.generate(
+                len - 1,
+                (d) => createTestPrice(
+                  symbol: 'm$i',
+                  close: 100,
+                  date: base.add(Duration(days: d)),
+                ),
+              ),
+              createTestPrice(
+                symbol: 'm$i',
+                close: 100 * (1 + returns[i] / 100),
+                date: base.add(Duration(days: len)),
+              ),
+            ],
+        };
+      }
+
+      test('🚨 少數暴漲股不得把「過半下跌」讀成多頭(稽核 C2)', () {
+        // 55 檔 −2%、5 檔 +500%
+        //   平均 = (55×(−2) + 5×500) / 60 = +39.8%  → 舊碼判多頭
+        //   中位數 = −2%                            → 過半在跌,判空頭
+        final u = mixedUniverse([
+          ...List.filled(55, -2.0),
+          ...List.filled(5, 500.0),
+        ]);
+        expect(
+          PriceCalculator.marketUptrendOrNull(u, 120),
+          isFalse,
+          reason: '60 檔裡 55 檔在跌,不該因為 5 檔多倍股而判多頭',
+        );
+      });
+
+      test('🚨 判定必須與上漲家數一致——中位數 > 0 ⟺ 過半上漲', () {
+        // 這條釘住換估計量的**理由**,不只是換了一個函式。
+        //
+        // 幅度刻意**不對稱**（贏家 +50%、輸家 −5%）:若兩邊對稱,平均與
+        // 中位數會給同一答案,這條就對 mutation 免疫、變成覆蓋的假象。
+        // 不對稱下平均在 up ≥ 6 就翻多,中位數要 up ≥ 31——中間那段
+        // (10/29/30) 正是舊實作說謊的區間。
+        //
+        // 檔數取**奇數**(61):偶數檔的中位數是中間兩值的平均,恰好半數
+        // 上漲時答案取決於兩者幅度,等價關係只在奇數檔嚴格成立。
+        for (final up in [0, 6, 10, 29, 30, 31, 50, 61]) {
+          final u = mixedUniverse([
+            ...List.filled(up, 50.0),
+            ...List.filled(61 - up, -5.0),
+          ]);
+          expect(
+            PriceCalculator.marketUptrendOrNull(u, 120),
+            up > 30, // 61 檔中過半 = 31 檔以上
+            reason: '61 檔中 $up 檔上漲',
+          );
+        }
+      });
+
+      test('🚨 單一極端值不得改變結論(穩健性)', () {
+        final losers = List.filled(59, -3.0);
+        expect(
+          PriceCalculator.marketUptrendOrNull(mixedUniverse(losers), 120),
+          isFalse,
+        );
+        expect(
+          PriceCalculator.marketUptrendOrNull(
+            mixedUniverse([...losers, 100000.0]),
+            120,
+          ),
+          isFalse,
+          reason: '加一檔 +100,000% 仍不得翻多——那正是舊碼會做的事',
+        );
+      });
+
+      test('對照組:真正的全面上漲仍判多頭(確認不是把功能關掉)', () {
+        expect(
+          PriceCalculator.marketUptrendOrNull(
+            mixedUniverse(List.filled(60, 8.0)),
+            120,
+          ),
+          isTrue,
+        );
+      });
+
       test('過濾後有效股不足 50 → null（維持 permissive，不誤殺訊號）', () {
         final today = DateTime(2026, 7, 24);
         final fresh = universeEndingAt(40, 10, today, prefix: 'fresh');
