@@ -69,6 +69,19 @@ class _InstitutionalRankingScreenState
           ),
           child: state.isLoading && ranking == null
               ? const GenericListShimmer(itemCount: 10)
+              // 靜默稽核 #9:DB 錯誤原本偽裝成「暫無資料」——provider 有寫
+              // error 但這頁沒讀,且空狀態分支在 RefreshIndicator 外連下拉
+              // 重試都不可達。比照 revenue_overview_screen 的 error 分支,
+              // 另補重試入口。
+              : state.error != null && ranking == null
+              ? EmptyState(
+                  icon: Icons.error_outline,
+                  title: state.error!,
+                  actionLabel: 'common.retry'.tr(),
+                  onAction: () => ref
+                      .read(institutionalRankingProvider.notifier)
+                      .loadData(),
+                )
               : ranking == null
               ? EmptyState(
                   icon: Icons.groups_outlined,

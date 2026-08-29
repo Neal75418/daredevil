@@ -64,7 +64,7 @@ class ChipAnalysisService {
     // day/holding/insider 走 last/加總,單列即可。
     final measuredDomains = [
       institutionalHistory.length >= ChipScoringParams.instStreakSmallDays,
-      shareholdingHistory.length >= 2, // 同 _shareholdingAdjustment 守衛:頭尾才有 diff
+      _shareholdingMeasurable(sortedShareholding), // 頭尾才有 diff,端點 null=沒量到
       // 連增判定需 marginStreakDays 個連續 pair → 至少 streak+1 列
       marginHistory.length >= ChipScoringParams.marginStreakDays + 1,
       dayTradingHistory.isNotEmpty,
@@ -132,12 +132,22 @@ class ChipAnalysisService {
   // 2. 外資持股
   // ==================================================
 
+  /// 外資持股域可計算的前提:至少兩列、且**頭尾端點的 ratio 皆非 null**。
+  ///
+  /// null 不是 0(2026-08-29 靜默稽核 #6):端點缺值時 `?? 0` 會把
+  /// 「持股 25%」算成「從 0 增持 25%」→ 誤發最大加分(反向誤發
+  /// penalty)。缺值=沒量到 → 不動分、不算已量測——與集中度域同一原則。
+  bool _shareholdingMeasurable(List<ShareholdingEntry> history) =>
+      history.length >= 2 &&
+      history.first.foreignSharesRatio != null &&
+      history.last.foreignSharesRatio != null;
+
   /// 傳入的 [history] 須已按日期升冪排序
   int _shareholdingAdjustment(List<ShareholdingEntry> history) {
-    if (history.length < 2) return 0;
+    if (!_shareholdingMeasurable(history)) return 0;
 
-    final oldest = history.first.foreignSharesRatio ?? 0;
-    final latest = history.last.foreignSharesRatio ?? 0;
+    final oldest = history.first.foreignSharesRatio!;
+    final latest = history.last.foreignSharesRatio!;
     final diff = latest - oldest;
 
     if (diff >= ChipScoringParams.foreignDiffLargePct) {

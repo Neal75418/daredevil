@@ -461,6 +461,61 @@ void main() {
     });
   });
 
+  group('外資持股端點 null(2026-08-29 靜默稽核 #6:null 不是 0)', () {
+    // 窗端點是 null-ratio 列時,舊碼 `?? 0` 讓 diff 變成「從 0 增到現值」
+    // ——持股 25% 的股票憑空拿最大加分(反向則誤發 penalty)。null=沒量
+    // 到,不是 0%;與集中度域同一修法:端點缺值 → 不可計算 → 不動分、
+    // 不算已量測。
+    final service = const ChipAnalysisService();
+
+    ChipStrengthResult runShare(List<double?> ratios) => service.compute(
+      institutionalHistory: [],
+      shareholdingHistory: [
+        for (var i = 0; i < ratios.length; i++)
+          ShareholdingEntry(
+            symbol: '2330',
+            date: DateTime(2026, 8, 20 + i),
+            foreignSharesRatio: ratios[i],
+          ),
+      ],
+      marginHistory: [],
+      dayTradingHistory: [],
+      holdingDistribution: [],
+      insiderHistory: [],
+    );
+
+    test('🚨 舊端點 null → 不得把 25% 當成「從 0 增持」發最大加分', () {
+      final r = runShare([null, 25.0]);
+      expect(r.score, ChipScoringParams.baselineScore, reason: '不可計算=不動分');
+      expect(r.measuredDomains, 0, reason: '端點缺值=未量測');
+    });
+
+    test('🚨 新端點 null → 不得誤發最大減持 penalty', () {
+      final r = runShare([25.0, null]);
+      expect(r.score, ChipScoringParams.baselineScore);
+      expect(r.measuredDomains, 0);
+    });
+
+    test('兩端點都有值 → 照常計算(對照組)', () {
+      final r = runShare([20.0, 20.7]); // diff +0.7 ≥ large 0.5
+      expect(
+        r.score,
+        ChipScoringParams.baselineScore +
+            ChipScoringParams.foreignIncreaseLargeBonus,
+      );
+      expect(r.measuredDomains, 1);
+    });
+
+    test('中間列 null 不影響(只看頭尾)', () {
+      final r = runShare([20.0, null, 20.7]);
+      expect(
+        r.score,
+        ChipScoringParams.baselineScore +
+            ChipScoringParams.foreignIncreaseLargeBonus,
+      );
+    });
+  });
+
   group('baseline 50 重定標(2026-08-29 review 射程外發現)', () {
     // 六個調整項是**有正負號的雙向訊號**,但從 0 起算再 clamp(0,100) 等於
     // 砍掉負半軸:「法人連賣的極弱股」與「什麼訊號都沒有的中性股」都是

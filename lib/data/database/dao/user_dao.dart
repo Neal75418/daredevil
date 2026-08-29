@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.drift.dart';
 import 'package:daredevil/data/database/dao/batch_query_mixin.dart';
 import 'package:daredevil/data/database/tables/user_tables.drift.dart';
@@ -592,6 +593,14 @@ mixin UserDaoMixin on $AppDatabase {
         pledgeRatioMap: pledgeRatioMap,
       ),
     );
+    if (result.skippedNoPrice.isNotEmpty) {
+      AppLogger.warning(
+        'UserDao',
+        '${result.skippedNoPrice.length} 檔警示因缺當日價格未被評估: '
+            '${result.skippedNoPrice.take(5).join(', ')}'
+            '${result.skippedNoPrice.length > 5 ? ' …' : ''}',
+      );
+    }
 
     // 自動停用未實作的警示類型（舊版 DB 殘留資料）
     for (final id in result.unimplementedIds) {

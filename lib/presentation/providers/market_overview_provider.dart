@@ -388,7 +388,13 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
 
       if (!_active || _loadGeneration != myGen) return;
 
-      state = await _buildState(results, dataDate);
+      // 靜默稽核 #11:_buildState 內含 DB 查詢——guard 只在 await 之前的話,
+      // 較舊 generation 可在新一輪寫入後才落地覆蓋。build 完**再驗一次**
+      // 才寫,與上方 timeout 背景路徑同一樣板(那條有做對,證明這裡是
+      // 遺漏非設計)。
+      final next = await _buildState(results, dataDate);
+      if (!_active || _loadGeneration != myGen) return;
+      state = next;
     } catch (e, s) {
       // getLatestDataDate() 可能拋出例外
       AppLogger.warning('MarketOverviewNotifier', '載入大盤總覽失敗', e, s);

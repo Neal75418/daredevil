@@ -427,31 +427,28 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
   }
 
   /// 載入更多自選股（無限滾動）
-  Future<void> loadMore() async {
+  ///
+  /// 純記憶體分頁運算——原本包著一個**無 log 的全靜默 catch**(違反專案
+  /// 「catch 必留痕」鐵律),而 body 沒有任何可拋的 IO,實為 dead code,
+  /// 直接拆掉(2026-08-29 靜默稽核 #17)。
+  void loadMore() {
     // 防止重複載入
     if (state.isLoadingMore || !state.hasMore) return;
 
-    state = state.copyWith(isLoadingMore: true);
+    // 計算下一頁的範圍
+    final currentCount = state.displayedCount;
+    final totalCount = state.filteredItems.length;
+    const nextPageSize = kPageSize;
+    final newDisplayedCount = (currentCount + nextPageSize).clamp(
+      0,
+      totalCount,
+    );
 
-    try {
-      // 計算下一頁的範圍
-      final currentCount = state.displayedCount;
-      final totalCount = state.filteredItems.length;
-      const nextPageSize = kPageSize;
-      final newDisplayedCount = (currentCount + nextPageSize).clamp(
-        0,
-        totalCount,
-      );
-
-      // 更新狀態
-      state = state.copyWith(
-        displayedCount: newDisplayedCount,
-        hasMore: newDisplayedCount < totalCount,
-        isLoadingMore: false,
-      );
-    } catch (e) {
-      state = state.copyWith(isLoadingMore: false);
-    }
+    // 更新狀態
+    state = state.copyWith(
+      displayedCount: newDisplayedCount,
+      hasMore: newDisplayedCount < totalCount,
+    );
   }
 
   /// 依指定選項排序

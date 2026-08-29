@@ -454,7 +454,7 @@ void main() {
       // Default state has isLoadingMore = false, hasMore = true
       // Since there are no items, it should just update counts
       final notifier = container.read(watchlistProvider.notifier);
-      await notifier.loadMore();
+      notifier.loadMore();
 
       final state = container.read(watchlistProvider);
       expect(state.isLoadingMore, isFalse);
@@ -467,7 +467,7 @@ void main() {
       when(() => mockDb.getWatchlistGroups()).thenAnswer((_) async => []);
       await notifier.loadData();
 
-      await notifier.loadMore();
+      notifier.loadMore();
       final state = container.read(watchlistProvider);
       expect(state.isLoadingMore, isFalse);
     });

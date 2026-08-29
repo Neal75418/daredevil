@@ -94,13 +94,18 @@ class AlertEvaluationService {
   ///
   /// 回傳已觸發的警示，以及應自動停用的未實作警示類型 ID
   /// （舊版 DB 資料）。
-  ({List<PriceAlertEntry> triggered, List<int> unimplementedIds})
+  ({
+    List<PriceAlertEntry> triggered,
+    List<int> unimplementedIds,
+    List<String> skippedNoPrice,
+  })
   evaluateAlerts(
     List<PriceAlertEntry> activeAlerts,
     AlertEvaluationContext context,
   ) {
     final triggered = <PriceAlertEntry>[];
     final unimplementedIds = <int>[];
+    final skippedNoPrice = <String>[];
 
     for (final alert in activeAlerts) {
       // 未實作的警示類型不依賴 price data，直接收集並跳過
@@ -114,7 +119,13 @@ class AlertEvaluationService {
       }
 
       final currentPrice = context.currentPrices[alert.symbol];
-      if (currentPrice == null) continue;
+      if (currentPrice == null) {
+        // 靜默稽核 #10:部分同步/停牌讓當日價格缺席時,連 KD/量能這類
+        // 不必然依賴現價的警示也一併跳過——計數上報,「沒響」與「沒被
+        // 評估」不得不可分
+        skippedNoPrice.add(alert.symbol);
+        continue;
+      }
 
       final priceChange = context.priceChanges[alert.symbol];
       bool shouldTrigger = false;
@@ -268,7 +279,11 @@ class AlertEvaluationService {
       }
     }
 
-    return (triggered: triggered, unimplementedIds: unimplementedIds);
+    return (
+      triggered: triggered,
+      unimplementedIds: unimplementedIds,
+      skippedNoPrice: skippedNoPrice,
+    );
   }
 
   // ==================================================

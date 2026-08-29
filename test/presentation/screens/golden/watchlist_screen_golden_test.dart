@@ -29,7 +29,7 @@ class FakeWatchlistNotifier extends WatchlistNotifier {
   Future<void> loadData() async {}
 
   @override
-  Future<void> loadMore() async {}
+  void loadMore() {}
 
   @override
   void setSearchQuery(String query) {}

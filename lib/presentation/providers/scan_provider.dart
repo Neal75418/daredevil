@@ -232,6 +232,12 @@ class ScanNotifier extends Notifier<ScanState> {
 
   /// 載入掃描資料（第一頁）
   Future<void> loadData() async {
+    // 靜默稽核 #13:loadData 原本無 seq guard(對照 _reloadFirstPage 有
+    // _reloadSeq)——更新完成的 epoch reload 與手動下拉同時發生時,兩輪
+    // 在 _allAnalyses/_filteredAnalyses/_ret60 等 instance 欄位上交錯,
+    // 可能混出兩輪資料的拼貼清單。共用同一個計數器:任一新輪(loadData
+    // 或 reloadFirstPage)開始即作廢所有在途舊輪。
+    final seq = ++_reloadSeq;
     state = state.copyWith(isLoading: true, error: null, hasMore: true);
 
     try {
@@ -239,7 +245,7 @@ class ScanNotifier extends Notifier<ScanState> {
       // scan 固定用長線 horizon（_horizon doc）；dataUpdateEpoch listener
       // 會重新呼這條。
       final result = await _analysisRepo.findLatestAnalyses(horizon: _horizon);
-      if (!_active) return;
+      if (!_active || seq != _reloadSeq) return;
       final targetDate = result.targetDate;
       final analyses = result.analyses;
 
@@ -336,7 +342,7 @@ class ScanNotifier extends Notifier<ScanState> {
       final observationItems = await _loadItemsForAnalyses(
         _observationAnalyses.take(kPageSize).toList(),
       );
-      if (!_active) return;
+      if (!_active || seq != _reloadSeq) return;
 
       if (_filteredAnalyses.isEmpty) {
         state = state.copyWith(
@@ -358,7 +364,7 @@ class ScanNotifier extends Notifier<ScanState> {
       final firstPageItems = await _loadItemsForAnalyses(
         _filteredAnalyses.take(kPageSize).toList(),
       );
-      if (!_active) return;
+      if (!_active || seq != _reloadSeq) return;
 
       state = state.copyWith(
         stocks: firstPageItems,
