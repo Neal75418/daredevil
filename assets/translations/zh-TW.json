@@ -257,7 +257,9 @@
       "partialFail": "{count} 類異動未偵測(資料查詢失敗)",
       "etfFilterFail": "ETF 過濾失效,榜單可能混入 ETF"
     },
-    "indexStale": "非即時({date})"
+    "indexStale": "非即時({date})",
+    "sectionsFailed": "{count} 個區塊載入失敗,該區數字可能不完整",
+    "sentimentPartial": "{count} 項子指標缺席,分數以剩餘權重計算"
   },
   "stockSearch": {
     "tooltip": "搜尋股票",

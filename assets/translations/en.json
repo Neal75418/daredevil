@@ -257,7 +257,9 @@
       "partialFail": "{count} anomaly detectors failed",
       "etfFilterFail": "ETF filter unavailable; list may include ETFs"
     },
-    "indexStale": "stale ({date})"
+    "indexStale": "stale ({date})",
+    "sectionsFailed": "{count} sections failed to load; figures may be incomplete",
+    "sentimentPartial": "{count} sub-indicators missing; score uses remaining weights"
   },
   "stockSearch": {
     "tooltip": "Search stocks",

@@ -408,6 +408,29 @@ void main() {
     );
   });
 
+  group('區塊載入失敗註記(2026-08-29 靜默稽核 #7)', () {
+    testWidgets('🚨 有區塊失敗 → 標題上方掛「N 個區塊載入失敗」', (tester) async {
+      final state = MarketOverviewState(
+        indices: [createIndex(MarketIndexNames.taiex, 22000, 150)],
+        failedSections: const {'warningCounts', 'institutional'},
+        dataDate: DateTime(2026, 2, 13),
+      );
+      await tester.pumpWidget(buildTestApp(MarketDashboard(state: state)));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('marketOverview.sectionsFailed'), findsOneWidget);
+    });
+
+    testWidgets('無區塊失敗 → 無註記(不誤報)', (tester) async {
+      final state = MarketOverviewState(
+        indices: [createIndex(MarketIndexNames.taiex, 22000, 150)],
+        dataDate: DateTime(2026, 2, 13),
+      );
+      await tester.pumpWidget(buildTestApp(MarketDashboard(state: state)));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('marketOverview.sectionsFailed'), findsNothing);
+    });
+  });
+
   group('籌碼異動失敗閘門(2026-08-29 review:閘門原本零測試)', () {
     testWidgets('🚨 零異動+有偵測失敗 → 區塊必須現身並顯示註記', (tester) async {
       // 閘門在 dashboard 層——把 || anomalyFailures 拿掉時 Row 層測試照樣

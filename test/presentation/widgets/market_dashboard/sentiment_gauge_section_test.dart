@@ -205,4 +205,46 @@ void main() {
       );
     });
   });
+
+  group('子指標缺席註記(2026-08-29 靜默稽核 #7 附帶效應)', () {
+    testWidgets('🚨 缺一項子指標 → 掛「N 項子指標缺席」', (tester) async {
+      // 法人歷史查詢失敗時 25% 分量憑空消失、指針照樣穩穩指著——
+      // 有效權重正規化讓殘缺與完整的 gauge 外觀完全相同
+      widenViewport(tester);
+      const partial = MarketSentiment(
+        score: 57,
+        level: SentimentLevel.neutral,
+        subScores: {
+          'advanceRatio': 59.0,
+          'volumeMomentum': 42.0,
+          'marginChange': 47.0,
+          'industryBreadth': 68.0,
+        },
+      );
+      await tester.pumpWidget(
+        buildTestApp(
+          const SentimentGaugeSection(
+            sentiment: partial,
+            market: MarketCode.twse,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('marketOverview.sentimentPartial'), findsOneWidget);
+    });
+
+    testWidgets('五項齊全 → 無註記(不誤報)', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          SentimentGaugeSection(
+            sentiment: createSentiment(),
+            market: MarketCode.twse,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('marketOverview.sentimentPartial'), findsNothing);
+    });
+  });
 }

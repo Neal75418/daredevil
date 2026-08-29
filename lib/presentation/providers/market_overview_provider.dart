@@ -68,6 +68,7 @@ class MarketOverviewState {
     this.historyTrends = const HistoryTrends(),
     this.chipAnomaliesByMarket = const {},
     this.chipAnomalyFailedDetectors = const [],
+    this.failedSections = const {},
     this.isLoading = false,
     this.error,
     this.dataDate,
@@ -152,6 +153,12 @@ class MarketOverviewState {
   /// 「N 類未偵測」註記,「今天沒異動」與「偵測壞了」不再逐 pixel 相同
   final List<String> chipAnomalyFailedDetectors;
 
+  /// 載入失敗的區塊 key(靜默稽核 #7)。16 個 `_load*` 原本一律 catch→
+  /// 空 map,失敗區塊在畫面上與「今天很平靜」逐 pixel 相同(最尖銳的是
+  /// 注意/處置家數:查詢失敗與零警示同樣渲染成安靜市場)。非空時儀表板
+  /// 標題掛「N 個區塊載入失敗」,情緒儀表另標子指標缺席。
+  final Set<String> failedSections;
+
   final bool isLoading;
   final String? error;
 
@@ -202,6 +209,7 @@ class MarketOverviewState {
     HistoryTrends? historyTrends,
     Map<String, List<ChipAnomaly>>? chipAnomaliesByMarket,
     List<String>? chipAnomalyFailedDetectors,
+    Set<String>? failedSections,
     bool? isLoading,
     Object? error = sentinel,
     DateTime? dataDate,
@@ -236,6 +244,7 @@ class MarketOverviewState {
           chipAnomaliesByMarket ?? this.chipAnomaliesByMarket,
       chipAnomalyFailedDetectors:
           chipAnomalyFailedDetectors ?? this.chipAnomalyFailedDetectors,
+      failedSections: failedSections ?? this.failedSections,
       isLoading: isLoading ?? this.isLoading,
       error: error == sentinel ? this.error : error as String?,
       dataDate: dataDate ?? this.dataDate,
@@ -337,31 +346,79 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       // 用 typed record `.wait` 分三組（record wait 上限 9 元素）取代
       // untyped Future.wait + magic-index cast——重排/插入載入項時
       // 編譯器直接報錯，不再依賴註解對齊索引。
+      // 靜默稽核 #7:各 _load* 失敗時把 section key 收進同一個集合——
+      // 「區塊失敗渲染成今天很平靜」與「真的平靜」自此可分。集合為
+      // 本次 load 的區域變數,timeout 背景延續路徑經 closure 捕捉同一
+      // 顆,無跨代污染。
+      final failedSections = <String>{};
       final allTasks = (
         (
           _loadIndices(),
-          _loadIndexHistory(),
-          _loadAdvanceDeclineByMarket(dataDate, fallbackDate: fallbackDate),
-          _loadInstitutionalByMarket(dataDate, fallbackDate: fallbackDate),
-          _loadMarginByMarket(dataDate, fallbackDate: fallbackDate),
-          _loadTurnoverByMarket(dataDate, fallbackDate: fallbackDate),
+          _loadIndexHistory(failedSections: failedSections),
+          _loadAdvanceDeclineByMarket(
+            dataDate,
+            fallbackDate: fallbackDate,
+            failedSections: failedSections,
+          ),
+          _loadInstitutionalByMarket(
+            dataDate,
+            fallbackDate: fallbackDate,
+            failedSections: failedSections,
+          ),
+          _loadMarginByMarket(
+            dataDate,
+            fallbackDate: fallbackDate,
+            failedSections: failedSections,
+          ),
+          _loadTurnoverByMarket(
+            dataDate,
+            fallbackDate: fallbackDate,
+            failedSections: failedSections,
+          ),
         ).wait,
         (
-          _loadLimitUpDownByMarket(dataDate, fallbackDate: fallbackDate),
-          _loadTurnoverComparisonByMarket(dataDate),
-          _loadWarningCountsByMarket(),
-          _loadInstitutionalStreakByMarket(dataDate),
-          _loadIndustrySummaryByMarket(dataDate, fallbackDate: fallbackDate),
-          _loadInstitutionalHistoryByMarket(dataDate),
-          _loadTurnoverHistoryByMarket(dataDate),
+          _loadLimitUpDownByMarket(
+            dataDate,
+            fallbackDate: fallbackDate,
+            failedSections: failedSections,
+          ),
+          _loadTurnoverComparisonByMarket(
+            dataDate,
+            failedSections: failedSections,
+          ),
+          _loadWarningCountsByMarket(failedSections: failedSections),
+          _loadInstitutionalStreakByMarket(
+            dataDate,
+            failedSections: failedSections,
+          ),
+          _loadIndustrySummaryByMarket(
+            dataDate,
+            fallbackDate: fallbackDate,
+            failedSections: failedSections,
+          ),
+          _loadInstitutionalHistoryByMarket(
+            dataDate,
+            failedSections: failedSections,
+          ),
+          _loadTurnoverHistoryByMarket(
+            dataDate,
+            failedSections: failedSections,
+          ),
         ).wait,
         (
-          _loadMarginHistoryByMarket(dataDate),
-          _loadAdvanceDeclineHistoryByMarket(dataDate),
+          _loadMarginHistoryByMarket(dataDate, failedSections: failedSections),
+          _loadAdvanceDeclineHistoryByMarket(
+            dataDate,
+            failedSections: failedSections,
+          ),
           _loadChipAnomalies(dataDate),
-          _loadIndexStageHistory(),
-          _loadNewHighLowByMarket(dataDate, fallbackDate: fallbackDate),
-          _loadAdLineByMarket(dataDate),
+          _loadIndexStageHistory(failedSections: failedSections),
+          _loadNewHighLowByMarket(
+            dataDate,
+            fallbackDate: fallbackDate,
+            failedSections: failedSections,
+          ),
+          _loadAdLineByMarket(dataDate, failedSections: failedSections),
         ).wait,
       ).wait;
 
@@ -386,7 +443,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
           allTasks
               .then((r) async {
                 if (_active && _loadGeneration == myGen) {
-                  final next = await _buildState(r, dataDate);
+                  final next = await _buildState(r, dataDate, failedSections);
                   if (_active && _loadGeneration == myGen) state = next;
                 }
               })
@@ -407,7 +464,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       // 較舊 generation 可在新一輪寫入後才落地覆蓋。build 完**再驗一次**
       // 才寫,與上方 timeout 背景路徑同一樣板(那條有做對,證明這裡是
       // 遺漏非設計)。
-      final next = await _buildState(results, dataDate);
+      final next = await _buildState(results, dataDate, failedSections);
       if (!_active || _loadGeneration != myGen) return;
       state = next;
     } catch (e, s) {
@@ -428,6 +485,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   Future<MarketOverviewState> _buildState(
     _OverviewSnapshot results,
     DateTime dataDate,
+    Set<String> failedSections,
   ) async {
     // typed record pattern destructuring——順序/型別對不上會直接編譯錯誤
     final (
@@ -509,7 +567,10 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
 
     // 籌碼槓桿判讀必須拿**融資那天**的指數，不能拿最新的（見
     // [MarketOverviewState.marginIndexChangePercent] 的說明）。
-    final marginIndexChange = await _loadIndexChangeOn(marginResult.dataDates);
+    final marginIndexChange = await _loadIndexChangeOn(
+      marginResult.dataDates,
+      failedSections: failedSections,
+    );
 
     return MarketOverviewState(
       indices: indicesResult.data,
@@ -542,6 +603,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       ),
       chipAnomaliesByMarket: chipAnomalies.byMarket,
       chipAnomalyFailedDetectors: chipAnomalies.failedDetectors,
+      failedSections: failedSections,
       dataDate: dataDate,
       sectionDates: sectionDates,
     );
@@ -676,8 +738,9 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   /// （2026-07-27 實測櫃買 07-24 為 -3.69%、07-27 為 +0.12%，取後者會把
   /// 「去槓桿中」講成「籌碼洗清，相對健康」）。
   Future<Map<String, double>> _loadIndexChangeOn(
-    Map<String, DateTime> datesByMarket,
-  ) async {
+    Map<String, DateTime> datesByMarket, {
+    required Set<String> failedSections,
+  }) async {
     if (datesByMarket.isEmpty) return const {};
     try {
       final byMarket = <String, String>{
@@ -705,6 +768,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入融資日指數漲跌失敗', e);
+      failedSections.add('indexChangeOn');
       return const {};
     }
   }
@@ -737,7 +801,9 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   }
 
   /// 從 DB 載入近 30 日指數歷史（供走勢圖使用）
-  Future<Map<String, List<double>>> _loadIndexHistory() async {
+  Future<Map<String, List<double>>> _loadIndexHistory({
+    required Set<String> failedSections,
+  }) async {
     try {
       // 查詢 TWSE 重點指數 + TPEx 櫃買指數的歷史
       final indexNames = [
@@ -756,6 +822,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入指數歷史失敗', e);
+      failedSections.add('indexHistory');
       return {};
     }
   }
@@ -765,7 +832,9 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   /// 與 [_loadIndexHistory]（30 點走勢圖）分離：位階需 ≥60 個交易日才能算
   /// MA60，因此使用 [DataFreshness.marketStageHistoryLookbackDays] 較長窗口，
   /// 僅查 Hero 指數（加權指數 + 櫃買指數）以避免拉長其他 sparkline。
-  Future<Map<String, List<double>>> _loadIndexStageHistory() async {
+  Future<Map<String, List<double>>> _loadIndexStageHistory({
+    required Set<String> failedSections,
+  }) async {
     try {
       final indexNames = [MarketIndexNames.taiex, MarketIndexNames.tpexIndex];
 
@@ -781,6 +850,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入指數位階歷史失敗', e);
+      failedSections.add('indexStageHistory');
       return {};
     }
   }
@@ -791,7 +861,11 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   /// 回傳 [staleDates]：記錄哪些市場是回退來的（market → fallbackDate），供 UI 標示
   /// 「資料非當日」，避免把舊日廣度誤讀成今日。當日資料正常的市場不會出現在內。
   Future<({Map<String, AdvanceDecline> data, Map<String, DateTime> staleDates})>
-  _loadAdvanceDeclineByMarket(DateTime date, {DateTime? fallbackDate}) async {
+  _loadAdvanceDeclineByMarket(
+    DateTime date, {
+    DateTime? fallbackDate,
+    required Set<String> failedSections,
+  }) async {
     final staleDates = <String, DateTime>{};
     try {
       final data = await _db.getAdvanceDeclineCountsByMarket(date);
@@ -822,6 +896,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       );
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入分市場漲跌家數失敗', e);
+      failedSections.add('advanceDecline');
       return (data: <String, AdvanceDecline>{}, staleDates: staleDates);
     }
   }
@@ -836,7 +911,11 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   /// 若主日期有資料則 [dataDate] 為 [date]，
   /// 若任一市場回退到 [fallbackDate]，則以 fallbackDate 為代表日期。
   Future<({Map<String, InstitutionalTotals> data, DateTime dataDate})>
-  _loadInstitutionalByMarket(DateTime date, {DateTime? fallbackDate}) async {
+  _loadInstitutionalByMarket(
+    DateTime date, {
+    DateTime? fallbackDate,
+    required Set<String> failedSections,
+  }) async {
     var usedFallback = false;
 
     // 平行呼叫 TWSE 和 TPEX API，各自獨立 catch 避免互相拖垮
@@ -861,6 +940,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
               : null;
         } catch (e) {
           AppLogger.warning('MarketOverviewNotifier', '載入 TWSE 法人總額失敗', e);
+          failedSections.add('institutional');
           return null;
         }
       }(),
@@ -884,6 +964,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
               : null;
         } catch (e) {
           AppLogger.warning('MarketOverviewNotifier', '載入 TPEx 法人總額失敗', e);
+          failedSections.add('institutional');
           return null;
         }
       }(),
@@ -917,7 +998,11 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       DateTime? dataDate,
     })
   >
-  _loadMarginByMarket(DateTime date, {DateTime? fallbackDate}) async {
+  _loadMarginByMarket(
+    DateTime date, {
+    DateTime? fallbackDate,
+    required Set<String> failedSections,
+  }) async {
     try {
       // 直接查詢各市場最新融資融券資料，避免日期不同步問題
       final raw = await _db.getLatestMarginTradingTotalsByMarket();
@@ -944,6 +1029,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return (data: result, dataDates: dates, dataDate: earliestDate);
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入分市場融資融券總額失敗', e);
+      failedSections.add('margin');
       return (
         data: <String, MarginTradingTotals>{},
         dataDates: <String, DateTime>{},
@@ -958,6 +1044,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   Future<Map<String, TradingTurnover>> _loadTurnoverByMarket(
     DateTime date, {
     DateTime? fallbackDate,
+    required Set<String> failedSections,
   }) async {
     try {
       final data = await _db.getTurnoverSummaryByMarket(date);
@@ -976,6 +1063,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       };
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入分市場成交額失敗', e);
+      failedSections.add('turnover');
       return {};
     }
   }
@@ -984,6 +1072,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   Future<Map<String, LimitUpDown>> _loadLimitUpDownByMarket(
     DateTime date, {
     DateTime? fallbackDate,
+    required Set<String> failedSections,
   }) async {
     try {
       final data = await _db.getLimitUpDownCountsByMarket(date);
@@ -1006,14 +1095,16 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       };
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入漲停跌停家數失敗', e);
+      failedSections.add('limitUpDown');
       return {};
     }
   }
 
   /// 載入成交額 vs 5 日均量比較（依市場分組）
   Future<Map<String, TurnoverComparison>> _loadTurnoverComparisonByMarket(
-    DateTime date,
-  ) async {
+    DateTime date, {
+    required Set<String> failedSections,
+  }) async {
     try {
       final data = await _db.getRecentTurnoverByMarket(date, days: 5);
       final result = <String, TurnoverComparison>{};
@@ -1040,12 +1131,15 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入成交額均量比較失敗', e);
+      failedSections.add('turnoverComparison');
       return {};
     }
   }
 
   /// 載入注意/處置股家數（依市場分組）
-  Future<Map<String, WarningCounts>> _loadWarningCountsByMarket() async {
+  Future<Map<String, WarningCounts>> _loadWarningCountsByMarket({
+    required Set<String> failedSections,
+  }) async {
     try {
       final data = await _db.getActiveWarningCountsByMarket();
 
@@ -1058,14 +1152,16 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       };
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入注意處置股家數失敗', e);
+      failedSections.add('warningCounts');
       return {};
     }
   }
 
   /// 載入法人連續買賣超天數（依市場分組）
   Future<Map<String, InstitutionalStreak>> _loadInstitutionalStreakByMarket(
-    DateTime date,
-  ) async {
+    DateTime date, {
+    required Set<String> failedSections,
+  }) async {
     try {
       final data = await _db.getRecentInstitutionalDailyByMarket(
         date,
@@ -1095,6 +1191,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入法人連續買賣超失敗', e);
+      failedSections.add('institutionalStreak');
       return {};
     }
   }
@@ -1159,8 +1256,9 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   /// 提取 totalNet (foreign+trust+dealer)、保留日期並反轉為 oldest→newest。
   /// 保留日期供 [MarketSentimentService.calculateHistoricalScores] 依日期對齊。
   Future<Map<String, List<DatedValue>>> _loadInstitutionalHistoryByMarket(
-    DateTime date,
-  ) async {
+    DateTime date, {
+    required Set<String> failedSections,
+  }) async {
     try {
       final raw = await _db.getRecentInstitutionalDailyByMarket(date);
       final result = <String, List<DatedValue>>{};
@@ -1180,6 +1278,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入法人歷史趨勢失敗', e);
+      failedSections.add('institutionalHistory');
       return {};
     }
   }
@@ -1188,8 +1287,9 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   ///
   /// 傳入 days: 30 覆蓋預設的 5 天，保留日期並反轉為 oldest→newest。
   Future<Map<String, List<DatedValue>>> _loadTurnoverHistoryByMarket(
-    DateTime date,
-  ) async {
+    DateTime date, {
+    required Set<String> failedSections,
+  }) async {
     try {
       final raw = await _db.getRecentTurnoverByMarket(date, days: 30);
       final result = <String, List<DatedValue>>{};
@@ -1201,6 +1301,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入成交額歷史趨勢失敗', e);
+      failedSections.add('turnoverHistory');
       return {};
     }
   }
@@ -1210,7 +1311,10 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   /// 回傳同時包含 margin 和 short 兩組 List，避免查兩次。
   /// margin 攜帶日期供情緒對齊；short 僅供 sparkline，維持純 [double]。
   Future<Map<String, ({List<DatedValue> margin, List<double> short})>>
-  _loadMarginHistoryByMarket(DateTime date) async {
+  _loadMarginHistoryByMarket(
+    DateTime date, {
+    required Set<String> failedSections,
+  }) async {
     try {
       final raw = await _db.getRecentMarginTradingByMarket(date);
       final result =
@@ -1227,6 +1331,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入融資融券歷史趨勢失敗', e);
+      failedSections.add('marginHistory');
       return {};
     }
   }
@@ -1236,8 +1341,9 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   /// 計算 advance / (advance + decline + unchanged)，範圍 0~1。
   /// 保留日期供 [MarketSentimentService.calculateHistoricalScores] 依日期對齊。
   Future<Map<String, List<DatedValue>>> _loadAdvanceDeclineHistoryByMarket(
-    DateTime date,
-  ) async {
+    DateTime date, {
+    required Set<String> failedSections,
+  }) async {
     try {
       final raw = await _db.getRecentAdvanceDeclineByMarket(date);
       final result = <String, List<DatedValue>>{};
@@ -1250,6 +1356,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入漲跌比歷史趨勢失敗', e);
+      failedSections.add('advanceRatioHistory');
       return {};
     }
   }
@@ -1285,6 +1392,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   Future<Map<String, ({int newHighs, int newLows})>> _loadNewHighLowByMarket(
     DateTime date, {
     DateTime? fallbackDate,
+    required Set<String> failedSections,
   }) async {
     try {
       final data = await _db.getNewHighLowCountsByMarket(date);
@@ -1302,6 +1410,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return data;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入 52 週新高新低家數失敗', e);
+      failedSections.add('newHighLow');
       return {};
     }
   }
@@ -1310,7 +1419,10 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   ///
   /// 複用 [getRecentAdvanceDeclineByMarket]（已 coverage-filter 完整日），
   /// 取每日 (advance − decline) 後由舊到新累加為騰落線。
-  Future<Map<String, List<double>>> _loadAdLineByMarket(DateTime date) async {
+  Future<Map<String, List<double>>> _loadAdLineByMarket(
+    DateTime date, {
+    required Set<String> failedSections,
+  }) async {
     try {
       final raw = await _db.getRecentAdvanceDeclineByMarket(
         date,
@@ -1327,6 +1439,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入 AD 騰落線失敗', e);
+      failedSections.add('adLine');
       return {};
     }
   }
@@ -1335,6 +1448,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
   Future<Map<String, List<IndustrySummary>>> _loadIndustrySummaryByMarket(
     DateTime date, {
     DateTime? fallbackDate,
+    required Set<String> failedSections,
   }) async {
     try {
       final result = <String, List<IndustrySummary>>{};
@@ -1354,6 +1468,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       return result;
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入產業表現失敗', e);
+      failedSections.add('industrySummary');
       return {};
     }
   }

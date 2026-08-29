@@ -12,6 +12,20 @@ enum SentimentLevel {
 }
 
 /// 市場情緒計算結果
+/// 情緒分數的子指標權重。
+///
+/// **有效權重正規化**：缺席的子指標不算進分母——這讓「25% 法人分量憑空
+/// 消失」與完整計算的 gauge 外觀完全相同(靜默稽核 #7 附帶效應)。權重表
+/// 公開讓 UI 拿得到權威分母,對 [MarketSentiment.subScores] 的長度差
+/// 掛「N 項子指標缺席」註記,而不是在 widget 裡重寫魔術數字 5。
+const Map<String, double> subScoreWeights = {
+  'advanceRatio': 0.35,
+  'institutional': 0.25,
+  'volumeMomentum': 0.15,
+  'marginChange': 0.15,
+  'industryBreadth': 0.10,
+};
+
 class MarketSentiment {
   const MarketSentiment({
     required this.score,
@@ -115,13 +129,7 @@ class MarketSentimentService {
     // 加權計算
     if (subScores.isEmpty) return MarketSentiment._empty;
 
-    const weights = {
-      'advanceRatio': 0.35,
-      'institutional': 0.25,
-      'volumeMomentum': 0.15,
-      'marginChange': 0.15,
-      'industryBreadth': 0.10,
-    };
+    const weights = subScoreWeights;
 
     double totalWeight = 0;
     double weightedSum = 0;

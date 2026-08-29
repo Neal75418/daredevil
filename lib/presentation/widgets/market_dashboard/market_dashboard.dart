@@ -131,6 +131,45 @@ class _MarketDashboardState extends State<MarketDashboard> {
                   ),
                 ),
 
+              // 區塊載入失敗提示（靜默稽核 #7）
+              //
+              // 與上方 refreshError 的差別：那條是「整輪 load 拋例外」，
+              // 這條是「主流程成功、但 N 個區塊各自 catch→空」——後者原本
+              // 完全不可見，失敗區塊與「今天很平靜」逐 pixel 相同。
+              // app-global 放標題上方（非 per-market），與失敗語意一致。
+              if (widget.state.failedSections.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: DesignTokens.spacing8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber,
+                        size: 14,
+                        color: theme.brightness == Brightness.light
+                            ? WarningColors.warningOnLight
+                            : WarningColors.warning,
+                      ),
+                      const SizedBox(width: DesignTokens.spacing4),
+                      Expanded(
+                        child: Text(
+                          'marketOverview.sectionsFailed'.tr(
+                            namedArgs: {
+                              'count': '${widget.state.failedSections.length}',
+                            },
+                          ),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.brightness == Brightness.light
+                                ? WarningColors.warningOnLight
+                                : WarningColors.warning,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
               // 標題列（包含市場選擇器）
               _buildHeader(theme, isMobile),
 

@@ -79,6 +79,15 @@ void main() {
     when(
       () => mockDb.getAdvanceDeclineCountsByMarket(any()),
     ).thenAnswer((_) async => {});
+    // 2026-08-29 靜默稽核 #7 的副產品:此 stub 原本缺席,既有測試一直讓
+    // marginHistory 在 MissingStub 下靜默失敗——正是那條 catch→空的形狀,
+    // 新的 failedSections 斷言把它照了出來
+    when(
+      () => mockDb.getRecentMarginTradingByMarket(
+        any(),
+        days: any(named: 'days'),
+      ),
+    ).thenAnswer((_) async => {});
     when(
       () => mockDb.getTurnoverSummaryByMarket(any()),
     ).thenAnswer((_) async => {});
@@ -215,6 +224,29 @@ void main() {
       expect(state.isLoading, isFalse);
       expect(state.error, isNull);
       expect(state.indices, isEmpty);
+    });
+
+    test('🚨 區塊查詢失敗 → failedSections 列名(靜默稽核 #7)', () async {
+      // 最尖銳的例子:注意/處置家數查詢失敗與「今天零警示」原本同樣渲染
+      // 成安靜市場——現在 state 帶著失敗名單,儀表板標題掛註記
+      setupEmptyDefaults();
+      when(
+        () => mockDb.getActiveWarningCountsByMarket(),
+      ).thenThrow(Exception('boom'));
+
+      final notifier = container.read(marketOverviewProvider.notifier);
+      await notifier.loadData();
+
+      final state = container.read(marketOverviewProvider);
+      expect(state.failedSections, contains('warningCounts'));
+      expect(state.error, isNull, reason: '主流程仍成功——這正是它原本隱形的原因');
+    });
+
+    test('全部正常 → failedSections 為空(不誤報)', () async {
+      setupEmptyDefaults();
+      final notifier = container.read(marketOverviewProvider.notifier);
+      await notifier.loadData();
+      expect(container.read(marketOverviewProvider).failedSections, isEmpty);
     });
 
     test('🚨 指數 API 全掛 → DB 備援全部列入 indexStaleNames(靜默稽核 #3)', () async {

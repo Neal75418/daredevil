@@ -116,6 +116,27 @@ class _SentimentGaugeSectionState extends State<SentimentGaugeSection> {
               // 漸層 bar + 三角形指標
               _GradientBar(score: sentiment.score),
 
+              // 子指標缺席註記（靜默稽核 #7 附帶效應）：缺席者不計入
+              // 有效權重分母，gauge 外觀與完整計算**完全相同**——例如法人
+              // 歷史查詢失敗時 25% 分量憑空消失而指針照樣穩穩指著。
+              if (sentiment.subScores.isNotEmpty &&
+                  sentiment.subScores.length < subScoreWeights.length) ...[
+                const SizedBox(height: DesignTokens.spacing4),
+                Text(
+                  'marketOverview.sentimentPartial'.tr(
+                    namedArgs: {
+                      'count':
+                          '${subScoreWeights.length - sentiment.subScores.length}',
+                    },
+                  ),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.brightness == Brightness.light
+                        ? WarningColors.warningOnLight
+                        : WarningColors.warning,
+                  ),
+                ),
+              ],
+
               // 子指標：預設收摺，點「細項」展開（CNN Fear&Greed 範式）
               if (sentiment.subScores.isNotEmpty) ...[
                 const SizedBox(height: DesignTokens.spacing8),
