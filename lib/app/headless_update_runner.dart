@@ -1,5 +1,8 @@
+import 'package:meta/meta.dart';
+
 import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_registry.dart';
 import 'package:daredevil/core/constants/reason_type.dart';
+import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
@@ -44,14 +47,32 @@ const _tag = 'HeadlessUpdateRunner';
 /// - macOS launchd CLI：直接讀 `FINMIND_TOKEN` env var 傳進來
 /// - null 或空字串 → finMind client 沒 token，免費資料能跑、需 token 的
 ///   syncer 會在內部 skip
+/// 測試 seam：runner 的價值在裝配與生命週期管理，測試需要攔截「建好的
+/// 服務」同時保留 runner 對 clients／budget／DB 的真實管理。
+typedef HeadlessServiceBuilder =
+    UpdateService Function({
+      required AppDatabase database,
+      required FinMindClient finMindClient,
+      required TwseClient twseClient,
+      required TpexClient tpexClient,
+      required TdccClient tdccClient,
+      required RssParser rssParser,
+    });
+
 Future<UpdateResult> runHeadlessUpdate({
   required AppDatabase database,
   required ApiBudgetStore budgetStore,
   String? finMindToken,
+  AppClock clock = const SystemClock(),
+  @visibleForTesting HeadlessServiceBuilder? buildService,
 }) async {
-  final now = DateTime.now();
+  final now = clock.now();
   if (!TaiwanCalendar.isTradingDay(now)) {
     AppLogger.info(_tag, '非交易日，跳過更新');
+    // docstring 契約「runner 會在 finally 呼叫 db.close()」原本在這條
+    // 早退路徑漏掉——CLI 端靠自己的 finally 補刀、bg isolate 靠 isolate
+    // 結束回收才沒出事。補上讓契約在每條路徑成立（2026-08-29 稽核）。
+    await database.close();
     return UpdateResult(date: now)
       ..success = true
       ..skipped = true
@@ -108,14 +129,24 @@ Future<UpdateResult> runHeadlessUpdate({
 
       // 透過 UpdateServiceFactory 統一裝配，與 foreground
       // `updateServiceProvider` 共享同一條 wiring 路徑避免漂移。
-      final updateService = UpdateServiceFactory.build(
-        database: database,
-        finMindClient: finMindClient,
-        twseClient: twseClient,
-        tpexClient: tpexClient,
-        tdccClient: tdccClient,
-        rssParser: rssParser,
-      );
+      final updateService = buildService != null
+          ? buildService(
+              database: database,
+              finMindClient: finMindClient,
+              twseClient: twseClient,
+              tpexClient: tpexClient,
+              tdccClient: tdccClient,
+              rssParser: rssParser,
+            )
+          : UpdateServiceFactory.build(
+              database: database,
+              finMindClient: finMindClient,
+              twseClient: twseClient,
+              tpexClient: tpexClient,
+              tdccClient: tdccClient,
+              rssParser: rssParser,
+              clock: clock,
+            );
 
       return await updateService.runDailyUpdate();
     } finally {
