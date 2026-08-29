@@ -466,8 +466,24 @@ Future<int> runExitValidateCli(List<String> args) async {
     final result = await validator.run();
     final report = buildReport(result);
     print(report);
+
+    // 機器可讀行——本工具原本只產人看的 markdown,呼叫端無從判斷這輪
+    // 有沒有樣本(2026-08-29 tool 稽核 #10)
+    print('EXIT_VALIDATE_SAMPLES=${result.samples.length}');
+
+    // 零樣本不得覆寫上一份好報告:那會把「這輪沒跑出東西」偽裝成
+    // 「出場條件沒有 edge」,而檔案時間戳看起來還是新的
     const outPath = 'tool/exit-validate-report.md';
-    File(outPath).writeAsStringSync(report);
+    if (result.samples.isEmpty) {
+      stderr.writeln(
+        '❌ 零樣本——不覆寫 $outPath(保留上一份)。'
+        '常見原因:replay 的流動性雙閘後樣本不足、或 DB 缺資料',
+      );
+      return 5;
+    }
+    // 原子寫入:中途被 kill 會留下截斷的報告
+    final tmp = File('$outPath.tmp')..writeAsStringSync(report);
+    tmp.renameSync(outPath);
     print('📄 報告已寫入 $outPath');
     return 0;
   } finally {

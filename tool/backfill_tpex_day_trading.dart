@@ -93,6 +93,18 @@ Future<int> runTpexDayTradingCli(List<String> args) async {
       '${Platform.environment['HOME']}/Library/Containers/'
           'com.neo.afterclose/Data/Documents/afterclose.sqlite';
 
+  final unknown = unknownFlags(args);
+  if (unknown.isNotEmpty) {
+    stderr.writeln('❌ 未知旗標: ${unknown.join(", ")}');
+    stderr.writeln('   已知: ${_knownFlags.join(", ")}');
+    return 2;
+  }
+  final dangling = danglingValueFlags(args);
+  if (dangling.isNotEmpty) {
+    stderr.writeln('❌ 這些旗標需要值但出現在參數最末: ${dangling.join(", ")}');
+    return 2;
+  }
+
   final token = Platform.environment['FINMIND_TOKEN'];
   if (token == null || token.isEmpty) {
     stderr.writeln('❌ FINMIND_TOKEN 未設');
@@ -274,6 +286,13 @@ Future<int> runTpexDayTradingCli(List<String> args) async {
         stderr.writeln('      已完成 $done/${work.length} 檔，就地停止。');
         stderr.writeln('      額度為 sliding 1 小時窗，等一小時後重跑即可。');
         return 4;
+      } on DatabaseException catch (e) {
+        // 寫入失敗與網路失敗不同級(稽核 #13):前者通常是系統性的
+        // (schema 不符、磁碟滿、鎖住),一路 failed++ 下去等於用 248 次
+        // 6.2 秒的間隔把同一個錯誤重演 248 遍,最後還印「✅ 完成」。
+        stderr.writeln('   ⛔ $symbol DB 寫入失敗,就地停止: $e');
+        stderr.writeln('      已完成 $done/${work.length} 檔。');
+        return 1;
       } catch (e) {
         failed++;
         stderr.writeln('   ⚠️ $symbol 失敗: $e');
@@ -290,6 +309,25 @@ Future<int> runTpexDayTradingCli(List<String> args) async {
     await db.close();
   }
 }
+
+/// 已知旗標——未列出的一律拒絕(稽核 #13)。
+///
+/// `_strArg` 對「旗標在最末」與「旗標不存在」都回 null,於是
+/// `--database /path/to/calibration.db` 這種打錯字會**默默落回預設值,
+/// 也就是 production app DB**。無聲寫錯資料庫,而參數看起來像被接受了。
+const _knownFlags = {'--dry-run', '--all', '--years', '--limit', '--db'};
+
+/// 回傳未知旗標(以 `--` 開頭且不在白名單內)。
+List<String> unknownFlags(List<String> args) => [
+  for (final a in args)
+    if (a.startsWith('--') && !_knownFlags.contains(a)) a,
+];
+
+/// 帶值旗標出現在最末(取不到值)——與「沒給這個旗標」必須分得出來。
+List<String> danglingValueFlags(List<String> args) => [
+  for (final name in const ['--years', '--limit', '--db'])
+    if (args.contains(name) && args.indexOf(name) + 1 >= args.length) name,
+];
 
 int? _intArg(List<String> args, String name) {
   final i = args.indexOf(name);

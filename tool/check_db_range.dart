@@ -134,6 +134,7 @@ String? _autoDetect() {
   ];
 
   final candidates = <String>[];
+  var scanIncomplete = false;
   for (final root in searchRoots) {
     final dir = Directory(root);
     if (!dir.existsSync()) continue;
@@ -147,11 +148,19 @@ String? _autoDetect() {
           candidates.add(path);
         }
       }
-    } catch (_) {
-      // 忽略 permission denied
+    } catch (e) {
+      // 稽核 #14:整段 listSync(recursive) 包在一個 catch 裡,權限錯誤會
+      // **中止該 root 的掃描**、留下不完整的候選清單——然後自信地對一個
+      // 可能是舊的/錯的 DB 出報告。這支工具正是你懷疑資料出事時會拿來
+      // 用的,那是最不該給錯答案的時刻。
+      scanIncomplete = true;
+      stderr.writeln('⚠️  掃描 $root 時中斷(可能是權限),候選清單可能不完整: $e');
     }
   }
 
+  if (scanIncomplete && candidates.isNotEmpty) {
+    stderr.writeln('⚠️  以下判斷基於**不完整**的候選清單');
+  }
   if (candidates.isEmpty) return null;
   if (candidates.length > 1) {
     print('⚠️  偵測到多個候選，使用第一個：');
@@ -285,22 +294,33 @@ void _checkOrphanTables(Database db, Set<String> existingTables) {
       final count =
           db.select('SELECT COUNT(*) AS c FROM "$table"').first['c'] as int;
       print('  $table: ${_formatCount(count)}');
-    } catch (_) {
-      print('  $table: (查詢失敗)');
+    } catch (e) {
+      // 例外物件不能丟掉(稽核 #14):鎖住 / 損壞 / 不可查詢的 view
+      // 原本收斂成同一句「查詢失敗」,而且印在 stdout
+      stderr.writeln('  $table: (查詢失敗) $e');
     }
   }
 }
+
+/// [_parseFlexibleDate] 的測試出口——秒/毫秒判別與範圍守衛有真實的
+/// 失效模式(2033 時間炸彈),不能只靠 CLI 端到端驗。
+DateTime? parseFlexibleDateForTesting(String raw) => _parseFlexibleDate(raw);
 
 /// 嘗試解析多種 date 字串格式（ISO、YYYY-MM-DD、Drift int timestamp）
 DateTime? _parseFlexibleDate(String raw) {
   // Drift DateTimeColumn 可能存 ISO 字串或 Unix timestamp int
   final asInt = int.tryParse(raw);
   if (asInt != null) {
-    // Drift 預設存 seconds since epoch (非 millis)
-    if (asInt > 2000000000) {
-      return DateTime.fromMillisecondsSinceEpoch(asInt);
-    }
-    return DateTime.fromMillisecondsSinceEpoch(asInt * 1000);
+    // 以**位數**判別秒/毫秒,不用量級門檻(稽核 #17):原本的
+    // `asInt > 2000000000` 是 2033-05-18,之後的秒級時戳會被當成毫秒
+    // 解成 1970-01-24——而且是**解析成功**,「無法解析」的分支不會觸發,
+    // 錯的答案直接餵進兩年充足性判定。
+    final digits = raw.trim().replaceFirst('-', '').length;
+    final ms = digits >= 13 ? asInt : asInt * 1000;
+    final dt = DateTime.fromMillisecondsSinceEpoch(ms);
+    // 超出合理範圍寧可回 null 讓上游印「無法解析」,不要給錯的日期
+    if (dt.year < 1990 || dt.year > 2100) return null;
+    return dt;
   }
   return DateTime.tryParse(raw);
 }

@@ -273,6 +273,13 @@ Future<int> runRegimeReportCli(List<String> args) async {
 
     print('');
     print(formatReport(data, years));
+    // 稽核 #12:零樣本 / 零規則不是「跑完了沒事」——原本一律 exit 0,
+    // harness 的 expect(code, 0) 照過,而報告是空的。呼叫端必須分得出
+    // 「這輪什麼都沒量到」與「量到了、結論是沒差異」。
+    if (data.isEmpty) {
+      stderr.writeln('❌ 零規則——本輪未量到任何 regime cell,報告是空的');
+      return 5;
+    }
     return 0;
   } finally {
     await db.close();

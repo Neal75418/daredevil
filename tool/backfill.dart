@@ -283,8 +283,11 @@ class Backfiller {
     //
     // onlyDayTrading 不需要：TWTB4U 一次回全市場、TradingRepository 也不吃
     // targetSymbols，跑 stock list sync 只會平白消耗 FinMind 配額。
+    PhaseResult? stockListFailure;
     if (!config.skipStockListSync && !config.onlyDayTrading) {
-      await _syncStockList();
+      stockListFailure = await _syncStockList();
+      // 進 phases 讓 BackfillResult.hasFailures 看得到(稽核 #8)
+      if (stockListFailure != null) phases.add(stockListFailure);
     }
 
     // 決定 symbol 範圍
@@ -293,6 +296,17 @@ class Backfiller {
         : await _resolveSymbols();
     if (!config.onlyDayTrading) {
       _log('📋 Target symbols: ${symbols.length}');
+      // 空宇宙是致命的,不是「沒事可做」(稽核 #8):兩個價格 phase 直接
+      // 跳過、法人 phase 跑零檔、phases 沒有任何 failedSymbols → exit 0,
+      // 而 calibrate.sh 接著對一個空 DB 跑 replay 並宣告成功。
+      if (symbols.isEmpty) {
+        throw StateError(
+          'stock_master 沒有任何可用 symbol——backfill 無事可做。'
+          '${stockListFailure != null ? "本輪 stock_list 同步失敗(見上),"
+                    "既有清單也是空的;" : ""}'
+          '請先確認 stock_master 有資料再重跑',
+        );
+      }
     }
 
     if (config.dryRun) {
@@ -505,8 +519,13 @@ class Backfiller {
     );
   }
 
-  /// 同步 stock list 至 stock_master
-  Future<void> _syncStockList() async {
+  /// 同步 stock list 至 stock_master。
+  ///
+  /// 失敗回 [PhaseResult] 讓 [BackfillResult.hasFailures] 看得到——原本
+  /// 只 _log 一行,不進 phases,於是 HTTP 500 / schema 變動 / DB 寫入失敗
+  /// 全部以 exit 0 收場,而宇宙悄悄退回**舊快照**:新上市股從此缺席每一
+  /// 次校準,沒有任何訊號(2026-08-29 tool 稽核 #8)。
+  Future<PhaseResult?> _syncStockList() async {
     _log('▶️  Phase [stock_list] — 從 FinMind 同步股票清單');
     final start = DateTime.now();
     try {
@@ -515,12 +534,22 @@ class Backfiller {
       _log(
         '✅ [stock_list] synced $count stocks in ${_formatDuration(duration)}',
       );
+      return null;
     } on RateLimitException {
       rethrow;
     } on NetworkException {
       rethrow;
     } catch (e) {
-      _log('⚠️  [stock_list] 同步失敗，嘗試使用既有資料: $e');
+      _log('⚠️  [stock_list] 同步失敗，改用既有(可能過期的)清單: $e');
+      return PhaseResult(
+        phase: 'stock_list',
+        symbolsProcessed: 1,
+        symbolsSucceeded: 0,
+        rowsInserted: 0,
+        // hasFailures 看的是這個欄位
+        failedSymbols: const ['<stock_list>'],
+        duration: DateTime.now().difference(start),
+      );
     }
   }
 

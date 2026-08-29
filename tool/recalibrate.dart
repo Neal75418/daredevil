@@ -733,6 +733,9 @@ void _printPromoteImpact(Set<String> producedHorizons) {
     } on StateError catch (e) {
       stderr.writeln('  ❌ $name 無法計算 promote 影響:$e');
       stderr.writeln('     (JSON 被拒載——不要拿這次的輸出做 promote 決策)');
+      // 訊息說「不要拿去 promote」,exit code 卻說成功——呼叫端與自動化
+      // 只看得到後者(稽核 #16)
+      promoteImpactFailed = true;
       continue;
     }
     final tag = zeroing ? '負證據歸零生效' : '負證據歸零不套用';
@@ -840,6 +843,11 @@ String _previewIds(List<String> ids) {
 /// 本輪請求處理的 horizon——缺產出時用來判定「本輪什麼都沒做」(稽核 #3)
 Set<String> requestedHorizons = {};
 
+/// 任一 horizon 的 promote 影響算不出來(candidate JSON 被拒載)。
+/// candidate 在此之前就已落檔,所以只能靠 exit code 讓呼叫端知道
+/// 「這份產出不可用於 promote 決策」(稽核 #16)。
+bool promoteImpactFailed = false;
+
 Future<void> main(List<String> args) async {
   final config = _parseArgs(args);
   if (config == null) {
@@ -930,6 +938,14 @@ Future<void> main(List<String> args) async {
       '❌ 以下 horizon 未產出 candidate(rule_accuracy 無該 period 統計):'
       '${missing.join(", ")}——磁碟上的 *_candidate.json 是**前一輪**的產物,'
       '不得拿本輪的成功訊息為它們背書',
+    );
+    exitCode = 5;
+    return;
+  }
+  if (promoteImpactFailed) {
+    stderr.writeln(
+      '❌ 有 horizon 的 promote 影響算不出來(candidate JSON 被拒載)——'
+      '本輪產出不得用於 promote 決策',
     );
     exitCode = 5;
     return;

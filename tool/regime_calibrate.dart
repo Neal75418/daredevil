@@ -256,6 +256,19 @@ Future<int> runRegimeCalibrateCli(List<String> args) async {
     print('   active,沒有 avg_return / t_stat,promote 進 production 檔名會');
     print('   讓負證據歸零失效(生產檔現有 28/44 條靠它壓著)且無任何警告。');
     print('   （人工 review + 上面驗證認可後才決定怎麼用）');
+    // 稽核 #12:零樣本 / 零規則不是「跑完了沒事」——原本一律 exit 0,
+    // harness 的 expect(code, 0) 照過,而報告是空的。呼叫端必須分得出
+    // 「這輪什麼都沒量到」與「量到了、結論是沒差異」。
+    // 這支還會**寫檔**:degenerate 輸入下 deriveScores 的 survivors 為空
+    // → 全 52 條 score 0 的 all-cut candidate 落到 assets/,然後印 ✅。
+    if (newShort.values.every((v) => v == 0) &&
+        newLong.values.every((v) => v == 0)) {
+      stderr.writeln(
+        '❌ 兩個 horizon 的衍生分數全為 0(樣本不足或資料退化)——'
+        '已寫出的 candidate 是全 cut,不得用於任何決策',
+      );
+      return 5;
+    }
     return 0;
   } finally {
     await db.close();
@@ -273,7 +286,18 @@ Future<int> runRegimeCalibrateCli(List<String> args) async {
 /// 三條變動中兩條方向相反。
 Map<String, int> _loadOld(String path, cal.Horizon horizon) {
   final f = File(path);
-  if (!f.existsSync()) return {};
+  // 缺檔不得當成「OLD 全 0」(2026-08-29 tool 稽核 #11):空 map 會讓
+  // scoreWeightedRelative 的分母為 0 → 回 0.0 → 判準 `newSwe >= oldSwe`
+  // 對任何非負的 NEW 都印「✅ NEW 不輸」。這正是上方註解花九行警告的
+  // 那個錯誤(2026-08-22 實測虛報 +5.60、實際 −0.048),只是換一條路
+  // 進來。walkforward_validate 對同一個前置條件是硬錯誤(return 3),
+  // 兩支工具不該對此有兩種立場。
+  if (!f.existsSync()) {
+    throw StateError(
+      '找不到現行 production 校準:$path——沒有 OLD 基準就沒有比較,'
+      '不得以「NEW 不輸」收場。請先確認 assets 下有已 promote 的校準檔',
+    );
+  }
   return effectiveScores(
     f.readAsStringSync(),
     horizon: horizon,

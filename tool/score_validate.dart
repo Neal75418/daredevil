@@ -464,6 +464,13 @@ Future<int> runScoreValidateCli(List<String> args) async {
       abs.where((s) => s.trend > 0).toList(),
       (s) => s.modePul >= ExitParams.modeSignalScoreThreshold,
     );
+    // 稽核 #12:零樣本 / 零規則不是「跑完了沒事」——原本一律 exit 0,
+    // harness 的 expect(code, 0) 照過,而報告是空的。呼叫端必須分得出
+    // 「這輪什麼都沒量到」與「量到了、結論是沒差異」。
+    if (abs.isEmpty) {
+      stderr.writeln('❌ 零樣本——本輪未量到任何 stock-day,結論不可用');
+      return 5;
+    }
     return 0;
   } finally {
     await db.close();
