@@ -1363,7 +1363,8 @@
     "stockDividends": "Stock Dividends",
     "perShare": "per share",
     "expected": "expected",
-    "yield": "yield"
+    "yield": "yield",
+    "unpricedWarning": "{count} positions unpriced; valued at cost"
   },
   "calendar": {
     "title": "Event Calendar",

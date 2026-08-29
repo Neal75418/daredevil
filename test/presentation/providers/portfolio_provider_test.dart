@@ -74,6 +74,37 @@ DailyPriceEntry createPrice({required String symbol, double close = 100}) {
 // ==========================================
 
 void main() {
+  group('summary.unpricedCount(2026-08-29 靜默稽核 #5)', () {
+    // 缺價持股以成本價計值、未實現損益恰為 0,混進總報酬——停牌/跌停
+    // 鎖死的重倉股讓總報酬看起來平穩,aggregate 原本無任何「N 檔未計價」
+    // 指標。
+    PortfolioPositionData pos(String sym, {double? price, double qty = 1000}) =>
+        PortfolioPositionData(
+          symbol: sym,
+          stockName: sym,
+          market: 'TWSE',
+          quantity: qty,
+          avgCost: 100,
+          realizedPnl: 0,
+          totalDividendReceived: 0,
+          currentPrice: price,
+        );
+
+    test('🚨 缺價的在倉持股要計數', () {
+      final state = PortfolioState(
+        positions: [pos('2330', price: 600), pos('9999'), pos('8888')],
+      );
+      expect(state.summary.unpricedCount, 2);
+    });
+
+    test('全部有價 → 0;已平倉(quantity 0)缺價不計', () {
+      final state = PortfolioState(
+        positions: [pos('2330', price: 600), pos('1111', qty: 0)],
+      );
+      expect(state.summary.unpricedCount, 0);
+    });
+  });
+
   late MockAppDatabase mockDb;
   late MockPortfolioRepository mockRepo;
   late ProviderContainer container;

@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/core/utils/localized_number_format.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
@@ -72,6 +73,33 @@ class PortfolioSummaryCard extends StatelessWidget {
               ),
             ],
           ),
+          // 缺價警示(靜默稽核 #5):缺當日價的持股以成本價計值、未實現
+          // 損益恰為 0——上方的總市值/總損益因此偏樂觀,必須說出來
+          if (summary.unpricedCount > 0) ...[
+            const SizedBox(height: DesignTokens.spacing8),
+            Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 14,
+                  color: theme.brightness == Brightness.light
+                      ? WarningColors.warningOnLight
+                      : WarningColors.warning,
+                ),
+                const SizedBox(width: DesignTokens.spacing4),
+                Text(
+                  'portfolio.unpricedWarning'.tr(
+                    namedArgs: {'count': '${summary.unpricedCount}'},
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.brightness == Brightness.light
+                        ? WarningColors.warningOnLight
+                        : WarningColors.warning,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: DesignTokens.spacing12),
 
           // 損益明細

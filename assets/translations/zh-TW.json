@@ -1363,7 +1363,8 @@
     "stockDividends": "持股股利",
     "perShare": "每股",
     "expected": "預期",
-    "yield": "殖利率"
+    "yield": "殖利率",
+    "unpricedWarning": "{count} 檔缺當日價,以成本價計"
   },
   "calendar": {
     "title": "事件行事曆",

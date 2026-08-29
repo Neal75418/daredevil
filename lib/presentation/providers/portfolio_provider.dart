@@ -89,6 +89,7 @@ class PortfolioSummary {
     required this.totalRealizedPnl,
     required this.totalDividends,
     required this.positionCount,
+    this.unpricedCount = 0,
   });
 
   final double totalMarketValue;
@@ -97,6 +98,11 @@ class PortfolioSummary {
   final double totalRealizedPnl;
   final double totalDividends;
   final int positionCount;
+
+  /// 在倉但缺當日價的檔數(靜默稽核 #5)。這些持股以成本價計值、未實現
+  /// 損益恰為 0——停牌/跌停鎖死的重倉股會讓總報酬看起來平穩。>0 時
+  /// 頁首總覽掛警示,per-position 列本就保留 null 可下鑽。
+  final int unpricedCount;
 
   double get totalPnl => totalUnrealizedPnl + totalRealizedPnl + totalDividends;
 
@@ -137,12 +143,14 @@ class PortfolioState {
 
     double totalMV = 0, totalCB = 0, totalUPnl = 0, totalRPnl = 0, totalDiv = 0;
 
+    var unpriced = 0;
     for (final p in positions) {
       totalMV += p.marketValue;
       totalCB += p.costBasis;
       totalUPnl += p.unrealizedPnl;
       totalRPnl += p.realizedPnl;
       totalDiv += p.totalDividendReceived;
+      if (p.quantity > 0 && p.currentPrice == null) unpriced++;
     }
 
     return PortfolioSummary(
@@ -152,6 +160,7 @@ class PortfolioState {
       totalRealizedPnl: totalRPnl,
       totalDividends: totalDiv,
       positionCount: positions.where((p) => p.quantity > 0).length,
+      unpricedCount: unpriced,
     );
   }
 

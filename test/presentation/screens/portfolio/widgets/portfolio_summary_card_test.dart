@@ -19,6 +19,7 @@ void main() {
     double totalRealizedPnl = 10000,
     double totalDividends = 5000,
     int positionCount = 5,
+    int unpricedCount = 0,
   }) {
     return PortfolioSummary(
       totalMarketValue: totalMarketValue,
@@ -27,6 +28,7 @@ void main() {
       totalRealizedPnl: totalRealizedPnl,
       totalDividends: totalDividends,
       positionCount: positionCount,
+      unpricedCount: unpricedCount,
     );
   }
 
@@ -36,6 +38,24 @@ void main() {
   }
 
   group('PortfolioSummaryCard', () {
+    testWidgets('🚨 有缺價持股 → 顯示「N 檔未計價」警示(靜默稽核 #5)', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          PortfolioSummaryCard(summary: createSummary(unpricedCount: 2)),
+        ),
+      );
+      expect(find.text('portfolio.unpricedWarning'), findsOneWidget);
+    });
+
+    testWidgets('全部有價 → 不顯示警示(不誤報)', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(PortfolioSummaryCard(summary: createSummary())),
+      );
+      expect(find.text('portfolio.unpricedWarning'), findsNothing);
+    });
+
     testWidgets('displays market value with NT\$ prefix', (tester) async {
       widenViewport(tester);
       await tester.pumpWidget(
