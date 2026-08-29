@@ -48,14 +48,24 @@
 // Writes to `rule_accuracy` table in the same calibration DB. The existing
 // `tool/recalibrate.dart` reads from this table as its input.
 
-// ⚠️ **與生產分布的已知殘餘分岔（2026-08-29 review 量測）**：生產只評分
-// CandidateSelector 的產出（20 日中位成交值 ≥ 3,000 萬），replay 評
-// stock_master 全部——實測近 20 個交易日 2,090 檔有 bar、其中 1,347 檔
-// （64%）過不了流動性門檻。約三分之二的校準語料是生產永遠不會評分的
-// stock-day，且同樣餵進 regime universe。這比 (a)(b)(c) 三處修掉的分岔
-// 加總都大；是否讓 replay 套同一道流動性門檻是**校準語料的定義問題**
-// （會大幅縮小樣本、改變所有規則的統計），列為待決策而非逕行修改。
-// 追蹤：docs/plans/2026-07-26-pipeline-review-findings.md #47。
+// **生產一致性 (d)——流動性宇宙（findings #47，2026-08-29 決策後執行）**：
+// 生產只評分候選層過流動性門檻的股票（20 日中位成交值 ≥ 3,000 萬，
+// PriceDao.getMedianTurnoverBatch + CandidateSelector.isLiquid）；replay
+// 原本評 stock_master 全部——實測 64% 校準語料是生產永不評分的 stock-day，
+// 且同樣餵進 regime universe 與 excess-return 的 universe 均值/baseline。
+// 現由 [ReplayCalibrator.computeLiquidityEligibility] 逐 (symbol, 評估日)
+// point-in-time 判定（窗界=全市場第 20 新交易日、有效日 < 10 → permissive
+// 放行——語意鏡射生產 DAO，parity 見 test/tool/replay_liquidity_gate_test
+// .dart），評估、regime、universe 均值三處同一母體。
+//
+// 與生產的**已知刻意 delta**：生產另有「自選清單豁免」（使用者主動追蹤的
+// 股票即使低流動也評分），replay 不模擬——把「今天的自選」注入全部歷史日
+// 等於 lookahead，且那是使用者 overlay、不是規則母體。影響面：自選股多為
+// 流動股，delta 實際近零。
+//
+// ⚠️ **epoch 斷代**：套用此門檻起，校準統計與歷次全語料的結果**不可比**
+// （樣本縮至約 36%、所有規則的 hit rate/t 值/cut 重算）。比較基準一律取
+// gated run 之間。
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -323,11 +333,28 @@ class ReplayCalibrator {
         data.pricesBySymbol,
       ),
     );
+    // **生產一致性 (d)**：流動性宇宙（findings #47）。生產只評分候選層
+    // 過門檻的股票——先算,讓 regime 與 universe 均值同一母體。
+    final liquidityEligible = computeLiquidityEligibility(data.pricesBySymbol);
+    var ineligibleDays = 0;
+    var totalDays = 0;
+    for (final flags in liquidityEligible.values) {
+      totalDays += flags.length;
+      ineligibleDays += flags.where((f) => !f).length;
+    }
+    _log(
+      '🚰 Liquidity gate: $ineligibleDays/$totalDays stock-days '
+      '(${(ineligibleDays / (totalDays == 0 ? 1 : totalDays) * 100).toStringAsFixed(1)}%) '
+      'below candidate threshold — excluded from corpus/regime/universe',
+    );
+
     // **生產一致性 (b)**：per-date regime map。不傳的話回檔規則永不被
-    // gate，校準樣本含生產會壓掉的空頭觸發。
+    // gate，校準樣本含生產會壓掉的空頭觸發。universe 僅含流動性合格股
+    // ——生產的 regime 是對候選批次算的。
     final uptrendByDate = computeMarketUptrendByDate(
       data.pricesBySymbol,
       SectorParams.regimeLookbackDays,
+      eligibleBySymbol: liquidityEligible,
     );
 
     // 2a. 橫斷面 universe 均值 forward return（每個交易日一個值）— 供超額
@@ -337,12 +364,16 @@ class ReplayCalibrator {
     if (config.excessReturn) {
       _log('');
       _log('▶️  Computing cross-sectional universe mean returns...');
-      universeMeans = _computeUniverseMeanReturns(data);
+      universeMeans = _computeUniverseMeanReturns(data, liquidityEligible);
       _log(
         '✅ Universe means: ${universeMeans.mean5.length} days (5D), '
         '${universeMeans.mean60.length} days (60D)',
       );
-      baseline = _computeUniverseBaselineHit(data, universeMeans);
+      baseline = _computeUniverseBaselineHit(
+        data,
+        universeMeans,
+        liquidityEligible,
+      );
       _log(
         '✅ Universe baseline hit: '
         '5D=${baseline.hit5?.toStringAsFixed(4)}, '
@@ -371,6 +402,7 @@ class ReplayCalibrator {
         ruleStats,
         universeMeans,
         uptrendByDate,
+        liquidityEligible[symbol],
       );
       daysProcessed += result.days;
       totalFirings += result.firings;
@@ -455,12 +487,18 @@ class ReplayCalibrator {
   @visibleForTesting
   static Map<DateTime, bool?> computeMarketUptrendByDate(
     Map<String, List<DailyPriceEntry>> pricesBySymbol,
-    int lookbackDays,
-  ) {
+    int lookbackDays, {
+    Map<String, List<bool>>? eligibleBySymbol,
+  }) {
     final sum = <DateTime, double>{};
     final n = <DateTime, int>{};
-    for (final history in pricesBySymbol.values) {
+    for (final entry in pricesBySymbol.entries) {
+      final history = entry.value;
+      // 生產一致性 (d)：regime 是對**候選批次**算的——當日流動性不合格的
+      // 股票不在批次裡，不得貢獻大盤均值
+      final eligible = eligibleBySymbol?[entry.key];
       for (var i = lookbackDays; i < history.length; i++) {
+        if (!(eligible?[i] ?? true)) continue;
         final anchor = history[i - lookbackDays];
         // 生產只看 400 日曆天窗：錨點落在窗外的股票在生產端整檔被跳過
         if (history[i].date.difference(anchor.date).inDays >
@@ -483,12 +521,87 @@ class ReplayCalibrator {
     };
   }
 
+  /// 每檔股票逐 bar 的流動性合格判定（生產一致性 (d)，findings #47）。
+  ///
+  /// 語意鏡射生產的候選層門檻（[PriceDao.getMedianTurnoverBatch] +
+  /// `CandidateSelector.isLiquid`），parity 由
+  /// test/tool/replay_liquidity_gate_test.dart 以生產 DAO 為 ground truth
+  /// 逐 (symbol, 交易日) 全掃釘住：
+  ///
+  /// - 窗界 = **全市場**第 [RuleParams.liquidityMedianWindowDays] 新的交易
+  ///   日（≤ 該 bar 日）。個股停牌日自然缺席、窗**不**順延——與 DAO 的
+  ///   `OFFSET windowDays-1` 同義。全市場 distinct 日不足一個窗時 DAO 回
+  ///   空 map → caller 全 permissive，這裡同樣全放行。
+  /// - turnover = volume × close，**兩者皆非 null** 才算有效日。
+  /// - 窗內有效日 < [RuleParams.liquidityMinDataDays] → 無法判定 →
+  ///   permissive 放行（無資料 ≠ 低流動性）。
+  /// - 中位數（偶數取中間兩值平均）≥
+  ///   [RuleParams.liquidityMinMedianTurnoverNtd] 才合格。
+  ///
+  /// 生產另有「自選清單豁免」——**刻意不模擬**（檔頭有記載）：把今天的
+  /// 自選注入全部歷史日等於 lookahead，且那是使用者 overlay、不是規則母體。
+  ///
+  /// 回傳值與 pricesBySymbol 的每個 list 逐 index 對齊。
+  @visibleForTesting
+  static Map<String, List<bool>> computeLiquidityEligibility(
+    Map<String, List<DailyPriceEntry>> pricesBySymbol,
+  ) {
+    // 全市場 distinct 交易日（正規化到日、升冪）——窗界的座標系
+    final globalSet = <DateTime>{};
+    for (final history in pricesBySymbol.values) {
+      for (final e in history) {
+        globalSet.add(_dateKey(e.date));
+      }
+    }
+    final globalDates = globalSet.toList()..sort();
+    final posByDate = <DateTime, int>{
+      for (var i = 0; i < globalDates.length; i++) globalDates[i]: i,
+    };
+
+    final result = <String, List<bool>>{};
+    for (final entry in pricesBySymbol.entries) {
+      final history = entry.value;
+      final eligible = List<bool>.filled(history.length, true);
+      var start = 0; // 窗起點滑動指標——cutoff 隨 i 單調不減，兩指標即可
+      for (var i = 0; i < history.length; i++) {
+        final pos = posByDate[_dateKey(history[i].date)]!;
+        final cutoffPos = pos - (RuleParams.liquidityMedianWindowDays - 1);
+        if (cutoffPos < 0) continue; // 全市場資料不足一個窗 → permissive
+        final cutoff = globalDates[cutoffPos];
+        while (start < i && _dateKey(history[start].date).isBefore(cutoff)) {
+          start++;
+        }
+        final values = <double>[];
+        for (var j = start; j <= i; j++) {
+          final v = history[j].volume;
+          final c = history[j].close;
+          if (v == null || c == null) continue;
+          values.add(v * c);
+        }
+        if (values.length < RuleParams.liquidityMinDataDays) {
+          continue; // 有效日不足 → 無法判定 → permissive
+        }
+        values.sort();
+        final mid = values.length ~/ 2;
+        final median = values.length.isOdd
+            ? values[mid]
+            : (values[mid - 1] + values[mid]) / 2;
+        if (median < RuleParams.liquidityMinMedianTurnoverNtd) {
+          eligible[i] = false;
+        }
+      }
+      result[entry.key] = eligible;
+    }
+    return result;
+  }
+
   _PerSymbolResult _replaySymbol(
     String symbol,
     _BackfilledData data,
     Map<String, RuleStats> ruleStats,
     _UniverseMeans? universeMeans,
     Map<DateTime, bool?> uptrendByDate,
+    List<bool>? liquidityEligible,
   ) {
     final prices = data.pricesBySymbol[symbol];
     if (prices == null || prices.length < config.minHistoryDays) {
@@ -536,6 +649,10 @@ class ReplayCalibrator {
           !currentPrice.date.isAfter(ex.end)) {
         continue;
       }
+
+      // 生產一致性 (d)：該日流動性不過候選門檻 = 生產根本不會評分這檔
+      // ——不進校準語料（findings #47）
+      if (!(liquidityEligible?[i] ?? true)) continue;
 
       // 建立分析視窗
       final pricesUpToDay = prices.sublist(0, i + 1);
@@ -913,7 +1030,10 @@ class ReplayCalibrator {
   ///
   /// 對所有 symbol × 所有交易日累加 (date → 報酬)，再除以該日有效樣本數。
   /// 用於橫斷面超額報酬：個股報酬 − 當日均值 = 相對 alpha（去多空 beta）。
-  _UniverseMeans _computeUniverseMeanReturns(_BackfilledData data) {
+  _UniverseMeans _computeUniverseMeanReturns(
+    _BackfilledData data,
+    Map<String, List<bool>> liquidityEligible,
+  ) {
     const shortDays = 5;
     const longDays = 60;
     final sum5 = <DateTime, double>{};
@@ -921,8 +1041,14 @@ class ReplayCalibrator {
     final sum60 = <DateTime, double>{};
     final cnt60 = <DateTime, int>{};
 
-    for (final prices in data.pricesBySymbol.values) {
+    for (final symbolEntry in data.pricesBySymbol.entries) {
+      final prices = symbolEntry.value;
+      // 生產一致性 (d)：excess 的「大盤均值」是機會集的均值——語料只含
+      // 流動性合格股，比較基準也必須同一母體，否則 firing − 均值混入
+      // 兩個母體的系統性落差
+      final eligible = liquidityEligible[symbolEntry.key];
       for (var i = 0; i < prices.length; i++) {
+        if (!(eligible?[i] ?? true)) continue;
         // Lookahead bias fix（audit finding #6）：entry 與 [_replaySymbol] 用
         // 同一隔日 open 慣例（缺值 fallback close）——universe 均值必須與
         // firing return 用同一 entry 基準，否則超額報酬（firing − 均值）會
@@ -977,6 +1103,7 @@ class ReplayCalibrator {
   ({double? hit5, double? hit60}) _computeUniverseBaselineHit(
     _BackfilledData data,
     _UniverseMeans means,
+    Map<String, List<bool>> liquidityEligible,
   ) {
     const shortDays = 5;
     const longDays = 60;
@@ -985,8 +1112,13 @@ class ReplayCalibrator {
     var hits60 = 0;
     var n60 = 0;
 
-    for (final prices in data.pricesBySymbol.values) {
+    for (final symbolEntry in data.pricesBySymbol.entries) {
+      final prices = symbolEntry.value;
+      // 生產一致性 (d)：H0 與 firing 樣本必須同分布——doc 所述「同一組
+      // 過濾」自 2026-08-29 起含流動性宇宙
+      final eligible = liquidityEligible[symbolEntry.key];
       for (var i = 0; i < prices.length; i++) {
+        if (!(eligible?[i] ?? true)) continue;
         // Lookahead bias fix（audit finding #6）：與 [_computeUniverseMeanReturns]
         // 用同一隔日 open entry 慣例，理由同上（baseline 須與 firing/均值
         // 同一 entry 基準，否則 H0 與樣本分布不一致）。

@@ -750,7 +750,14 @@ process，故分開處理。
 
 ### 47. 校準語料含 64% 生產永不評分的 stock-day（流動性宇宙分岔）
 
-**狀態**：📋 已記錄未修（2026-08-29 review 量測；待決策）
+**狀態**：✅ 已決策執行（2026-08-29 使用者確認）——replay 套用與生產同源的
+流動性門檻（`ReplayCalibrator.computeLiquidityEligibility`，point-in-time、
+窗界=全市場第 20 新交易日、permissive 語意鏡射 DAO），評估語料、regime
+universe、excess universe 均值/baseline H0 四處同一母體；生產的「自選清單
+豁免」刻意不模擬（lookahead + 使用者 overlay）。parity 由
+`test/tool/replay_liquidity_gate_test.dart` 以生產 DAO 為 ground truth 全掃
+釘住，8 個接線/語意突變全部 killed。**epoch 斷代**：gated 統計與歷次全語料
+結果不可比。
 
 **證據**：生產只評分 CandidateSelector 產出（`candidate_selector.dart:48-58`，
 20 日中位成交值 ≥ 3,000 萬，isolate 內二次把關 `scoring_isolate.dart:547-553`）；
