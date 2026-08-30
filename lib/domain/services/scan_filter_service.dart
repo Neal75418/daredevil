@@ -105,6 +105,8 @@ class ScanFilterService {
       // 同分以 symbol ASC 決勝（deterministic，與上面兩個分支一致）：
       // List.sort 無穩定性保證，而真實資料同分群很大——2026-08-28 的 422 檔
       // 主清單只有 63 個相異 scoreLong，其中 146 檔是雙 0 的風控可見層。
+      // （那是移除候選股數門檻前的口徑；同日以新口徑重算是 534 檔 / 64 個 /
+      //  182 檔同分——宇宙變寬讓同分群更大，這條決勝鍵更必要。）
       // 少了決勝鍵，desc→asc→desc 來回切會讓同分群每次落在不同位置。
       case ScanSort.scoreAsc:
         analyses.sort((a, b) {
