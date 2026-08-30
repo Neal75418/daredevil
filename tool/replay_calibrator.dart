@@ -101,6 +101,7 @@ import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/liquidity_checker.dart';
 import 'package:daredevil/domain/services/price_calculator.dart';
+import 'package:daredevil/domain/services/price_continuity.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/update/batch_data_builder.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
@@ -725,8 +726,17 @@ class ReplayCalibrator {
       // ——不進校準語料（findings #47）
       if (!(liquidityEligible?[i] ?? true)) continue;
 
-      // 建立分析視窗
-      final pricesUpToDay = prices.sublist(0, i + 1);
+      // 建立分析視窗。
+      //
+      // 生產一致性 (f)：生產在 `batch_data_loader` 對每檔價格套
+      // `contiguousSuffix()`，只用最後一個**價格水位斷點**之後的區段算指標
+      // （未還原除權息／減資／分割，跨越位移的長窗指標會給出物理上不可能的
+      // 值——見 `PriceContinuity` 檔頭）。replay 不套就會讓語料含生產不會
+      // 那樣算的 stock-day。
+      //
+      // 逐日截斷是 point-in-time 正確的：`sublist(0, i+1)` 之後才找斷點，
+      // 所以只看得到該日之前發生的位移，不會用未來的除權息去截過去。
+      final pricesUpToDay = prices.sublist(0, i + 1).contiguousSuffix();
       final analysisResult = _analysis.analyzeStock(pricesUpToDay);
       if (analysisResult == null) continue;
 
