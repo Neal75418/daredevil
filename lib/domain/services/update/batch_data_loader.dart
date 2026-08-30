@@ -2,7 +2,6 @@ import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
-import 'package:daredevil/domain/services/price_continuity.dart';
 import 'package:daredevil/data/repositories/insider_repository.dart';
 import 'package:daredevil/data/repositories/institutional_repository.dart';
 import 'package:daredevil/data/repositories/news_repository.dart';
@@ -147,52 +146,11 @@ class BatchDataLoader {
     );
 
     // 型別安全的並行等待（Dart 3 Record 解構）
-    final (rawPricesMap, newsMap, rawInstitutionalMap) = await (
+    final (pricesMap, newsMap, rawInstitutionalMap) = await (
       pricesFuture,
       newsFuture,
       instFuture,
     ).wait;
-
-    // 只用最後一個**價格水位斷點**之後的歷史（2026-08-30 稽核 C3）。
-    //
-    // `daily_price` 存交易所原始收盤價、**未還原除權息／減資／分割**，跨越
-    // 位移的長窗指標會產出物理上不可能的值：5904 寶雅 2026-08-27 的
-    // `daily_reason` 存著 `ma60: 506.18`，而當天股價 74.10。實測 2026-08-28
-    // 有 14 檔「當日有落庫評分、且 MA60 窗內含斷點」——其中 2603 長榮在自選
-    // 清單裡，當天以 `ma60: 209.79`（跨 6/17 除息 −12.0% 缺口）觸發
-    // `PULLBACK_TO_MA20` 的 +15 分買進訊號。
-    //
-    // **這是評分鏈的單一入口**：`ScoringBatchData.pricesMap` 同時餵給
-    // isolate 路徑與主執行緒 fallback（守門見
-    // `price_continuity_entry_guard_test.dart`）。刻意放在
-    // `fillNoActivityDays` **之前**——那支以價格列為 ground truth 補法人淨額
-    // 0 的日子，兩者必須看同一個區間。
-    final pricesMap = {
-      for (final e in rawPricesMap.entries) e.key: e.value.contiguousSuffix(),
-    };
-
-    // 截斷後歷史不足分析門檻的股票會由 `classifyCandidate` 以
-    // insufficientData 擋下並計數，但那個計數混著「新上市」與「剛除權息」
-    // 兩種成因。這裡單獨報告後者——實測自選清單 43 檔中僅 2603 有斷點且
-    // 截斷後仍有 51 列（不受影響），但除息旺季會有股票落進「不足 21 根」
-    // 的約一個月視窗，屆時卡片會少掉趨勢與評分，需要看得見。
-    final truncated = <String, int>{};
-    for (final e in rawPricesMap.entries) {
-      final after = pricesMap[e.key]!.length;
-      if (after < e.value.length) truncated[e.key] = after;
-    }
-    if (truncated.isNotEmpty) {
-      final belowGate = truncated.entries
-          .where((e) => e.value < RuleParams.swingWindow + 1)
-          .map((e) => '${e.key}(${e.value})')
-          .toList();
-      AppLogger.info(
-        'BatchDataLoader',
-        '價格水位斷點：${truncated.length} 檔截斷歷史'
-            '${belowGate.isEmpty ? '' : '，其中 ${belowGate.length} 檔因此不足分析門檻：'
-                      '${belowGate.join(", ")}'}',
-      );
-    }
 
     // 交易所對「當日無法人進出」的股票不發列，缺列會被規則迴圈直接跳過、
     // 把不相鄰的兩天接成連續。以價格列為 ground truth 補回淨額 0 的日子，
