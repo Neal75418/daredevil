@@ -2,6 +2,7 @@ import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/models.dart';
 import 'package:daredevil/domain/services/ohlcv_data.dart';
+import 'package:daredevil/domain/services/price_continuity.dart';
 import 'package:daredevil/domain/services/technical_indicator_service.dart';
 import 'package:daredevil/domain/services/analysis/trend_detection_service.dart';
 import 'package:daredevil/domain/services/analysis/reversal_detection_service.dart';
@@ -128,15 +129,40 @@ class AnalysisCoordinatorService {
   /// 回傳最近一日的 RSI、KD、MA 值，
   /// 以及前一日的 KD 用於交叉偵測。
   /// MA 值預先計算一次，供所有規則共用。
+  ///
+  /// **只用最後一個價格水位斷點之後的資料**（2026-08-30 稽核 C3）：
+  /// `daily_price` 存交易所原始收盤價、未還原除權息／減資／分割，跨越位移的
+  /// 長窗指標會給出物理上不可能的值——5904 寶雅 2026-08-27 的 `daily_reason`
+  /// 存著 `ma60: 506.18`，而當天股價 74.10；同檔在 15 個交易日裡有 12 天發出
+  /// `RSI_EXTREME_OVERSOLD {"rsi":17.4}`，以斷點後的資料重算約在 60。
+  ///
+  /// **為什麼放在這裡，而不是價格入口（`batch_data_loader`）**：入口截斷會讓
+  /// `prices.length` 本身變短，連帶踩到下游一連串**長度**閘——實測 165 檔被
+  /// 截斷者中，52 檔掉到 60 根以下（整個 indicator 區塊變 null）、**142 檔掉到
+  /// 250 根以下（52 週規則永不觸發）**、17 檔掉到 21 根以下（連
+  /// `daily_analysis` 列都不寫）。而 52 週規則**本來就正確處理除息**
+  /// （`_sumDividendsInPeriod` 把窗內現金股利從極值扣掉，見 evidence 的
+  /// `adjustedHigh`/`dividendAdjustment`）——入口截斷等於破壞一條已經解好的
+  /// 規則。放在這裡則外層閘門（[_minIndicatorDataPoints]）仍看完整歷史，
+  /// 只有指標值本身改用斷點後的序列：2603 長榮（斷點後 51 根）保住 RSI／KD／
+  /// MA5/10/20 與 52 週規則，只有 MA60 變 null——那是真的算不出來。
+  ///
+  /// ⚠️ 殘留：[analyzeStock] 的趨勢迴歸與支撐壓力仍用完整歷史。把它也截斷會
+  /// 讓短序列連 `daily_analysis` 列都不寫（自選股空白卡），代價大於收益。
+  /// 實測受影響的是「斷點落在最近 20 根內」的 17 檔，其中 4 檔今日有評分。
   TechnicalIndicators? calculateTechnicalIndicators(
     List<DailyPriceEntry> prices,
   ) {
+    // 閘門看**完整**歷史：這道判斷的語意是「這檔資料量夠不夠談指標」，
+    // 不是「斷點後夠不夠」——後者由下面各指標自己的長度需求決定。
     if (prices.length < _minIndicatorDataPoints) {
       return null;
     }
 
+    final contiguous = prices.contiguousSuffix();
+
     // 擷取 OHLC 資料（含 gapBefore：哪些有效交易日前跨了停牌缺口）
-    final (:closes, :highs, :lows, :gapBefore, volumes: _) = prices
+    final (:closes, :highs, :lows, :gapBefore, volumes: _) = contiguous
         .extractOhlcv();
 
     if (closes.length < IndicatorParams.rsiPeriod + 2) {
@@ -181,12 +207,14 @@ class AnalysisCoordinatorService {
       currentD = kd.d.last;
     }
 
-    // 預先計算所有 MA（供規則共用，避免重複計算）
-    final ma5 = TechnicalIndicatorService.latestSMA(prices, 5);
-    final ma10 = TechnicalIndicatorService.latestSMA(prices, 10);
-    final ma20 = TechnicalIndicatorService.latestSMA(prices, 20);
-    final ma60 = TechnicalIndicatorService.latestSMA(prices, 60);
-    final volResult = TechnicalIndicatorService.latestVolumeMA(prices, 20);
+    // 預先計算所有 MA（供規則共用，避免重複計算）。
+    // 用 `contiguous`：跨越水位位移的 MA 是物理上不可能的值，
+    // 而長度不足時 latestSMA 回 null——null 是誠實的，錯的數字不是。
+    final ma5 = TechnicalIndicatorService.latestSMA(contiguous, 5);
+    final ma10 = TechnicalIndicatorService.latestSMA(contiguous, 10);
+    final ma20 = TechnicalIndicatorService.latestSMA(contiguous, 20);
+    final ma60 = TechnicalIndicatorService.latestSMA(contiguous, 60);
+    final volResult = TechnicalIndicatorService.latestVolumeMA(contiguous, 20);
 
     return TechnicalIndicators(
       rsi: currentRsi,
