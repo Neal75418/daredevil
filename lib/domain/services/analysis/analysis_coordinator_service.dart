@@ -144,8 +144,10 @@ class AnalysisCoordinatorService {
   /// （`_sumDividendsInPeriod` 把窗內現金股利從極值扣掉，見 evidence 的
   /// `adjustedHigh`/`dividendAdjustment`）——入口截斷等於破壞一條已經解好的
   /// 規則。放在這裡則外層閘門（[_minIndicatorDataPoints]）仍看完整歷史，
-  /// 只有指標值本身改用斷點後的序列：2603 長榮（斷點後 51 根）保住 RSI／KD／
-  /// MA5/10/20 與 52 週規則，只有 MA60 變 null——那是真的算不出來。
+  /// 只有指標值本身改用斷點後的序列：2603 長榮（2026-06-17 除息 −12.0%，
+  /// 斷點後 53 根）保住 RSI／KD／MA5/10/20 與 52 週規則，只有 MA60 變 null
+  /// ——那是真的算不出來。2026-08-31／09-01 生產實測證實：它照常發出依賴
+  /// MA20 的 `PE_UNDERVALUED`，而 MA60 相關規則不觸發。
   ///
   /// ⚠️ 殘留：[analyzeStock] 的趨勢迴歸與支撐壓力仍用完整歷史。把它也截斷會
   /// 讓短序列連 `daily_analysis` 列都不寫（自選股空白卡），代價大於收益。
