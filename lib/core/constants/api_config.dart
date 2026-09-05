@@ -105,33 +105,26 @@ abstract final class ApiConfig {
   /// 重試延遲（毫秒）
   static const int retryDelayMs = 1000;
 
-  /// 財報同步最大市場候選數（避免 FinMind 免費額度耗盡）
-  static const int financialSyncMaxCandidates = 150;
-
-  // 上櫃候選估值／營收「不設」候選上限（2026-07-29 移除 otcFundamentalsSyncMaxCount）：
-  // 兩者走 TPEx OpenAPI 全市場端點、各 1 次呼叫與檔數無關,cap 省不到配額,
-  // 只會讓 repo 僅 persist 前綴候選、餓死其餘覆蓋。財報是逐檔打 FinMind、
-  // 成本差兩個數量級,才需要 [otcFinancialSyncMaxCount] 專屬配額。
-
-  /// 上櫃財報（損益表＋資產負債表）每輪回填上限
+  /// 財報（損益表＋資產負債表）每輪回填目標數上限——上市＋上櫃**單一佇列**
   ///
-  /// [financialSyncMaxCandidates] 那條路徑吃的是 `[...twse, ...tpex]` 串接後
-  /// 的前 150 名，而上市候選恆為 500~800 檔以上（2026-07-27 日誌：候選 1372），
-  /// **上櫃永遠是餘數而餘數是 0** —— 實測財報覆蓋率上市 32.9%、上櫃 1.5%。
-  /// 故另給上櫃一條專屬配額，上市那條完全不動。
+  /// 2026-09-05 收成單一「最舊優先」佇列之前這裡是兩個常數：上市 150（依候選
+  /// 順序取前 N）＋上櫃 100（最舊優先）。上市那條的排序鍵其實是波動度（live
+  /// 路徑 `quickFilterPrices` 依波動度降冪），低波動大型股永遠排不進名額窗——
+  /// app DB 實查 460 檔零 EPS，其中 18 檔當天有評分（台灣大、群光、佳世達…），
+  /// 7 條 EPS／ROE 規則對它們無聲不觸發；五輪日誌實測被回填的 102 檔裡
+  /// 0 檔來自那 460 檔。
   ///
-  /// 定為 100 的依據（2026-07-27 實測，非估算）：上線首輪整輪 FinMind 用量
-  /// 384/600（3 + 外資持股 39 + 169 檔 × 2 + 4），其中回填佔 200。
-  /// 待回填 890 檔，最舊優先下約 10 個交易日收斂，之後穩態趨近 0。
-  ///
-  /// 這是**上限**，實際每輪由 [UpdateService.otcFinancialLimitForBudget]
-  /// 依剩餘額度下修——見 [otcFinancialBackfillReserve]。
-  static const int otcFinancialSyncMaxCount = 100;
+  /// 200 = 整點滿額度時 [financialBackfillReserve] 公式的值
+  /// `(600 − 0 − 200) ÷ 2`——讓「上限」與「額度」在滿額時吻合，而不是兩個旋鈕。
+  /// 實際每輪由 `UpdateService.financialQuotaForBudget` 依剩餘額度下修。
+  /// 穩態下佇列選到的都是新鮮股、被 `_filterNeedingStatementSync` 濾成零呼叫，
+  /// 所以上限只影響回填期的收斂速度，不影響長期用量。
+  static const int financialSyncMaxCount = 200;
 
   /// 財報回填(上市+上櫃合併)的小時額度保留量(2026-08-05 季報季修復)。
   ///
   /// 上市佇列原無額度守衛——「重跑 needy 為空」的假設在**季報季**破產:
-  /// Q2 一開始全市場同時變 needy,每輪 150+100 檔 ×2=488 次呼叫,單輪
+  /// Q2 一開始全市場同時變 needy,當時上限上市 150＋上櫃 100、實測單輪 488 次呼叫,單輪
   /// 吃掉 82% 小時額度(2026-08-05 實測 494/600),連點更新即 402、其他
   /// FinMind 步驟(持股/營收歷史/月營收)全滅。
   ///
@@ -153,16 +146,6 @@ abstract final class ApiConfig {
   /// 涵蓋「會進評分候選」的股票，而候選本來就套同一道門檻。全上櫃 1,320 檔
   /// 裡約 248 檔達標；對照組是上市 1,249 檔裡實際觸發過當沖規則的只有 113 檔。
   static const double dayTradingBackfillMinMedianTurnover = 30000000;
-
-  /// 上櫃財報回填時保留給後續步驟的 FinMind 額度
-  ///
-  /// 回填佇列是最舊優先，設計上保證每輪都選得出 100 檔全新的 stale 股，
-  /// 所以**重跑不會變便宜**（與上市那條 needy 為空的性質相反）。
-  /// 2026-07-27 實測同一 sliding 1hr 窗內兩輪合計 497/600，第三輪會破表。
-  ///
-  /// 40 = 步驟 6.5 上櫃外資持股配額 20（market_data_updater.dart 的
-  /// `maxSyncCount` 預設值）+ 20 緩衝。
-  static const int otcFinancialBackfillReserve = 40;
 
   /// Syncer 批次大小（每批並行處理的股票數）
   static const int syncerBatchSize = 10;

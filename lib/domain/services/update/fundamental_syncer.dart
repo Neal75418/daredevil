@@ -13,32 +13,26 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/fundamental_repository.dart';
 import 'package:daredevil/data/repositories/market_data_repository.dart';
 
-/// 選出本輪要同步財報的上櫃候選 —— **最舊優先**。
+/// 依「財報最舊優先」排序候選並取前 [limit]——上市與上櫃**共用**的純函式。
 ///
 /// 兩個規則：
-/// 1. ETF（代碼 00 開頭）在取前 N 之**前**排除
-/// 2. 其餘依最新財報日由舊到新排序，**無資料者視為最舊**；同日期以代號排序
-///    保證決定性
+/// 1. ETF（代碼 00 開頭）在取前 N 之**前**排除——ETF 無財報、排序鍵恆為「最舊」，
+///    不先排除就每輪固定霸佔名額且永遠排最前（2026-07-27 實查上櫃 904 檔中
+///    15 檔 ETF 全部 0 筆財報）
+/// 2. 其餘依最新財報日由舊到新排序，**無資料者視為最舊**；同日期以代號升冪
+///    決勝，保證跨輪可重現
 ///
-/// ## 為什麼不能沿用 take(N)
-///
-/// 上市那條路徑（[UpdateService.selectFinancialSyncTargets]）依候選順序取前 N，
-/// 搬到上櫃會立刻復發兩個已修過的同型病：
-///
-/// - **ETF 佔位**：上櫃今日有價格的 904 檔中 15 檔是 ETF 且全部 0 筆財報
-///   （2026-07-27 正式 DB 實查）。ETF 永遠不會變新鮮，排序鍵恆為「最舊」，
-///   不先排除就是每輪固定霸佔 15 個名額、且永遠排在最前面。
-/// - **前綴永不輪替**：價格走快取路徑時候選順序退化為代號升冪，take 前 N
-///   每天都是同一批；補完後他們變新鮮、同步 0 筆，後面的 790 檔永遠輪不到。
-///
-/// 最舊優先讓補完者自然沉到隊尾，890 檔待回填約 10 個交易日收斂。
+/// **為什麼不能用「取候選前 N」**：候選順序在 live 路徑是波動度降冪、cached
+/// 路徑是代號升冪，兩者都與「誰的財報最舊」無關。前者讓低波動大型股永遠排不
+/// 進名額窗（2026-09-05 app DB 實查：460 檔零 EPS、其中 18 檔當天有評分），
+/// 後者讓補完者仍佔位、後段永遠輪不到。最舊優先讓補完者自然沉到隊尾，佇列
+/// 跨輪收斂（上櫃 890 檔約 10 個交易日的實測）。
 ///
 /// 已知殘留：FinMind 對少數股票恆回 0 筆（2026-07-27 實測上市 33 檔中 7835、
-/// 9136 兩檔如此），這類永遠停在「無資料」→ 永久排在隊首佔名額。實測比例約
-/// 6%，回填完成後預估固定佔用 ~50 個名額。因無「已嘗試」時戳可依據，此處
-/// 不另處理，改由同步日誌印出「目標 N 檔／實際寫入 M 檔」讓停滯可被觀察。
+/// 9136 兩檔如此），這類永遠停在「無資料」→ 永久排在隊首佔名額。因無「已嘗試」
+/// 時戳可依據，此處不另處理，由同步日誌的「0 筆」行讓停滯可被觀察。
 @visibleForTesting
-List<String> selectOtcFinancialTargets({
+List<String> selectStaleFinancialTargets({
   required List<String> candidates,
   required Map<String, DateTime?> latestDates,
   required int limit,
@@ -188,39 +182,62 @@ class FundamentalSyncer {
     );
   }
 
-  /// 挑出本輪要回填財報的上櫃候選（最舊優先、已排除 ETF）
+  /// 挑出本輪要回填財報的目標——**單一佇列**：自選＋熱門優先，其餘全市場依
+  /// INCOME 最新日期最舊優先（見 [selectStaleFinancialTargets]）。
   ///
-  /// 上市那條路徑（[UpdateService.selectFinancialSyncTargets]）取
-  /// `[...twse, ...tpex]` 的前 [ApiConfig.financialSyncMaxCandidates] 名，
-  /// 上市候選恆遠超過上限 → 上櫃永遠分不到名額。本方法給上櫃一條獨立佇列，
-  /// 上市那條不受影響。挑選規則見 [selectOtcFinancialTargets]。
+  /// 2026-09-05 之前是兩條佇列：上市取候選前 N、上櫃最舊優先，外加「上市先拿、
+  /// 上櫃吃剩」的配額拆分。分開的唯一理由是上市名額窗把上櫃餓死；改成最舊優先
+  /// 後餓死在結構上不可能發生（誰最舊誰先補），兩條佇列與配額拆分就失去存在
+  /// 理由，留著只是多一個會漏掉守衛的入口。
   ///
-  /// 失敗時 **fail-closed 回空清單**：拿不到最新財報日就無從排序，若退回
-  /// 全清單會讓整包上櫃候選逐檔打 FinMind。這條路徑的價值是慢速回填，
-  /// 少跑一輪無害，配額爆掉才會傷到當日主要資料。
-  Future<List<String>> selectOtcFinancialBacklog({
+  /// [prioritySymbols]（自選＋熱門）不套 ETF 過濾也不參與排序：使用者主動追蹤
+  /// 的股票應留在清單裡，ETF 由下游自然跳過。它們**計入 [limit]**——這是相對
+  /// 舊碼的行為改變：舊的上市名額窗讓 priority 永遠全員入列、不受額度限制，
+  /// 等於 budget guard 漏掉 priority 這條路（自選 50＋熱門 15 在 limit=50 時會打
+  /// 130 次）。現在 `0 < limit < priority.length` 時截掉尾段，**截斷順序＝
+  /// 呼叫端的插入序：自選在前、熱門在後**（`{...watchlist, ...popular}`），
+  /// 額度吃緊時先犧牲熱門股，由 update_service_test 釘住。
+  ///
+  /// 排序查詢失敗時 **fail-closed 只回 priority**：拿不到最新財報日就無從排序，
+  /// 退回全清單會讓整包候選逐檔打 FinMind；priority 有界（自選＋熱門約 60 檔）
+  /// 且下游仍套新鮮度過濾——保住自選覆蓋、放棄這一輪的回填。少跑一輪無害，
+  /// 額度爆掉才會傷到當日主要資料。
+  Future<List<String>> selectFinancialBacklog({
     required List<String> candidates,
-    int limit = ApiConfig.otcFinancialSyncMaxCount,
+    required Set<String> prioritySymbols,
+    int limit = ApiConfig.financialSyncMaxCount,
   }) async {
-    if (candidates.isEmpty || limit <= 0) return const [];
-    try {
-      final otcStocks = await _db.getStocksByMarket(MarketCode.tpex);
-      final otcSymbols = otcStocks.map((s) => s.symbol).toSet();
-      final otcCandidates = candidates.where(otcSymbols.contains).toList();
-      if (otcCandidates.isEmpty) return const [];
+    if (limit <= 0) return const [];
+    final priority = prioritySymbols.take(limit).toList();
+    final remaining = limit - priority.length;
+    if (remaining <= 0) return priority;
 
+    // ETF 在查 DB 之前就剔除：它們無財報，查了也只是把 IN 清單撐大
+    final rest = candidates
+        .where(
+          (s) => !prioritySymbols.contains(s) && !StockPatterns.isEtfCode(s),
+        )
+        .toList();
+    if (rest.isEmpty) return priority;
+
+    try {
       final latestDates = await _db.getLatestFinancialDataDatesBatch(
-        otcCandidates,
+        rest,
         'INCOME',
       );
-      return selectOtcFinancialTargets(
-        candidates: otcCandidates,
+      final stale = selectStaleFinancialTargets(
+        candidates: rest,
         latestDates: latestDates,
-        limit: limit,
+        limit: remaining,
       );
+      return [...priority, ...stale];
     } catch (e) {
-      AppLogger.warning('FundamentalSyncer', '上櫃財報候選挑選失敗，本輪略過回填', e);
-      return const [];
+      AppLogger.warning(
+        'FundamentalSyncer',
+        '財報回填候選排序失敗，本輪只同步自選＋熱門 ${priority.length} 檔',
+        e,
+      );
+      return priority;
     }
   }
 

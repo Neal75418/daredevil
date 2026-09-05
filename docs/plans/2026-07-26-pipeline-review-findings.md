@@ -187,6 +187,10 @@
 
 **狀態**：✅ 已修（2026-07-27 `22bdfd0`）— **但原始說法有一半是錯的**
 
+> ⚠️ 2026-09-05 後記：`selectFinancialSyncTargets` 已整個移除——上市取候選前 N 的名額窗（live 路徑
+> 依波動度）讓低波動大型股永遠補不到 EPS，兩條佇列收成 `FundamentalSyncer.selectFinancialBacklog`
+> 單一最舊優先佇列。下文行號與函式名是當時快照。
+
 機制成立：ETF 過濾晚於 take，111 個名額被 ETF 吃光且不遞補。已把過濾提到
 `UpdateService.selectFinancialSyncTargets` 內（取前 N 之前），並抽成
 `@visibleForTesting` 純函數加守門測試。

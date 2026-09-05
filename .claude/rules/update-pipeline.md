@@ -66,19 +66,22 @@ TDCC holding、dividend、insider transfer、quarterly report。
 - **前置**（2026-08-16）：`syncMarketWideBalanceSheets` 走六業別 × 兩市場共 12 個**免額度**
   t187ap07 端點，一次補齊全市場資產負債表，讓後面兩條 FinMind 佇列的單位成本**砍半**。
   ⚠️ 因此「財報是額度唯一瓶頸」的舊成本模型已不準
-- **兩條獨立佇列**：上市走 `UpdateService.selectFinancialSyncTargets`（取
-  `[...twse, ...tpex]` 前 `financialSyncMaxCandidates`）；上櫃走 `selectOtcFinancialBacklog`
-  （**最舊優先 + ETF 在取前 N 之前排除**）。分開是因為串接下上市候選恆遠超上限、
-  上櫃永遠是餘數而餘數是 0
-- **兩市場都受額度節流**：`UpdateService.financialQuotaForBudget` 回傳 `({int twse, int otc})`，
-  額度＝`(budget − used − financialBackfillReserve) ÷ 2`，上市先拿、上櫃吃剩；
-  `quota.twse == 0` 時上市直接短路成空清單
-- 2026-08-05 季報季修復：原本只擋上櫃，假設「上市 needy 為空所以不是壓力來源」。
-  季報季全市場同時變 needy，單輪 488 次呼叫吃掉 82% 小時額度，該假設破產。
-  `ApiConfig.financialBackfillReserve = 200` 就是為此存在
-- ⚠️ `otcFinancialLimitForBudget` 仍留在 `update_service.dart:1025`，但**已無 production
-  呼叫者**，只剩測試與一則過期註解引用——別照它推論行為
-- 回填佇列設計上每輪都選得出全新的 stale 股，**重跑不會變便宜**
+- **單一「最舊優先」佇列**（2026-09-05）：`FundamentalSyncer.selectFinancialBacklog`——自選＋熱門
+  優先（不套 ETF 過濾、計入上限），其餘全市場候選**先剔 ETF**、再依 INCOME 最新日期由舊到新
+  （無資料視為最舊、同日以代號決勝）取到上限。純排序在 `selectStaleFinancialTargets`
+- ⚠️ 之前是兩條佇列：上市取候選前 150（live 路徑候選是**波動度降冪**，cached 路徑是代號升冪），
+  上櫃另走最舊優先。前者讓低波動大型股永遠排不進名額窗——app DB 實查 460 檔零 EPS、18 檔當天有
+  評分（台灣大、群光、佳世達…），7 條 EPS／ROE 規則對它們無聲不觸發；五輪日誌被回填的 102 檔裡
+  0 檔來自那 460 檔。分開兩條的唯一理由是餓死，最舊優先下餓死在結構上不可能，故一併收掉
+- **額度節流只剩一個數字**：`UpdateService.financialQuotaForBudget` 回傳 `int`，
+  ＝`(budget − used − financialBackfillReserve) ÷ 2` 夾在 `[0, financialSyncMaxCount=200]`；
+  0 時整段短路。2026-08-05 季報季修復（全市場同時變 needy、單輪 488 次吃掉 82% 小時額度）的
+  reserve=200 機制原樣保留
+- 排序查詢失敗 **fail-closed 只回自選＋熱門**：退回全清單會讓整包候選逐檔打 FinMind
+- 守門：`test/domain/services/update/financial_backlog_single_entry_guard_test.dart` 掃 lib 斷言
+  `syncFinancialStatements(symbols:)` 呼叫點恰 1 且舊佇列符號不得復活
+- **回填期**每輪都選得出全新的 stale 股，重跑不會變便宜（額度感知因此必要）；**收斂後**選到的
+  都是新鮮股、被 `_filterNeedingStatementSync` 濾成零呼叫——兩句講的是同一條佇列的兩個階段
 
 **`QuarterlyReportSyncer`**（2026-08-06）
 

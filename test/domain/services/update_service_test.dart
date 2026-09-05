@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:daredevil/core/constants/api_config.dart';
+import 'package:daredevil/core/constants/default_stocks.dart';
 import 'package:daredevil/core/constants/rule_enums.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
-import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/tdcc_client.dart';
 import 'package:daredevil/data/remote/api_budget_tracker.dart';
@@ -25,6 +25,7 @@ import 'package:daredevil/domain/repositories/price_repository.dart'
 import 'package:daredevil/domain/services/scoring_service.dart';
 import 'package:daredevil/domain/services/update/news_mention_snapshot_service.dart';
 import 'package:daredevil/domain/services/thesis/thesis_monitor_service.dart';
+import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/domain/services/update_service.dart';
 import 'package:daredevil/domain/services/update_service_deps.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1026,56 +1027,68 @@ void main() {
     });
   });
 
-  // 步驟 4.7 的目標清單由兩條佇列組成：上市走
-  // `selectFinancialSyncTargets`（取 `[...twse, ...tpex]` 的前 150 名），
-  // 上櫃走 `FundamentalSyncer.selectOtcFinancialBacklog`（獨立配額、最舊優先）。
+  // 步驟 4.7 的目標清單來自單一「最舊優先」佇列（2026-09-05）：自選＋熱門優先，
+  // 其餘全市場依 INCOME 最新日期由舊到新（`FundamentalSyncer.selectFinancialBacklog`）。
   //
-  // 這組測試守的是**接線**：backlog 算出來卻沒接進同步呼叫會是靜默 no-op，
-  // 日誌照印、測試照綠，而上櫃覆蓋率原地不動——正是本輪要修的病本身。
-  group('financialQuotaForBudget(2026-08-05 季報季額度爆量修復)', () {
-    // 背景:上市佇列原無額度守衛(假設「重跑 needy 為空」),Q2 季報季
-    // 全市場同時變 needy → 每輪 150+100 檔 ×2=488 次呼叫,單輪吃掉
-    // 82% 小時額度,連點更新即 402、其他 FinMind 步驟全滅。
-    test('🚨 整點滿額度:上市滿額、上櫃吃剩餘,總支出必留 reserve', () {
-      final q = UpdateService.financialQuotaForBudget(
+  // 這組測試守的是**接線**：佇列算出來卻沒接進同步呼叫、或算出的額度沒真的傳
+  // 下去，都是靜默 no-op——日誌照印、測試照綠，而覆蓋率原地不動。
+  group('financialQuotaForBudget(額度感知,2026-09-05 收成單一數字)', () {
+    // 背景:2026-08-05 季報季全市場同時變 needy → 單輪 488 次呼叫吃掉 82%
+    // 小時額度,連點更新即 402。reserve 200 就是為此存在。
+    test('🚨 整點滿額度:取滿上限,且總支出必留 reserve', () {
+      final limit = UpdateService.financialQuotaForBudget(
         usage: (used: 0, budget: 600),
       );
-      expect(q.twse, ApiConfig.financialSyncMaxCandidates);
-      expect(q.otc, lessThan(ApiConfig.otcFinancialSyncMaxCount));
-      final spend = (q.twse + q.otc) * 2;
+      expect(limit, ApiConfig.financialSyncMaxCount);
       expect(
-        600 - spend,
+        600 - limit * 2,
         greaterThanOrEqualTo(ApiConfig.financialBackfillReserve),
         reason: '財報支出後必須留 reserve 給本輪其餘步驟+下一次手動更新',
       );
     });
 
-    test('🚨 同小時第二輪:額度耗到 reserve 內 → 兩市場皆 0(快速通過)', () {
-      final q = UpdateService.financialQuotaForBudget(
-        usage: (used: 450, budget: 600),
+    test('🚨 同小時第二輪:額度耗到 reserve 內 → 0(快速通過)', () {
+      expect(
+        UpdateService.financialQuotaForBudget(usage: (used: 450, budget: 600)),
+        0,
       );
-      expect(q.twse, 0);
-      expect(q.otc, 0);
+      expect(
+        UpdateService.financialQuotaForBudget(usage: (used: 650, budget: 600)),
+        0,
+        reason: 'sliding 窗內可能已超額，相減會是負的，不得回負數',
+      );
     });
 
-    test('部分額度:上市先拿、上櫃吃剩', () {
-      // affordable = (600-300-200)/2 = 50 → twse 50、otc 0
-      final q = UpdateService.financialQuotaForBudget(
-        usage: (used: 300, budget: 600),
+    test('部分額度:(600-300-200)/2 = 50', () {
+      expect(
+        UpdateService.financialQuotaForBudget(usage: (used: 300, budget: 600)),
+        50,
       );
-      expect(q.twse, 50);
-      expect(q.otc, 0);
     });
 
     test('usage null(未掛 tracker)→ 回上限(量不到≠沒額度)', () {
-      final q = UpdateService.financialQuotaForBudget(usage: null);
-      expect(q.twse, ApiConfig.financialSyncMaxCandidates);
-      expect(q.otc, ApiConfig.otcFinancialSyncMaxCount);
+      expect(
+        UpdateService.financialQuotaForBudget(usage: null),
+        ApiConfig.financialSyncMaxCount,
+      );
+    });
+
+    test('單調性：已用越多、可補越少，且永不超過上限', () {
+      var prev = ApiConfig.financialSyncMaxCount + 1;
+      for (var used = 0; used <= 700; used += 7) {
+        final limit = UpdateService.financialQuotaForBudget(
+          usage: (used: used, budget: 600),
+        );
+        expect(limit, inInclusiveRange(0, ApiConfig.financialSyncMaxCount));
+        expect(limit, lessThanOrEqualTo(prev), reason: 'used=$used 時反而變多了');
+        prev = limit;
+      }
+      expect(prev, 0, reason: '額度用滿後應收斂到 0');
     });
   });
 
-  group('步驟 4.7：上櫃財報回填佇列', () {
-    /// 上市候選遠多於 `financialSyncMaxCandidates`，模擬正式環境
+  group('步驟 4.7：財報回填單一佇列', () {
+    /// 上市候選遠多於 `financialSyncMaxCount`，模擬正式環境
     /// （2026-07-27 日誌：上市候選 1372 檔 vs 上限 150）
     final twseCandidates = [for (var i = 0; i < 400; i++) '${2000 + i}'];
     const otcSymbol = '5471'; // 松翰，上櫃、無財報
@@ -1121,23 +1134,15 @@ void main() {
       ).thenAnswer((_) async => {});
     }
 
-    test('🚨 上櫃候選排在上市之後，仍須拿到財報同步（現行串接下永遠是 0）', () async {
+    test('🚨 上櫃候選排在上市之後仍須拿到財報同步——不靠專屬名額，靠最舊優先', () async {
+      // 上市候選全部已新鮮、上櫃那檔無資料：舊的「取候選前 150」會把名額全給上市
+      // 再被下游新鮮度過濾清空；單一佇列下無資料者排隊首
+      final fresh = TaiwanCalendar.expectedLatestReportQuarter(DateTime.now());
       stubCandidates([...twseCandidates, otcSymbol]);
-      when(() => mockDb.getStocksByMarket(any())).thenAnswer(
-        (_) async => [
-          StockMasterEntry(
-            symbol: otcSymbol,
-            name: '松翰',
-            market: MarketCode.tpex,
-            industry: '半導體',
-            isActive: true,
-            updatedAt: tradingDay,
-          ),
-        ],
-      );
+      when(() => mockDb.getStocksByMarket(any())).thenAnswer((_) async => []);
       when(
         () => mockDb.getLatestFinancialDataDatesBatch(any(), any()),
-      ).thenAnswer((_) async => const {});
+      ).thenAnswer((_) async => {for (final s in twseCandidates) s: fresh});
 
       final mockFundamental = buildFundamentalMock();
       final service = buildService(fundamental: mockFundamental);
@@ -1152,32 +1157,18 @@ void main() {
       ).called(1);
     });
 
-    test('🚨 額度吃緊時上櫃回填必須縮量（守接線：算出的上限要真的傳下去）', () async {
+    test('🚨 額度吃緊時回填必須縮量（守接線：算出的上限要真的傳下去）', () async {
       stubCandidates([
         ...twseCandidates,
         for (var i = 0; i < 60; i++) '${5400 + i}',
       ]);
-      when(() => mockDb.getStocksByMarket(any())).thenAnswer(
-        (_) async => [
-          for (var i = 0; i < 60; i++)
-            StockMasterEntry(
-              symbol: '${5400 + i}',
-              name: 'OTC$i',
-              market: MarketCode.tpex,
-              industry: '半導體',
-              isActive: true,
-              updatedAt: tradingDay,
-            ),
-        ],
-      );
+      when(() => mockDb.getStocksByMarket(any())).thenAnswer((_) async => []);
       when(
         () => mockDb.getLatestFinancialDataDatesBatch(any(), any()),
       ).thenAnswer((_) async => const {});
 
-      // 2026-08-05 季報季修復後語意更新:配額統一為 financialQuotaForBudget
-      // (reserve 200、上市先拿)。used=60 → affordable=(600-60-200)/2=170
-      // → 上市拿滿 150、上櫃吃剩 20——沿用「算出的上限要真的傳下去」的
-      // 接線守護(若接線漏掉仍傳固定 100,這裡會是 60=候選全數)。
+      // used=60 → affordable=(600-60-200)/2=170。若接線漏掉、仍傳上限 200，
+      // 這裡會是 200；若退回舊的固定值也不會剛好 170。
       final tracker = ApiBudgetTracker();
       for (var i = 0; i < 60; i++) {
         tracker.recordCall(ApiVendor.finMind);
@@ -1199,14 +1190,18 @@ void main() {
           endDate: any(named: 'endDate'),
         ),
       ).captured.cast<String>();
-      final otcSynced = synced.where((s) => s.startsWith('54')).length;
 
       expect(
-        otcSynced,
-        20,
+        synced.length,
+        170,
+        reason: '熱門 15 檔計入上限，其餘 155 個名額給最舊優先；總數必須等於算出的額度',
+      );
+      expect(
+        synced,
+        containsAll(DefaultStocks.popularStocks),
         reason:
-            '上市先拿 150 後上櫃只剩 20((600-60-200)/2-150)。若接線漏掉、'
-            '仍傳固定 100,這裡會是 60(候選全數)——撞爆 600 的路徑',
+            '熱門股不在候選池，只能經由 priority 進來；接線若把 priority 丟掉，'
+            '名額會被候選補滿、總數仍是 170 而這裡轉紅',
       );
     });
 
@@ -1240,26 +1235,32 @@ void main() {
       );
     });
 
-    test('對照組：上市配額不得被上櫃佇列排擠', () async {
-      stubCandidates([...twseCandidates, otcSymbol]);
-      when(() => mockDb.getStocksByMarket(any())).thenAnswer(
-        (_) async => [
-          StockMasterEntry(
-            symbol: otcSymbol,
-            name: '松翰',
-            market: MarketCode.tpex,
-            industry: '半導體',
-            isActive: true,
-            updatedAt: tradingDay,
-          ),
-        ],
+    test('🚨 自選股必須經由 priority 進回填，且額度吃緊時先截熱門、不截自選', () async {
+      // priority = {...watchlist, ...popular}：自選在前。used=380 → limit=10，
+      // priority 有 1+15=16 檔 → 只同步前 10 檔。自選那檔不在候選池、也不是熱門，
+      // 只有 priority 這條路能到它；若接線漏掉 watchlist、或 popular 排在前面，這裡轉紅
+      const watched = '5471';
+      when(() => mockDb.getWatchlist()).thenAnswer(
+        (_) async => [WatchlistEntry(symbol: watched, createdAt: tradingDay)],
       );
+      stubCandidates(twseCandidates);
+      when(() => mockDb.getStocksByMarket(any())).thenAnswer((_) async => []);
       when(
         () => mockDb.getLatestFinancialDataDatesBatch(any(), any()),
       ).thenAnswer((_) async => const {});
 
+      final tracker = ApiBudgetTracker();
+      for (var i = 0; i < 380; i++) {
+        tracker.recordCall(ApiVendor.finMind);
+      }
+      final finMind = FinMindClient(budgetTracker: tracker);
+      addTearDown(finMind.close);
+
       final mockFundamental = buildFundamentalMock();
-      final service = buildService(fundamental: mockFundamental);
+      final service = buildService(
+        fundamental: mockFundamental,
+        finMind: finMind,
+      );
       await service.runDailyUpdate(forDate: tradingDay);
 
       final synced = verify(
@@ -1270,11 +1271,41 @@ void main() {
         ),
       ).captured.cast<String>();
 
+      expect(synced.length, 10, reason: 'limit=(600-380-200)/2=10');
+      expect(synced, contains(watched), reason: '自選股在 priority 最前，截斷截的是熱門股');
       expect(
-        synced.where((s) => s != otcSymbol).length,
-        ApiConfig.financialSyncMaxCandidates,
-        reason: '上櫃走獨立配額，上市那 150 個名額必須原封不動',
+        synced.where(DefaultStocks.popularStocks.contains).length,
+        9,
+        reason: '剩下 9 個名額給熱門股，回填一檔都沒有',
       );
+    });
+
+    test('🚨 低波動、無 INCOME 的上市股必須排在「已新鮮的候選」前面——名額不是給波動度的', () async {
+      // 生產實況(2026-09-05 app DB):460 檔只有官方批次給的資產負債表、零 EPS,
+      // 其中 18 檔當天有評分且全是上市大型低波動股(台灣大 3045、群光 2385…)。
+      // live 路徑的候選依波動度降冪,上市名額窗取前 N → 這些股票永遠排不進去;
+      // 本週五輪實測被回填的 102 檔裡 0 檔來自那 460 檔。
+      const starved = '3045';
+      final fresh = TaiwanCalendar.expectedLatestReportQuarter(DateTime.now());
+      // 名額窗塞滿「已新鮮」的高波動候選,餓死的那檔排在最後
+      final volatileFresh = [for (var i = 0; i < 400; i++) '${2000 + i}'];
+      stubCandidates([...volatileFresh, starved]);
+      when(() => mockDb.getStocksByMarket(any())).thenAnswer((_) async => []);
+      when(
+        () => mockDb.getLatestFinancialDataDatesBatch(any(), any()),
+      ).thenAnswer((_) async => {for (final s in volatileFresh) s: fresh});
+
+      final mockFundamental = buildFundamentalMock();
+      final service = buildService(fundamental: mockFundamental);
+      await service.runDailyUpdate(forDate: tradingDay);
+
+      verify(
+        () => mockFundamental.syncFinancialStatements(
+          symbol: starved,
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).called(1);
     });
   });
 }

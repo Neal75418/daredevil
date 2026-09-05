@@ -5,7 +5,6 @@ import 'dart:async';
 import 'package:meta/meta.dart' show visibleForTesting;
 
 import 'package:daredevil/core/constants/api_config.dart';
-import 'package:daredevil/core/constants/stock_patterns.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/constants/default_stocks.dart';
 import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_registry.dart';
@@ -911,38 +910,29 @@ class UpdateService {
         AppLogger.warning('UpdateService', '全市場資產負債表同步失敗,退回逐檔', e);
       }
 
-      // 兩市場統一額度配額(2026-08-05 季報季修復):上市佇列原無額度
-      // 守衛——「重跑 needy 為空」在季報季破產(全市場同時變 needy),
-      // 單輪 488 次呼叫吃掉 82% 小時額度。額度感知從上櫃推廣到全財報:
-      // 上市先拿、上櫃吃剩,總支出保證留 reserve 給其餘步驟與下一輪。
+      // 單一「最舊優先」佇列(2026-09-05):自選＋熱門優先,其餘全市場依 INCOME
+      // 最新日期由舊到新。之前上市取候選前 N(live 路徑=波動度降冪)、上櫃另走
+      // 一條最舊優先佇列——低波動大型股永遠排不進上市名額窗,app DB 實查 460 檔
+      // 零 EPS、18 檔當天有評分。額度感知沿用 2026-08-05 的 reserve 機制,只是
+      // 不再拆成「上市先拿、上櫃吃剩」兩個數字。
       final usage = _finMindClient?.hourlyUsage;
-      final quota = financialQuotaForBudget(usage: usage);
-      if (usage != null &&
-          (quota.twse < ApiConfig.financialSyncMaxCandidates ||
-              quota.otc < ApiConfig.otcFinancialSyncMaxCount)) {
+      final limit = financialQuotaForBudget(usage: usage);
+      if (usage != null && limit < ApiConfig.financialSyncMaxCount) {
         AppLogger.info(
           'UpdateService',
-          '財報回填縮量: 上市 ${quota.twse} 檔、上櫃 ${quota.otc} 檔 '
-              '(FinMind 已用 ${usage.used}/${usage.budget},保留 '
-              '${ApiConfig.financialBackfillReserve})',
+          '財報回填縮量: $limit 檔 (FinMind 已用 ${usage.used}/${usage.budget},'
+              '保留 ${ApiConfig.financialBackfillReserve})',
         );
       }
-      final targetSymbols = quota.twse == 0
+      final priority = {...watchlistSymbols, ..._popularStocks};
+      final targets = limit == 0
           ? const <String>[]
-          : selectFinancialSyncTargets(
-              prioritySymbols: {...watchlistSymbols, ..._popularStocks},
-              marketCandidates: ctx.marketCandidates,
-              maxCandidates: quota.twse,
-            );
-      // 上櫃專屬回填佇列(獨立於上市名額,理由見 selectOtcFinancialBacklog)
-      final otcBacklog = quota.otc == 0
-          ? const <String>[]
-          : await fundamentalSyncer.selectOtcFinancialBacklog(
+          : await fundamentalSyncer.selectFinancialBacklog(
               candidates: ctx.marketCandidates,
-              limit: quota.otc,
+              prioritySymbols: priority,
+              limit: limit,
             );
-      final allTargets = {...targetSymbols, ...otcBacklog}.toList();
-      if (allTargets.isNotEmpty) {
+      if (targets.isNotEmpty) {
         // 損益表與資產負債表無相依性，平行執行以縮短等待時間。
         //
         // **必須用 `Future.wait` 而非 record 的 `.wait`**：後者在任一支失敗時
@@ -952,8 +942,8 @@ class UpdateService {
         // 實跑驗證：record `.wait` → ParallelWaitError<(int?, int?), ...>；
         // `Future.wait` → 原型 RateLimitException，且同樣等所有 future 結束。
         final counts = await Future.wait<int?>([
-          fundamentalSyncer.syncFinancialStatements(symbols: allTargets),
-          fundamentalSyncer.syncBalanceSheets(symbols: allTargets),
+          fundamentalSyncer.syncFinancialStatements(symbols: targets),
+          fundamentalSyncer.syncBalanceSheets(symbols: targets),
         ]);
         final epsCount = counts[0];
         final bsCount = counts[1];
@@ -962,7 +952,8 @@ class UpdateService {
           'UpdateService',
           '步驟 4.7: 損益=$epsCount, 資負=$bsLabel, '
               '全市場資負(免費)=$marketWideBs '
-              '(${allTargets.length} 檔，其中上櫃回填 ${otcBacklog.length})',
+              '(${targets.length} 檔，其中自選＋熱門 '
+              '${targets.where(priority.contains).length})',
         );
       }
     } on RateLimitException catch (e) {
@@ -975,100 +966,27 @@ class UpdateService {
     }
   }
 
-  /// 挑選財報同步的目標股票（自選＋熱門優先，其餘依候選順序補到上限）。
+  /// 依剩餘 FinMind 額度決定本輪財報回填目標數（上限
+  /// [ApiConfig.financialSyncMaxCount]）。
   ///
-  /// 抽成純函式以便單獨驗證配額分配——這段的正確性不在於「有沒有呼叫到
-  /// syncer」，而在於**名額有沒有被用滿**，那需要對回傳清單本身斷言。
-  /// 依剩餘 FinMind 額度決定本輪上櫃財報回填量（上限
-  /// [ApiConfig.otcFinancialSyncMaxCount]）。
+  /// affordable = (budget − used − [ApiConfig.financialBackfillReserve]) ÷ 2
+  /// （每檔打損益＋資負兩次）。整點滿額度時 = 200 = 上限；額度耗至 reserve 內
+  /// 回 0、整段跳過，同小時的第二輪不再 402（2026-08-05 季報季實測單輪 494/600）。
   ///
-  /// 為什麼固定 100 不夠安全：回填佇列是最舊優先，**設計上保證每輪都選得出
-  /// 100 檔完全無資料的上櫃股**（補完 1~100 名，下輪就換 101~200 名），
-  /// 所以重跑不會變便宜 —— 這與上市那條（`_filterNeedingStatementSync` 讓
-  /// 重跑時 needy 為空、零呼叫）性質相反。而 [ApiBudgetTracker] 是 app
-  /// session 級單一實例 + sliding 1 小時，跨輪會累加。
-  ///
-  /// 2026-07-27 實測同一小時內兩輪：113 + 384 = 497/600，第三輪要再約 200
-  /// → 約 700，破表。同檔 api_budget_tracker.dart:17 記著這事發生過
-  /// （「加總打了 1125 calls，撞 hourly cap 整套 abort」）。
+  /// 2026-09-05 之前回傳 `({twse, otc})`「上市先拿、上櫃吃剩」——那是兩條佇列
+  /// 的產物；佇列收成一條後只剩一個數字。
   ///
   /// [usage] 為 null（未掛 tracker）時回上限：**「量不到」不等於「沒額度」**，
   /// 當成 0 會讓沒有 tracker 的環境完全停掉回填。這與
   /// `FinMindClient.hourlyUsage` 刻意回 null 而非 0 是同一條原則。
-  ///
-  /// 只約束上櫃這條自己的用量。上市那條的
-  /// [ApiConfig.financialSyncMaxCandidates] 維持不動——它先於本功能存在，
-  /// 且重跑時 needy 為空，不是壓力來源。
-  /// 財報回填的兩市場統一額度配額(2026-08-05 季報季修復)。
-  ///
-  /// affordable =(budget − used − [ApiConfig.financialBackfillReserve])÷2
-  /// (每檔打損益+資負兩次);上市先拿(候選恆超上限,是覆蓋主力)、
-  /// 上櫃吃剩餘。整點滿額度時上市拿滿 150、上櫃約 50——單輪財報支出
-  /// 封頂 400,加其餘步驟 ~50 仍留 >150 給同小時的下一次手動更新;
-  /// 額度耗至 reserve 內時兩市場歸零,更新數十秒完成且不再 402。
-  ///
-  /// [usage] null(未掛 tracker)回雙上限:「量不到」≠「沒額度」。
   @visibleForTesting
-  static ({int twse, int otc}) financialQuotaForBudget({
+  static int financialQuotaForBudget({
     required ({int used, int budget})? usage,
   }) {
-    if (usage == null) {
-      return (
-        twse: ApiConfig.financialSyncMaxCandidates,
-        otc: ApiConfig.otcFinancialSyncMaxCount,
-      );
-    }
+    if (usage == null) return ApiConfig.financialSyncMaxCount;
     final affordable =
         (usage.budget - usage.used - ApiConfig.financialBackfillReserve) ~/ 2;
-    final twse = affordable.clamp(0, ApiConfig.financialSyncMaxCandidates);
-    final otc = (affordable - twse).clamp(
-      0,
-      ApiConfig.otcFinancialSyncMaxCount,
-    );
-    return (twse: twse, otc: otc);
-  }
-
-  @visibleForTesting
-  static int otcFinancialLimitForBudget({
-    required ({int used, int budget})? usage,
-    int maxLimit = ApiConfig.otcFinancialSyncMaxCount,
-    int reserve = ApiConfig.otcFinancialBackfillReserve,
-  }) {
-    if (usage == null) return maxLimit;
-    // 每檔要打損益表 + 資產負債表兩次
-    final affordable = (usage.budget - usage.used - reserve) ~/ 2;
-    return affordable.clamp(0, maxLimit);
-  }
-
-  @visibleForTesting
-  static List<String> selectFinancialSyncTargets({
-    required Set<String> prioritySymbols,
-    required List<String> marketCandidates,
-    int maxCandidates = ApiConfig.financialSyncMaxCandidates,
-  }) {
-    final remainingSlots = maxCandidates - prioritySymbols.length;
-    return {
-      ...prioritySymbols,
-      if (remainingSlots > 0)
-        // **ETF 過濾必須早於 take**：ETF 無財報，下游 fundamental_syncer
-        // （:306 INCOME／:409 BALANCE）會濾掉它們，但被丟掉的名額不會由
-        // 第 N+1 名遞補 → 名額空轉。與 3faea63 在 chip_anomaly_service
-        // 立的同一條規則。
-        //
-        // 實測 2026-07-24：價格走快取路徑時候選順序退化為 symbol 升冪
-        // （quickFilterCandidatesFromDb 不排序、DAO 無 ORDER BY），扣掉
-        // 39 檔 priority 後**前 111 檔 100% 是 00 開頭 ETF**，那一輪等於
-        // 沒有任何非自選股拿到新財報；而 update_run 72 次中約 89% 走快取路徑。
-        //
-        // priority（自選＋熱門）不套此過濾：使用者主動追蹤的 ETF 應留在
-        // 清單裡，由下游自然跳過即可。
-        ...marketCandidates
-            .where(
-              (s) =>
-                  !prioritySymbols.contains(s) && !StockPatterns.isEtfCode(s),
-            )
-            .take(remainingSlots),
-    }.toList();
+    return affordable.clamp(0, ApiConfig.financialSyncMaxCount);
   }
 
   /// 步驟 4.8：Killer Features 資料（警示、董監持股）
