@@ -17,51 +17,6 @@
 > 但 **bundle ID 仍是 `com.neo.afterclose`、DB 檔名仍是 `afterclose.sqlite`** —— 它們決定 macOS 容器路徑（`~/Library/Containers/com.neo.afterclose/Data/Documents/`），改動等同 App 換家、既有資料庫（約 58.7 萬列價格，2026-08-07 實測）會看似清空。
 > **除非做容器遷移，否則不要動這兩個字串**；文件裡出現它們是實體事實，不是漏改。
 
-```mermaid
-flowchart LR
-    subgraph Input["每日輸入"]
-        API["公開 API"]
-        RSS["RSS 新聞"]
-    end
-
-    subgraph Process["本地處理"]
-        Sync["資料同步"]
-        Rules["70 條規則"]
-        Score["評分引擎"]
-    end
-
-    subgraph Output["產出"]
-        Modes["三模式選股<br/>起漲 / 強勢 / 回檔"]
-        Alert["異常警示"]
-    end
-
-    API --> Sync
-    RSS --> Sync
-    Sync --> Rules --> Score --> Modes
-    Score --> Alert
-
-    classDef ext fill:#F59E0B,stroke:#78350F,stroke-width:2px,color:#FFFFFF
-    classDef dom fill:#10B981,stroke:#065F46,stroke-width:2px,color:#FFFFFF
-    classDef pres fill:#4F46E5,stroke:#312E81,stroke-width:2px,color:#FFFFFF
-
-    class API,RSS ext
-    class Sync,Rules,Score dom
-    class Modes,Alert pres
-```
-
----
-
-## 常用指令
-
-```bash
-flutter pub get                                                # 安裝依賴
-dart run build_runner build --delete-conflicting-outputs        # 程式碼生成 (僅 Drift)
-flutter test                                                   # 執行測試
-flutter test --coverage                                        # 含覆蓋率報告
-flutter analyze --no-fatal-infos                               # 靜態分析
-dart format .                                                  # 格式化 (pre-commit hook 自動執行)
-```
-
 ---
 
 ## 關鍵路徑
@@ -106,16 +61,6 @@ dart format .                                                  # 格式化 (pre-
 > 佐證層：兩支 CLI 每次執行都印 `[build=<sha> compiled=<time>]`（`lib/core/utils/build_stamp.dart` 讀 bundle 根的 `BUILD_INFO`，由 `install.sh` 寫入、dirty 會標記）。
 > hook 只在本機、只在正常 commit 路徑有效；rebase／cherry-pick／換機時，**日誌裡那行 SHA 是唯一能事後驗證的證據**。
 
-### 資料庫變更流程
-
-```bash
-# 1. 修改 lib/data/database/tables/*.dart
-# 2. 執行 code generation
-dart run build_runner build --delete-conflicting-outputs
-# 3. 確認無迴歸
-flutter test
-```
-
 ### 測試
 
 | Layer        | 覆蓋率目標 |
@@ -123,41 +68,6 @@ flutter test
 | Domain       | 85%+       |
 | Data         | 85%+       |
 | Presentation | 70%+       |
-
-```bash
-flutter test                                          # 快速測試
-flutter test --coverage                               # 含覆蓋率
-flutter test test/domain/services/                    # 測試特定目錄
-```
-
-### Widget 測試慣例
-
-```dart
-import '../../helpers/widget_test_helpers.dart';
-
-void main() {
-  setUpAll(() async {
-    await setupTestLocalization(); // 使用 .tr() 的 widget 必須呼叫
-  });
-
-  void widenViewport(WidgetTester tester) {
-    tester.view.physicalSize = const Size(5000, 4000);
-    addTearDown(() => tester.view.resetPhysicalSize());
-  }
-
-  testWidgets('example', (tester) async {
-    widenViewport(tester); // 避免 RenderFlex overflow
-    await tester.pumpWidget(buildTestApp(MyWidget(), brightness: Brightness.light));
-  });
-}
-```
-
-**注意事項**：
-- `SectionHeader` 使用 `flutter_animate`，需 `await tester.pump(const Duration(seconds: 1))` 推進動畫
-- `TechnicalIndicatorService` 為 plain class，直接 `new` 使用，不需 mock
-- `FinMindRevenue.date` 型別為 `String`（非 `DateTime`）
-- `PortfolioPositionData.quantity` 型別為 `double`（非 `int`）
-- 每個測試檔案自行宣告 mock classes，不使用共享 mock 檔案
 
 ---
 
@@ -200,17 +110,6 @@ Data 層提供實作；`domain/repositories/` 介面**僅保留有真消費者�
 `tool/daily_update.dart`、`tool/intraday_alert_check.dart`（皆由 launchd `dart run`）的 import 閉包**不得**含 flutter／easy_localization／flutter plugins（shared_preferences 等）——混入即編譯失敗且**靜默斷自動更新**（2026-07 斷 13 天才發現）。
 守門：`test/tool/tool_chain_pure_dart_test.dart`（涵蓋兩支 CLI）；改動 update 鏈後跑 `dart compile kernel tool/daily_update.dart` 終驗。
 `@visibleForTesting` 用 `package:meta`，i18n 格式化用 presentation 專用 `LocalizedNumberFormat`
-
----
-
-## 關鍵文件
-
-| 文件                                       | 說明                     |
-|:-------------------------------------------|:-------------------------|
-| [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md) | 規則引擎詳解 (70 條規則) |
-| [docs/CALIBRATION.md](docs/CALIBRATION.md) | 規則分數校準管線(四階段) |
-| [RELEASE.md](RELEASE.md)                   | 發布建置指南             |
-| [CHANGELOG.md](CHANGELOG.md)               | 版本變更紀錄             |
 
 ---
 
