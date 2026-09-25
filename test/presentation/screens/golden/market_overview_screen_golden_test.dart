@@ -1,3 +1,9 @@
+/// Golden test: MarketOverviewScreen（今日頁摘要條進入的完整大盤頁）
+///
+/// 平台相依（字型渲染），只在本機跑；CI 以 --exclude-tags golden 排除。
+@Tags(['golden'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
