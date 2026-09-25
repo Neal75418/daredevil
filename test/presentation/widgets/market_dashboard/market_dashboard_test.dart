@@ -94,6 +94,18 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
+    testWidgets('🚨 已有資料時重新載入 → 保留看板，不縮成轉圈卡', (tester) async {
+      // 每次下拉／回前景都會 reload 大盤；原本不管有沒有資料都整塊換成
+      // 120px 的轉圈卡，看板每次都閃一下
+      widenViewport(tester);
+      final state = createLoadedState().copyWith(isLoading: true);
+
+      await tester.pumpWidget(buildTestApp(MarketDashboard(state: state)));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byIcon(Icons.show_chart), findsOneWidget);
+    });
+
     testWidgets('returns SizedBox.shrink when no data', (tester) async {
       widenViewport(tester);
       const state = MarketOverviewState();

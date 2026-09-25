@@ -64,7 +64,8 @@ class _MarketDashboardState extends State<MarketDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.state.isLoading) {
+    // 已有資料時重新載入（下拉、回前景）保留看板，只有首次載入才顯示轉圈卡
+    if (widget.state.isLoading && !widget.state.hasData) {
       return const Padding(
         padding: EdgeInsets.symmetric(
           horizontal: DesignTokens.spacing16,

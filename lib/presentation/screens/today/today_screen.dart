@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -74,6 +76,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   Widget build(BuildContext context) {
     // 使用 selector 分離 loading/error 狀態，避免 updateProgress 變更時重建整個畫面
     final isLoading = ref.watch(todayProvider.select((s) => s.isLoading));
+    // 已有內容時重新載入（下拉、回前景）不換成骨架：整頁被換掉會讓捲動
+    // 位置與畫面一起消失。骨架只給「還沒有任何內容」的首次載入。
+    final hasContent = ref.watch(
+      todayProvider.select((s) => s.dataDate != null || s.lastUpdate != null),
+    );
     final error = ref.watch(todayProvider.select((s) => s.error));
     // 「有內容可顯示」改用 3-mode 同源判斷（取代已退役的 todayProvider.recommendations）：
     // 用於決定 loadData 出錯時要顯示全屏 error 還是保留現有內容（起漲候選 tab 有資料即視為有內容）。
@@ -89,17 +96,55 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
     return Scaffold(
       body: ThemedRefreshIndicator(
-        onRefresh: () async {
-          await Future.wait([
-            ref.read(todayProvider.notifier).loadData(),
-            ref.read(marketOverviewProvider.notifier).loadData(),
-          ]);
-        },
-        child: isLoading
+        onRefresh: _onPullToRefresh,
+        child: isLoading && !hasContent
             ? const StockListShimmer(itemCount: 5)
             : error != null && !hasRecommendations
             ? _buildError(error)
             : _buildContent(watchlistSymbols),
+      ),
+    );
+  }
+
+  /// 下拉＝抓最新（台股 App 慣例）。
+  ///
+  /// 🚨 先重讀 DB 再判斷：App 開著時記憶體裡的資料日可能早已過時（launchd
+  /// 15:30 已在 App 外寫入今天），拿舊值判斷會白跑一輪完整更新。重讀後
+  /// 仍落後交易日才跑完整更新（1–2 分鐘、耗 FinMind 額度）；否則告知
+  /// 「已是最新」，讓下拉有明確回饋。
+  Future<void> _onPullToRefresh() async {
+    // 判斷前只重讀 DB（快）。大盤要連網（最多 20 秒），等確定已是最新才
+    // 載入；要跑更新時，更新結束本就會重載大盤。
+    await ref.read(todayProvider.notifier).reloadAfterResume();
+    if (!mounted) return;
+
+    final today = ref.read(todayProvider);
+    // 更新進行中（重讀被跳過）或重讀失敗：不說「已是最新」——進度條、
+    // 全頁錯誤畫面或（已有清單時）部分錯誤橫幅已經在顯示
+    if (today.isUpdating || today.error != null) return;
+
+    final dataDate = today.dataDate;
+    final behind = dataDate == null
+        ? 1
+        : TaiwanCalendar.tradingDaysBehind(
+            dataDate,
+            ref.read(appClockProvider).now(),
+          );
+    if (behind >= 1) {
+      // 不 await：下拉指示器收起，改由更新進度條顯示進度
+      unawaited(_runUpdate());
+      return;
+    }
+    await ref.read(marketOverviewProvider.notifier).loadData();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'today.alreadyLatest'.tr(
+            namedArgs: {'date': '${dataDate!.month}/${dataDate.day}'},
+          ),
+        ),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -922,7 +967,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           builder: (context, ref, _) {
             final mode = ref.watch(selectedModeProvider);
             final asyncRecs = ref.watch(modeRecommendationsProvider(mode));
+            // 重算（DB 有變 → bump epoch）時保留舊清單：預設 reload 會回到
+            // loading，清單被整塊換成轉圈、捲動位置跟著消失
             return asyncRecs.when(
+              skipLoadingOnReload: true,
               data: (recommendations) {
                 if (recommendations.isEmpty) {
                   return SliverFillRemaining(

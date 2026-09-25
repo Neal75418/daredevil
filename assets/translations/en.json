@@ -85,7 +85,8 @@
     "industryRankingScope": "Median member return · TWSE+TPEx combined · ≥5 members — breadth view, differs from cap-weighted official indices",
     "watchlistMaReclaim": "↗ {count} watchlist stock(s) reclaimed MA: {names}",
     "dataStale": "Data is {count} trading day(s) behind (latest close {date})",
-    "updateNow": "Update now"
+    "updateNow": "Update now",
+    "alreadyLatest": "Up to date ({date} close)"
   },
   "news": {
     "title": "Market News",

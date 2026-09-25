@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,7 @@ import 'package:daredevil/core/constants/scoring_mode.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/domain/services/update_service.dart';
+import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
@@ -20,6 +23,7 @@ import 'package:daredevil/presentation/screens/today/widgets/data_stale_banner.d
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/update_progress_banner.dart';
+import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
 
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
@@ -37,6 +41,17 @@ class FakeTodayNotifier extends TodayNotifier {
 
   @override
   Future<void> loadData() async {}
+
+  int reloadCalls = 0;
+
+  /// 模擬重讀 DB 後的狀態（例如 launchd 已在 App 外寫入新資料）
+  TodayState? stateAfterReload;
+
+  @override
+  Future<void> reloadAfterResume() async {
+    reloadCalls++;
+    if (stateAfterReload case final s?) state = s;
+  }
 
   @override
   Future<UpdateResult> runUpdate({bool force = false}) async {
@@ -86,11 +101,14 @@ class FakeWatchlistNotifier extends WatchlistNotifier {
 class FakeMarketOverviewNotifier extends MarketOverviewNotifier {
   MarketOverviewState initialState = const MarketOverviewState();
 
+  /// 設定後 loadData 會卡住直到完成（模擬網路慢）
+  static Completer<void>? hold;
+
   @override
   MarketOverviewState build() => initialState;
 
   @override
-  Future<void> loadData() async {}
+  Future<void> loadData() async => hold?.future;
 }
 
 class FakeSettingsNotifier extends SettingsNotifier {
@@ -289,6 +307,233 @@ void main() {
     testWidgets('還沒有任何資料 → 不提示（屬於首次安裝的空狀態）', (tester) async {
       await pumpAt(tester, dataDate: null, now: DateTime(2026, 9, 18, 17));
       expect(find.text('today.dataStale'), findsNothing);
+    });
+  });
+
+  // 下拉原本只重讀 DB、不抓新資料（台股 App 的慣例是下拉＝抓最新），而且
+  // loadData 會把整頁換成骨架、捲動位置跟著消失。
+  group('下拉重新整理', () {
+    Future<FakeTodayNotifier> pumpAt(
+      WidgetTester tester, {
+      required DateTime? dataDate,
+      required DateTime now,
+      bool isLoading = false,
+      TodayState? afterReload,
+    }) async {
+      widenViewport(tester);
+      final notifier = FakeTodayNotifier()..stateAfterReload = afterReload;
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(
+            dataDate: dataDate,
+            lastUpdate: dataDate,
+            isLoading: isLoading,
+          ),
+          clock: _FixedClock(now),
+          todayNotifier: notifier,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      return notifier;
+    }
+
+    Future<void> pullToRefresh(WidgetTester tester) async {
+      await tester
+          .widget<ThemedRefreshIndicator>(find.byType(ThemedRefreshIndicator))
+          .onRefresh();
+      await tester.pump();
+    }
+
+    testWidgets('🚨 資料落後 → 下拉就跑更新', (tester) async {
+      final notifier = await pumpAt(
+        tester,
+        dataDate: DateTime(2026, 9, 14),
+        now: DateTime(2026, 9, 18, 17),
+      );
+
+      await pullToRefresh(tester);
+
+      expect(notifier.runUpdateCalls, 1);
+    });
+
+    testWidgets('資料已是最新 → 不白跑更新，重讀並告知已是最新', (tester) async {
+      final notifier = await pumpAt(
+        tester,
+        dataDate: DateTime(2026, 9, 18),
+        now: DateTime(2026, 9, 18, 17),
+      );
+
+      await pullToRefresh(tester);
+
+      expect(notifier.runUpdateCalls, 0);
+      expect(notifier.reloadCalls, 1, reason: 'App 外的更新要能被帶進來');
+      expect(find.text('today.alreadyLatest'), findsOneWidget);
+    });
+
+    testWidgets('🚨 先重讀 DB 再判斷：launchd 已寫入今天 → 不白跑更新', (tester) async {
+      // App 開著、離開不到 30 分鐘，記憶體還是昨天；DB 其實已有今天
+      final notifier = await pumpAt(
+        tester,
+        dataDate: DateTime(2026, 9, 17),
+        now: DateTime(2026, 9, 18, 17),
+        afterReload: TodayState(
+          dataDate: DateTime(2026, 9, 18),
+          lastUpdate: DateTime(2026, 9, 18, 15, 31),
+        ),
+      );
+
+      await pullToRefresh(tester);
+
+      expect(notifier.reloadCalls, 1);
+      expect(notifier.runUpdateCalls, 0);
+      expect(find.text('today.alreadyLatest'), findsOneWidget);
+    });
+
+    testWidgets('🚨 要跑更新時不必先等大盤的網路載入', (tester) async {
+      FakeMarketOverviewNotifier.hold = Completer<void>();
+      addTearDown(() => FakeMarketOverviewNotifier.hold = null);
+      final notifier = await pumpAt(
+        tester,
+        dataDate: DateTime(2026, 9, 14),
+        now: DateTime(2026, 9, 18, 17),
+      );
+
+      unawaited(
+        tester
+            .widget<ThemedRefreshIndicator>(find.byType(ThemedRefreshIndicator))
+            .onRefresh(),
+      );
+      await tester.pump();
+
+      expect(notifier.runUpdateCalls, 1, reason: '大盤載入卡住也不該擋住更新');
+      FakeMarketOverviewNotifier.hold!.complete();
+      await tester.pump();
+    });
+
+    testWidgets('已有推薦清單時重讀失敗 → 部分錯誤橫幅顯示、不說已是最新', (tester) async {
+      widenViewport(tester);
+      final notifier = FakeTodayNotifier()
+        ..stateAfterReload = TodayState(
+          dataDate: DateTime(2026, 9, 18),
+          lastUpdate: DateTime(2026, 9, 18),
+          error: 'db busy',
+        );
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(
+            dataDate: DateTime(2026, 9, 18),
+            lastUpdate: DateTime(2026, 9, 18),
+          ),
+          clock: _FixedClock(DateTime(2026, 9, 18, 17)),
+          todayNotifier: notifier,
+          modeRecommendations: (ref, mode) =>
+              SynchronousFuture([rec('2330', trend: 'UP')]),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester
+          .widget<ThemedRefreshIndicator>(find.byType(ThemedRefreshIndicator))
+          .onRefresh();
+      await tester.pump();
+
+      expect(find.textContaining('db busy'), findsOneWidget);
+      expect(find.text('today.alreadyLatest'), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('重讀失敗 → 不說「已是最新」', (tester) async {
+      await pumpAt(
+        tester,
+        dataDate: DateTime(2026, 9, 18),
+        now: DateTime(2026, 9, 18, 17),
+        afterReload: TodayState(
+          dataDate: DateTime(2026, 9, 18),
+          lastUpdate: DateTime(2026, 9, 18),
+          error: 'db busy',
+        ),
+      );
+
+      await pullToRefresh(tester);
+
+      expect(find.text('today.alreadyLatest'), findsNothing);
+      // 重讀失敗會切到錯誤畫面，其進場動畫的 timer 要跑完
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('更新進行中 → 不說「已是最新」', (tester) async {
+      await pumpAt(
+        tester,
+        dataDate: DateTime(2026, 9, 18),
+        now: DateTime(2026, 9, 18, 17),
+        afterReload: TodayState(
+          dataDate: DateTime(2026, 9, 18),
+          lastUpdate: DateTime(2026, 9, 18),
+          isUpdating: true,
+        ),
+      );
+
+      await pullToRefresh(tester);
+
+      expect(find.text('today.alreadyLatest'), findsNothing);
+    });
+
+    testWidgets('還沒有任何資料 → 下拉就跑更新', (tester) async {
+      final notifier = await pumpAt(
+        tester,
+        dataDate: null,
+        now: DateTime(2026, 9, 18, 17),
+      );
+
+      await pullToRefresh(tester);
+
+      expect(notifier.runUpdateCalls, 1);
+    });
+
+    testWidgets('🚨 推薦清單重算時保留舊清單，不換成轉圈', (tester) async {
+      // DB 有變就 bump epoch → 推薦 provider 重算；AsyncValue.when 預設
+      // reload 時回到 loading，清單被整塊換掉、捲動位置消失
+      widenViewport(tester);
+      var calls = 0;
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(
+            dataDate: DateTime(2026, 9, 18),
+            lastUpdate: DateTime(2026, 9, 18),
+          ),
+          clock: _FixedClock(DateTime(2026, 9, 18, 17)),
+          // 與正式 provider 相同：watch epoch，bump 時以「依賴改變」reload
+          modeRecommendations: (ref, mode) {
+            final epoch = ref.watch(dataUpdateEpochProvider);
+            calls++;
+            return epoch == 0
+                ? SynchronousFuture([rec('2330', trend: 'UP')])
+                : Completer<List<ModeRecommendation>>().future;
+          },
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('2330'), findsOneWidget, reason: '前提');
+
+      ProviderScope.containerOf(
+        tester.element(find.byType(TodayScreen)),
+      ).read(dataUpdateEpochProvider.notifier).bump();
+      await tester.pump();
+      expect(calls, greaterThan(1), reason: '前提：確實觸發了重算');
+
+      expect(find.text('2330'), findsOneWidget);
+    });
+
+    testWidgets('🚨 已有內容時重新載入 → 不換成骨架（保留畫面與捲動位置）', (tester) async {
+      await pumpAt(
+        tester,
+        dataDate: DateTime(2026, 9, 18),
+        now: DateTime(2026, 9, 18, 17),
+        isLoading: true,
+      );
+
+      expect(find.byType(StockListShimmer), findsNothing);
+      expect(find.byType(CustomScrollView), findsOneWidget);
     });
   });
 

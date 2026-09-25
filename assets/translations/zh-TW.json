@@ -85,7 +85,8 @@
     "industryRankingScope": "口徑:成員中位數報酬・上市+上櫃合併・樣本≥5檔——與市值加權的官方類指數不同,量的是族群廣度",
     "watchlistMaReclaim": "↗ 自選 {count} 檔站回均線:{names}",
     "dataStale": "資料落後 {count} 個交易日（最新 {date} 收盤）",
-    "updateNow": "立即更新"
+    "updateNow": "立即更新",
+    "alreadyLatest": "已是最新（{date} 收盤）"
   },
   "news": {
     "title": "市場新聞",
