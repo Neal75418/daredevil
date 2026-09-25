@@ -71,9 +71,9 @@ class _CreatePriceAlertDialogState
     } else {
       // 建立模式
       _selectedType = AlertType.above;
-      if (widget.currentPrice case final price?) {
-        _valueController.text = price.toStringAsFixed(2);
-      }
+      _valueController.text = _selectedType.initialInputText(
+        currentPrice: widget.currentPrice,
+      );
     }
   }
 
@@ -181,26 +181,27 @@ class _CreatePriceAlertDialogState
               ),
               const SizedBox(height: DesignTokens.spacing16),
 
-              // 目標值輸入
-              TextField(
-                controller: _valueController,
-                decoration: InputDecoration(
-                  labelText: _getValueLabel(),
-                  hintText: _getValueHint(),
-                  suffixText: _selectedType == AlertType.changePct
-                      ? '%'
-                      : 'alert.currency'.tr(),
-                  border: const OutlineInputBorder(),
+              // 目標值輸入（自動觸發型不需要，整欄隱藏）
+              if (_selectedType.requiresTargetValue) ...[
+                TextField(
+                  controller: _valueController,
+                  decoration: InputDecoration(
+                    labelText: _getValueLabel(),
+                    hintText: _getValueHint(),
+                    suffixText: _getValueSuffix(),
+                    border: const OutlineInputBorder(),
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'^\d*\.?\d{0,2}'),
+                    ),
+                  ],
                 ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-                ],
-              ),
-
-              const SizedBox(height: DesignTokens.spacing16),
+                const SizedBox(height: DesignTokens.spacing16),
+              ],
 
               // 備註輸入（選填）
               TextField(
@@ -286,10 +287,18 @@ class _CreatePriceAlertDialogState
                   style: const TextStyle(fontSize: DesignTokens.fontSizeSm),
                 ),
                 selected: _selectedType == type,
-                onSelected: (picked) {
-                  if (!picked) return; // 互斥:不允許取消選取
-                  setState(() => _selectedType = type);
-                },
+                // 編輯模式鎖定類型：editAlert 只更新數值與備註，切了也不會存
+                onSelected: widget.isEditing && type != _selectedType
+                    ? null
+                    : (picked) {
+                        if (!picked) return; // 互斥:不允許取消選取
+                        setState(() {
+                          _selectedType = type;
+                          _valueController.text = type.initialInputText(
+                            currentPrice: widget.currentPrice,
+                          );
+                        });
+                      },
               ),
           ],
         ),
@@ -314,7 +323,24 @@ class _CreatePriceAlertDialogState
       AlertType.rsiOverbought ||
       AlertType.rsiOversold => 'alert.rsiThreshold'.tr(),
       AlertType.crossAboveMa || AlertType.crossBelowMa => 'alert.maDays'.tr(),
+      AlertType.revenueYoySurge => 'alert.revenueYoyThreshold'.tr(),
+      AlertType.highDividendYield => 'alert.dividendYieldThreshold'.tr(),
+      AlertType.peUndervalued => 'alert.peThreshold'.tr(),
       _ => '',
+    };
+  }
+
+  String? _getValueSuffix() {
+    if (_selectedType.isPriceTarget) return 'alert.currency'.tr();
+    return switch (_selectedType) {
+      AlertType.changePct ||
+      AlertType.revenueYoySurge ||
+      AlertType.highDividendYield => '%',
+      AlertType.volumeAbove => 'alert.unit.lots'.tr(),
+      AlertType.peUndervalued => 'alert.unit.times'.tr(),
+      AlertType.crossAboveMa ||
+      AlertType.crossBelowMa => 'alert.unit.dayMa'.tr(),
+      _ => null,
     };
   }
 
@@ -377,6 +403,8 @@ class _CreatePriceAlertDialogState
     }
 
     final note = _noteController.text.isEmpty ? null : _noteController.text;
+    // 不需目標值的類型一律存 0，不讓欄位殘值（例如預填現價）混進門檻
+    final targetValue = _selectedType.requiresTargetValue ? value! : 0.0;
     final bool success;
 
     if (widget.isEditing) {
@@ -384,7 +412,7 @@ class _CreatePriceAlertDialogState
           .read(priceAlertProvider.notifier)
           .editAlert(
             id: widget.existingAlert!.id,
-            targetValue: value ?? 0,
+            targetValue: targetValue,
             note: note,
           );
     } else {
@@ -393,7 +421,7 @@ class _CreatePriceAlertDialogState
           .createAlert(
             symbol: widget.symbol,
             alertType: _selectedType,
-            targetValue: value ?? 0,
+            targetValue: targetValue,
             note: note,
           );
     }

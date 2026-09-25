@@ -26,13 +26,11 @@ void main() {
     return true;
   }
 
-  test('S 註冊的每個 key 都存在於 zh-TW 與 en', () {
-    final source = File('lib/core/l10n/app_strings.dart').readAsStringSync();
-    final keys = RegExp(
-      r"'([a-z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9]+)+)'\s*\.tr\(",
-    ).allMatches(source).map((m) => m.group(1)!).toSet();
-    expect(keys, isNotEmpty, reason: '抽取失敗=regex 壞了,不是真的沒 key');
+  final literalKey = RegExp(
+    r"'([a-z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9]+)+)'\s*\.tr\(",
+  );
 
+  void expectAllKeysExist(Set<String> keys) {
     for (final locale in ['zh-TW', 'en']) {
       final root = loadLocale(locale);
       final missing = keys.where((k) => !hasKey(root, k)).toList()..sort();
@@ -42,5 +40,26 @@ void main() {
         reason: '$locale.json 缺 key(畫面會直接顯示 key 原字串): $missing',
       );
     }
+  }
+
+  test('S 註冊的每個 key 都存在於 zh-TW 與 en', () {
+    final source = File('lib/core/l10n/app_strings.dart').readAsStringSync();
+    final keys = literalKey.allMatches(source).map((m) => m.group(1)!).toSet();
+    expect(keys, isNotEmpty, reason: '抽取失敗=regex 壞了,不是真的沒 key');
+    expectAllKeysExist(keys);
+  });
+
+  // 只掃 S 不夠:lib/ 裡另有近千處直接 'key'.tr()。行事曆刪除後的
+  // 「復原」按鈕引用不存在的 'common.undo',兩個語系都顯示 key 字面。
+  test('lib/ 裡每個字面 key 的 .tr() 都存在於 zh-TW 與 en', () {
+    final keys = <String>{};
+    for (final f in Directory('lib').listSync(recursive: true)) {
+      if (f is! File || !f.path.endsWith('.dart')) continue;
+      keys.addAll(
+        literalKey.allMatches(f.readAsStringSync()).map((m) => m.group(1)!),
+      );
+    }
+    expect(keys.length, greaterThan(500), reason: '抽取量過少=regex 或路徑壞了');
+    expectAllKeysExist(keys);
   });
 }

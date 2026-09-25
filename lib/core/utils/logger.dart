@@ -1,3 +1,5 @@
+import 'package:daredevil/core/utils/log_redaction.dart';
+
 /// 日誌等級，用於過濾輸出
 enum LogLevel { debug, info, warning, error }
 
@@ -84,10 +86,10 @@ abstract final class AppLogger {
     _log(LogLevel.warning, tag, message, error, stackTrace);
 
     _sentryBreadcrumb?.call(
-      '[$tag] $message',
+      LogRedaction.redact('[$tag] $message'),
       tag,
       'warning',
-      error != null ? {'error': error.toString()} : null,
+      error != null ? {'error': LogRedaction.redact(error.toString())} : null,
     );
   }
 
@@ -103,7 +105,12 @@ abstract final class AppLogger {
     _log(LogLevel.error, tag, message, error, stackTrace);
 
     if (error != null) {
-      _sentryCapture?.call(error, stackTrace, tag, message);
+      _sentryCapture?.call(
+        error,
+        stackTrace,
+        tag,
+        LogRedaction.redact(message),
+      );
     }
   }
 
@@ -141,7 +148,9 @@ abstract final class AppLogger {
         '${now.minute.toString().padLeft(2, '0')}:'
         '${now.second.toString().padLeft(2, '0')}.'
         '${now.millisecond.toString().padLeft(3, '0')}';
-    final logMessage = '$timestamp $prefix [$tag] $message';
+    final logMessage = LogRedaction.redact(
+      '$timestamp $prefix [$tag] $message',
+    );
 
     // 純 Dart `print` — debug build 行為等同 `debugPrint`（不 throttle 但
     // 順序保證）。CLI 寫進 launchd stdout file。
@@ -150,7 +159,9 @@ abstract final class AppLogger {
 
     if (error != null) {
       // ignore: avoid_print
-      print('$timestamp $prefix [$tag] Error: $error');
+      print(
+        '$timestamp $prefix [$tag] Error: ${LogRedaction.redact('$error')}',
+      );
     }
 
     if (stackTrace != null) {

@@ -260,8 +260,9 @@ class AlertEvaluationService {
         case AlertParams.typeHighPledgeRatio:
           final ratio = context.pledgeRatioMap[alert.symbol];
           if (ratio != null) {
-            shouldTrigger =
-                ratio >= (alert.targetValue > 0 ? alert.targetValue : 30);
+            // 不讀 targetValue：此類型不需目標值，但舊版對話框會把預填現價
+            // 存進來（質押比 ≥850% 永不觸發）。
+            shouldTrigger = ratio >= AlertParams.highPledgeRatioPct;
           }
 
         default:
@@ -312,7 +313,8 @@ class AlertEvaluationService {
     return recent.reduce((a, b) => a + b) / recent.length;
   }
 
-  /// 檢查成交量爆量（成交量 >= 4x 均量 且價格變動 >= 1.5%）
+  /// 檢查成交量爆量（量 ≥ [AlertParams.volumeSpikeMultiplier] 倍均量，
+  /// 且漲跌幅 ≥ [AlertParams.volumeSpikeMinPriceChangePct]%）
   bool _checkVolumeSpike(
     List<DailyPriceEntry> prices,
     double currentPrice,
@@ -326,21 +328,20 @@ class AlertEvaluationService {
     final latestVolume = prices.last.volume;
     if (latestVolume == null || latestVolume <= 0) return false;
 
-    // 條件 1: 成交量 >= 4x 均量
-    final volumeSpike = latestVolume >= avgVolume * 4;
-
-    // 條件 2: 價格變動 >= 1.5%
+    final volumeSpike =
+        latestVolume >= avgVolume * AlertParams.volumeSpikeMultiplier;
     final significantPriceChange =
-        priceChange != null && priceChange.abs() >= 1.5;
+        priceChange != null &&
+        priceChange.abs() >= AlertParams.volumeSpikeMinPriceChangePct;
 
     return volumeSpike && significantPriceChange;
   }
 
-  /// 檢查成交量高於目標值
-  bool _checkVolumeAbove(DailyPriceEntry price, double targetVolume) {
+  /// 檢查成交量高於目標值（[targetLots] 單位是張，DB 的 volume 單位是股）
+  bool _checkVolumeAbove(DailyPriceEntry price, double targetLots) {
     final volume = price.volume;
     if (volume == null || volume <= 0) return false;
-    return volume >= targetVolume;
+    return volume >= targetLots * RuleParams.sheetToShares;
   }
 
   // ==================================================

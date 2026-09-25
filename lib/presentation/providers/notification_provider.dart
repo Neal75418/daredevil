@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import 'package:easy_localization/easy_localization.dart';
 
+import 'package:daredevil/core/constants/rule_params_alert.dart';
 import 'package:daredevil/core/services/notification_service.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
@@ -273,8 +274,11 @@ class NotificationNotifier extends Notifier<NotificationState> {
       AlertType.changePct => 'notification.changeBody'.tr(
         namedArgs: {'percent': alert.targetValue.toStringAsFixed(1)},
       ),
+      // 爆量的倍數是固定門檻、不存在 targetValue（見 AlertParams）
       AlertType.volumeSpike => 'notification.volumeSpikeBody'.tr(
-        namedArgs: {'value': alert.targetValue.toStringAsFixed(0)},
+        namedArgs: {
+          'value': AlertParams.volumeSpikeMultiplier.toStringAsFixed(0),
+        },
       ),
       AlertType.volumeAbove => 'notification.volumeAboveBody'.tr(
         namedArgs: {'value': alert.targetValue.toStringAsFixed(0)},

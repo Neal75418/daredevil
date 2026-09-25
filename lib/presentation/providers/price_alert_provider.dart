@@ -98,12 +98,31 @@ enum AlertType {
     AlertType.rsiOversold => AlertParams.defaultRsiOversold,
     AlertType.crossAboveMa ||
     AlertType.crossBelowMa => AlertParams.defaultMaCrossDays,
-    AlertType.volumeSpike => AlertParams.defaultVolumeSpikeMultiplier,
     AlertType.revenueYoySurge => AlertParams.defaultRevenueYoySurgePct,
     AlertType.highDividendYield => AlertParams.defaultHighDividendYieldPct,
     AlertType.peUndervalued => AlertParams.defaultPeUndervalued,
     _ => null,
   };
+
+  /// 目標值是否就是「價格」（切換到這些類型時預填現價才有意義）
+  bool get isPriceTarget => switch (this) {
+    AlertType.above ||
+    AlertType.below ||
+    AlertType.breakResistance ||
+    AlertType.breakSupport => true,
+    _ => false,
+  };
+
+  /// 切換到此類型時數值欄的初始內容。
+  ///
+  /// 🚨 不可沿用上一個類型的內容：舊版切換時不重設，現價「850」被當成
+  /// RSI／PE／質押比門檻存下去。
+  String initialInputText({double? currentPrice}) {
+    if (isPriceTarget) return currentPrice?.toStringAsFixed(2) ?? '';
+    final d = defaultTargetValue;
+    if (d == null) return '';
+    return d == d.truncateToDouble() ? d.toInt().toString() : d.toString();
+  }
 
   /// 檢查此警示類型是否已實作觸發邏輯
   ///
@@ -178,8 +197,11 @@ String getAlertDescription(PriceAlertEntry alert, AlertType type) {
     AlertType.changePct => 'alert.changeAbove'.tr(
       namedArgs: {'percent': alert.targetValue.toStringAsFixed(1)},
     ),
+    // 爆量的倍數是固定門檻、不存在 targetValue（見 AlertParams）
     AlertType.volumeSpike => 'alert.desc.volumeSpike'.tr(
-      namedArgs: {'value': alert.targetValue.toStringAsFixed(0)},
+      namedArgs: {
+        'value': AlertParams.volumeSpikeMultiplier.toStringAsFixed(0),
+      },
     ),
     AlertType.volumeAbove => 'alert.desc.volumeAbove'.tr(
       namedArgs: {'value': alert.targetValue.toStringAsFixed(0)},

@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart';
 
+import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/clock.dart';
-import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/tdcc_client.dart';
@@ -14,7 +14,7 @@ import 'package:daredevil/data/remote/tdcc_client.dart';
 ///
 /// - 資料每週更新（週五收盤後公布）
 /// - 一次 API 呼叫取得全市場資料，無需逐檔查詢
-/// - 內建新鮮度檢查，同一週不重複同步
+/// - 內建新鮮度檢查，最新一期未滿一週不重複下載（每次約 9.8 MB）
 class TdccHoldingSyncer {
   const TdccHoldingSyncer({
     required AppDatabase database,
@@ -35,9 +35,8 @@ class TdccHoldingSyncer {
   ///
   /// 回傳寫入的股票數。
   Future<int> sync({Set<String>? candidateSymbols}) async {
-    // 新鮮度檢查：使用任一常見股票代碼檢查是否已有本週資料
-    if (await _hasCurrentWeekData()) {
-      AppLogger.debug('TdccHoldingSyncer', '已有本週資料，跳過同步');
+    if (await _hasLatestIssue()) {
+      AppLogger.debug('TdccHoldingSyncer', '最新一期未滿一週，跳過同步');
       return 0;
     }
 
@@ -102,13 +101,21 @@ class TdccHoldingSyncer {
     }
   }
 
-  /// 檢查是否已有本週的股權分散表資料
+  /// DB 的最新一期距今是否未滿一個公布週期
   ///
-  /// 檢查 DB 中任一股票的最新資料日期是否在本週內。
-  Future<bool> _hasCurrentWeekData() async {
+  /// 🚨 不可用「資料日與今天同一週」：資料日是上週最後交易日，平日永遠
+  /// 與今天不同週，結果每輪更新都重抓（2026-09 日誌同一天下載兩次）。
+  /// 以日曆天數比較，週五休市（資料日落在週四）也成立。
+  Future<bool> _hasLatestIssue() async {
     // 用台積電 (2330) 作為哨兵檢查
     final latestDate = await _db.getLatestHoldingDistributionDate('2330');
     if (latestDate == null) return false;
-    return DateContext.isSameWeek(latestDate, _clock.now());
+    final now = _clock.now();
+    final days = DateTime.utc(now.year, now.month, now.day)
+        .difference(
+          DateTime.utc(latestDate.year, latestDate.month, latestDate.day),
+        )
+        .inDays;
+    return days < DataFreshness.tdccIssueIntervalDays;
   }
 }

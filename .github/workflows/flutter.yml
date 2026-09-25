@@ -2,6 +2,8 @@ name: Flutter CI
 
 on:
   workflow_dispatch:
+  # release.yml 以此為發佈閘門（格式、分析、測試全過才建置）
+  workflow_call:
   push:
     branches: [main]
     paths-ignore:

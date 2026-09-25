@@ -920,6 +920,26 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           },
         ),
 
+        // 常駐短版免責聲明：訊號清單最容易被當成「明牌」。全文在首次
+        // 同意頁與設定的「關於」；有沒有訊號都要顯示。
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              DesignTokens.spacing16,
+              DesignTokens.spacing16,
+              DesignTokens.spacing16,
+              0,
+            ),
+            child: Text(
+              'disclaimer.short'.tr(),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+
         // 底部間距
         const SliverToBoxAdapter(child: SizedBox(height: 80)),
       ],

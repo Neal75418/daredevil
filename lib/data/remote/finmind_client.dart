@@ -138,14 +138,13 @@ class FinMindClient {
     );
   }
 
-  /// 建立查詢參數（含選用的 token）
-  Map<String, dynamic> _buildParams(Map<String, dynamic> params) {
-    final result = Map<String, dynamic>.from(params);
-    if (_token?.isNotEmpty ?? false) {
-      result['token'] = _token;
-    }
-    return result;
-  }
+  /// 認證 header（FinMind v4：`Authorization: Bearer <token>`）。
+  ///
+  /// 🚨 不可放回 query string：token 會跟著 uri 出現在 dio 的錯誤字串裡，
+  /// 經 logger 進 Sentry、CLI 日誌與 update_run 表。每次請求現取，
+  /// 讓 [token] setter 的更新立即生效。
+  Options? _authOptions() =>
+      hasToken ? Options(headers: {'Authorization': 'Bearer $_token'}) : null;
 
   /// 產生快取鍵（依參數鍵排序以確保一致性）
   String _cacheKey(Map<String, dynamic> params) {
@@ -266,7 +265,8 @@ class FinMindClient {
         _budgetTracker?.recordCall(ApiVendor.finMind);
         final response = await _dio.get(
           '',
-          queryParameters: _buildParams(params),
+          queryParameters: params,
+          options: _authOptions(),
         );
 
         if (response.statusCode == 200) {

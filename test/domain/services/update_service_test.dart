@@ -209,7 +209,7 @@ void main() {
     when(() => mockDb.getActiveAlerts()).thenAnswer((_) async => []);
     when(() => mockDb.getWatchlist()).thenAnswer((_) async => []);
     when(() => mockDb.getLatestPricesBatch(any())).thenAnswer((_) async => {});
-    // TDCC 新鮮度檢查：無本週資料
+    // TDCC 新鮮度檢查：DB 尚無資料 → 一律抓
     when(
       () => mockDb.getLatestHoldingDistributionDate(any()),
     ).thenAnswer((_) async => null);

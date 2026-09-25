@@ -38,7 +38,7 @@ _See what changed, without noise._
 | **Today**              | 市場摘要 + 三模式選股（起漲候選 / 強勢觀察 / 回檔觀察） |
 | **Scan**               | 上市櫃全市場掃描，依評分排序                            |
 | **Watchlist**          | 自選清單狀態追蹤 + 無限滾動分頁                         |
-| **Stock Detail**       | 趨勢、關鍵價位、推薦理由、新聞                          |
+| **Stock Detail**       | 趨勢、關鍵價位、觸發訊號、新聞                          |
 | **Comparison**         | 多檔股票並列比較                                        |
 | **Portfolio**          | 持倉追蹤與損益計算                                      |
 | **News**               | 多源 RSS 新聞彙整                                       |
@@ -50,7 +50,7 @@ _See what changed, without noise._
 | **Quarterly**          | 季報財務                                                |
 | **Revenue**            | 月營收                                                  |
 | **Settings**           | 偏好設定                                                |
-| **Onboarding**         | 首次使用引導                                            |
+| **Onboarding**         | 首次使用引導 + 免責聲明同意（既有安裝也會看到一次）      |
 
 ---
 

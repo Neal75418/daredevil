@@ -122,18 +122,19 @@ void main() {
       expect(triggered, isEmpty);
     });
 
+    // targetValue 單位是張（UI：「成交量高於 {value} 張」），DB volume 是股
     test('VOLUME_ABOVE triggers when current volume >= target', () async {
-      // 最新一天成交量 20000 >= 15000
+      // 最新一天成交量 2 萬張（2000 萬股）>= 1.5 萬張
       await db.insertPrices([
         DailyPriceCompanion.insert(
           symbol: '2330',
           date: DateTime.now(),
           close: const Value(510.0),
-          volume: const Value(20000.0),
+          volume: const Value(20000000.0),
         ),
       ]);
 
-      // 建立 VOLUME_ABOVE 警示（目標 15000）
+      // 建立 VOLUME_ABOVE 警示（目標 15000 張）
       final alertId = await db.createPriceAlert(
         symbol: '2330',
         alertType: 'VOLUME_ABOVE',
@@ -149,20 +150,21 @@ void main() {
     test(
       'VOLUME_ABOVE doesn\'t trigger when current volume < target',
       () async {
-        // 最新一天成交量 20000 < 25000
+        // 最新一天 2 萬張（2000 萬股）< 2.5 萬張。
+        // 🚨 股數本身大於 25000：若誤把股數直接比張數會觸發
         await db.insertPrices([
           DailyPriceCompanion.insert(
             symbol: '2330',
             date: DateTime.now(),
             close: const Value(510.0),
-            volume: const Value(20000.0),
+            volume: const Value(20000000.0),
           ),
         ]);
 
         await db.createPriceAlert(
           symbol: '2330',
           alertType: 'VOLUME_ABOVE',
-          targetValue: 25000.0, // 目標 25000
+          targetValue: 25000.0, // 目標 25000 張
         );
 
         final triggered = await db.checkAlerts({'2330': 510.0}, {'2330': 2.0});

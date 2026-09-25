@@ -506,6 +506,32 @@ class SettingsScreen extends ConsumerWidget {
         Text('settings.aboutDescription'.tr()),
         const SizedBox(height: DesignTokens.spacing16),
         Text(
+          'disclaimer.title'.tr(),
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: DesignTokens.spacing8),
+        for (final key in const [
+          'disclaimer.intro',
+          'disclaimer.point1',
+          'disclaimer.point2',
+          'disclaimer.point3',
+          'disclaimer.point4',
+        ]) ...[
+          Text(key.tr(), style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: DesignTokens.spacing4),
+        ],
+        const SizedBox(height: DesignTokens.spacing12),
+        Text(
+          'settings.dataSourcesTitle'.tr(),
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: DesignTokens.spacing8),
+        Text(
+          'settings.dataSources'.tr(),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: DesignTokens.spacing16),
+        Text(
           '© ${DateTime.now().year} Daredevil',
           style: Theme.of(context).textTheme.bodySmall,
         ),

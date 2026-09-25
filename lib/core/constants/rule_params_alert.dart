@@ -91,6 +91,19 @@ abstract final class AlertParams {
   static const int week52LookbackDays = 370;
 
   // --------------------------------------------------
+  // 自動觸發型警示的固定門檻（使用者不可調，targetValue 不參與判斷）
+  // --------------------------------------------------
+
+  /// 爆量警示：當日量 ≥ 均量的倍數。說明文字也讀這個值，兩者不可分開。
+  static const double volumeSpikeMultiplier = 4.0;
+
+  /// 爆量警示：同時要求的最小漲跌幅（%，取絕對值）。
+  static const double volumeSpikeMinPriceChangePct = 1.5;
+
+  /// 董監質押比過高警示門檻（%）。
+  static const double highPledgeRatioPct = 30.0;
+
+  // --------------------------------------------------
   // 新增警示時的預設目標值
   // --------------------------------------------------
 
@@ -106,9 +119,6 @@ abstract final class AlertParams {
 
   /// MA 交叉警示預設均線天數（20 日）
   static const double defaultMaCrossDays = 20.0;
-
-  /// 爆量警示預設倍數（2 倍均量）
-  static const double defaultVolumeSpikeMultiplier = 2.0;
 
   /// 營收 YoY 飆升警示預設門檻（+30%）
   static const double defaultRevenueYoySurgePct = 30.0;

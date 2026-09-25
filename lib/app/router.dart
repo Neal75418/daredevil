@@ -7,6 +7,7 @@ import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/extensions/router_extensions.dart';
 
 import 'package:daredevil/presentation/screens/alerts/alerts_screen.dart';
+import 'package:daredevil/presentation/screens/onboarding/disclaimer_screen.dart';
 import 'package:daredevil/presentation/screens/onboarding/onboarding_screen.dart';
 import 'package:daredevil/presentation/screens/industry/industry_overview_screen.dart';
 import 'package:daredevil/presentation/screens/news/news_screen.dart';
@@ -36,13 +37,17 @@ final _watchlistNavigatorKey = GlobalKey<NavigatorState>(
 /// 快取 onboarding 完成狀態，避免重複 async 讀取
 bool _onboardingComplete = false;
 
+/// 快取免責聲明同意狀態
+bool _disclaimerAccepted = false;
+
 /// 標記 [initOnboardingStatus] 是否已被呼叫過
 bool _onboardingStatusInitialized = false;
 
-/// 預載 onboarding 狀態（須在 router 使用前呼叫）
+/// 預載 onboarding 與免責同意狀態（須在 router 使用前呼叫）
 Future<void> initOnboardingStatus() async {
   final prefs = await SharedPreferences.getInstance();
   _onboardingComplete = prefs.getBool(OnboardingScreen.completedKey) ?? false;
+  _disclaimerAccepted = prefs.getBool(DisclaimerScreen.acceptedKey) ?? false;
   _onboardingStatusInitialized = true;
 }
 
@@ -51,6 +56,42 @@ Future<void> completeOnboarding() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool(OnboardingScreen.completedKey, true);
   _onboardingComplete = true;
+}
+
+/// 目前快取的免責同意狀態（供測試驗證 [initOnboardingStatus] 有讀到）
+@visibleForTesting
+bool get isDisclaimerAccepted => _disclaimerAccepted;
+
+/// 記錄使用者已同意免責聲明（持久化 + 更新快取）。
+///
+/// 🚨 呼叫端必須 await 完才能 `go`：redirect 讀的是快取，先 go 會被
+/// 踢回同意頁。
+Future<void> acceptDisclaimer() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(DisclaimerScreen.acceptedKey, true);
+  _disclaimerAccepted = true;
+}
+
+/// 進入 App 的閘門：引導 → 免責聲明同意 → 主畫面。
+///
+/// 🚨 免責同意是獨立旗標而非引導的一部分：既有安裝早已完成引導，
+/// 若只放進引導頁，它們永遠不會看到、也不會按同意。
+@visibleForTesting
+String? resolveEntryRedirect({
+  required bool onboardingComplete,
+  required bool disclaimerAccepted,
+  required String location,
+}) {
+  final String? gate = !onboardingComplete
+      ? AppRoutes.onboarding
+      : !disclaimerAccepted
+      ? AppRoutes.disclaimer
+      : null;
+  if (gate != null) return location == gate ? null : gate;
+  if (location == AppRoutes.onboarding || location == AppRoutes.disclaimer) {
+    return AppRoutes.home;
+  }
+  return null;
 }
 
 /// App 路由設定
@@ -62,13 +103,11 @@ final router = GoRouter(
       'initOnboardingStatus() must be awaited before router is used. '
       'Ensure main() calls await initOnboardingStatus() before _runApp().',
     );
-    if (!_onboardingComplete && state.matchedLocation != AppRoutes.onboarding) {
-      return AppRoutes.onboarding;
-    }
-    if (_onboardingComplete && state.matchedLocation == AppRoutes.onboarding) {
-      return AppRoutes.home;
-    }
-    return null;
+    return resolveEntryRedirect(
+      onboardingComplete: _onboardingComplete,
+      disclaimerAccepted: _disclaimerAccepted,
+      location: state.matchedLocation,
+    );
   },
   routes: [
     // Onboarding（全螢幕，無底部導航）
@@ -76,6 +115,16 @@ final router = GoRouter(
       path: AppRoutes.onboarding,
       name: 'onboarding',
       builder: (context, state) => const OnboardingScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.disclaimer,
+      name: 'disclaimer',
+      builder: (context, state) => DisclaimerScreen(
+        onAccept: () async {
+          await acceptDisclaimer();
+          if (context.mounted) context.go(AppRoutes.home);
+        },
+      ),
     ),
     // 含底部導航的 Shell 路由
     StatefulShellRoute.indexedStack(

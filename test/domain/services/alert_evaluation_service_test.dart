@@ -161,4 +161,94 @@ void main() {
       expect(result.triggered, hasLength(1));
     });
   });
+
+  // 提醒對話框原本會把預填現價當成任何類型的 targetValue 存下去(已修),
+  // 但既有 DB 裡已經躺著這種資料。不需目標值的類型在評估時不得再讀它。
+  group('不需目標值的類型不讀 targetValue(既有髒資料)', () {
+    PriceAlertEntry pledgeAlert({required double targetValue}) =>
+        PriceAlertEntry(
+          id: 1,
+          symbol: '2330',
+          alertType: AlertParams.typeHighPledgeRatio,
+          targetValue: targetValue,
+          isActive: true,
+          createdAt: DateTime(2026, 9, 1),
+        );
+
+    AlertEvaluationContext pledgeContext(double ratio) =>
+        AlertEvaluationContext(
+          currentPrices: const {'2330': 850},
+          priceChanges: const {},
+          volumeDataMap: const {},
+          priceHistoryMap: const {},
+          indicatorDataMap: const {},
+          warningSymbols: const {},
+          disposalSymbols: const {},
+          pledgeRatioMap: {'2330': ratio},
+        );
+
+    test('🚨 質押提醒存了現價 850 當門檻,質押比 45% 仍要觸發', () {
+      final result = AlertEvaluationService().evaluateAlerts([
+        pledgeAlert(targetValue: 850),
+      ], pledgeContext(45));
+      expect(result.triggered, hasLength(1));
+    });
+
+    test('質押比低於固定門檻不觸發(不論 targetValue)', () {
+      final result = AlertEvaluationService().evaluateAlerts([
+        pledgeAlert(targetValue: 0),
+      ], pledgeContext(AlertParams.highPledgeRatioPct - 1));
+      expect(result.triggered, isEmpty);
+    });
+  });
+
+  // UI 說明是「成交量高於 {value} 張」,DB 的 volume 是「股」——原本直接拿
+  // 股數比張數,輸入 10000(一萬張)實際在比一萬股=10 張,幾乎天天觸發。
+  group('成交量高於:targetValue 單位是張', () {
+    PriceAlertEntry volumeAboveAlert(double lots) => PriceAlertEntry(
+      id: 1,
+      symbol: '2330',
+      alertType: AlertParams.typeVolumeAbove,
+      targetValue: lots,
+      isActive: true,
+      createdAt: DateTime(2026, 9, 1),
+    );
+
+    AlertEvaluationContext withLatestShares(double shares) {
+      final day = DateTime(2026, 9, 1);
+      return AlertEvaluationContext(
+        currentPrices: const {'2330': 850},
+        priceChanges: const {},
+        volumeDataMap: {
+          '2330': [
+            createTestPrice(symbol: '2330', date: day, close: 850, volume: 1),
+            createTestPrice(
+              symbol: '2330',
+              date: day.add(const Duration(days: 1)),
+              close: 850,
+              volume: shares,
+            ),
+          ],
+        },
+        priceHistoryMap: const {},
+        indicatorDataMap: const {},
+        warningSymbols: const {},
+        disposalSymbols: const {},
+      );
+    }
+
+    test('🚨 設 10000 張、今天成交 5000 張(500 萬股)不得觸發', () {
+      final result = AlertEvaluationService().evaluateAlerts([
+        volumeAboveAlert(10000),
+      ], withLatestShares(5000000));
+      expect(result.triggered, isEmpty);
+    });
+
+    test('設 10000 張、今天成交 12000 張(1200 萬股)要觸發', () {
+      final result = AlertEvaluationService().evaluateAlerts([
+        volumeAboveAlert(10000),
+      ], withLatestShares(12000000));
+      expect(result.triggered, hasLength(1));
+    });
+  });
 }

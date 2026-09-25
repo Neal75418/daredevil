@@ -8,6 +8,7 @@ abstract final class AppRoutes {
 
   // 全螢幕路由
   static const onboarding = '/onboarding';
+  static const disclaimer = '/disclaimer';
   static const settings = '/settings';
   static const alerts = '/alerts';
   static const industry = '/industry';

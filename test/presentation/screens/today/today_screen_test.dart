@@ -179,6 +179,37 @@ void main() {
     trendState: trend,
   );
 
+  // 訊號清單是最容易被當成「明牌」的地方；全文聲明只在首次同意頁與「關於」，
+  // 清單底部要常駐短版。有訊號、沒訊號都要在。
+  group('今日清單常駐短版免責聲明', () {
+    testWidgets('有訊號時顯示在清單下方', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          modeRecommendations: (ref, mode) =>
+              SynchronousFuture([rec('2330', trend: 'UP')]),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('2330'), findsOneWidget, reason: '前提：清單有渲染');
+      expect(find.text('disclaimer.short'), findsOneWidget);
+    });
+
+    testWidgets('沒有訊號時也顯示（空狀態撐滿視窗，聲明在其下方）', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.scrollUntilVisible(
+        find.text('disclaimer.short'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('disclaimer.short'), findsOneWidget);
+    });
+  });
+
   group('起漲候選趨勢分艙(2026-08-12)', () {
     Widget appWith(List<ModeRecommendation> momentum) => buildTestWidget(
       todayState: const TodayState(),

@@ -18,6 +18,9 @@ abstract final class DataFreshness {
   /// 最多晚 30 天補上——歷史資料的時效壓力本來就低。
   static const int historicalBackfillBackoffDays = 30;
 
+  /// TDCC 股權分散表的公布週期（日曆天）。最新一期未滿這個天數就不重抓。
+  static const int tdccIssueIntervalDays = 7;
+
   // ==================================================
   // 批次資料快取門檻
   // ==================================================

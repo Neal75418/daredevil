@@ -135,6 +135,26 @@ void main() {
       expect(find.byIcon(Icons.verified_rounded), findsOneWidget);
     });
 
+    testWidgets('「關於」含免責聲明全文與資料來源顯名', (tester) async {
+      // 政府資料開放授權條款要求顯名，未顯名視為自始未取得授權
+      widenViewport(tester);
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.byIcon(Icons.info_outline_rounded));
+      // 設定頁有持續動畫，pumpAndSettle 會逾時；推進到對話框轉場結束即可
+      await tester.pump(const Duration(seconds: 1));
+
+      for (final key in [
+        'disclaimer.point1',
+        'disclaimer.point4',
+        'settings.dataSourcesTitle',
+        'settings.dataSources',
+      ]) {
+        expect(find.text(key), findsOneWidget, reason: key);
+      }
+    });
+
     testWidgets('shows warning badges switch as enabled', (tester) async {
       widenViewport(tester);
 

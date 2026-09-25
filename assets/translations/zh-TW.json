@@ -17,7 +17,8 @@
     "settings": "設定",
     "next": "下一步",
     "offline": "目前離線，顯示的是快取資料",
-    "detail": "詳情"
+    "detail": "詳情",
+    "undo": "復原"
   },
   "error": {
     "network": "網路連線失敗，請檢查網路設定",
@@ -43,13 +44,13 @@
     "strengthObserve": "強勢觀察",
     "weaknessObserve": "回檔觀察",
     "neutral": "中性",
-    "momentumEntryDesc": "上升趨勢中、貼近均線未過熱、出現進場訊號（順勢初升，非底部抄底）",
+    "momentumEntryDesc": "上升趨勢中、貼近均線未過熱、出現初升訊號（順勢初升，非底部抄底）",
     "strengthObserveDesc": "已在強勢段、觀察續強動能",
-    "weaknessObserveDesc": "強勢股拉回、等健康回檔買點"
+    "weaknessObserveDesc": "強勢股拉回至均線附近、趨勢未破壞"
   },
   "today": {
-    "top10": "今日推薦 ({count} 檔)",
-    "top10Loading": "今日推薦",
+    "top10": "今日訊號 ({count} 檔)",
+    "top10Loading": "今日訊號",
     "updateData": "更新資料",
     "lastUpdate": "最後更新: {time}",
     "updateFailed": "更新失敗: {error}",
@@ -185,7 +186,7 @@
         "healthyUp": "量增配漲，量價健康",
         "weakUp": "量縮上漲，動能轉弱",
         "heavySelloff": "量增殺盤，賣壓沉重",
-        "quietConsolidation": "量縮整理，觀望",
+        "quietConsolidation": "量縮整理，方向未明",
         "flat": "量能持平"
       },
       "marginLeverage": {
@@ -549,11 +550,11 @@
     }
   },
   "score": {
-    "label": "推薦評分",
-    "strong": "強烈推薦",
-    "watch": "值得關注",
-    "normal": "一般",
-    "wait": "觀望",
+    "label": "訊號評分",
+    "strong": "訊號強度：高",
+    "watch": "訊號強度：中",
+    "normal": "訊號強度：一般",
+    "wait": "訊號強度：低",
     "points": "分",
     "tier": {
       "strong": "強",
@@ -575,7 +576,7 @@
     "limitDown": "跌停"
   },
   "reasons": {
-    "label": "推薦理由",
+    "label": "觸發訊號",
     "reversalW2S": "弱轉強",
     "reversalS2W": "強轉弱",
     "breakout": "技術突破",
@@ -655,7 +656,7 @@
     "institutional": "外資或投信出現明顯的買賣方向變化。",
     "news": "近期有相關新聞報導，可能影響股價走勢。",
     "rsiOverbought": "RSI 技術指標顯示超買，短線可能回檔。",
-    "rsiOversold": "RSI 技術指標顯示超賣，可能有反彈機會。",
+    "rsiOversold": "RSI 技術指標顯示超賣。",
     "revenueYoySurge": "營收年增率大幅成長，基本面強勁。",
     "revenueYoyDecline": "營收年增率大幅衰退，基本面轉弱。",
     "revenueMomGrowth": "營收連續月增成長，成長動能持續。",
@@ -682,24 +683,24 @@
     "foreignConcentration": "外資持股高度集中，籌碼集中風險較高。",
     "foreignExodus": "外資加速流出，賣壓較大。",
     "priceVolumeWeakRally": "價格上漲但成交量萎縮，漲勢無力警示，後續可能反轉。",
-    "pullbackToMa20": "強勢趨勢中拉回到 MA20、量縮、趨勢未破壞 — 健康回檔進場時機。",
-    "hammerAtSupport": "強股拉回 MA20/MA60 支撐位、出現錘子線止跌 — 反轉確認進場點。",
-    "kdHighPullback": "KD 從高檔回落但未死叉、多頭排列維持 — 動能稍歇可考慮分批進場。",
-    "pullbackToMa10": "強勢趨勢中淺回檔到 MA10（close 仍在 MA20 上方）、量縮 — 日常 buy the dip 進場帶。"
+    "pullbackToMa20": "強勢趨勢中拉回到 MA20、量縮、趨勢未破壞 — 典型的健康回檔型態。",
+    "hammerAtSupport": "強股拉回 MA20/MA60 支撐位、出現錘子線止跌 — 支撐位的反轉型態。",
+    "kdHighPullback": "KD 從高檔回落但未死叉、多頭排列維持 — 動能稍歇。",
+    "pullbackToMa10": "強勢趨勢中淺回檔到 MA10（close 仍在 MA20 上方）、量縮 — 淺回檔型態。"
   },
   "onboarding": {
     "skip": "略過",
     "next": "下一步",
     "getStarted": "開始使用",
-    "step1Title": "智慧盤後分析",
-    "step1Desc": "每日收盤後自動分析全市場股票，60 條規則涵蓋技術面、籌碼面與基本面，為您找出最值得關注的標的。",
+    "step1Title": "盤後全市場掃描",
+    "step1Desc": "每日收盤後自動掃描全市場，以數十條技術面、籌碼面與基本面規則，標出今天跟平常不一樣的股票。",
     "step2Title": "深度個股研究",
-    "step2Desc": "AI 智慧摘要、籌碼強度評分、個股比較、策略回測，助您做出更有信心的投資決策。",
+    "step2Desc": "規則摘要、籌碼強度評分、個股比較、訊號回測統計，幫你更快看懂盤後資訊。",
     "step3Title": "即時追蹤提醒",
-    "step3Desc": "自訂價格警示與技術指標觸發條件，重要訊號第一時間通知，不錯過任何投資機會。"
+    "step3Desc": "自訂價格與技術指標提醒，條件成立時通知你。"
   },
   "empty": {
-    "noRecommendations": "尚無今日推薦",
+    "noRecommendations": "今日無訊號",
     "noRecommendationsHint": "目前沒有符合條件的股票\n請稍後再試或手動更新",
     "noFilterResults": "無符合條件的股票",
     "noFilterResultsHint": "試著調整篩選條件",
@@ -812,7 +813,9 @@
     "backgroundUpdate": "背景更新",
     "autoUpdate": "每日自動更新",
     "autoUpdateDesc": "每日收盤後（15:00）自動更新資料並推送通知",
-    "autoUpdateFailed": "自動更新排程設定失敗，請稍後再試"
+    "autoUpdateFailed": "自動更新排程設定失敗，請稍後再試",
+    "dataSourcesTitle": "資料來源",
+    "dataSources": "本 App 使用臺灣證券交易所、證券櫃檯買賣中心、臺灣集中保管結算所之開放資料，依「政府資料開放授權條款－第1版」（https://data.gov.tw/license）利用；另使用公開資訊觀測站與 FinMind 資料。新聞標題與連結來自各媒體 RSS，著作權屬原媒體所有。"
   },
   "alert": {
     "title": "警示",
@@ -910,7 +913,8 @@
     },
     "unit": {
       "dayMa": "日均線",
-      "times": "倍"
+      "times": "倍",
+      "lots": "張"
     },
     "quickSet": {
       "hint": "快捷提醒——點一下就掛,價位 app 已算好",
@@ -935,7 +939,10 @@
     "trailingRefreshDone": "已重算 {count} 檔自動提醒（手動設定的未更動）",
     "trailingRefreshEmpty": "沒有可設定的自選股（價格資料不足）",
     "trailingManaged": "每日自動",
-    "unmonitorable": "不在主檔,無法監控"
+    "unmonitorable": "不在主檔,無法監控",
+    "revenueYoyThreshold": "營收年增門檻",
+    "dividendYieldThreshold": "殖利率門檻",
+    "peThreshold": "本益比門檻"
   },
   "notification": {
     "title": "通知設定",
@@ -1079,7 +1086,7 @@
     "priceVolumeWeakRally": "價漲量縮（漲勢無力警示）"
   },
   "summary": {
-    "title": "AI 智慧分析",
+    "title": "規則摘要",
     "sentimentStrongBullish": "明顯偏多",
     "sentimentBullish": "偏多",
     "sentimentNeutral": "中性",
@@ -1097,15 +1104,15 @@
     "supportResistanceWithDist": "支撐 {support}（距 {supportDist}%）、壓力 {resistance}（距 {resistanceDist}%）。",
     "supportResistanceAboveResistance": "已站上前壓力 {resistance}（高出 {resistanceDist}%），上方無明確壓力；支撐 {support}（距 {supportDist}%）。",
     "supportResistanceBelowSupport": "已跌破支撐 {support}（低於 {supportDist}%），下方無明確支撐；壓力 {resistance}（距 {resistanceDist}%）。",
-    "riskReward": "估算風險報酬比約 1:{ratio}（停利至壓力、停損至支撐）。",
-    "riskRewardFavorable": "上檔空間明顯大於下檔風險，賠率相對有利。",
-    "riskRewardPoor": "下檔風險已大於上檔空間，賠率相對不利。",
+    "riskReward": "以最近壓力、支撐估算，上檔空間約為下檔空間的 {ratio} 倍。",
+    "riskRewardFavorable": "上檔空間明顯大於下檔空間。",
+    "riskRewardPoor": "下檔空間已大於上檔空間。",
     "scoreExceptional": "綜合評分 {score} 分，訊號高度集中，短線動能極強。",
-    "scoreStrong": "綜合評分 {score} 分，技術面強勢，可優先觀察。",
-    "scoreWorthwatching": "綜合評分 {score} 分，具備一定技術面支撐，可持續觀察。",
-    "scoreWatch": "綜合評分 {score} 分，值得持續關注。",
+    "scoreStrong": "綜合評分 {score} 分，技術面強勢。",
+    "scoreWorthwatching": "綜合評分 {score} 分，具備一定技術面支撐。",
+    "scoreWatch": "綜合評分 {score} 分，訊號強度中等。",
     "scoreNeutral": "綜合評分 {score} 分，訊號強度偏弱。",
-    "scoreCaution": "綜合評分 {score} 分，建議觀望。",
+    "scoreCaution": "綜合評分 {score} 分，訊號很弱。",
     "keySignals": "關鍵訊號",
     "riskFactors": "風險提示",
     "supportingDataTitle": "輔助數據",
@@ -1120,7 +1127,7 @@
     "maAlignmentBullish": "均線呈多頭排列 (5>10>20>60)，中長期趨勢向上。",
     "maAlignmentBearish": "均線呈空頭排列，中長期趨勢向下。",
     "rsiOverbought": "RSI 指標達 {rsi}，已進入超買區域。",
-    "rsiOversold": "RSI 指標僅 {rsi}，已進入超賣區域，可能有反彈機會。",
+    "rsiOversold": "RSI 指標僅 {rsi}，已進入超賣區域。",
     "institutionalBuyStreak": "法人連續買超中，動能持續。",
     "institutionalBuyStreakDays": "法人連續買超 {days} 天，動能持續。",
     "institutionalBuyStreakDaysTruncated": "法人連續買超 {days} 天以上，動能持續。",
@@ -1171,7 +1178,7 @@
     "highVolumeBreakout": "高檔帶量突破，多頭攻勢確立。",
     "lowVolumeAccumulation": "低檔量縮整理，可能進入吸籌階段。",
     "bearishDivergence": "近 5 日價跌量增，空頭背離訊號。",
-    "newsRelated": "近期有相關新聞，建議留意。",
+    "newsRelated": "近期有相關新聞。",
     "netBuy": "買超 {lots} 張",
     "netSell": "賣超 {lots} 張",
     "netNeutral": "持平",
@@ -1179,8 +1186,8 @@
     "institutionalFlow": "最新交易日法人動向：外資 {foreign}、投信 {trust}。",
     "institutionalBuyTrend": "法人連續 {days} 天買超，籌碼面偏多。",
     "institutionalSellTrend": "法人連續 {days} 天賣超，籌碼面偏空。",
-    "limitUp": "今日觸及漲停板（+10%），多頭氣勢極強，追高需留意風險。",
-    "limitDown": "今日觸及跌停板（-10%），空方力道極強，接刀需格外謹慎。",
+    "limitUp": "今日觸及漲停板（+10%），多頭氣勢極強。",
+    "limitDown": "今日觸及跌停板（-10%），空方力道極強。",
     "noSignals": "目前無明顯訊號觸發。",
     "disclaimer": "以上為系統依據規則自動生成之分析摘要，僅供參考，不構成投資建議。",
     "actionSetAlert": "設定警示",
@@ -1197,13 +1204,13 @@
     "confluenceMomentumBreakout": "技術面突破且均線多頭排列，動能強勁。",
     "confluenceInstitutionalExit": "法人持續賣超且外資減持，籌碼面偏空。",
     "confluenceOverall": "收盤價 {close} 元，當日 {change}%。{confluence}",
-    "mixedSignals": "多空訊號並存，建議等待方向確認。",
+    "mixedSignals": "多空訊號並存，方向尚未明確。",
     "confidenceHigh": "佐證充足",
     "confidenceMedium": "佐證中等",
     "confidenceLow": "佐證有限",
     "ruleAccuracy": "規則準確度",
     "priceVolumeWeakRally": "近 5 日價格上漲但量能較 5 日均量萎縮 {volShrink}%，漲勢可能無力。",
-    "pullbackToMa20": "強勢股健康回檔至月線附近（距 {distance}%），回檔進場觀察點。",
+    "pullbackToMa20": "強勢股回檔至月線附近（距 {distance}%）。",
     "pullbackToMa10": "強勢趨勢中淺回檔至 10 日線，趨勢未破壞。",
     "hammerAtSupport": "支撐位出現鎚子線，下影線顯示買盤承接。",
     "kdHighPullback": "KD 高檔回落，強勢股短線動能降溫、觀察回檔支撐。",
@@ -1230,7 +1237,7 @@
     "sectionValuation": "估值指標",
     "sectionRevenue": "營收與獲利",
     "sectionInstitutional": "法人動向",
-    "sectionAI": "AI 觀點",
+    "sectionAI": "規則觀點",
     "metricScore": "分數 (5D)",
     "metricTrend": "趨勢",
     "metricReversal": "反轉狀態",
@@ -1248,7 +1255,7 @@
     "metricTrust5D": "投信5日淨買",
     "metricDealer5D": "自營5日淨買",
     "metricSentiment": "整體情緒",
-    "metricAssessment": "AI 評估",
+    "metricAssessment": "規則評估",
     "sentimentStrongBullish": "明顯偏多",
     "sentimentBullish": "偏多",
     "sentimentNeutral": "中性",
@@ -1629,5 +1636,15 @@
     "yoyCol": "年增",
     "marginCol": "淨利率",
     "entryUnfiled": "未交卷:{names}"
+  },
+  "disclaimer": {
+    "title": "使用前請先閱讀",
+    "intro": "Daredevil 是個人開發的盤後資訊整理工具，不是證券投資顧問，也不提供投資建議。",
+    "point1": "App 內的訊號、評分與摘要，都是依公開資料以固定規則自動產生的統計結果，不是對任何股票的買賣建議。",
+    "point2": "歷史回測與命中率只描述過去，不代表未來表現。",
+    "point3": "資料來自證交所、櫃買中心、集保結算所、公開資訊觀測站與 FinMind 等公開來源，可能延遲或有誤。",
+    "point4": "任何投資決定與盈虧，由你自行判斷並承擔。",
+    "accept": "我了解並同意",
+    "short": "訊號由規則自動產生，僅供參考，不構成投資建議。"
   }
 }

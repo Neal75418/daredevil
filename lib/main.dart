@@ -11,6 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'package:daredevil/app/router.dart';
+import 'package:daredevil/app/sentry_redaction.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_registry.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
@@ -103,6 +104,8 @@ void main() async {
       options.dsn = sentryDsn;
       options.environment = kDebugMode ? 'development' : 'production';
       options.sendDefaultPii = false;
+      options.beforeSend = (event, hint) => redactSentryEvent(event);
+      options.beforeBreadcrumb = (crumb, hint) => redactBreadcrumb(crumb);
       options.tracesSampleRate = kDebugMode ? 1.0 : 0.2;
     }, appRunner: () => _runApp(container));
   } else {

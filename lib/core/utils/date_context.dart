@@ -49,13 +49,6 @@ class DateContext {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  /// 檢查兩個日期是否在同一週（週一至週日，忽略時間）
-  static bool isSameWeek(DateTime a, DateTime b) {
-    final aWeekStart = a.subtract(Duration(days: a.weekday - 1));
-    final bWeekStart = b.subtract(Duration(days: b.weekday - 1));
-    return isSameDay(aWeekStart, bWeekStart);
-  }
-
   /// 檢查日期 a 是否早於或等於日期 b（標準化比較）
   static bool isBeforeOrEqual(DateTime a, DateTime b) {
     final normalA = normalize(a);

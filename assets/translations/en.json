@@ -17,7 +17,8 @@
     "settings": "Settings",
     "next": "Next",
     "offline": "You are offline. Showing cached data.",
-    "detail": "Detail"
+    "detail": "Detail",
+    "undo": "Undo"
   },
   "error": {
     "network": "Network connection failed. Please check your settings.",
@@ -39,17 +40,17 @@
     "news": "News"
   },
   "scoringMode": {
-    "momentumEntry": "Entry",
+    "momentumEntry": "Early Trend",
     "strengthObserve": "Strong",
     "weaknessObserve": "Pullback",
     "neutral": "Neutral",
-    "momentumEntryDesc": "Uptrend, near MA, entry signals firing — early leg, not bottom-fishing",
+    "momentumEntryDesc": "Uptrend, near MA, early-leg signals firing — not bottom-fishing",
     "strengthObserveDesc": "Already strong — watching for continuation",
-    "weaknessObserveDesc": "Strong names pulling back — buy-the-dip"
+    "weaknessObserveDesc": "Strong names pulling back toward MAs, trend intact"
   },
   "today": {
-    "top10": "Today's Picks ({count})",
-    "top10Loading": "Today's Picks",
+    "top10": "Today's Signals ({count})",
+    "top10Loading": "Today's Signals",
     "updateData": "Update Data",
     "lastUpdate": "Last updated: {time}",
     "updateFailed": "Update failed: {error}",
@@ -185,7 +186,7 @@
         "healthyUp": "Rising on volume — healthy price-volume",
         "weakUp": "Up on shrinking volume — momentum fading",
         "heavySelloff": "Selloff on volume — heavy pressure",
-        "quietConsolidation": "Light volume, consolidating — stay cautious",
+        "quietConsolidation": "Light volume, consolidating — direction unclear",
         "flat": "Volume steady"
       },
       "marginLeverage": {
@@ -549,11 +550,11 @@
     }
   },
   "score": {
-    "label": "Rating Score",
-    "strong": "Highly Recommended",
-    "watch": "Worth Watching",
-    "normal": "Normal",
-    "wait": "Wait & See",
+    "label": "Signal Score",
+    "strong": "Signal Strength: High",
+    "watch": "Signal Strength: Medium",
+    "normal": "Signal Strength: Normal",
+    "wait": "Signal Strength: Low",
     "points": "pts",
     "tier": {
       "strong": "Strong",
@@ -575,7 +576,7 @@
     "limitDown": "Limit Down"
   },
   "reasons": {
-    "label": "Recommendation Reasons",
+    "label": "Triggered Signals",
     "reversalW2S": "Weak→Strong",
     "reversalS2W": "Strong→Weak",
     "breakout": "Technical Breakout",
@@ -655,7 +656,7 @@
     "institutional": "Foreign or investment trust institutions show a clear directional change.",
     "news": "Recent news coverage may impact stock price movement.",
     "rsiOverbought": "RSI indicates overbought conditions, short-term pullback possible.",
-    "rsiOversold": "RSI indicates oversold conditions, potential bounce opportunity.",
+    "rsiOversold": "RSI indicates oversold conditions.",
     "revenueYoySurge": "Revenue YoY growth surged significantly, strong fundamentals.",
     "revenueYoyDecline": "Revenue YoY growth declined significantly, weakening fundamentals.",
     "revenueMomGrowth": "Revenue growing month-over-month consecutively.",
@@ -682,24 +683,24 @@
     "foreignConcentration": "High foreign investor concentration, concentration risk.",
     "foreignExodus": "Foreign capital accelerating outflow, selling pressure increasing.",
     "priceVolumeWeakRally": "Price rising on declining volume — weak rally warning, possible reversal ahead.",
-    "pullbackToMa20": "Strong uptrend pulling back to MA20 with volume shrinking, trend intact — healthy entry timing.",
-    "hammerAtSupport": "Strong stock testing MA20/MA60 support with bullish hammer formation — reversal entry point.",
-    "kdHighPullback": "KD declining from overbought without dead cross, MA alignment maintained — momentum cooling, consider scaling in.",
-    "pullbackToMa10": "Shallow pullback to MA10 in strong uptrend (close still above MA20), volume shrinking — daily dip-buying zone."
+    "pullbackToMa20": "Strong uptrend pulling back to MA20 with volume shrinking, trend intact — a typical healthy-pullback pattern.",
+    "hammerAtSupport": "Strong stock testing MA20/MA60 support with a bullish hammer — a reversal pattern at support.",
+    "kdHighPullback": "KD declining from overbought without a dead cross, MA alignment maintained — momentum cooling.",
+    "pullbackToMa10": "Shallow pullback to MA10 in a strong uptrend (close still above MA20), volume shrinking — a shallow-pullback pattern."
   },
   "onboarding": {
     "skip": "Skip",
     "next": "Next",
     "getStarted": "Get Started",
-    "step1Title": "Smart Post-Market Analysis",
-    "step1Desc": "Automatically analyze all stocks after market close using 60 rules covering technical, institutional, and fundamental factors to find the best opportunities.",
+    "step1Title": "Post-Market Scan",
+    "step1Desc": "After each close, scans the whole market with dozens of technical, institutional and fundamental rules and flags stocks behaving differently from usual.",
     "step2Title": "In-Depth Stock Research",
-    "step2Desc": "AI-powered summaries, chip strength scores, stock comparison, and strategy backtesting to help you make confident investment decisions.",
+    "step2Desc": "Rule-based summaries, chip strength scores, stock comparison and signal backtest stats to help you read post-market data faster.",
     "step3Title": "Real-Time Alerts",
-    "step3Desc": "Set custom price alerts and technical indicator triggers. Get notified instantly when important signals occur."
+    "step3Desc": "Set price and indicator alerts and get notified when the conditions are met."
   },
   "empty": {
-    "noRecommendations": "No Recommendations Today",
+    "noRecommendations": "No Signals Today",
     "noRecommendationsHint": "No stocks match the criteria\nTry again later or manually refresh",
     "noFilterResults": "No Matching Stocks",
     "noFilterResultsHint": "Try adjusting your filters",
@@ -812,7 +813,9 @@
     "backgroundUpdate": "Background Update",
     "autoUpdate": "Daily Auto Update",
     "autoUpdateDesc": "Automatically update data after market close (15:00) and send notification",
-    "autoUpdateFailed": "Failed to schedule auto-update. Please try again later."
+    "autoUpdateFailed": "Failed to schedule auto-update. Please try again later.",
+    "dataSourcesTitle": "Data Sources",
+    "dataSources": "This app uses open data from the Taiwan Stock Exchange, Taipei Exchange and Taiwan Depository & Clearing Corporation under the Open Government Data License, version 1.0 (https://data.gov.tw/license), plus data from MOPS and FinMind. News headlines and links come from each outlet's RSS feed; copyright remains with the original publishers."
   },
   "alert": {
     "title": "Alerts",
@@ -910,7 +913,8 @@
     },
     "unit": {
       "dayMa": "-day MA",
-      "times": "x"
+      "times": "x",
+      "lots": "lots"
     },
     "quickSet": {
       "hint": "Quick alerts — one tap, prices precomputed",
@@ -935,7 +939,10 @@
     "trailingRefreshDone": "Recomputed {count} auto alerts (manual ones untouched)",
     "trailingRefreshEmpty": "No watchlist stock has enough price history",
     "trailingManaged": "Daily auto",
-    "unmonitorable": "Not in stock master; cannot monitor"
+    "unmonitorable": "Not in stock master; cannot monitor",
+    "revenueYoyThreshold": "Revenue YoY Threshold",
+    "dividendYieldThreshold": "Dividend Yield Threshold",
+    "peThreshold": "P/E Threshold"
   },
   "notification": {
     "title": "Notification Settings",
@@ -1079,7 +1086,7 @@
     "priceVolumeWeakRally": "Price Up, Volume Down (Weak Rally Warning)"
   },
   "summary": {
-    "title": "AI Analysis",
+    "title": "Rule-Based Summary",
     "sentimentStrongBullish": "Strong Bull Bias",
     "sentimentBullish": "Bullish",
     "sentimentNeutral": "Neutral",
@@ -1088,7 +1095,7 @@
     "overallUp": "Currently in an uptrend, close {close}, today {change}%.",
     "overallDown": "Currently in a downtrend, close {close}, today {change}%.",
     "overallRange": "Currently in a consolidation range, closing at {close}.",
-    "marketBullish": "Market in uptrend (above quarterly MA) — favorable backdrop.",
+    "marketBullish": "Market in uptrend (above quarterly MA) — trend-following backdrop.",
     "marketBearish": "Market in downtrend (below quarterly MA) — bullish signals warrant caution.",
     "marketNeutral": "Market range-bound (MAs entangled) — rely on stock-level signals.",
     "reversalW2S": "Weak-to-strong reversal signal detected, trend may turn bullish.",
@@ -1097,15 +1104,15 @@
     "supportResistanceAboveResistance": "Broke above prior resistance {resistance} (by {resistanceDist}%), no clear resistance overhead; support {support} ({supportDist}% away).",
     "supportResistanceBelowSupport": "Broke below support {support} (by {supportDist}%), no clear support underneath; resistance {resistance} ({resistanceDist}% away).",
     "supportResistanceWithDist": "Support {support} ({supportDist}% away), Resistance {resistance} ({resistanceDist}% away).",
-    "riskReward": "Estimated risk/reward ~1:{ratio} (target at resistance, stop at support).",
-    "riskRewardFavorable": "Upside notably exceeds downside — favorable odds.",
-    "riskRewardPoor": "Downside now exceeds upside — unfavorable odds.",
+    "riskReward": "Based on the nearest resistance and support, upside room is ~{ratio}× the downside room.",
+    "riskRewardFavorable": "Upside room notably exceeds downside room.",
+    "riskRewardPoor": "Downside room now exceeds upside room.",
     "scoreExceptional": "Score {score}, highly concentrated signals with strong short-term momentum.",
-    "scoreStrong": "Score {score}, strong technicals — worth prioritizing.",
-    "scoreWorthwatching": "Score {score}, supported by technical factors, worth continued monitoring.",
-    "scoreWatch": "Score {score}, worth watching.",
+    "scoreStrong": "Score {score}, strong technicals.",
+    "scoreWorthwatching": "Score {score}, supported by technical factors.",
+    "scoreWatch": "Score {score}, mid-level signal strength.",
     "scoreNeutral": "Score {score}, weak signal strength.",
-    "scoreCaution": "Score {score}, suggest caution.",
+    "scoreCaution": "Score {score}, very weak signal.",
     "keySignals": "Key Signals",
     "riskFactors": "Risk Factors",
     "supportingDataTitle": "Supporting Data",
@@ -1120,7 +1127,7 @@
     "maAlignmentBullish": "Moving averages in bullish alignment (5>10>20>60), medium-term uptrend.",
     "maAlignmentBearish": "Moving averages in bearish alignment, medium-term downtrend.",
     "rsiOverbought": "RSI at {rsi}, entering overbought territory.",
-    "rsiOversold": "RSI at {rsi}, entering oversold territory, potential bounce.",
+    "rsiOversold": "RSI at {rsi}, in oversold territory.",
     "institutionalBuyStreak": "Institutional consecutive buying, sustained momentum.",
     "institutionalBuyStreakDays": "Institutional buy streak: {days} days, sustained momentum.",
     "institutionalBuyStreakDaysTruncated": "Institutional buy streak: {days}+ days, sustained momentum.",
@@ -1171,7 +1178,7 @@
     "highVolumeBreakout": "High-volume breakout, confirmed bullish advance.",
     "lowVolumeAccumulation": "Low-volume consolidation, potential accumulation phase.",
     "bearishDivergence": "Bearish divergence over the past 5 days: price down on rising volume.",
-    "newsRelated": "Recent related news, stay informed.",
+    "newsRelated": "Recent related news.",
     "netBuy": "net buy {lots} lots",
     "netSell": "net sell {lots} lots",
     "netNeutral": "flat",
@@ -1179,8 +1186,8 @@
     "institutionalFlow": "Latest session fund flows: Foreign {foreign}, Investment Trust {trust}.",
     "institutionalBuyTrend": "Institutional net buy for {days} consecutive days, bullish structure.",
     "institutionalSellTrend": "Institutional net sell for {days} consecutive days, bearish structure.",
-    "limitUp": "Hit daily limit up (+10%), extremely strong bullish momentum, be cautious chasing highs.",
-    "limitDown": "Hit daily limit down (-10%), extremely strong bearish pressure, exercise extreme caution.",
+    "limitUp": "Hit daily limit up (+10%), extremely strong bullish momentum.",
+    "limitDown": "Hit daily limit down (-10%), extremely strong bearish pressure.",
     "noSignals": "No significant signals triggered.",
     "disclaimer": "Auto-generated analysis summary for reference only, not investment advice.",
     "actionSetAlert": "Set Alert",
@@ -1197,13 +1204,13 @@
     "confluenceMomentumBreakout": "Technical breakout with bullish MA alignment, strong momentum.",
     "confluenceInstitutionalExit": "Institutional selling with foreign outflow, bearish market structure.",
     "confluenceOverall": "Closing at {close}, today {change}%. {confluence}",
-    "mixedSignals": "Mixed bull/bear signals present, consider waiting for directional confirmation.",
+    "mixedSignals": "Mixed bull/bear signals; direction not yet clear.",
     "confidenceHigh": "Well-supported",
     "confidenceMedium": "Moderate",
     "confidenceLow": "Limited",
     "ruleAccuracy": "Rule Accuracy",
     "priceVolumeWeakRally": "Weak rally signal: price up over 5 days but volume {volShrink}% below the 5-day average.",
-    "pullbackToMa20": "Healthy pullback to MA20 ({distance}% away) — pullback entry watch.",
+    "pullbackToMa20": "Strong stock pulled back near MA20 ({distance}% away).",
     "pullbackToMa10": "Shallow pullback to MA10 within strong trend.",
     "hammerAtSupport": "Hammer at support — lower shadow shows buying.",
     "kdHighPullback": "KD pulling back from high — momentum cooling.",
@@ -1230,7 +1237,7 @@
     "sectionValuation": "Valuation",
     "sectionRevenue": "Revenue & Earnings",
     "sectionInstitutional": "Institutional Flow",
-    "sectionAI": "AI Insights",
+    "sectionAI": "Rule-Based View",
     "metricScore": "Score (5D)",
     "metricTrend": "Trend",
     "metricReversal": "Reversal",
@@ -1248,7 +1255,7 @@
     "metricTrust5D": "Trust 5D Net",
     "metricDealer5D": "Dealer 5D Net",
     "metricSentiment": "Sentiment",
-    "metricAssessment": "AI Assessment",
+    "metricAssessment": "Rule Assessment",
     "sentimentStrongBullish": "Strong Bull Bias",
     "sentimentBullish": "Bullish",
     "sentimentNeutral": "Neutral",
@@ -1629,5 +1636,15 @@
     "yoyCol": "YoY",
     "marginCol": "Margin",
     "entryUnfiled": "Unfiled: {names}"
+  },
+  "disclaimer": {
+    "title": "Please read before using",
+    "intro": "Daredevil is a personally developed post-market information tool. It is not an investment adviser and does not provide investment advice.",
+    "point1": "Signals, scores and summaries in the app are statistics generated automatically from public data by fixed rules. They are not recommendations to buy or sell any stock.",
+    "point2": "Backtests and hit rates describe the past and do not indicate future performance.",
+    "point3": "Data comes from public sources such as TWSE, TPEx, TDCC, MOPS and FinMind, and may be delayed or inaccurate.",
+    "point4": "You make, and are responsible for, your own investment decisions and their outcomes.",
+    "accept": "I understand and agree",
+    "short": "Signals are generated by rules for reference only and are not investment advice."
   }
 }
