@@ -70,86 +70,23 @@ class _ApiTokenTileState extends ConsumerState<ApiTokenTile> {
     }
   }
 
-  void _showTokenDialog() {
-    final controller = TextEditingController();
-    final theme = Theme.of(context);
-
+  Future<void> _showTokenDialog() async {
     HapticFeedback.lightImpact();
-    showDialog(
+    final result = await showDialog<_TokenDialogResult>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('settings.apiToken'.tr()),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  hintText: 'settings.apiTokenHint'.tr(),
-                  border: const OutlineInputBorder(),
-                ),
-                obscureText: true,
-                autocorrect: false,
-                enableSuggestions: false,
-                onChanged: (_) => setDialogState(() {}),
-              ),
-              const SizedBox(height: DesignTokens.spacing8),
-              // 用 TextButton 確保命中區 ≥ 44dp（HIG/WCAG），裸 InkWell
-              // 的 line height ~12dp 太小。
-              TextButton(
-                onPressed: _openRegisterUrl,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: DesignTokens.spacing4,
-                    vertical: DesignTokens.spacing8,
-                  ),
-                  minimumSize: const Size(0, 44),
-                  tapTargetSize: MaterialTapTargetSize.padded,
-                ),
-                child: Text(
-                  'settings.apiRegister'.tr(),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.primary,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            if (_hasToken)
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(dialogContext);
-                  await _clearToken();
-                },
-                child: Text(
-                  'common.delete'.tr(),
-                  style: const TextStyle(color: AppTheme.errorColor),
-                ),
-              ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('common.cancel'.tr()),
-            ),
-            FilledButton(
-              onPressed: controller.text.trim().isEmpty
-                  ? null
-                  : () async {
-                      final token = controller.text.trim();
-                      Navigator.pop(dialogContext);
-                      await _saveToken(token);
-                    },
-              child: Text('common.save'.tr()),
-            ),
-          ],
-        ),
+      builder: (_) => _ApiTokenDialog(
+        hasToken: _hasToken,
+        onOpenRegister: _openRegisterUrl,
       ),
-    ).then((_) {
-      controller.dispose();
-    });
+    );
+    switch (result) {
+      case _SaveToken(:final token):
+        await _saveToken(token);
+      case _ClearToken():
+        await _clearToken();
+      case null:
+        break;
+    }
   }
 
   Future<void> _saveToken(String token) async {
@@ -166,10 +103,13 @@ class _ApiTokenTileState extends ConsumerState<ApiTokenTile> {
       return;
     }
 
+    // await 前先取好：寫入 keychain 期間使用者離開設定頁，之後的 ref 會失效
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final tokenNotifier = ref.read(finMindTokenProvider.notifier);
     await settingsRepo.setFinMindToken(token);
 
-    ref.invalidate(finMindClientProvider);
+    // client watch 這個 provider，會自動以新 token 重建
+    tokenNotifier.set(token);
 
     if (mounted) {
       setState(() {
@@ -188,9 +128,10 @@ class _ApiTokenTileState extends ConsumerState<ApiTokenTile> {
 
   Future<void> _clearToken() async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final tokenNotifier = ref.read(finMindTokenProvider.notifier);
     await settingsRepo.clearFinMindToken();
 
-    ref.invalidate(finMindClientProvider);
+    tokenNotifier.set(null);
 
     if (mounted) {
       setState(() {
@@ -320,6 +261,110 @@ class _ApiTokenTileState extends ConsumerState<ApiTokenTile> {
             ),
           ),
         const SizedBox(height: DesignTokens.spacing8),
+      ],
+    );
+  }
+}
+
+/// Token 對話框的結果
+sealed class _TokenDialogResult {}
+
+final class _SaveToken extends _TokenDialogResult {
+  _SaveToken(this.token);
+  final String token;
+}
+
+final class _ClearToken extends _TokenDialogResult {}
+
+/// Token 輸入對話框
+///
+/// 🚨 controller 必須由對話框自己持有、在 [State.dispose] 釋放：原本在
+/// `showDialog(...).then` 裡 dispose，但 future 在 pop 當下就完成，關閉動畫
+/// 期間 TextField 仍會重建，用到已釋放的 controller（debug 下每次存／刪
+/// token 都丟 assertion）。State.dispose 要等 route 真正移除才會呼叫。
+class _ApiTokenDialog extends StatefulWidget {
+  const _ApiTokenDialog({required this.hasToken, required this.onOpenRegister});
+
+  final bool hasToken;
+  final VoidCallback onOpenRegister;
+
+  @override
+  State<_ApiTokenDialog> createState() => _ApiTokenDialogState();
+}
+
+class _ApiTokenDialogState extends State<_ApiTokenDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final token = _controller.text.trim();
+
+    return AlertDialog(
+      title: Text('settings.apiToken'.tr()),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            decoration: InputDecoration(
+              hintText: 'settings.apiTokenHint'.tr(),
+              border: const OutlineInputBorder(),
+            ),
+            obscureText: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: DesignTokens.spacing8),
+          // 用 TextButton 確保命中區 ≥ 44dp（HIG/WCAG），裸 InkWell
+          // 的 line height ~12dp 太小。
+          TextButton(
+            onPressed: widget.onOpenRegister,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(
+                horizontal: DesignTokens.spacing4,
+                vertical: DesignTokens.spacing8,
+              ),
+              minimumSize: const Size(0, 44),
+              tapTargetSize: MaterialTapTargetSize.padded,
+            ),
+            child: Text(
+              'settings.apiRegister'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.primary,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        if (widget.hasToken)
+          TextButton(
+            onPressed: () => Navigator.pop(context, _ClearToken()),
+            child: Text(
+              'common.delete'.tr(),
+              style: const TextStyle(color: AppTheme.errorColor),
+            ),
+          ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('common.cancel'.tr()),
+        ),
+        FilledButton(
+          onPressed: token.isEmpty
+              ? null
+              : () => Navigator.pop(context, _SaveToken(token)),
+          child: Text('common.save'.tr()),
+        ),
       ],
     );
   }

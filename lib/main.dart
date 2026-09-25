@@ -221,19 +221,10 @@ Future<String> _loadAppVersion() async {
   }
 }
 
-/// 從安全儲存載入 FinMind API Token 並設定至 Client
-Future<void> _initializeFinMindToken(ProviderContainer container) async {
-  try {
-    final settingsRepo = container.read(settingsRepositoryProvider);
-    final token = await settingsRepo.getFinMindToken();
-    if (token != null && token.isNotEmpty) {
-      container.read(finMindClientProvider).token = token;
-    }
-  } catch (e) {
-    // Token 載入為選用，失敗不影響啟動
-    AppLogger.warning('Main', '載入 FinMind Token 失敗', e);
-  }
-}
+/// 從安全儲存載入 FinMind API Token（失敗或格式無效皆以匿名模式運作）
+Future<void> _initializeFinMindToken(ProviderContainer container) => container
+    .read(finMindTokenProvider.notifier)
+    .loadFrom(container.read(settingsRepositoryProvider));
 
 class DaredevilApp extends ConsumerStatefulWidget {
   const DaredevilApp({super.key});

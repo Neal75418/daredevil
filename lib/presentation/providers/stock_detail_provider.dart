@@ -37,14 +37,14 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
   StockDetailNotifier(this._symbol);
 
   final String _symbol;
-  // late(非 final):build() 會因 finMindClientProvider invalidate 重跑,
+  // late(非 final):build() 會因 finMindClientProvider 重建而重跑,
   // late final 會在第二次 build 拋 LateInitializationError(測試實證)
   late StockFundamentalsLoader _fundamentalsLoader;
   late StockChipLoader _chipLoader;
   var _active = true;
 
   /// 曾成功載入過內容(2026-08-01 複審):build() 因 finMindClientProvider
-  /// invalidate 重跑時 state 被清空,而 epoch listener 的空 state guard
+  /// 重建而重跑時 state 被清空,而 epoch listener 的空 state guard
   /// 恰好在清空後擋住自己——無此旗標則「換 token」讓存活的個股頁靜默
   /// 空白且永久卡死。同 instance 重跑 field 保留,據此排自動 reload。
   var _hasLoadedOnce = false;
@@ -54,7 +54,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
     _active = true;
     ref.onDispose(() => _active = false);
     // finMindClientProvider 用 watch 而非 read(2026-07-29 審查修正):
-    // 使用者更新 token 會 invalidate 該 provider,舊 client 的 Dio 隨即被
+    // 使用者更新 token 會讓該 provider 重建(watch finMindTokenProvider),舊 client 的 Dio 隨即被
     // close;read 快照會讓存活頁面(含 3 分鐘 keepAlive 窗)的 API fallback
     // 全打在死連線上、被 loader 的 catch 吞掉,症狀恰為「設了 token 還是
     // 沒資料」。watch 讓 notifier 隨 client 重建,與 repository providers

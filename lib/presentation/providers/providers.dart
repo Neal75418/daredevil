@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/utils/lru_cache.dart';
+import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/database/app_database_flutter.dart';
 import 'package:daredevil/data/database/cached_accessor.dart';
@@ -82,6 +83,45 @@ final apiBudgetTrackerProvider = Provider<ApiBudgetTracker>((ref) {
   );
 });
 
+/// 目前生效的 FinMind token（記憶體中的唯一來源）。
+///
+/// 啟動時由 main 從安全儲存載入；設定頁存／清 token 時更新。
+/// [finMindClientProvider] watch 它，所以 client 不論因何重建都帶著當下的 token。
+class FinMindTokenNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  /// 設定目前的 token。格式無效時以匿名模式運作。
+  ///
+  /// 🚨 驗證必須在這裡：client 以建構子收 token、不經 setter 的驗證。
+  /// FINMIND_TOKEN 環境變數與舊版遷移來源未必驗過（repository 註明不 trim），
+  /// 帶換行的 token 放進 header 會讓每個請求都失敗，錯誤字串還含 token 原文。
+  /// 空字串不必特別處理：FinMindClient.hasToken 已視同沒有 token。
+  void set(String? token) {
+    if (token != null &&
+        token.isNotEmpty &&
+        !FinMindClient.isValidTokenFormat(token)) {
+      AppLogger.warning('FinMindToken', 'token 格式無效，以匿名模式運作');
+      state = null;
+      return;
+    }
+    state = token;
+  }
+
+  /// App 啟動時從安全儲存載入。讀取失敗不影響啟動，以匿名模式運作。
+  Future<void> loadFrom(SettingsRepository repo) async {
+    try {
+      set(await repo.getFinMindToken());
+    } catch (e) {
+      AppLogger.warning('FinMindToken', '載入 FinMind Token 失敗', e);
+    }
+  }
+}
+
+final finMindTokenProvider = NotifierProvider<FinMindTokenNotifier, String?>(
+  FinMindTokenNotifier.new,
+);
+
 /// FinMind API 客戶端（用於取得歷史資料）
 ///
 /// 當使用者變更快取時間設定時，此 provider 會被 invalidate 並重建；
@@ -90,6 +130,7 @@ final apiBudgetTrackerProvider = Provider<ApiBudgetTracker>((ref) {
 final finMindClientProvider = Provider<FinMindClient>((ref) {
   final cacheDuration = ref.watch(cacheDurationProvider);
   final client = FinMindClient(
+    token: ref.watch(finMindTokenProvider),
     cacheTtl: Duration(minutes: cacheDuration),
     budgetTracker: ref.watch(apiBudgetTrackerProvider),
   );
