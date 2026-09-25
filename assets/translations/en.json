@@ -87,7 +87,18 @@
     "dataStale": "Data is {count} trading day(s) behind (latest close {date})",
     "updateNow": "Update now",
     "alreadyLatest": "Up to date ({date} close)",
-    "historyBuilding": "Building price history {percent}% (about {runs} more updates) · long-horizon signals (e.g. 52-week highs) may not appear yet"
+    "historyBuilding": "Building price history {percent}% (about {runs} more updates) · long-horizon signals (e.g. 52-week highs) may not appear yet",
+    "cardGuide": {
+      "title": "How to read a signal card",
+      "tierTitle": "Strong / Medium / Weak / Watch",
+      "tierBody": "How well the stock matches the current mode's conditions — not a price forecast. Strong ≥{strong}, Medium {medium}–{mediumMax}, Weak {weak}–{weakMax}; Watch: below {weak}, conditions not yet fully met.",
+      "horizonTitle": "5D / 60D",
+      "horizonBody": "The card shows the higher of the two scores (5D / 60D weightings). Both use the same conditions: some are re-weighted by how they performed 5 or 60 trading days later in backtests; the rest keep default weights.",
+      "numberTitle": "The numbers",
+      "numberBody": "Small differences between scores are not statistically meaningful — compare tiers, not numbers.",
+      "elementsTitle": "Other parts of the card",
+      "elementsBody": "The left arrow is the current trend (up / range / down); the sparkline shows the last {days} closes, colored by its own change (gray when flat); the price column shows the latest close and that day's change."
+    }
   },
   "news": {
     "title": "Market News",

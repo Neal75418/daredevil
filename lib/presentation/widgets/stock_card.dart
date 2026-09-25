@@ -71,9 +71,9 @@ class StockCard extends StatefulWidget {
 
   /// 雙 horizon score (5D, 60D) — 給 Today screen Mode tab 用
   ///
-  /// 不為 null 時，header 內顯示 tier 徽章＋5D/60D 雙數字
-  /// （ScoreTierBadge.dual）。其他 caller（watchlist / scan）不傳此參數
-  /// 就維持單一 ScoreTierBadge 行為。
+  /// 不為 null 時，header 內顯示 tier 徽章＋較高者的分數
+  /// （ScoreTierBadge.dual，分級與數字都取較高者）。其他 caller
+  /// （watchlist / scan）不傳此參數就維持單一 ScoreTierBadge 行為。
   final (double, double)? dualScore;
   final List<String> reasons;
   final String? trendState;
@@ -275,7 +275,7 @@ class _StockCardState extends State<StockCard> {
 
                               // 迷你走勢圖（窄卡片時自動隱藏）
                               if (showSparkline) ...[
-                                _buildSparkline(priceColor),
+                                _buildSparkline(theme.brightness),
                                 const SizedBox(width: 8),
                               ],
 
@@ -496,12 +496,18 @@ class _StockCardState extends State<StockCard> {
   /// 建立迷你走勢圖
   ///
   /// 新增防禦性 null 檢查，避免條件判斷與方法呼叫之間的競態條件
-  Widget _buildSparkline(Color priceColor) {
+  Widget _buildSparkline(Brightness brightness) {
     final prices = widget.recentPrices;
     if (prices == null || prices.length < 7) {
       return const SizedBox.shrink();
     }
-    return MiniSparkline(prices: prices, color: priceColor);
+    // 顏色依走勢圖自己畫出來那段的漲跌，不跟今日漲跌（原本線往上卻是
+    // 跌色——箭頭、走勢圖、漲跌三個指標各講各的）
+    final color = AppTheme.getPriceColor(
+      MiniSparkline.trendChangePercent(prices) ?? 0,
+      brightness,
+    );
+    return MiniSparkline(prices: prices, color: color);
   }
 
   Widget _buildWatchlistButton(ThemeData theme, {bool compact = false}) {

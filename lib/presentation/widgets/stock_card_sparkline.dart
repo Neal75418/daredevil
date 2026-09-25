@@ -27,8 +27,8 @@ class MiniSparkline extends StatelessWidget {
   /// 圖表高度（預設 32）
   final double? height;
 
-  /// 顯示的最大資料點數（為清晰呈現）
-  static const int _maxDataPoints = 20;
+  /// 顯示的最大資料點數（為清晰呈現）；訊號卡說明的「近 N 個交易日」取此值
+  static const int maxDataPoints = 20;
 
   /// 有意義圖表所需的最小資料點數
   static const int _minDataPoints = 5;
@@ -42,18 +42,29 @@ class MiniSparkline extends StatelessWidget {
   /// 顯示圖表的最小價格變化百分比（0.3%）
   static const double _minVariationPercent = 0.003;
 
+  /// 變化不到此百分比視為持平
+  static const double _flatChangePercent = 0.1;
+
+  /// 畫出來那段（最近 [maxDataPoints] 筆）的首尾漲跌百分比；不到
+  /// [_flatChangePercent] 回 0（持平），資料不足回 null。
+  ///
+  /// 朗讀標籤與呼叫端的走勢圖配色共用這個值：看到的線、聽到的描述、
+  /// 顏色三者一致（原本配色跟著今日漲跌，線往上卻是跌色）。
+  static double? trendChangePercent(List<double> prices) {
+    if (prices.length < _minDataPoints) return null;
+    final sampled = _samplePrices(prices);
+    final first = sampled.first;
+    if (first <= 0) return 0;
+    final change = (sampled.last - first) / first * 100;
+    return change.abs() < _flatChangePercent ? 0 : change;
+  }
+
   /// 建立無障礙語意標籤
   String _buildSemanticLabel(List<double> sampledPrices) {
-    if (sampledPrices.length < 2) return S.sparklineDefault;
-
-    final first = sampledPrices.first;
-    final last = sampledPrices.last;
-    final change = first > 0 ? ((last - first) / first * 100) : 0.0;
+    final change = trendChangePercent(sampledPrices);
+    if (change == null) return S.sparklineDefault;
     final days = sampledPrices.length;
-
-    if (change.abs() < 0.1) {
-      return S.sparklineFlat(days);
-    }
+    if (change == 0) return S.sparklineFlat(days);
     return S.sparklineTrend(days, change);
   }
 
@@ -120,9 +131,9 @@ class MiniSparkline extends StatelessWidget {
   }
 
   /// 取樣價格至最近 N 個資料點以獲得更清晰的呈現
-  List<double> _samplePrices(List<double> prices) {
-    if (prices.length <= _maxDataPoints) return prices;
-    return prices.sublist(prices.length - _maxDataPoints);
+  static List<double> _samplePrices(List<double> prices) {
+    if (prices.length <= maxDataPoints) return prices;
+    return prices.sublist(prices.length - maxDataPoints);
   }
 
   /// 將價格正規化至 0-1 範圍以獲得一致的圖表高度

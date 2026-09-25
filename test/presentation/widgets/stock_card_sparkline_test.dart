@@ -11,6 +11,43 @@ void main() {
     await setupTestLocalization();
   });
 
+  // 走勢圖顏色依「畫出來那段」的首尾漲跌（而非今日漲跌）；朗讀標籤同一個值
+  group('MiniSparkline.trendChangePercent', () {
+    test('上漲 → 正值', () {
+      expect(
+        MiniSparkline.trendChangePercent([100, 101, 103, 105, 108, 110]),
+        closeTo(10, 1e-9),
+      );
+    });
+
+    test('下跌 → 負值', () {
+      expect(
+        MiniSparkline.trendChangePercent([110, 108, 105, 103, 101, 100]),
+        lessThan(0),
+      );
+    });
+
+    test('變化不到 0.1% → 視為持平（0）', () {
+      expect(
+        MiniSparkline.trendChangePercent([1000, 1003, 998, 1001, 1000.5]),
+        0,
+      );
+    });
+
+    // 30 筆只畫最後 20 筆：前 10 筆很高、後 20 筆從低處上漲 → 看得到的是上漲
+    test('只看畫出來的最後 20 筆', () {
+      final prices = [
+        ...List.filled(10, 200.0),
+        for (var i = 0; i < 20; i++) 100.0 + i,
+      ];
+      expect(MiniSparkline.trendChangePercent(prices), greaterThan(0));
+    });
+
+    test('資料不足（< 5 筆）→ null', () {
+      expect(MiniSparkline.trendChangePercent([100, 101, 102]), isNull);
+    });
+  });
+
   group('MiniSparkline', () {
     testWidgets('returns SizedBox.shrink when fewer than 5 data points', (
       tester,

@@ -64,6 +64,11 @@ class ModeRecommendation {
   /// 該 mode 內所有觸發 rule 的 ruleScoreLong 加總
   final double modeScoreLong;
 
+  /// 卡片顯示用的分數：5D、60D 取較高者（與徽章分級同一個依據——
+  /// ScoreTierBadge 依較高者分級）。朗讀標籤、長按預覽也用它，三處同一個數。
+  double get displayScore =>
+      modeScoreShort > modeScoreLong ? modeScoreShort : modeScoreLong;
+
   final String? stockName;
   final String? market;
   final double? latestClose;

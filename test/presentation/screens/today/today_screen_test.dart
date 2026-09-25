@@ -16,6 +16,7 @@ import 'package:daredevil/presentation/widgets/section_header.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_dashboard.dart';
 import 'package:daredevil/presentation/widgets/industry_ranking_section.dart';
 import 'package:daredevil/presentation/screens/today/widgets/market_summary_strip.dart';
+import 'package:daredevil/presentation/screens/today/widgets/signal_card_guide_sheet.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
@@ -33,6 +34,8 @@ import 'package:daredevil/presentation/providers/today_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/screens/today/today_screen.dart';
 import 'package:daredevil/presentation/screens/today/widgets/data_stale_banner.dart';
+import 'package:daredevil/presentation/widgets/stock_card.dart';
+import 'package:daredevil/presentation/widgets/score_ring.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/update_progress_banner.dart';
@@ -689,6 +692,29 @@ void main() {
       expect(FakeMarketOverviewNotifier.loadCalls, before + 1);
     });
 
+    // 分數、5日／60日、箭頭與走勢圖原本全無說明；入口放標題旁（點徽章會
+    // 與「點卡片進個股」衝突）
+    testWidgets('今日訊號標題旁的 ⓘ → 開啟「訊號卡怎麼看」', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(
+        find.descendant(
+          of: signalsHeader(),
+          matching: find.byIcon(Icons.info_outline),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(SignalCardGuideSheet), findsOneWidget);
+    });
+
     testWidgets('點摘要條 → 進 /market', (tester) async {
       widenViewport(tester);
       final router = GoRouter(
@@ -771,6 +797,50 @@ void main() {
       expect(find.byType(IndustryRankingSection), findsOneWidget);
       // 族群卡片的進場動畫計時器推完
       await tester.pump(const Duration(seconds: 2));
+    });
+  });
+
+  // 卡片徽章只顯示較高分（5日、60日取大）：朗讀標籤與長按預覽的分數要同
+  // 一個，否則卡片寫 30、朗讀唸 15、預覽也畫 15
+  group('顯示分數一致', () {
+    final mixed = ModeRecommendation(
+      symbol: '2208',
+      rank: 1,
+      modeScoreShort: 15,
+      modeScoreLong: 30,
+      reasons: const [],
+      stockName: '台船',
+      latestClose: 19.4,
+      priceChange: -1.02,
+      trendState: 'UP',
+    );
+
+    Future<void> pumpMixed(WidgetTester tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
+          modeRecommendations: (ref, mode) => SynchronousFuture([mixed]),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    test('ModeRecommendation.displayScore＝兩者較高', () {
+      expect(mixed.displayScore, 30);
+    });
+
+    testWidgets('卡片的 score（朗讀標籤用）取較高分', (tester) async {
+      await pumpMixed(tester);
+      expect(tester.widget<StockCard>(find.byType(StockCard)).score, 30);
+    });
+
+    testWidgets('長按預覽的分數取較高分', (tester) async {
+      await pumpMixed(tester);
+      await tester.longPress(find.byType(StockCard));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.widget<ScoreRing>(find.byType(ScoreRing)).score, 30);
     });
   });
 

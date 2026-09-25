@@ -87,7 +87,18 @@
     "dataStale": "資料落後 {count} 個交易日（最新 {date} 收盤）",
     "updateNow": "立即更新",
     "alreadyLatest": "已是最新（{date} 收盤）",
-    "historyBuilding": "歷史資料建置中 {percent}%（約再 {runs} 次更新補齊）· 期間長週期訊號（如 52 週新高）可能尚未出現"
+    "historyBuilding": "歷史資料建置中 {percent}%（約再 {runs} 次更新補齊）· 期間長週期訊號（如 52 週新高）可能尚未出現",
+    "cardGuide": {
+      "title": "訊號卡怎麼看",
+      "tierTitle": "強／中／弱／觀察",
+      "tierBody": "這檔股票符合目前模式條件的程度，不是漲跌預測。強 ≥{strong}、中 {medium}–{mediumMax}、弱 {weak}–{weakMax}；觀察：低於 {weak}，條件尚未完全成立。",
+      "horizonTitle": "5日／60日",
+      "horizonBody": "卡片上的分數取 5日、60日兩套權重算出的分數中較高者。兩套權重來自同一組條件：部分條件依過去回測在 5 或 60 個交易日後的表現調整，其餘沿用預設值。",
+      "numberTitle": "數字",
+      "numberBody": "分數之間的小差異沒有統計意義，請看分級，不要比數字大小。",
+      "elementsTitle": "卡片上的其他資訊",
+      "elementsBody": "左側箭頭是目前的趨勢判定（上升／盤整／下降）；走勢圖是最近 {days} 筆收盤，顏色依這段期間的漲跌，持平為灰色；價格欄是最新收盤價與當日漲跌幅。"
+    }
   },
   "news": {
     "title": "市場新聞",

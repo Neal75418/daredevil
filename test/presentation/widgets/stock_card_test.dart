@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/presentation/widgets/score_tier_badge.dart';
+import 'package:daredevil/presentation/widgets/stock_card_sparkline.dart';
+
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/presentation/widgets/stock_card.dart';
@@ -371,15 +374,17 @@ void main() {
         return tester.widget<Text>(find.text(key)).style?.color;
       }
 
+      ColorScheme schemeOf(WidgetTester tester) =>
+          Theme.of(tester.element(find.byType(StockCard))).colorScheme;
+
       testWidgets('score >= 45 → 「強」徽章（ScoreTierBadge 強色）', (tester) async {
         await tester.pumpWidget(
           buildTestApp(const StockCard(symbol: '2330', score: 55.0)),
         );
+        // 分級用品牌色深淺（非漲跌紅綠）：強＝實心、字用 onPrimary
         expect(
           tierLabelColor(tester, 'score.tier.strong'),
-          // ScoreTier 色階為 ScoreTierBadge 私有常數（與籌碼評等/漲跌
-          // 語意無關，見 score_tier_badge.dart 內註解），故以字面值比對。
-          const Color(0xFF4CAF50),
+          schemeOf(tester).onPrimary,
         );
         // 確切分數退為小字、中性色（不再暗示假精確度）
         expect(find.text('55'), findsOneWidget);
@@ -391,7 +396,7 @@ void main() {
         );
         expect(
           tierLabelColor(tester, 'score.tier.medium'),
-          const Color(0xFF8BC34A),
+          schemeOf(tester).primary,
         );
       });
 
@@ -401,7 +406,7 @@ void main() {
         );
         expect(
           tierLabelColor(tester, 'score.tier.weak'),
-          const Color(0xFFFFC107),
+          schemeOf(tester).onSurfaceVariant,
         );
       });
 
@@ -475,5 +480,101 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(find.byIcon(Icons.trending_up_rounded), findsOneWidget);
     });
+  });
+
+  // 走勢圖的顏色原本跟著今日漲跌：線明明往上卻是跌色（2026-09-25 實機
+  // 2208）。改依走勢圖自己畫出來那段的漲跌。
+  group('走勢圖顏色', () {
+    const rising = [10.0, 10.2, 10.4, 10.3, 10.6, 10.8, 11.0, 11.2];
+
+    Color sparklineColor(WidgetTester tester) =>
+        tester.widget<MiniSparkline>(find.byType(MiniSparkline)).color;
+
+    testWidgets('今日下跌、近期上漲 → 走勢圖用漲色', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        buildTestApp(
+          const StockCard(
+            symbol: '2208',
+            latestClose: 11.2,
+            priceChange: -1.02,
+            recentPrices: rising,
+          ),
+        ),
+      );
+      expect(
+        sparklineColor(tester),
+        AppTheme.getPriceColor(1, Brightness.light),
+      );
+    });
+
+    testWidgets('今日上漲、近期下跌 → 走勢圖用跌色', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        buildTestApp(
+          StockCard(
+            symbol: '2208',
+            latestClose: 10.0,
+            priceChange: 2.3,
+            recentPrices: rising.reversed.toList(),
+          ),
+        ),
+      );
+      expect(
+        sparklineColor(tester),
+        AppTheme.getPriceColor(-1, Brightness.light),
+      );
+    });
+  });
+
+  // 窄卡片時徽章包在 FittedBox 裡等比縮小：雙分數的徽章不得比單一分數
+  // 縮得更小（兩個數字並排曾讓 390pt 的分級字縮到約 0.42 倍）。比較同寬
+  // 下分級字的實際渲染高度，與測試字型寬窄無關。
+  testWidgets('窄卡片：雙分數的分級字與單一分數同樣大', (tester) async {
+    tester.view.physicalSize = const Size(390, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    Future<double> tierTextHeight(StockCard card) async {
+      await tester.pumpWidget(buildTestApp(card));
+      return tester.getRect(find.text('score.tier.medium')).height;
+    }
+
+    // 比較有效的前提：單一分數時 FittedBox 就已在縮（否則雙分數多出的
+    // 寬度可能也不縮，測試會沒意義地一直綠——例如改載真實翻譯後）
+    void expectScaling() {
+      expect(
+        tester.getSize(find.byType(FittedBox)).width,
+        lessThan(tester.getSize(find.byType(ScoreTierBadge)).width),
+        reason: '測試條件失效：單一分數的徽章沒有被縮放',
+      );
+    }
+
+    const common = (symbol: '5608', name: '四維航', close: 17.0, change: -1.16);
+    final single = await tierTextHeight(
+      StockCard(
+        symbol: common.symbol,
+        stockName: common.name,
+        latestClose: common.close,
+        priceChange: common.change,
+        score: 30,
+      ),
+    );
+    expectScaling();
+    final dual = await tierTextHeight(
+      StockCard(
+        symbol: common.symbol,
+        stockName: common.name,
+        latestClose: common.close,
+        priceChange: common.change,
+        score: 30,
+        dualScore: (15, 30),
+      ),
+    );
+    expect(dual, moreOrLessEquals(single, epsilon: 0.01));
   });
 }

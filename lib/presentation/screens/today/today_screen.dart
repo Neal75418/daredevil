@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:daredevil/presentation/screens/today/widgets/revenue_filing_entry.dart';
 import 'package:daredevil/presentation/screens/today/widgets/quarterly_filing_entry.dart';
 import 'package:daredevil/presentation/screens/today/widgets/market_summary_strip.dart';
+import 'package:daredevil/presentation/screens/today/widgets/signal_card_guide_sheet.dart';
 import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
@@ -412,9 +413,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           market: rec.market,
           latestClose: rec.latestClose,
           priceChange: rec.priceChange,
-          // primary score 給 fallback / preview sheet 用（StockCard 內 dualScore
-          // 不為 null 時會優先顯示雙 column）
-          score: rec.modeScoreShort,
+          // 朗讀標籤用的分數：與徽章顯示的同一個（較高者）
+          score: rec.displayScore,
           dualScore: (rec.modeScoreShort, rec.modeScoreLong),
           reasons: rec.reasonTypes,
           warningReasons: rec.warningReasons,
@@ -440,7 +440,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 stockName: rec.stockName,
                 latestClose: rec.latestClose,
                 priceChange: rec.priceChange,
-                score: rec.modeScoreShort,
+                score: rec.displayScore,
                 trendState: rec.trendState,
                 reasons: rec.reasonTypes,
                 isInWatchlist: isInWatchlist,
@@ -893,7 +893,18 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 data: (recs) => S.todayTop10(recs.length),
                 orElse: () => S.todayTop10Loading,
               );
-              return SectionHeader(title: title, icon: Icons.trending_up);
+              return SectionHeader(
+                title: title,
+                icon: Icons.trending_up,
+                // 分數、5日／60日、箭頭與走勢圖的說明（點徽章會與「點卡片
+                // 進個股」衝突，入口放標題旁）
+                trailing: IconButton(
+                  icon: const Icon(Icons.info_outline),
+                  tooltip: 'today.cardGuide.title'.tr(),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => SignalCardGuideSheet.show(context),
+                ),
+              );
             },
           ),
         ),
