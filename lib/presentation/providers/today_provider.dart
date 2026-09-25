@@ -134,23 +134,23 @@ class TodayNotifier extends Notifier<TodayState> {
       // 取得最後更新執行記錄
       final lastRun = await _marketRepo.getLatestUpdateRun();
 
-      // B-lite cold-start auto-update（2026-06-18）：macOS 無 workmanager、
-      // CLI 卡 Flutter binding，妥協做法是「user 一開 app 就背景跑」。
-      // 6h gate + 交易日 + 不阻塞 UI（fire-and-forget）。
-      // 新鮮度看「上次成功」、節流看「上次嘗試」——見
-      // DataFreshness.coldStartRetryThrottleMinutes 的註解。
-      final lastSuccess = await _marketRepo.getLatestSuccessfulUpdateRun();
-      _maybeTriggerColdStartUpdate(
-        lastSuccessAt: lastSuccess?.finishedAt ?? lastSuccess?.startedAt,
-        lastAttemptAt: attemptAnchorOf(lastRun),
-      );
-
-      // 取得實際資料日期供顯示用（非查詢用途）
+      // 取得實際資料日期（顯示用，也是冷啟動更新的新鮮度依據）
       final latestPriceDate = await _marketRepo.getLatestDataDate();
       final latestInstDate = await _marketRepo.getLatestInstitutionalDate();
       final dataDate = _dataSyncService.getDisplayDataDate(
         latestPriceDate,
         latestInstDate,
+      );
+
+      // B-lite cold-start auto-update（2026-06-18）：macOS 無 workmanager、
+      // CLI 卡 Flutter binding，妥協做法是「user 一開 app 就背景跑」。
+      // 資料落後交易日才跑、節流看「上次嘗試」、不阻塞 UI（fire-and-forget）
+      // ——見 shouldTriggerColdStartUpdate。
+      _maybeTriggerColdStartUpdate(
+        dataDate: dataDate,
+        lastAttemptAt: attemptAnchorOf(lastRun),
+        latestRunSucceeded:
+            lastRun?.status.toUpperCase() == UpdateStatus.success.code,
       );
 
       // 防禦性 guard：寫入前驗證 generation 沒被並發 reload 取代
@@ -228,14 +228,11 @@ class TodayNotifier extends Notifier<TodayState> {
 
   /// B-lite cold-start auto-update（2026-06-18）
   ///
-  /// 四個 short-circuit（任一不通就 skip）：
+  /// short-circuit（任一不通就 skip）：
   /// 1. [autoColdStartUpdateEnabled]=false → 整層關閉（主要給測試 / 未來
   ///    feature flag 用）
   /// 2. 已有 update 在進行 → [runUpdate] 自己會擋，提前 skip 省 log noise
-  /// 3. 上次 update 距現在 < [DataFreshness.coldStartAutoUpdateGateHours]
-  ///    → fresh enough，跳過避免同日多次重跑 syncer（每個 syncer 內
-  ///    有 freshness check，但繞掉整次省 ~10s 開銷）
-  /// 4. 非交易日（週末 / 國定假日）→ 沒新資料可抓
+  /// 3. [shouldTriggerColdStartUpdate] 不通過（資料未落後／已收斂／節流中）
   ///
   /// 通過則 fire-and-forget — UI 用 [TodayState.isUpdating] / updateProgress
   /// 顯示進度，user 可以繼續操作；完成後 [dataUpdateEpochProvider] 自然
@@ -246,25 +243,43 @@ class TodayNotifier extends Notifier<TodayState> {
   /// 內部包成 UpdateResult.errors，後續 UI 會反映。
   /// 冷啟動自動更新的判斷（純函式，方便測試 —— 不看真實時鐘）
   ///
-  /// 兩個條件必須分開判斷，因為它們問的是不同問題：
-  /// - **資料夠不夠新** → 距上次**成功**更新 ≥
-  ///   [DataFreshness.coldStartAutoUpdateGateHours]
+  /// 三個條件分開判斷，因為它們問的是不同問題：
+  /// - **資料夠不夠新** → 資料日是否落後交易日
+  ///   （[TaiwanCalendar.tradingDaysBehind]）
+  /// - **是否已收斂** → 應有資料日的就緒時間後已成功跑過仍落後＝來源
+  ///   沒有這天（颱風臨時停市、日曆未標的假日），不再重試
   /// - **是不是在狂打 API** → 距上次**嘗試**（不分成功與否）≥
   ///   [DataFreshness.coldStartRetryThrottleMinutes]
   ///
-  /// 混成一個判斷（拿不分 status 的最後一筆當新鮮度基準）會讓一次失敗的
-  /// 更新把重試擋滿 6 小時 —— 更新失敗反而更不會重試，方向是反的。
-  /// 反過來只看成功、不節流，資料久未成功時每開一次 app 就打一次 API。
+  /// 新鮮度曾用「距上次成功 ≥6 小時」：交易日早上昨晚已更新到昨天收盤、
+  /// 落後 0 天，卻因 11.5h ≥ 6h 白跑一輪、燒 FinMind 額度（2026-09-25 改）。
+  /// 失敗的嘗試只擋節流時間，不可冒充「資料已新」。
   @visibleForTesting
   static bool shouldTriggerColdStartUpdate({
     required DateTime now,
-    required DateTime? lastSuccessAt,
+    required DateTime? dataDate,
     required DateTime? lastAttemptAt,
+    required bool latestRunSucceeded,
   }) {
-    if (!TaiwanCalendar.isTradingDay(now)) return false;
-    if (lastSuccessAt != null &&
-        now.difference(lastSuccessAt).inHours <
-            DataFreshness.coldStartAutoUpdateGateHours) {
+    // 沒有任何資料（新安裝）一律要跑；非交易日也跑——UpdateService 會自動
+    // 改抓上一個交易日，週末發現週五沒抓到不必等到週一
+    if (dataDate != null &&
+        TaiwanCalendar.tradingDaysBehind(dataDate, now) < 1) {
+      return false;
+    }
+    // 收斂：應有資料日的就緒時間之後已成功跑過一輪仍落後＝來源就是沒有
+    // 這天（颱風臨時停市未入日曆、_maxYear 後的平日假日）。不收斂的話每
+    // 60 分鐘白跑一輪、燒 FinMind 額度，等應有資料日往前推進才重新判斷。
+    final expected = TaiwanCalendar.expectedLatestTradingDataDate(now);
+    final readyAt = DateTime(
+      expected.year,
+      expected.month,
+      expected.day,
+      DataFreshness.dailyDataReadyHour,
+    );
+    if (latestRunSucceeded &&
+        lastAttemptAt != null &&
+        !lastAttemptAt.isBefore(readyAt)) {
       return false;
     }
     if (lastAttemptAt != null &&
@@ -276,22 +291,24 @@ class TodayNotifier extends Notifier<TodayState> {
   }
 
   void _maybeTriggerColdStartUpdate({
-    required DateTime? lastSuccessAt,
+    required DateTime? dataDate,
     required DateTime? lastAttemptAt,
+    required bool latestRunSucceeded,
   }) {
     if (!autoColdStartUpdateEnabled) return;
     if (state.isUpdating) return;
     if (!shouldTriggerColdStartUpdate(
-      now: DateTime.now(),
-      lastSuccessAt: lastSuccessAt,
+      // 與資料落後提示同一個時鐘（也讓接線可測）
+      now: ref.read(appClockProvider).now(),
+      dataDate: dataDate,
       lastAttemptAt: lastAttemptAt,
+      latestRunSucceeded: latestRunSucceeded,
     )) {
       return;
     }
     AppLogger.info(
       'TodayNotifier',
-      'B-lite cold-start auto-update：上次成功 ${lastSuccessAt ?? "從未"}'
-          '（≥${DataFreshness.coldStartAutoUpdateGateHours}h）、'
+      'B-lite cold-start auto-update：資料日 ${dataDate ?? "無"}（落後交易日）、'
           '上次嘗試 ${lastAttemptAt ?? "從未"}'
           '（≥${DataFreshness.coldStartRetryThrottleMinutes}min），背景觸發',
     );

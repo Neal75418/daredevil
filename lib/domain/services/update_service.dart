@@ -201,7 +201,7 @@ class UpdateService {
   /// - 背景任務只在 Android / iOS 註冊（`background_update_service.dart`
   ///   的 `Platform.isAndroid || Platform.isIOS`），**macOS 不存在此路徑**
   /// - iOS 上要碰撞需背景任務（15:00）與前景冷啟動同時發生，且冷啟動
-  ///   gate 的兩個條件（距上次成功 ≥6h、距上次嘗試 ≥60min）皆通過
+  ///   gate 通過（資料落後交易日、距上次嘗試 ≥60min、未在就緒後成功跑過）
   /// - 跨 isolate 互斥需引入檔案鎖或 DB lock 表，兩者都帶新的失效模式
   ///   （isolate 被 OS 殺掉後鎖殘留），代價與風險不成比例
   ///

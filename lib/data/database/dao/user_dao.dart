@@ -286,18 +286,6 @@ mixin UserDaoMixin on $AppDatabase {
         .getSingleOrNull();
   }
 
-  /// 最後一筆**成功**的 update_run
-  ///
-  /// 冷啟動 gate 判斷「資料夠不夠新」用。[getLatestUpdateRun] 不分 status，
-  /// 拿它當新鮮度基準會讓一次失敗的嘗試看起來像「剛更新過」。
-  Future<UpdateRunEntry?> getLatestSuccessfulUpdateRun() {
-    return (select(updateRun)
-          ..where((t) => t.status.equals(UpdateStatus.success.code))
-          ..orderBy([(t) => OrderingTerm.desc(t.id)])
-          ..limit(1))
-        .getSingleOrNull();
-  }
-
   /// 取得最近 N 筆更新執行記錄（包含 SUCCESS / PARTIAL / FAILED）
   ///
   /// UI 顯示「更新紀錄」歷史列表用，user tap Today 上的 timestamp 帶出。

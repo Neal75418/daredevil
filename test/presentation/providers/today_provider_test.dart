@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
+import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/database/cached_accessor.dart';
 import 'package:daredevil/data/repositories/analysis_repository.dart';
@@ -80,9 +81,6 @@ void main() {
     // 再交給 dataSyncService.getDisplayDataDate 計算顯示日期。
     when(() => mockDb.getWatchlist()).thenAnswer((_) async => []);
     when(() => mockDb.getLatestUpdateRun()).thenAnswer((_) async => null);
-    when(
-      () => mockDb.getLatestSuccessfulUpdateRun(),
-    ).thenAnswer((_) async => null);
     when(
       () => mockDb.getLatestDataDate(),
     ).thenAnswer((_) async => DateTime(2026, 2, 13));
@@ -283,84 +281,120 @@ void main() {
     });
   });
   // ====================================================================
-  // 冷啟動自動更新 gate（2026-07-26）
+  // 冷啟動自動更新 gate
   //
-  // data_freshness.dart 的 docstring 寫「距上次**成功** update_run」，
-  // 但 getLatestUpdateRun() 完全不過濾 status，today_provider 也無條件
-  // 拿最後一筆的時間 —— 一次 PARTIAL / FAILED 會把冷啟動自動更新擋滿
-  // 6 小時。更新失敗反而讓 app 更不會重試，方向是反的。
-  //
-  // 修法把混在一起的兩件事拆開：
-  //   資料夠不夠新 → 距上次**成功**更新 ≥ coldStartAutoUpdateGateHours
-  //   是不是在狂打 → 距上次**嘗試** ≥ coldStartRetryThrottleMinutes
-  // 兩者皆成立才觸發。這比「依 status 選單一門檻」更準確：後者在
-  // 「上次成功才 3 小時前、但 2 小時前有一筆 PARTIAL」時會多餘重跑。
+  // 2026-07-26：新鮮度與節流拆開判斷（失敗的嘗試不可冒充「剛更新過」）。
+  // 2026-09-25：新鮮度改問「資料是否落後交易日」，不再用「距上次成功 ≥6h」：
+  // 交易日早上 9 點，昨晚 21:30 已更新到昨天收盤、落後 0 天，舊條件
+  // （11.5h ≥ 6h）卻會白跑一輪、燒 FinMind 額度——任何人早上開 App 都會
+  // 觸發，Mac 常駐視窗回前景後也會。
   // ====================================================================
-  group('冷啟動自動更新 gate 依 status 分流', () {
-    // 判斷抽成純函式後不需 mock harness，也不看真實時鐘 —— 舊寫法在
-    // 週末跑會因為 isTradingDay(DateTime.now()) 直接早退而假綠/假紅。
-    final tradingDay = DateTime(2026, 7, 22, 9); // 週三
+  group('冷啟動自動更新 gate', () {
+    bool decide({
+      required DateTime now,
+      required DateTime? dataDate,
+      DateTime? attempt,
+      bool succeeded = false,
+    }) => TodayNotifier.shouldTriggerColdStartUpdate(
+      now: now,
+      dataDate: dataDate,
+      lastAttemptAt: attempt,
+      latestRunSucceeded: succeeded,
+    );
 
-    bool decide({DateTime? success, DateTime? attempt}) =>
-        TodayNotifier.shouldTriggerColdStartUpdate(
-          now: tradingDay,
-          lastSuccessAt: success,
-          lastAttemptAt: attempt,
-        );
+    test('🚨 交易日早上、已有昨天收盤 → 不跑（盤前沒有新資料可抓）', () {
+      expect(
+        decide(now: DateTime(2026, 9, 18, 9), dataDate: DateTime(2026, 9, 17)),
+        isFalse,
+      );
+    });
 
-    test('🚨 上次成功已久、之後的失敗嘗試也夠久 → 必須重試', () {
+    test('收盤資料就緒後仍是昨天的資料 → 跑', () {
+      expect(
+        decide(now: DateTime(2026, 9, 18, 17), dataDate: DateTime(2026, 9, 17)),
+        isTrue,
+      );
+    });
+
+    test('週末發現週五沒抓到 → 跑（不必等到週一）', () {
+      expect(
+        decide(now: DateTime(2026, 9, 19, 10), dataDate: DateTime(2026, 9, 17)),
+        isTrue,
+      );
+    });
+
+    test('週末、資料已是週五 → 不跑', () {
+      expect(
+        decide(now: DateTime(2026, 9, 19, 10), dataDate: DateTime(2026, 9, 18)),
+        isFalse,
+      );
+    });
+
+    test('🚨 還沒有任何資料（新安裝）→ 跑，週末也跑', () {
+      expect(decide(now: DateTime(2026, 9, 19, 10), dataDate: null), isTrue);
+    });
+
+    test('落後但剛嘗試過 → 不連打（attempt throttle）', () {
+      final now = DateTime(2026, 9, 18, 17);
       expect(
         decide(
-          success: tradingDay.subtract(const Duration(hours: 9)),
-          attempt: tradingDay.subtract(const Duration(hours: 3)),
+          now: now,
+          dataDate: DateTime(2026, 9, 17),
+          attempt: now.subtract(const Duration(minutes: 5)),
+        ),
+        isFalse,
+      );
+    });
+
+    // 日曆說是交易日、來源卻沒有這天（颱風臨時停市——2026-07-10 就是事後
+    // 才補進日曆；或 _maxYear 之後平日假日未標）：落後永遠是 1。沒有收斂
+    // 條件的話每 60 分鐘白跑一輪、燒 FinMind 額度，週末也跑。
+    test('🚨 就緒時間後已成功跑過仍落後 → 來源就是沒有這天，不再重試', () {
+      final now = DateTime(2026, 9, 17, 20);
+      expect(
+        decide(
+          now: now,
+          dataDate: DateTime(2026, 9, 16),
+          attempt: DateTime(2026, 9, 17, 17),
+          succeeded: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('成功的那輪在就緒時間前（15:30 排程）→ 仍要再試一次', () {
+      expect(
+        decide(
+          now: DateTime(2026, 9, 17, 20),
+          dataDate: DateTime(2026, 9, 16),
+          attempt: DateTime(2026, 9, 17, 15, 30),
+          succeeded: true,
         ),
         isTrue,
-        reason:
-            '舊實作拿不分 status 的最後一筆當新鮮度基準，'
-            '一次 PARTIAL 就把重試擋滿 6 小時 —— 失敗反而更不重試',
       );
     });
 
-    test('剛嘗試過就不要連打（attempt throttle）', () {
+    test('就緒時間後那輪是失敗的 → 過節流後照樣重試', () {
       expect(
         decide(
-          success: tradingDay.subtract(const Duration(hours: 9)),
-          attempt: tradingDay.subtract(const Duration(minutes: 5)),
+          now: DateTime(2026, 9, 17, 20),
+          dataDate: DateTime(2026, 9, 16),
+          attempt: DateTime(2026, 9, 17, 17),
         ),
-        isFalse,
+        isTrue,
       );
     });
 
-    test('資料還新就不重試，即使中間有失敗的嘗試', () {
+    test('🚨 落後、上次失敗的嘗試已過節流 → 必須重試', () {
+      final now = DateTime(2026, 9, 18, 17);
       expect(
         decide(
-          success: tradingDay.subtract(const Duration(hours: 3)),
-          attempt: tradingDay.subtract(const Duration(hours: 2)),
+          now: now,
+          dataDate: DateTime(2026, 9, 17),
+          attempt: now.subtract(const Duration(hours: 1)),
         ),
-        isFalse,
-        reason: '「依 status 選單一門檻」的設計會在此情境多餘重跑',
-      );
-    });
-
-    test('從未成功過 → 只受節流限制', () {
-      expect(decide(success: null, attempt: null), isTrue);
-      expect(
-        decide(
-          success: null,
-          attempt: tradingDay.subtract(const Duration(minutes: 5)),
-        ),
-        isFalse,
-      );
-    });
-
-    test('非交易日一律不觸發', () {
-      expect(
-        TodayNotifier.shouldTriggerColdStartUpdate(
-          now: DateTime(2026, 7, 26), // 週日
-          lastSuccessAt: null,
-          lastAttemptAt: null,
-        ),
-        isFalse,
+        isTrue,
+        reason: '失敗的嘗試只擋節流時間，不可冒充「資料已新」',
       );
     });
   });
@@ -729,4 +763,143 @@ void main() {
       verifyNever(() => mockDb.getLatestUpdateRun());
     });
   });
+
+  // 判斷要拿「價格與法人較早的那天」（顯示用的 dataDate），不是價格日——
+  // 16:00 後價格已到、法人未到時，資料其實還沒齊。
+  group('loadData 把正確的資料日交給冷啟動判斷', () {
+    late ProviderContainer c;
+
+    setUp(() {
+      TodayNotifier.autoColdStartUpdateEnabled = true;
+      addTearDown(() => TodayNotifier.autoColdStartUpdateEnabled = false);
+      when(
+        () => mockUpdateService.runDailyUpdate(
+          force: any(named: 'force'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenAnswer((_) => Completer<UpdateResult>().future);
+      // 16:00 後、今天是交易日
+      when(
+        () => mockDb.getLatestDataDate(),
+      ).thenAnswer((_) async => DateTime(2026, 9, 17));
+      c = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(mockDb),
+          cachedDbProvider.overrideWithValue(mockCachedDb),
+          analysisRepositoryProvider.overrideWithValue(mockAnalysisRepo),
+          updateServiceProvider.overrideWithValue(mockUpdateService),
+          dataSyncServiceProvider.overrideWithValue(mockDataSyncService),
+          appClockProvider.overrideWithValue(
+            _FixedClock(DateTime(2026, 9, 17, 17)),
+          ),
+        ],
+      );
+      addTearDown(c.dispose);
+    });
+
+    test('🚨 價格已是今天、但顯示用資料日（含法人）仍是昨天 → 觸發', () async {
+      when(
+        () => mockDataSyncService.getDisplayDataDate(any(), any()),
+      ).thenReturn(DateTime(2026, 9, 16));
+
+      await c.read(todayProvider.notifier).loadData();
+
+      verify(
+        () => mockUpdateService.runDailyUpdate(
+          force: any(named: 'force'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).called(1);
+    });
+
+    test('就緒後有一輪失敗的更新（已過節流）→ 仍觸發（失敗不算收斂）', () async {
+      when(() => mockDb.getLatestUpdateRun()).thenAnswer(
+        (_) async => UpdateRunEntry(
+          id: 9,
+          runDate: DateTime(2026, 9, 17),
+          startedAt: DateTime(2026, 9, 17, 16, 5),
+          finishedAt: DateTime(2026, 9, 17, 16, 6),
+          status: 'FAILED',
+        ),
+      );
+      when(
+        () => mockDataSyncService.getDisplayDataDate(any(), any()),
+      ).thenReturn(DateTime(2026, 9, 16));
+      c.updateOverrides([
+        databaseProvider.overrideWithValue(mockDb),
+        cachedDbProvider.overrideWithValue(mockCachedDb),
+        analysisRepositoryProvider.overrideWithValue(mockAnalysisRepo),
+        updateServiceProvider.overrideWithValue(mockUpdateService),
+        dataSyncServiceProvider.overrideWithValue(mockDataSyncService),
+        appClockProvider.overrideWithValue(
+          _FixedClock(DateTime(2026, 9, 17, 17, 10)),
+        ),
+      ]);
+
+      await c.read(todayProvider.notifier).loadData();
+
+      verify(
+        () => mockUpdateService.runDailyUpdate(
+          force: any(named: 'force'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).called(1);
+    });
+
+    test('🚨 就緒後成功跑過仍落後 → 不觸發（收斂接線）', () async {
+      when(() => mockDb.getLatestUpdateRun()).thenAnswer(
+        (_) async => UpdateRunEntry(
+          id: 10,
+          runDate: DateTime(2026, 9, 17),
+          startedAt: DateTime(2026, 9, 17, 16, 5),
+          finishedAt: DateTime(2026, 9, 17, 16, 6),
+          status: 'SUCCESS',
+        ),
+      );
+      when(
+        () => mockDataSyncService.getDisplayDataDate(any(), any()),
+      ).thenReturn(DateTime(2026, 9, 16));
+      c.updateOverrides([
+        databaseProvider.overrideWithValue(mockDb),
+        cachedDbProvider.overrideWithValue(mockCachedDb),
+        analysisRepositoryProvider.overrideWithValue(mockAnalysisRepo),
+        updateServiceProvider.overrideWithValue(mockUpdateService),
+        dataSyncServiceProvider.overrideWithValue(mockDataSyncService),
+        appClockProvider.overrideWithValue(
+          _FixedClock(DateTime(2026, 9, 17, 17, 10)),
+        ),
+      ]);
+
+      await c.read(todayProvider.notifier).loadData();
+
+      verifyNever(
+        () => mockUpdateService.runDailyUpdate(
+          force: any(named: 'force'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      );
+    });
+
+    test('資料日已是今天 → 不觸發', () async {
+      when(
+        () => mockDataSyncService.getDisplayDataDate(any(), any()),
+      ).thenReturn(DateTime(2026, 9, 17));
+
+      await c.read(todayProvider.notifier).loadData();
+
+      verifyNever(
+        () => mockUpdateService.runDailyUpdate(
+          force: any(named: 'force'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      );
+    });
+  });
+}
+
+class _FixedClock implements AppClock {
+  const _FixedClock(this.fixed);
+  final DateTime fixed;
+  @override
+  DateTime now() => fixed;
 }

@@ -230,9 +230,6 @@ class MarketDataRepository {
 
   Future<UpdateRunEntry?> getLatestUpdateRun() => _db.getLatestUpdateRun();
 
-  Future<UpdateRunEntry?> getLatestSuccessfulUpdateRun() =>
-      _db.getLatestSuccessfulUpdateRun();
-
   Future<List<UpdateRunEntry>> getRecentUpdateRuns({int limit = 30}) =>
       _db.getRecentUpdateRuns(limit: limit);
 }

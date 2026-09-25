@@ -105,35 +105,16 @@ abstract final class DataFreshness {
   /// App 回到前景後，超過此時間（分鐘）視為資料過期，自動重新載入
   static const int appStaleThresholdMinutes = 30;
 
-  /// 冷啟動自動更新門檻：距上次**成功** update_run 超過此時間（小時）才會
-  /// 在 `TodayNotifier.loadData()` 觸發背景 `runUpdate`
-  ///
-  /// 「成功」二字曾只寫在此處而未落實 —— `getLatestUpdateRun()` 不過濾
-  /// status，一次 PARTIAL / FAILED 會冒充「剛更新過」把重試擋滿 6 小時。
-  /// 現以 `getLatestSuccessfulUpdateRun()` 為基準，狂打 API 的疑慮另由
-  /// [coldStartRetryThrottleMinutes] 承接（見該常數註解）。
-  ///
-  /// **設計動機（2026-06-18 B-lite）**：macOS 沒有 workmanager 背景任務，
-  /// CLI 走 launchd 又卡 Flutter binding（dart:ui 缺）。妥協做法：使用者
-  /// 開 app 時自動跑 update。`6` 小時對齊「**一個交易日只跑 1 次就夠**」：
-  /// - 同日多次開 app 不重複跑（symbol-level freshness check 也會擋）
-  /// - 隔天首次開 app（≥12h）一定觸發
-  /// - 出國 / 長假後回來，app 一開馬上有最新資料
-  ///
-  /// 非交易日（週末 / 國定假日）即使 stale 也不觸發 — 由 caller 額外用
-  /// `TaiwanCalendar.isTradingDay()` 過濾。
-  static const int coldStartAutoUpdateGateHours = 6;
+  /// 桌面結束 App（Cmd+Q）時配額落盤的等待上限（秒）。engine 等回覆才結束，
+  /// 落盤萬一卡住也不能讓結束 App 沒反應。
+  static const int exitFlushTimeoutSec = 2;
 
   /// 冷啟動自動更新的**重試節流**（分鐘）：距上次「嘗試」（不分成功與否）
   /// 未滿此時間就不再觸發
   ///
-  /// 與 [coldStartAutoUpdateGateHours] 是兩個不同問題，必須分開判斷：
-  /// - `coldStartAutoUpdateGateHours` 問「資料夠不夠新」→ 看上次**成功**
-  /// - 本常數問「是不是在狂打 API」→ 看上次**嘗試**
-  ///
-  /// 混成一個判斷（用 `getLatestUpdateRun` 不分 status）會讓一次失敗的更新
-  /// 把重試擋滿 6 小時 —— 更新失敗反而更不會重試，方向是反的。
-  /// 反過來只看成功、不節流，則會在資料久未成功時每開一次 app 就打一次 API。
+  /// 與「資料夠不夠新」（資料日是否落後交易日）是兩個不同問題，必須分開判斷：
+  /// 本常數只問「是不是在狂打 API」→ 看上次**嘗試**（不分成功與否）。
+  /// 不節流的話，資料抓不到時（例如來源尚未公布）每開一次 app 就打一次 API。
   static const int coldStartRetryThrottleMinutes = 60;
 
   /// 孤兒 RUNNING run 的收斂門檻:`started_at` 超過此時長的 RUNNING 才視為

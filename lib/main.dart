@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
@@ -10,7 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
-import 'package:daredevil/app/foreground_reload_policy.dart';
+import 'package:daredevil/app/app_lifecycle_coordinator.dart';
 import 'package:daredevil/app/router.dart';
 import 'package:daredevil/app/sentry_redaction.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
@@ -60,7 +61,8 @@ void main() async {
   // B-lite cold-start auto-update（review 2026-06-18）：macOS dev 機沒有
   // workmanager 路徑，使用者開 app 時自動跑 update 是最務實的累積 calibration
   // forward data 方法。預設關閉（給測試），production startup 顯式打開。
-  // 6h gate + 交易日 + isUpdating 三層 short-circuit 在 TodayNotifier 內處理。
+  // 資料落後交易日 + 嘗試節流 + isUpdating 等 short-circuit 在 TodayNotifier
+  // 內處理（見 shouldTriggerColdStartUpdate）。
   TodayNotifier.autoColdStartUpdateEnabled = true;
 
   // 從安全儲存載入 FinMind API Token
@@ -236,13 +238,20 @@ class DaredevilApp extends ConsumerStatefulWidget {
 
 class _DaredevilAppState extends ConsumerState<DaredevilApp>
     with WidgetsBindingObserver {
-  final _reloadPolicy = ForegroundReloadPolicy(
+  /// 生命週期的副作用規則都在 coordinator 裡（有測試）；這裡只負責接線
+  late final _lifecycle = AppLifecycleCoordinator(
     staleAfter: const Duration(minutes: DataFreshness.appStaleThresholdMinutes),
+    reload: () {
+      AppLogger.info('Lifecycle', '離開超過門檻，重新載入資料');
+      ref.read(todayProvider.notifier).reloadAfterResume();
+    },
+    flushBudget: () =>
+        ref.read(apiBudgetTrackerProvider).flush().catchError((Object e) {
+          AppLogger.warning('ApiBudgetTracker', 'flush 失敗', e);
+        }),
+    stopIntraday: () => ref.read(intradayMonitorProvider.notifier).stop(),
+    startIntraday: () => ref.read(intradayMonitorProvider.notifier).start(),
   );
-
-  /// 盤中輪詢是否因 paused 停過（只有停過才在 resumed 重啟，維持原行為：
-  /// macOS 失焦／手機拉通知列回來不重啟，免得每次都多一輪 tick）
-  bool _intradayStopped = false;
 
   @override
   void initState() {
@@ -263,30 +272,12 @@ class _DaredevilAppState extends ConsumerState<DaredevilApp>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 重載判斷看所有狀態（macOS 不會進 paused，見 ForegroundReloadPolicy）
-    if (_reloadPolicy.onStateChanged(state, DateTime.now())) {
-      AppLogger.info('Lifecycle', '離開超過門檻，重新載入資料');
-      ref.read(todayProvider.notifier).reloadAfterResume();
-    }
+  void didChangeAppLifecycleState(AppLifecycleState state) =>
+      _lifecycle.onStateChanged(state, DateTime.now());
 
-    // 盤中輪詢與配額落盤仍只綁 paused：macOS 視窗只是失焦時 app 仍在前景，
-    // 盤中提醒本就該繼續
-    if (state == AppLifecycleState.paused) {
-      ref.read(intradayMonitorProvider.notifier).stop();
-      _intradayStopped = true;
-      // 配額狀態落盤(2026-08-01 複審):tracker 每 10 次呼叫才自動存,
-      // 退背景/被殺前 flush 掉尾端記帳——遺失=低估=放行更多=402 方向
-      unawaited(
-        ref.read(apiBudgetTrackerProvider).flush().catchError((Object e) {
-          AppLogger.warning('ApiBudgetTracker', 'paused flush 失敗', e);
-        }),
-      );
-    } else if (state == AppLifecycleState.resumed && _intradayStopped) {
-      _intradayStopped = false;
-      ref.read(intradayMonitorProvider.notifier).start();
-    }
-  }
+  /// 桌面結束 App（macOS Cmd+Q）：engine 等回覆才結束，落盤能在退出前完成
+  @override
+  Future<AppExitResponse> didRequestAppExit() => _lifecycle.onExitRequested();
 
   @override
   Widget build(BuildContext context) {
