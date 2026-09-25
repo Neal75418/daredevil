@@ -6,6 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/scoring_mode.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
+import 'package:daredevil/core/utils/clock.dart';
+import 'package:daredevil/domain/services/update_service.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
 
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/mode_recommendation_provider.dart';
@@ -13,6 +16,7 @@ import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/providers/today_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/screens/today/today_screen.dart';
+import 'package:daredevil/presentation/screens/today/widgets/data_stale_banner.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/update_progress_banner.dart';
@@ -26,12 +30,26 @@ import '../../../helpers/widget_test_helpers.dart';
 
 class FakeTodayNotifier extends TodayNotifier {
   TodayState initialState = const TodayState();
+  int runUpdateCalls = 0;
 
   @override
   TodayState build() => initialState;
 
   @override
   Future<void> loadData() async {}
+
+  @override
+  Future<UpdateResult> runUpdate({bool force = false}) async {
+    runUpdateCalls++;
+    return UpdateResult(date: DateTime(2026, 9, 18))..success = true;
+  }
+}
+
+class _FixedClock implements AppClock {
+  const _FixedClock(this.fixed);
+  final DateTime fixed;
+  @override
+  DateTime now() => fixed;
 }
 
 class FakeWatchlistNotifier extends WatchlistNotifier {
@@ -128,6 +146,8 @@ void main() {
     Brightness brightness = Brightness.light,
     Future<List<ModeRecommendation>> Function(Ref, ScoringMode)?
     modeRecommendations,
+    AppClock? clock,
+    FakeTodayNotifier? todayNotifier,
   }) {
     final today = todayState ?? const TodayState();
     final watchlist = watchlistState ?? WatchlistState();
@@ -137,10 +157,11 @@ void main() {
       const TodayScreen(),
       overrides: [
         todayProvider.overrideWith(() {
-          final n = FakeTodayNotifier();
+          final n = todayNotifier ?? FakeTodayNotifier();
           n.initialState = today;
           return n;
         }),
+        if (clock != null) appClockProvider.overrideWithValue(clock),
         watchlistProvider.overrideWith(() {
           final n = FakeWatchlistNotifier();
           n.initialState = watchlist;
@@ -178,6 +199,98 @@ void main() {
     priceChange: 1.0,
     trendState: trend,
   );
+
+  // 標籤依注入的時鐘判斷「今天」（原本用 DateTime.now()，與落後提示的
+  // 時間來源不一致）。
+  group('資料日期標籤', () {
+    final now = DateTime(2026, 9, 17, 17);
+
+    test('同一天 → 今日', () {
+      expect(formatDataDateLabel(DateTime(2026, 9, 17), now), S.todayDataToday);
+    });
+
+    test('前一天 → 昨日', () {
+      expect(
+        formatDataDateLabel(DateTime(2026, 9, 16), now),
+        S.todayDataYesterday,
+      );
+    });
+
+    test('更早 → M/D', () {
+      expect(formatDataDateLabel(DateTime(2026, 9, 14), now), '9/14');
+    });
+  });
+
+  // 資料日期原本只是一行灰字「M/D」，落後好幾天也看不出來。以交易日判斷
+  // 落後：週一早上的上週五資料、連假後的節前資料都不算。
+  group('資料落後提示', () {
+    Future<FakeTodayNotifier> pumpAt(
+      WidgetTester tester, {
+      required DateTime? dataDate,
+      required DateTime now,
+      bool isUpdating = false,
+    }) async {
+      widenViewport(tester);
+      final notifier = FakeTodayNotifier();
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(
+            dataDate: dataDate,
+            lastUpdate: dataDate,
+            isUpdating: isUpdating,
+          ),
+          clock: _FixedClock(now),
+          todayNotifier: notifier,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      return notifier;
+    }
+
+    testWidgets('🚨 落後交易日時顯示提示，並可直接更新', (tester) async {
+      final notifier = await pumpAt(
+        tester,
+        dataDate: DateTime(2026, 9, 14),
+        now: DateTime(2026, 9, 18, 17),
+      );
+
+      expect(find.text('today.dataStale'), findsOneWidget);
+      // 元件內的文字另有真實翻譯測試；這裡驗今日頁傳進去的值
+      final banner = tester.widget<DataStaleBanner>(
+        find.byType(DataStaleBanner),
+      );
+      expect(banner.tradingDaysBehind, 4);
+      expect(banner.dataDate, DateTime(2026, 9, 14));
+
+      await tester.tap(find.text('today.updateNow'));
+      await tester.pump();
+      expect(notifier.runUpdateCalls, 1);
+    });
+
+    testWidgets('週一早上看上週五資料 → 不提示', (tester) async {
+      await pumpAt(
+        tester,
+        dataDate: DateTime(2026, 9, 18),
+        now: DateTime(2026, 9, 21, 9),
+      );
+      expect(find.text('today.dataStale'), findsNothing);
+    });
+
+    testWidgets('更新進行中 → 不提示（進度條已在顯示）', (tester) async {
+      await pumpAt(
+        tester,
+        dataDate: DateTime(2026, 9, 14),
+        now: DateTime(2026, 9, 18, 17),
+        isUpdating: true,
+      );
+      expect(find.text('today.dataStale'), findsNothing);
+    });
+
+    testWidgets('還沒有任何資料 → 不提示（屬於首次安裝的空狀態）', (tester) async {
+      await pumpAt(tester, dataDate: null, now: DateTime(2026, 9, 18, 17));
+      expect(find.text('today.dataStale'), findsNothing);
+    });
+  });
 
   // 訊號清單是最容易被當成「明牌」的地方；全文聲明只在首次同意頁與「關於」，
   // 清單底部要常駐短版。有訊號、沒訊號都要在。

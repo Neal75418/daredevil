@@ -18,6 +18,7 @@ import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/utils/date_context.dart';
+import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/core/utils/responsive_helper.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/mode_recommendation_provider.dart';
@@ -36,6 +37,8 @@ import 'package:daredevil/presentation/widgets/market_dashboard/market_dashboard
 import 'package:daredevil/presentation/widgets/section_header.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/providers/pinned_thesis_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/screens/today/widgets/data_stale_banner.dart';
 import 'package:daredevil/presentation/widgets/pinned_thesis_section.dart';
 import 'package:daredevil/presentation/widgets/stock_card.dart';
 import 'package:daredevil/presentation/widgets/stock_search_delegate.dart';
@@ -690,6 +693,42 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           },
         ),
 
+        // 資料落後提示：原本資料日期只是一行灰字，落後幾天都看不出來。
+        // 以交易日判斷（週末、連假不算落後）；更新中不顯示——進度條已在。
+        Consumer(
+          builder: (context, ref, _) {
+            final dataDate = ref.watch(todayProvider.select((s) => s.dataDate));
+            final isUpdating = ref.watch(
+              todayProvider.select((s) => s.isUpdating),
+            );
+            if (dataDate == null || isUpdating) {
+              return const SliverToBoxAdapter(child: SizedBox.shrink());
+            }
+            final behind = TaiwanCalendar.tradingDaysBehind(
+              dataDate,
+              ref.watch(appClockProvider).now(),
+            );
+            if (behind < 1) {
+              return const SliverToBoxAdapter(child: SizedBox.shrink());
+            }
+            return SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  DesignTokens.spacing16,
+                  DesignTokens.spacing4,
+                  DesignTokens.spacing16,
+                  DesignTokens.spacing4,
+                ),
+                child: DataStaleBanner(
+                  dataDate: dataDate,
+                  tradingDaysBehind: behind,
+                  onUpdate: _runUpdate,
+                ),
+              ),
+            );
+          },
+        ),
+
         // 自選 MA 階段警示條:跌破(紅,2026-07-31 四階段風控)與站回
         // (綠,2026-08-21)。開 app 第一屏直接撞見——風控不能靠記得去掃描頁
         // 看,機會也一樣。兩條各自獨立渲染,同日都發生時並存不互相吃掉。
@@ -1114,19 +1153,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     }
   }
 
-  String _formatDataDate(DateTime date) {
-    final now = DateTime.now();
-    final today = DateContext.normalize(now);
-    final dataDay = DateContext.normalize(date);
-
-    if (dataDay == today) {
-      return S.todayDataToday;
-    } else if (dataDay == today.subtract(const Duration(days: 1))) {
-      return S.todayDataYesterday;
-    } else {
-      return '${date.month}/${date.day}';
-    }
-  }
+  // 與資料落後提示同一個時間來源，兩者對「今天」的判斷才一致
+  String _formatDataDate(DateTime date) =>
+      formatDataDateLabel(date, ref.read(appClockProvider).now());
 
   void _showWarningDetails(List<String> warnings) {
     showDialog<void>(
@@ -1171,5 +1200,20 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         ],
       ),
     );
+  }
+}
+
+/// 資料日期標籤：今日／昨日／M/D（以 [now] 的日期判斷）
+@visibleForTesting
+String formatDataDateLabel(DateTime date, DateTime now) {
+  final today = DateContext.normalize(now);
+  final dataDay = DateContext.normalize(date);
+
+  if (dataDay == today) {
+    return S.todayDataToday;
+  } else if (dataDay == today.subtract(const Duration(days: 1))) {
+    return S.todayDataYesterday;
+  } else {
+    return '${date.month}/${date.day}';
   }
 }

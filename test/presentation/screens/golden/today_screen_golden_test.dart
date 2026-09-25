@@ -7,7 +7,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/mode_recommendation_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/providers/today_provider.dart';
@@ -113,6 +115,14 @@ class FakeSettingsNotifier extends SettingsNotifier {
 
 final _testDate = DateTime(2026, 3, 10);
 
+/// 時鐘釘在資料日當天收盤資料就緒後：資料落後提示依時鐘計算，用真實時間
+/// 會讓提示出現、golden 隨執行日期漂移。
+class _FixedClock implements AppClock {
+  const _FixedClock();
+  @override
+  DateTime now() => DateTime(2026, 3, 10, 17);
+}
+
 // 2026-06-19：Today screen 改 Mode-based、推薦來自 modeRecommendationsProvider
 // （非 todayProvider.recommendations），fixtures 改成 ModeRecommendation。
 final _testModeRecommendations = [
@@ -205,6 +215,7 @@ Widget buildTestWidget({
       modeRecommendationsProvider.overrideWith(
         (ref, mode) => SynchronousFuture(_testModeRecommendations),
       ),
+      appClockProvider.overrideWithValue(const _FixedClock()),
     ],
     brightness: brightness,
   );

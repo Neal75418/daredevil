@@ -83,7 +83,9 @@
     "trendGateCollapsed": "Uptrend unconfirmed ({count}) — tap to expand",
     "industryWindow1d": "1D",
     "industryRankingScope": "Median member return · TWSE+TPEx combined · ≥5 members — breadth view, differs from cap-weighted official indices",
-    "watchlistMaReclaim": "↗ {count} watchlist stock(s) reclaimed MA: {names}"
+    "watchlistMaReclaim": "↗ {count} watchlist stock(s) reclaimed MA: {names}",
+    "dataStale": "Data is {count} trading day(s) behind (latest close {date})",
+    "updateNow": "Update now"
   },
   "news": {
     "title": "Market News",

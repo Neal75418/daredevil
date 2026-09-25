@@ -795,6 +795,18 @@ void _phase1TintGuards() {
   const outlineD = SemanticColors.darkOutline;
 
   final scenarios = <_TintScenario>[
+    // today/widgets/data_stale_banner.dart（直接疊在 scaffold 上）
+    const _TintScenario(
+      'Today.dataStale',
+      warnOnTintL,
+      warnOnTintD,
+      WarningColors.warning,
+      WarningColors.warning,
+      0.12,
+      0.12,
+      white,
+      darkScaffold,
+    ),
     // warning_badge.dart（α: 淺 0.15／深 0.25）
     const _TintScenario(
       'WarningBadge.highPledge',

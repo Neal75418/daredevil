@@ -1,3 +1,4 @@
+import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/utils/logger.dart';
 
 /// 台灣股市交易日曆
@@ -273,6 +274,31 @@ class TaiwanCalendar {
     // ⚠️ 必須回 Q3 自身起始 7/1、不能回 10/1——Q3 截止日 9/30 < 10/1
     // 會被判「缺最新季」，1-3 月每輪更新都重抓（繼承 bug，review 修正）。
     return DateTime(now.year - 1, 7, 1);
+  }
+
+  /// 此刻應已有的最新一個交易日收盤資料日（回傳該日 0 點）
+  ///
+  /// 交易日 [DataFreshness.dailyDataReadyHour] 點後是當天；之前、或非交易日，
+  /// 是前一個交易日。與 [expectedLatestReportQuarter] 同理由：「資料落後」
+  /// 必須行事曆感知——週一早上的上週五資料、連假後的節前資料都不算過期。
+  static DateTime expectedLatestTradingDataDate(DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    if (isTradingDay(today) && now.hour >= DataFreshness.dailyDataReadyHour) {
+      return today;
+    }
+    return getPreviousTradingDay(today.subtract(const Duration(days: 1)));
+  }
+
+  /// [dataDate] 比此刻應有的最新收盤資料落後幾個交易日（不為負）
+  static int tradingDaysBehind(DateTime dataDate, DateTime now) {
+    final expected = expectedLatestTradingDataDate(now);
+    var day = DateTime(dataDate.year, dataDate.month, dataDate.day);
+    var behind = 0;
+    while (day.isBefore(expected)) {
+      day = DateTime(day.year, day.month, day.day + 1);
+      if (isTradingDay(day)) behind++;
+    }
+    return behind;
   }
 
   /// 此刻應已公布的最新一個「月營收」月份（回傳該月 1 日）
