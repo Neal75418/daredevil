@@ -78,7 +78,10 @@ jobs:
   # ── Job 2: 測試 shards（3 個並行）──────────────────────────────────
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 10 → 15（2026-09-25）：正常 run 已用 456–550s（上限的 76–92%）；
+    # Flutter SDK 快取閒置 7 天即被清，再多 ~40s 下載就超時被取消（測試其實全過）。
+    # 卡死防護不靠這裡：Codecov 步驟另有 3 分鐘的步驟級 timeout。
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
