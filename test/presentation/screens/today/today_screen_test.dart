@@ -3,10 +3,21 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:daredevil/core/constants/scoring_mode.dart';
+import 'package:daredevil/presentation/providers/industry_ranking_provider.dart';
+import 'package:daredevil/domain/models/industry_ranking.dart';
+import 'package:daredevil/data/models/twse/twse_market_index.dart';
+import 'package:daredevil/presentation/widgets/section_header.dart';
+import 'package:daredevil/presentation/widgets/market_dashboard/market_dashboard.dart';
+import 'package:daredevil/presentation/widgets/industry_ranking_section.dart';
+import 'package:daredevil/presentation/screens/today/widgets/market_summary_strip.dart';
+import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/domain/services/update_service.dart';
@@ -106,11 +117,17 @@ class FakeMarketOverviewNotifier extends MarketOverviewNotifier {
   /// 設定後 loadData 會卡住直到完成（模擬網路慢）
   static Completer<void>? hold;
 
+  /// loadData 被呼叫的次數（跨實例累計；讀前後差值）
+  static int loadCalls = 0;
+
   @override
   MarketOverviewState build() => initialState;
 
   @override
-  Future<void> loadData() async => hold?.future;
+  Future<void> loadData() async {
+    loadCalls++;
+    await hold?.future;
+  }
 }
 
 class FakeSettingsNotifier extends SettingsNotifier {
@@ -170,6 +187,8 @@ void main() {
     FakeTodayNotifier? todayNotifier,
     HistoryCoverage? coverage,
     Future<HistoryCoverage> Function(Ref)? coverageFn,
+    GoRouter? router,
+    List<Override> extraOverrides = const [],
   }) {
     final today = todayState ?? const TodayState();
     final watchlist = watchlistState ?? WatchlistState();
@@ -178,6 +197,7 @@ void main() {
     return buildProviderTestApp(
       const TodayScreen(),
       overrides: [
+        ...extraOverrides,
         todayProvider.overrideWith(() {
           final n = todayNotifier ?? FakeTodayNotifier();
           n.initialState = today;
@@ -214,6 +234,7 @@ void main() {
         ),
       ],
       brightness: brightness,
+      router: router,
     );
   }
 
@@ -545,6 +566,211 @@ void main() {
 
       expect(find.byType(StockListShimmer), findsNothing);
       expect(find.byType(CustomScrollView), findsOneWidget);
+    });
+  });
+
+  // 訊號是這個 App 的核心；原本大盤儀表板約佔 4.5 屏、訊號在第 6 屏
+  group('資訊層次', () {
+    MarketOverviewState marketWithData() => const MarketOverviewState(
+      advanceDeclineByMarket: {
+        MarketCode.twse: AdvanceDecline(
+          advance: 408,
+          decline: 667,
+          unchanged: 149,
+        ),
+      },
+    );
+
+    Finder signalsHeader() =>
+        find.widgetWithIcon(SectionHeader, Icons.trending_up);
+
+    // 族群排行沒資料時是 0 高度（finder 視為不可見）；給一筆才驗得到位置
+    final withIndustry = [
+      industryRankingProvider.overrideWith(
+        (ref, window) async => const [
+          IndustryRanking(
+            industry: '半導體業',
+            momentumPct: 12.3,
+            memberCount: 42,
+            institutionalNetShares: 5000000,
+            advancingRatio: 0.73,
+            topMembers: [],
+          ),
+        ],
+      ),
+    ];
+
+    // 接近實機的大盤資料（指數＋走勢、漲跌家數、成交額歷史）：只有漲跌家數
+    // 時舊版儀表板只渲染一小塊，第一屏測試會新舊版面都過、分辨不出來
+    MarketOverviewState realisticMarket() {
+      final history = List.generate(60, (i) => 47000.0 + i * 15);
+      return MarketOverviewState(
+        indices: [
+          TwseMarketIndex(
+            date: DateTime(2026, 9, 24),
+            name: MarketIndexNames.taiex,
+            close: 48024.6,
+            change: -132.69,
+            changePercent: -0.28,
+          ),
+          TwseMarketIndex(
+            date: DateTime(2026, 9, 24),
+            name: MarketIndexNames.tpexIndex,
+            close: 285.3,
+            change: 0.28,
+            changePercent: 0.1,
+          ),
+        ],
+        indexHistory: {MarketIndexNames.taiex: history},
+        advanceDeclineByMarket: const {
+          MarketCode.twse: AdvanceDecline(
+            advance: 408,
+            decline: 667,
+            unchanged: 149,
+          ),
+        },
+        historyTrends: HistoryTrends(
+          turnover: {
+            MarketCode.twse: [
+              for (var i = 0; i < 20; i++)
+                (date: DateTime(2026, 9, 1 + i), value: 7000.0 + i * 10),
+            ],
+          },
+        ),
+      );
+    }
+
+    testWidgets('順序：摘要條 → 今日訊號 → 族群排行，完整儀表板不在今日頁', (tester) async {
+      // 夠高才能讓三者同時建出來、在同一個捲動位置比較（清單之後的區塊
+      // 超出預載範圍就不會建）
+      tester.view.physicalSize = const Size(1200, 8000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
+          marketState: marketWithData(),
+          extraOverrides: withIndustry,
+          // 有訊號時清單是一般 SliverList；空／載入中是 SliverFillRemaining，
+          // 會把後面的區塊推出畫面（另一個測試驗）
+          modeRecommendations: (ref, mode) =>
+              SynchronousFuture([rec('2330', trend: 'UP')]),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      final stripY = tester.getTopLeft(find.byType(MarketSummaryStrip)).dy;
+      final headerY = tester.getTopLeft(signalsHeader()).dy;
+      final industryY = tester
+          .getTopLeft(find.byType(IndustryRankingSection))
+          .dy;
+      expect(stripY, lessThan(headerY));
+      expect(headerY, lessThan(industryY));
+      expect(find.byType(MarketDashboard), findsNothing);
+      // 族群卡片與訊號卡片的進場動畫計時器推完
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    // 原大盤卡的「錯誤＋重試」接線從來沒有測試；搬到摘要條時補上
+    testWidgets('大盤載入失敗可從摘要條重試', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
+          marketState: const MarketOverviewState(error: '網路錯誤'),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      final before = FakeMarketOverviewNotifier.loadCalls;
+
+      await tester.tap(find.text('common.retry'));
+      await tester.pump();
+
+      expect(FakeMarketOverviewNotifier.loadCalls, before + 1);
+    });
+
+    testWidgets('點摘要條 → 進 /market', (tester) async {
+      widenViewport(tester);
+      final router = GoRouter(
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, _) => const Scaffold(body: TodayScreen()),
+          ),
+          GoRoute(
+            path: AppRoutes.market,
+            builder: (_, _) => const Text('market-page'),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
+          marketState: marketWithData(),
+          router: router,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.byType(MarketSummaryStrip));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('market-page'), findsOneWidget);
+    });
+
+    // 資料日 9/16、時鐘 9/18 17:00 → 落後 2 個交易日（落後提示）；
+    // 覆蓋率 120/540 → 歷史建置提示。兩條提示是常見的最多情況。
+    testWidgets('🚨 390×844、兩條提示時「今日訊號」標題在第一屏', (tester) async {
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(
+            dataDate: DateTime(2026, 9, 16),
+            lastUpdate: DateTime(2026, 9, 16),
+          ),
+          clock: _FixedClock(DateTime(2026, 9, 18, 17)),
+          coverage: const HistoryCoverage(covered: 120, total: 540),
+          marketState: realisticMarket(),
+          // 實機族群排行都有資料（沒資料時是 0 高度，量不到它佔的位置）
+          extraOverrides: withIndustry,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(DataStaleBanner), findsOneWidget);
+      expect(signalsHeader(), findsOneWidget);
+      expect(find.text('today.historyBuilding'), findsOneWidget);
+      // 底部導覽列約 80pt 會蓋住內容（測試裡沒有 Shell）
+      expect(
+        tester.getBottomLeft(signalsHeader()).dy,
+        lessThanOrEqualTo(844 - 80),
+      );
+      // 族群卡片進場動畫計時器推完
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('推薦清單為空時族群排行仍在頁面上', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
+          modeRecommendations: (ref, mode) => SynchronousFuture(const []),
+          extraOverrides: withIndustry,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.scrollUntilVisible(
+        find.byType(IndustryRankingSection),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.byType(IndustryRankingSection), findsOneWidget);
+      // 族群卡片的進場動畫計時器推完
+      await tester.pump(const Duration(seconds: 2));
     });
   });
 

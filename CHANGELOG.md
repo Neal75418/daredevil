@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- 今日頁改為「提示 → 大盤摘要 → 今日訊號」：原本大盤儀表板約佔 4.5 屏、訊號要捲到第 6 屏才出現。
+  摘要條顯示加權／櫃買指數、上市情緒與漲跌家數，點擊進完整「大盤總覽」頁；族群排行與財報入口移到訊號之後
+
 ## [0.7.0] — 2026-09-25 — 可分享安裝：免責同意、正式簽章、新安裝引導
 
 ### Security

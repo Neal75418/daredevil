@@ -264,7 +264,18 @@
     },
     "indexStale": "stale ({date})",
     "sectionsFailed": "{count} sections failed to load; figures may be incomplete",
-    "sentimentPartial": "{count} sub-indicators missing; score uses remaining weights"
+    "sentimentPartial": "{count} sub-indicators missing; score uses remaining weights",
+    "summary": {
+      "taiex": "TAIEX",
+      "tpex": "TPEx",
+      "sentiment": "Sentiment",
+      "advance": "Up",
+      "decline": "Down",
+      "sectionsFailedShort": "{count} sections failed",
+      "semantics": "Market summary",
+      "tapHint": "Open the full market overview"
+    },
+    "pageEmpty": "No market data yet. Run an update to see it."
   },
   "stockSearch": {
     "tooltip": "Search stocks",

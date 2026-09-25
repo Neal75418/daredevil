@@ -53,6 +53,20 @@ void main() {
       expect(find.text('59'), findsNothing);
     });
 
+    testWidgets('顯示情緒等級文字', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          SentimentGaugeSection(
+            sentiment: createSentiment(),
+            market: MarketCode.twse,
+          ),
+        ),
+      );
+
+      expect(find.text('marketOverview.sentiment.neutral'), findsOneWidget);
+    });
+
     testWidgets('點細項展開：子指標分數出現、chevron 反轉', (tester) async {
       widenViewport(tester);
       await tester.pumpWidget(

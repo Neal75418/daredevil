@@ -7,7 +7,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/clock.dart';
+import 'package:daredevil/data/models/twse/twse_market_index.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/domain/services/update/history_coverage.dart';
 import 'package:daredevil/presentation/providers/history_coverage_provider.dart';
@@ -169,6 +171,38 @@ final _testModeRecommendations = [
   ),
 ];
 
+/// 今日頁頂端的大盤摘要條要有內容才看得到版面（兩個主指數＋漲跌家數＋
+/// 成交額歷史讓情緒算得出來）
+final _testMarket = MarketOverviewState(
+  indices: [
+    TwseMarketIndex(
+      date: _testDate,
+      name: MarketIndexNames.taiex,
+      close: 22150.3,
+      change: -61.2,
+      changePercent: -0.28,
+    ),
+    TwseMarketIndex(
+      date: _testDate,
+      name: MarketIndexNames.tpexIndex,
+      close: 245.6,
+      change: 0.25,
+      changePercent: 0.1,
+    ),
+  ],
+  advanceDeclineByMarket: const {
+    MarketCode.twse: AdvanceDecline(advance: 408, decline: 667, unchanged: 149),
+  },
+  historyTrends: HistoryTrends(
+    turnover: {
+      MarketCode.twse: [
+        (date: DateTime(2026, 3, 9), value: 3500.0),
+        (date: DateTime(2026, 3, 10), value: 3200.0),
+      ],
+    },
+  ),
+);
+
 // ==========================================
 // Helpers
 // ==========================================
@@ -208,6 +242,7 @@ Widget buildTestWidget({
       }),
       marketOverviewProvider.overrideWith(() {
         final n = FakeMarketOverviewNotifier();
+        n.initialState = _testMarket;
         return n;
       }),
       settingsProvider.overrideWith(() {

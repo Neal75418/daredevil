@@ -10,6 +10,7 @@ import 'package:daredevil/domain/services/technical_indicator_service.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/mini_trend_chart.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_reading_line.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/presentation/widgets/market_dashboard/market_overview_selectors.dart';
 
 /// Hero 指數區域
 ///
@@ -121,7 +122,7 @@ class HeroIndexSection extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      '$sign${index.changePercent.toStringAsFixed(2)}%',
+                      indexChangePercentText(index),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: PriceColors.onTintOf(
                           color,

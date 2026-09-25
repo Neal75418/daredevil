@@ -6,6 +6,7 @@ import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/domain/services/market_sentiment_service.dart';
+import 'package:daredevil/presentation/widgets/market_dashboard/market_overview_selectors.dart';
 
 /// 市場情緒儀表板
 ///
@@ -49,7 +50,7 @@ class _SentimentGaugeSectionState extends State<SentimentGaugeSection> {
     final theme = Theme.of(context);
     final sentiment = widget.sentiment;
     final color = _levelColor(sentiment.level, theme.brightness);
-    final levelText = _levelText(sentiment.level);
+    final levelText = sentimentLevelText(sentiment.level);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,17 +190,6 @@ class _SentimentGaugeSectionState extends State<SentimentGaugeSection> {
       SentimentLevel.greed => PriceColors.chipBullish,
       SentimentLevel.extremeGreed => PriceColors.chipBullish,
     };
-  }
-
-  static String _levelText(SentimentLevel level) {
-    final key = switch (level) {
-      SentimentLevel.extremeFear => 'marketOverview.sentiment.extremeFear',
-      SentimentLevel.fear => 'marketOverview.sentiment.fear',
-      SentimentLevel.neutral => 'marketOverview.sentiment.neutral',
-      SentimentLevel.greed => 'marketOverview.sentiment.greed',
-      SentimentLevel.extremeGreed => 'marketOverview.sentiment.extremeGreed',
-    };
-    return key.tr();
   }
 
   /// 市場代碼 → 顯示標籤（「上市」／「上櫃」）

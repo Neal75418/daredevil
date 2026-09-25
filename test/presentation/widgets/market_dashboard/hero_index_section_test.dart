@@ -57,6 +57,22 @@ void main() {
       expect(find.text('-80.10'), findsOneWidget);
     });
 
+    // 漲跌幅與摘要條共用 indexChangePercentText：正負號看 change，
+    // 「方向 -、漲跌幅 0.00」的 -0.0 不能顯示成 +-0.00%
+    testWidgets('漲跌幅：上漲帶 +、跌 2 點的 -0.0 顯示 -0.00%', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(HeroIndexSection(index: createIndex(change: 150.25))),
+      );
+      expect(find.text('+0.69%'), findsOneWidget);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          HeroIndexSection(index: createIndex(change: -2, changePercent: -0.0)),
+        ),
+      );
+      expect(find.text('-0.00%'), findsOneWidget);
+    });
+
     group('market stage row', () {
       // 持續上升 80 點 → 多頭排列（close > MA20 > MA60）
       final bullishHistory = List.generate(80, (i) => 22000.0 + i.toDouble());

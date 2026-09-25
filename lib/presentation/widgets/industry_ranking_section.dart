@@ -78,7 +78,7 @@ class _IndustryRankingSectionState
     return asyncRankings.when(
       // 輔助發現層：loading / error / 空資料（fresh DB、歷史回補中）都整段
       // 收起，不佔版面、不擋今日頁主線（推薦清單）。資料層錯誤已由上方
-      // MarketDashboard / 更新錯誤橫幅承接，這裡不重複報錯。
+      // 大盤摘要條 / 更新錯誤橫幅承接，這裡不重複報錯。
       loading: () => const SizedBox.shrink(),
       error: (_, _) => const SizedBox.shrink(),
       data: (rankings) {

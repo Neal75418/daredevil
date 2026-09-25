@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/data/database/app_database.dart';
@@ -24,7 +25,11 @@ Widget buildProviderTestApp(
   Widget child, {
   List<Override> overrides = const [],
   Brightness brightness = Brightness.light,
+  GoRouter? router,
 }) {
+  final theme = brightness == Brightness.light
+      ? AppTheme.lightTheme
+      : AppTheme.darkTheme;
   return ProviderScope(
     overrides: [databaseProvider.overrideWithValue(_testDb), ...overrides],
     // Riverpod 3 預設對失敗的 FutureProvider 自動重試（指數退避，最多
@@ -32,11 +37,13 @@ Widget buildProviderTestApp(
     // 立即、確定性地呈現，故關閉重試——與正式環境的 ProviderScope（main.dart）
     // 各自獨立，不影響正式行為。
     retry: (_, _) => null,
-    child: MaterialApp(
-      theme: brightness == Brightness.light
-          ? AppTheme.lightTheme
-          : AppTheme.darkTheme,
-      home: Scaffold(body: child),
-    ),
+    // 需要驗證 context.push 等導頁時傳入 [router]（此時 [child] 不使用，
+    // 由 router 的路由決定畫面）
+    child: router == null
+        ? MaterialApp(
+            theme: theme,
+            home: Scaffold(body: child),
+          )
+        : MaterialApp.router(theme: theme, routerConfig: router),
   );
 }

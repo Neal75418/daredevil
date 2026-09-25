@@ -15,6 +15,7 @@ import 'package:daredevil/presentation/widgets/market_dashboard/institutional_fl
 import 'package:daredevil/presentation/widgets/market_dashboard/margin_compact_row.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/chip_anomaly_row.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_reading_line.dart';
+import 'package:daredevil/presentation/widgets/market_dashboard/market_overview_selectors.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/trading_turnover_row.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/sentiment_gauge_section.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
@@ -208,12 +209,8 @@ class _MarketDashboardState extends State<MarketDashboard> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'marketOverview.title'.tr(),
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            // 不再顯示「大盤總覽」標題：儀表板只住在獨立的大盤總覽頁，
+            // 導覽列已有同一個標題
             // 顯示近似資料日期：dashboard 各區塊可能來自不同日期
             // （by-market 回退、融資融券各市場最新值等），以 ≈ 標示
             if (dataDate != null)
@@ -285,15 +282,8 @@ class _MarketDashboardState extends State<MarketDashboard> {
   double? _marginIndexChangePercent(String marketKey) =>
       widget.state.marginIndexChangePercent[marketKey];
 
-  double? _indexChangePercent(String marketKey) {
-    final heroName = marketKey == MarketCode.twse
-        ? MarketIndexNames.taiex
-        : MarketIndexNames.tpexIndex;
-    for (final idx in widget.state.indices) {
-      if (idx.name == heroName) return idx.changePercent;
-    }
-    return null;
-  }
+  double? _indexChangePercent(String marketKey) =>
+      heroIndexOf(widget.state, marketKey)?.changePercent;
 
   /// 綜合判讀行（top-level，見 [MarketReadingService.interpretCompositeSynthesis]）
   ///
@@ -322,33 +312,9 @@ class _MarketDashboardState extends State<MarketDashboard> {
     return MarketReadingLine(reading: reading, prominent: true);
   }
 
-  /// 計算指定市場的市場情緒分數
-  ///
-  /// 今日情緒：各子指標各自用「自己的」完整序列獨立計算，不跨序列對齊，
-  /// 故僅取各序列的 `.value` 即可。
-  MarketSentiment? _computeSentiment(String marketKey) {
-    final ad = widget.state.advanceDeclineByMarket[marketKey];
-    final trends = widget.state.historyTrends;
-    final instHist = trends.institutionalTotalNet[marketKey];
-    final turnHist = trends.turnover[marketKey];
-    final marginHist = trends.marginBalance[marketKey];
-    final industries = widget.state.industrySummaryByMarket[marketKey];
-
-    // 至少需要漲跌家數 + 一項歷史資料
-    if (ad == null || ad.total == 0) return null;
-    if ((instHist == null || instHist.length < 5) &&
-        (turnHist == null || turnHist.length < 2)) {
-      return null;
-    }
-
-    return MarketSentimentService.calculate(
-      advanceDecline: ad,
-      institutionalNetHistory: _values(instHist) ?? const [],
-      turnoverHistory: _values(turnHist) ?? const [],
-      marginBalanceHistory: _values(marginHist) ?? const [],
-      industries: industries ?? [],
-    );
-  }
+  /// 見 [computeMarketSentiment]
+  MarketSentiment? _computeSentiment(String marketKey) =>
+      computeMarketSentiment(widget.state, marketKey);
 
   /// 計算歷史情緒分數序列（供趨勢 sparkline）
   ///

@@ -10,6 +10,7 @@ import 'package:daredevil/presentation/screens/alerts/alerts_screen.dart';
 import 'package:daredevil/presentation/screens/onboarding/disclaimer_screen.dart';
 import 'package:daredevil/presentation/screens/onboarding/onboarding_screen.dart';
 import 'package:daredevil/presentation/screens/industry/industry_overview_screen.dart';
+import 'package:daredevil/presentation/screens/market/market_overview_screen.dart';
 import 'package:daredevil/presentation/screens/news/news_screen.dart';
 import 'package:daredevil/presentation/screens/portfolio/portfolio_tab.dart';
 import 'package:daredevil/presentation/screens/scan/scan_screen.dart';
@@ -216,6 +217,13 @@ final router = GoRouter(
       path: AppRoutes.industry,
       name: 'industry',
       builder: (context, state) => const IndustryOverviewScreen(),
+    ),
+
+    // 大盤總覽（全螢幕，Shell 外；今日頁摘要條進入）
+    GoRoute(
+      path: AppRoutes.market,
+      name: 'market',
+      builder: (context, state) => const MarketOverviewScreen(),
     ),
 
     // 股票比較（全螢幕，Shell 外）

@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:daredevil/presentation/screens/today/widgets/revenue_filing_entry.dart';
 import 'package:daredevil/presentation/screens/today/widgets/quarterly_filing_entry.dart';
+import 'package:daredevil/presentation/screens/today/widgets/market_summary_strip.dart';
 import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
@@ -35,7 +36,6 @@ import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/frosted_bar.dart';
 import 'package:daredevil/presentation/widgets/industry_ranking_section.dart';
 import 'package:daredevil/presentation/widgets/update_history_sheet.dart';
-import 'package:daredevil/presentation/widgets/market_dashboard/market_dashboard.dart';
 import 'package:daredevil/presentation/widgets/section_header.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/providers/pinned_thesis_provider.dart';
@@ -834,48 +834,18 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           color: AppTheme.successColor,
         ),
 
-        // 大盤總覽卡片（獨立 Consumer 隔離 market data rebuild）
+        // 大盤摘要條：一眼看大盤、點進完整大盤頁。原本整張儀表板約佔
+        // 4.5 屏、訊號要捲到第 6 屏；完整內容搬到 /market。
         SliverToBoxAdapter(
           child: Consumer(
-            builder: (context, ref, _) {
-              final marketState = ref.watch(marketOverviewProvider);
-              if (!marketState.hasData && !marketState.isLoading) {
-                if (marketState.error != null) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: DesignTokens.spacing16,
-                    ),
-                    child: Card(
-                      child: ListTile(
-                        leading: Icon(
-                          Icons.error_outline,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                        title: Text(marketState.error!),
-                        trailing: TextButton(
-                          onPressed: () => ref
-                              .read(marketOverviewProvider.notifier)
-                              .loadData(),
-                          child: Text('common.retry'.tr()),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              }
-              return MarketDashboard(state: marketState);
-            },
+            builder: (context, ref, _) => MarketSummaryStrip(
+              state: ref.watch(marketOverviewProvider),
+              onTap: () => context.push(AppRoutes.market),
+              onRetry: () =>
+                  ref.read(marketOverviewProvider.notifier).loadData(),
+            ),
           ),
         ),
-
-        // 族群排行（L1：族群決定 80%）— 大盤 context 之後、個股推薦之前。
-        // 空資料 / 載入中自動收起，不佔版面。
-        const SliverToBoxAdapter(child: IndustryRankingSection()),
-
-        // 月營收公布中入口(僅每月上旬顯示;窗口外/無資料自動收起)
-        const SliverToBoxAdapter(child: RevenueFilingEntrySection()),
-        const SliverToBoxAdapter(child: QuarterlyFilingEntrySection()),
 
         // 部分錯誤橫幅（有推薦資料但重新整理失敗時顯示）
         Consumer(
@@ -1048,6 +1018,15 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             );
           },
         ),
+
+        // 族群排行與財報入口：原本在個股之前（「族群決定 80%」），自身約
+        // 250px 會把訊號擠出第一屏，故移到訊號之後；內容不變。
+        // 族群排行空資料／載入中自動收起，不佔版面。
+        const SliverToBoxAdapter(child: IndustryRankingSection()),
+
+        // 月營收公布中入口(僅每月上旬顯示;窗口外/無資料自動收起)
+        const SliverToBoxAdapter(child: RevenueFilingEntrySection()),
+        const SliverToBoxAdapter(child: QuarterlyFilingEntrySection()),
 
         // 常駐短版免責聲明：訊號清單最容易被當成「明牌」。全文在首次
         // 同意頁與設定的「關於」；有沒有訊號都要顯示。
