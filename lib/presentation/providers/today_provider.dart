@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
+import 'package:daredevil/core/constants/rule_enums.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/sentinel.dart';
 import 'package:daredevil/core/utils/logger.dart';
@@ -90,10 +91,25 @@ class TodayNotifier extends Notifier<TodayState> {
   var _active = true;
   int _loadGeneration = 0;
 
+  /// 其他頁（經 [dataUpdateEpochProvider]）已被告知的 DB 版本。
+  ///
+  /// 🚨 只在會 bump epoch 的地方前進（首次載入、App 內更新完成、
+  /// [reloadAfterResume]）。不可拿「當下 state」當基準：下拉重整等 loadData
+  /// 會先把 state 更新成新版本卻不通知其他頁，之後回前景就再也比不出差異。
+  ({DateTime? lastUpdate, DateTime? dataDate})? _ackedSnapshot;
+
+  /// 最近一次 loadData 讀到的最新 update_run 是否仍在執行（App 外寫到一半）
+  bool _latestRunInProgress = false;
+
+  ({DateTime? lastUpdate, DateTime? dataDate}) get _snapshot =>
+      (lastUpdate: state.lastUpdate, dataDate: state.dataDate);
+
   @override
   TodayState build() {
     _active = true;
     _loadGeneration = 0;
+    _ackedSnapshot = null;
+    _latestRunInProgress = false;
     ref.onDispose(() => _active = false);
     return const TodayState();
   }
@@ -145,6 +161,15 @@ class TodayNotifier extends Notifier<TodayState> {
         dataDate: dataDate,
         isLoading: false,
       );
+      // 超過孤兒門檻的 RUNNING 是 CLI 中途崩潰的殘留，不算進行中——否則
+      // 會擋住通知直到下一輪 launchd 建立新紀錄（最長約 18 小時）
+      _latestRunInProgress =
+          lastRun != null &&
+          lastRun.status.toUpperCase() == UpdateStatus.running.code &&
+          DateTime.now().difference(lastRun.startedAt) <
+              DataFreshness.orphanRunningCutoff;
+      // 首次載入時各頁也是從 DB 全新讀取，視為已同步
+      _ackedSnapshot ??= _snapshot;
     } catch (e) {
       AppLogger.warning('TodayNotifier', '載入今日資料失敗', e);
       // race fix：runUpdate 完成後 await loadData() 跟 pull-to-refresh 並發時，
@@ -152,6 +177,33 @@ class TodayNotifier extends Notifier<TodayState> {
       if (!_active || _loadGeneration != generation) return;
       state = state.copyWith(isLoading: false, error: ErrorDisplay.message(e));
     }
+  }
+
+  /// 回到前景時重新載入（由 app 生命週期在離開超過門檻後呼叫）。
+  ///
+  /// 🚨 DB 可能已在 App 外被更新（launchd CLI、背景任務），這種更新不會
+  /// bump [dataUpdateEpochProvider]。只 loadData 的話今日頁日期變新、訊號
+  /// 清單與其他頁卻仍是舊的。最後更新或資料日與 [_ackedSnapshot]（其他頁
+  /// 已被告知的版本）不同時，走與 App 內更新完成相同的收尾：清快取、
+  /// bump epoch、重載大盤。
+  /// App 內更新進行中時跳過——那一輪結束時本就會收尾。
+  Future<void> reloadAfterResume() async {
+    if (state.isUpdating) return;
+    // 首次載入失敗時還不知道各頁看到哪個版本，保守視為「有變」
+    final ackedUnknown = _ackedSnapshot == null;
+    await loadData();
+    // 載入途中可能觸發了冷啟動更新（交給那一輪收尾）；App 外的更新還在跑
+    // 時先不通知，免得各頁讀到寫到一半的資料——跑完後下一次回前景會補上
+    // 載入失敗（DB 出錯）時不通知：不叫其他頁在出錯時重讀，也不讓 acked 前進
+    if (!_active || state.error != null) return;
+    if (state.isUpdating || _latestRunInProgress) return;
+    final current = _snapshot;
+    if (!ackedUnknown && current == _ackedSnapshot) return;
+    _ackedSnapshot = current;
+
+    _cachedDb.invalidateCache();
+    ref.read(dataUpdateEpochProvider.notifier).bump();
+    await ref.read(marketOverviewProvider.notifier).loadData();
   }
 
   /// 節流錨點:最後一筆 run 的**發起**時刻(不分 status)。
@@ -354,6 +406,7 @@ class TodayNotifier extends Notifier<TodayState> {
         loadData(),
         ref.read(marketOverviewProvider.notifier).loadData(),
       ]);
+      _ackedSnapshot = _snapshot;
 
       // loadData() / marketOverview.loadData() 內部 catch 不會 rethrow，
       // 但會設定各自的 state.error。若重新載入失敗，加入 errors 讓

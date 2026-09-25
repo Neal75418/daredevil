@@ -11,6 +11,7 @@ import 'package:daredevil/data/database/cached_accessor.dart';
 import 'package:daredevil/data/repositories/analysis_repository.dart';
 import 'package:daredevil/domain/services/data_sync_service.dart';
 import 'package:daredevil/domain/services/update_service.dart';
+import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/today_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 
@@ -28,6 +29,16 @@ class MockAnalysisRepository extends Mock implements AnalysisRepository {}
 class MockUpdateService extends Mock implements UpdateService {}
 
 class MockDataSyncService extends Mock implements DataSyncService {}
+
+class _CountingMarketOverviewNotifier extends MarketOverviewNotifier {
+  int loads = 0;
+
+  @override
+  MarketOverviewState build() => const MarketOverviewState();
+
+  @override
+  Future<void> loadData() async => loads++;
+}
 
 // ==========================================
 // Tests
@@ -442,6 +453,280 @@ void main() {
 
     test('無任何 run 回 null(從未嘗試)', () {
       expect(TodayNotifier.attemptAnchorOf(null), isNull);
+    });
+  });
+
+  // App 內更新完成後才會 bump epoch；launchd CLI／背景任務在 App 外更新 DB
+  // 時沒有任何東西通知 UI。回到前景若只 loadData，今日頁日期變新、訊號清單
+  // 與其他頁卻仍是舊的——比「全部都舊」更誤導。
+  group('回到前景重新載入(reloadAfterResume)', () {
+    late ProviderContainer c;
+    late _CountingMarketOverviewNotifier market;
+
+    UpdateRunEntry run(DateTime finishedAt) => UpdateRunEntry(
+      id: 1,
+      runDate: DateTime(2026, 9, 24),
+      startedAt: finishedAt.subtract(const Duration(minutes: 1)),
+      finishedAt: finishedAt,
+      status: 'SUCCESS',
+    );
+
+    setUp(() {
+      market = _CountingMarketOverviewNotifier();
+      c = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(mockDb),
+          cachedDbProvider.overrideWithValue(mockCachedDb),
+          analysisRepositoryProvider.overrideWithValue(mockAnalysisRepo),
+          updateServiceProvider.overrideWithValue(mockUpdateService),
+          dataSyncServiceProvider.overrideWithValue(mockDataSyncService),
+          marketOverviewProvider.overrideWith(() => market),
+        ],
+      );
+      addTearDown(c.dispose);
+    });
+
+    test('🚨 DB 已被 App 外更新 → 清快取、bump epoch、重載大盤', () async {
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 15, 31)));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+      final epochBefore = c.read(dataUpdateEpochProvider);
+
+      // launchd 21:30 那輪在 App 外跑完
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 21, 31)));
+      await notifier.reloadAfterResume();
+
+      verify(() => mockCachedDb.invalidateCache()).called(1);
+      expect(c.read(dataUpdateEpochProvider), greaterThan(epochBefore));
+      expect(market.loads, 1);
+    });
+
+    test('DB 沒變 → 只重讀今日狀態，不驚動其他頁', () async {
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 15, 31)));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+      final epochBefore = c.read(dataUpdateEpochProvider);
+
+      await notifier.reloadAfterResume();
+
+      verifyNever(() => mockCachedDb.invalidateCache());
+      expect(c.read(dataUpdateEpochProvider), epochBefore);
+      expect(market.loads, 0);
+    });
+
+    test('🚨 先下拉重整讀到新資料、再回前景 → 仍要通知其他頁', () async {
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 15, 31)));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+      final epochBefore = c.read(dataUpdateEpochProvider);
+
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 21, 31)));
+      await notifier.loadData(); // 下拉重整：只更新今日頁、不通知其他頁
+      await notifier.reloadAfterResume();
+
+      expect(
+        c.read(dataUpdateEpochProvider),
+        greaterThan(epochBefore),
+        reason: '比對基準若是「當下 state」，下拉重整已把變化吃掉、永遠不通知',
+      );
+    });
+
+    test('只有資料日變（同一筆 run 補寫了資料）→ 通知其他頁', () async {
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 15, 31)));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+      final epochBefore = c.read(dataUpdateEpochProvider);
+
+      when(
+        () => mockDataSyncService.getDisplayDataDate(any(), any()),
+      ).thenReturn(DateTime(2026, 9, 25));
+      await notifier.reloadAfterResume();
+
+      expect(c.read(dataUpdateEpochProvider), greaterThan(epochBefore));
+    });
+
+    test('App 外的更新還在跑（RUNNING）→ 先不通知，跑完後的下一次才通知', () async {
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 15, 31)));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+      final epochBefore = c.read(dataUpdateEpochProvider);
+
+      when(() => mockDb.getLatestUpdateRun()).thenAnswer(
+        (_) async => UpdateRunEntry(
+          id: 2,
+          runDate: DateTime(2026, 9, 24),
+          // 孤兒判斷以真實時間計算，進行中的 run 必須是剛開始的
+          startedAt: DateTime.now().subtract(const Duration(minutes: 1)),
+          status: 'RUNNING',
+        ),
+      );
+      await notifier.reloadAfterResume();
+      expect(c.read(dataUpdateEpochProvider), epochBefore, reason: '寫到一半');
+
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 21, 31)));
+      await notifier.reloadAfterResume();
+      expect(c.read(dataUpdateEpochProvider), greaterThan(epochBefore));
+    });
+
+    test('載入途中觸發了 App 內更新（冷啟動）→ 不通知，交給那一輪收尾', () async {
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 15, 31)));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+      final epochBefore = c.read(dataUpdateEpochProvider);
+
+      final pending = Completer<UpdateResult>();
+      when(
+        () => mockUpdateService.runDailyUpdate(
+          force: any(named: 'force'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenAnswer((_) => pending.future);
+      // 模擬 loadData 內的冷啟動判斷啟動了一輪更新（會同步設 isUpdating）
+      when(() => mockDb.getLatestUpdateRun()).thenAnswer((_) async {
+        unawaited(notifier.runUpdate().then((_) {}, onError: (_) {}));
+        return run(DateTime(2026, 9, 24, 21, 31));
+      });
+      await notifier.reloadAfterResume();
+
+      expect(c.read(todayProvider).isUpdating, isTrue, reason: '前提');
+      expect(c.read(dataUpdateEpochProvider), epochBefore);
+      expect(market.loads, 0);
+    });
+
+    test('通知過一次後 DB 沒再變 → 下次回前景不重複通知', () async {
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 15, 31)));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 21, 31)));
+      await notifier.reloadAfterResume();
+      final epochAfterFirst = c.read(dataUpdateEpochProvider);
+
+      await notifier.reloadAfterResume();
+
+      expect(c.read(dataUpdateEpochProvider), epochAfterFirst);
+      expect(market.loads, 1);
+    });
+
+    test('App 內更新完成（已通知）後回前景 → 不重複通知', () async {
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 15, 31)));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+
+      when(
+        () => mockUpdateService.runDailyUpdate(
+          force: any(named: 'force'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenAnswer(
+        (_) async => UpdateResult(date: DateTime(2026, 9, 24))..success = true,
+      );
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 21, 31)));
+      await notifier.runUpdate();
+      final epochAfterUpdate = c.read(dataUpdateEpochProvider);
+      final marketLoadsAfterUpdate = market.loads;
+
+      await notifier.reloadAfterResume();
+
+      expect(c.read(dataUpdateEpochProvider), epochAfterUpdate);
+      expect(market.loads, marketLoadsAfterUpdate);
+    });
+
+    test('孤兒 RUNNING（CLI 中途崩潰、超過孤兒門檻）不擋通知', () async {
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 15, 31)));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+      final epochBefore = c.read(dataUpdateEpochProvider);
+
+      final startedAt = DateTime.now().subtract(const Duration(hours: 3));
+      when(() => mockDb.getLatestUpdateRun()).thenAnswer(
+        (_) async => UpdateRunEntry(
+          id: 3,
+          runDate: DateTime(2026, 9, 24),
+          startedAt: startedAt,
+          status: 'RUNNING',
+        ),
+      );
+      await notifier.reloadAfterResume();
+
+      expect(
+        c.read(dataUpdateEpochProvider),
+        greaterThan(epochBefore),
+        reason: '崩潰前寫進去的資料不該被一筆永遠 RUNNING 的紀錄擋到下一輪',
+      );
+    });
+
+    test('首次載入失敗、之後 DB 被更新 → 回前景仍通知', () async {
+      when(() => mockDb.getLatestUpdateRun()).thenThrow(Exception('db busy'));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+      final epochBefore = c.read(dataUpdateEpochProvider);
+
+      when(
+        () => mockDb.getLatestUpdateRun(),
+      ).thenAnswer((_) async => run(DateTime(2026, 9, 24, 21, 31)));
+      await notifier.reloadAfterResume();
+
+      expect(c.read(dataUpdateEpochProvider), greaterThan(epochBefore));
+    });
+
+    test('回前景時載入又失敗 → 不通知（不叫其他頁在 DB 出錯時重讀）', () async {
+      when(() => mockDb.getLatestUpdateRun()).thenThrow(Exception('db busy'));
+      final notifier = c.read(todayProvider.notifier);
+      await notifier.loadData();
+      final epochBefore = c.read(dataUpdateEpochProvider);
+
+      await notifier.reloadAfterResume();
+
+      expect(c.read(dataUpdateEpochProvider), epochBefore);
+      expect(market.loads, 0);
+    });
+
+    test('App 內更新進行中 → 跳過（那一輪結束時本就會收尾）', () async {
+      final pending = Completer<UpdateResult>();
+      when(
+        () => mockUpdateService.runDailyUpdate(
+          force: any(named: 'force'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenAnswer((_) => pending.future);
+      final notifier = c.read(todayProvider.notifier);
+      unawaited(notifier.runUpdate().then((_) {}, onError: (_) {}));
+      await Future<void>.delayed(Duration.zero);
+      expect(c.read(todayProvider).isUpdating, isTrue, reason: '前提');
+      clearInteractions(mockDb);
+
+      await notifier.reloadAfterResume();
+
+      verifyNever(() => mockDb.getLatestUpdateRun());
     });
   });
 }

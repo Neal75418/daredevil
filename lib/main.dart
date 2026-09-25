@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
+import 'package:daredevil/app/foreground_reload_policy.dart';
 import 'package:daredevil/app/router.dart';
 import 'package:daredevil/app/sentry_redaction.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
@@ -235,7 +236,13 @@ class DaredevilApp extends ConsumerStatefulWidget {
 
 class _DaredevilAppState extends ConsumerState<DaredevilApp>
     with WidgetsBindingObserver {
-  DateTime? _lastPausedAt;
+  final _reloadPolicy = ForegroundReloadPolicy(
+    staleAfter: const Duration(minutes: DataFreshness.appStaleThresholdMinutes),
+  );
+
+  /// 盤中輪詢是否因 paused 停過（只有停過才在 resumed 重啟，維持原行為：
+  /// macOS 失焦／手機拉通知列回來不重啟，免得每次都多一輪 tick）
+  bool _intradayStopped = false;
 
   @override
   void initState() {
@@ -257,9 +264,17 @@ class _DaredevilAppState extends ConsumerState<DaredevilApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 重載判斷看所有狀態（macOS 不會進 paused，見 ForegroundReloadPolicy）
+    if (_reloadPolicy.onStateChanged(state, DateTime.now())) {
+      AppLogger.info('Lifecycle', '離開超過門檻，重新載入資料');
+      ref.read(todayProvider.notifier).reloadAfterResume();
+    }
+
+    // 盤中輪詢與配額落盤仍只綁 paused：macOS 視窗只是失焦時 app 仍在前景，
+    // 盤中提醒本就該繼續
     if (state == AppLifecycleState.paused) {
-      _lastPausedAt = DateTime.now();
       ref.read(intradayMonitorProvider.notifier).stop();
+      _intradayStopped = true;
       // 配額狀態落盤(2026-08-01 複審):tracker 每 10 次呼叫才自動存,
       // 退背景/被殺前 flush 掉尾端記帳——遺失=低估=放行更多=402 方向
       unawaited(
@@ -267,13 +282,8 @@ class _DaredevilAppState extends ConsumerState<DaredevilApp>
           AppLogger.warning('ApiBudgetTracker', 'paused flush 失敗', e);
         }),
       );
-    } else if (state == AppLifecycleState.resumed && _lastPausedAt != null) {
-      final elapsed = DateTime.now().difference(_lastPausedAt!);
-      if (elapsed.inMinutes >= DataFreshness.appStaleThresholdMinutes) {
-        AppLogger.info('Lifecycle', '離開 ${elapsed.inMinutes} 分鐘，重新載入資料');
-        ref.read(todayProvider.notifier).loadData();
-      }
-      _lastPausedAt = null;
+    } else if (state == AppLifecycleState.resumed && _intradayStopped) {
+      _intradayStopped = false;
       ref.read(intradayMonitorProvider.notifier).start();
     }
   }
