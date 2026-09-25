@@ -36,23 +36,19 @@ class TpexInsiderTransfer {
     // '轉讓股數'/'目前持有股數' 等不存在的 key → 全部 fallback 成 0（已驗 17/17 筆
     // 皆 0 的 bug）。以下 key 已對 live API 核實。
     //
-    // 「預定轉讓方式及股數-轉讓股數」只有「一般交易/鉅額逐筆」(走市場、有每日限額)
-    // 才填；信託/贈與/洽特定人該欄為空，股數改放「預定轉讓總股數-自有持股」。故空值
-    // 時 fallback 到後者（已對 live API 用持股算術驗證：目前持有 − 轉讓後持股 = 該值）。
-    // 採「自有持股」與下方 currentHolding（亦自有持股）口徑一致。
-    final methodSpecificSharesStr =
-        json['預定轉讓方式及股數-轉讓股數']?.toString().trim() ?? '';
-    final totalOwnSharesStr = json['預定轉讓總股數-自有持股']?.toString().trim() ?? '';
-    final transferSharesStr = methodSpecificSharesStr.isNotEmpty
-        ? methodSpecificSharesStr
-        : totalOwnSharesStr;
-    final transferShares =
-        TwParseUtils.parseFormattedInt(transferSharesStr) ?? 0;
-
     // 目前持有採「自有持股」（另有「保留運用決定權信託股數」未計入）
     final currentHoldingStr = json['目前持有股數-自有持股']?.toString().trim() ?? '';
     final currentHolding =
         TwParseUtils.parseFormattedInt(currentHoldingStr) ?? 0;
+    String raw(String key) => json[key]?.toString().trim() ?? '';
+    final transferShares = _transferShares(
+      totalOwn: raw('預定轉讓總股數-自有持股'),
+      totalTrust: raw('預定轉讓總股數-保留運用決定權信託股數'),
+      methodSpecific: raw('預定轉讓方式及股數-轉讓股數'),
+      holdingOwn: currentHolding,
+      holdingTrust: raw('目前持有股數-保留運用決定權信託股數'),
+      symbol: symbol,
+    );
 
     final validPeriodStr = json['有效轉讓期間']?.toString().trim() ?? '';
     final (validPeriodStart, validPeriodEnd) = _parseValidPeriod(
@@ -78,8 +74,8 @@ class TpexInsiderTransfer {
   /// 與 TPEx(mopsfin_t187ap12_O)同構但欄名不同:代號=「公司代號」
   /// (非 SecuritiesCompanyCode)、日期=「出表日期」(非 Date)、身分=
   /// 「申報人身分」(TPEx 是「申請人身分」)。**值帶前導空格**(live 實測
-  /// " 一般交易…"/" 150000"),一律 trim。股數 fallback 規則與 TPEx 同:
-  /// 方式別股數空(信託/贈與)→「預定轉讓總股數-自有持股」。
+  /// " 一般交易…"/" 150000"),一律 trim。轉讓股數規則與 TPEx 同(見
+  /// [_transferShares]):以總股數(自有＋信託)為準。
   factory TpexInsiderTransfer.fromTwseJson(Map<String, dynamic> json) {
     String field(String key) => json[key]?.toString().trim() ?? '';
 
@@ -94,16 +90,16 @@ class TpexInsiderTransfer {
       throw FormatException('無效的出表日期: "$reportDateStr"', json);
     }
 
-    final methodSpecificShares = field('預定轉讓方式及股數-轉讓股數');
-    final totalOwnShares = field('預定轉讓總股數-自有持股');
-    final transferSharesStr = methodSpecificShares.isNotEmpty
-        ? methodSpecificShares
-        : totalOwnShares;
-    final transferShares =
-        TwParseUtils.parseFormattedInt(transferSharesStr) ?? 0;
-
     final currentHolding =
         TwParseUtils.parseFormattedInt(field('目前持有股數-自有持股')) ?? 0;
+    final transferShares = _transferShares(
+      totalOwn: field('預定轉讓總股數-自有持股'),
+      totalTrust: field('預定轉讓總股數-保留運用決定權信託股數'),
+      methodSpecific: field('預定轉讓方式及股數-轉讓股數'),
+      holdingOwn: currentHolding,
+      holdingTrust: field('目前持有股數-保留運用決定權信託股數'),
+      symbol: symbol,
+    );
 
     final (validPeriodStart, validPeriodEnd) = _parseValidPeriod(
       field('有效轉讓期間'),
@@ -123,9 +119,48 @@ class TpexInsiderTransfer {
     );
   }
 
+  /// 轉讓股數（上市、上櫃同一規則）。
+  ///
+  /// 以「預定轉讓總股數」為準：自有持股＋保留運用決定權信託股數兩格，各自是
+  /// 單一數字。兩種方式並存時，官方把兩個方式與兩個股數各自接在同一格——
+  /// 3189 景碩 2026-08-28「一般交易(每日得轉讓股數限制)鉅額逐筆交易」、
+  /// 8000000 與 8000000 無分隔被讀成 80000008000000（持股僅 67037104）；
+  /// 2442 2026-08-18 兩方式以空格相隔、解析失敗存成 0。總股數兩格都解析
+  /// 不出數字（舊資料、空值或「--」）才退回「預定轉讓方式及股數-轉讓股數」。
+  ///
+  /// 計畫轉讓不可能超過持有（自有＋信託）：讀出更多代表格式又不如預期，丟
+  /// [ImplausibleInsiderTransferException] 讓整筆被跳過（持股不明時無從比較）。
+  static int _transferShares({
+    required String totalOwn,
+    required String totalTrust,
+    required String methodSpecific,
+    required int holdingOwn,
+    required String holdingTrust,
+    required String symbol,
+  }) {
+    final own = TwParseUtils.parseFormattedInt(totalOwn);
+    final trust = TwParseUtils.parseFormattedInt(totalTrust);
+    final shares = own == null && trust == null
+        ? TwParseUtils.parseFormattedInt(methodSpecific) ?? 0
+        : (own ?? 0) + (trust ?? 0);
+    final holding =
+        holdingOwn + (TwParseUtils.parseFormattedInt(holdingTrust) ?? 0);
+    if (holding > 0 && shares > holding) {
+      throw ImplausibleInsiderTransferException(
+        symbol: symbol,
+        transferShares: shares,
+        currentHolding: holding,
+      );
+    }
+    return shares;
+  }
+
   static TpexInsiderTransfer? tryFromTwseJson(Map<String, dynamic> json) {
     try {
       return TpexInsiderTransfer.fromTwseJson(json);
+    } on ImplausibleInsiderTransferException catch (e) {
+      AppLogger.warning('TWSE', '跳過內部人轉讓: $e');
+      return null;
     } catch (e) {
       AppLogger.debug('TWSE', '解析內部人轉讓失敗: ${json['公司代號']} ($e)');
       return null;
@@ -135,6 +170,9 @@ class TpexInsiderTransfer {
   static TpexInsiderTransfer? tryFromJson(Map<String, dynamic> json) {
     try {
       return TpexInsiderTransfer.fromJson(json);
+    } on ImplausibleInsiderTransferException catch (e) {
+      AppLogger.warning('TPEX', '跳過內部人轉讓: $e');
+      return null;
     } catch (e) {
       AppLogger.debug(
         'TPEX',
@@ -171,4 +209,24 @@ class TpexInsiderTransfer {
 
     return (start, end);
   }
+}
+
+/// 轉讓股數大於目前持股——格式不如預期的訊號（見 `_transferShares`）。
+///
+/// 獨立型別：一般解析失敗（例如 TPEx 每日回傳的空白列）記 debug，這種記
+/// warning，才不會被每天的空白列淹沒。
+class ImplausibleInsiderTransferException implements Exception {
+  const ImplausibleInsiderTransferException({
+    required this.symbol,
+    required this.transferShares,
+    required this.currentHolding,
+  });
+
+  final String symbol;
+  final int transferShares;
+  final int currentHolding;
+
+  @override
+  String toString() =>
+      '$symbol 轉讓股數 $transferShares 大於目前持股 $currentHolding，視為格式異常';
 }

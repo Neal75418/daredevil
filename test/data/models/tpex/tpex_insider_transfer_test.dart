@@ -69,21 +69,96 @@ void main() {
       expect(t.transferMethod, '信託');
     });
 
-    test('一般交易：兩股數欄都有值時優先方式別股數（fallback 不得改動既有行為）', () {
+    // 兩種方式並存時，官方把兩個方式、兩個股數各自接在同一格（無分隔字元）：
+    // 3189 景碩 2026-08-28「一般交易(每日得轉讓股數限制)鉅額逐筆交易」、
+    // 8000000＋8000000 → 解析成 80000008000000（持股僅 67037104）。
+    // 「預定轉讓總股數」恆為單一數字（自有、信託各一格），改以它為準。
+    test('🚨 兩種方式並存：以總股數為準，不讀接在一起的方式別股數', () {
+      final t = TpexInsiderTransfer.fromJson(<String, dynamic>{
+        'SecuritiesCompanyCode': '3189',
+        'Date': '1150828',
+        '預定轉讓方式及股數-轉讓方式': '一般交易(每日得轉讓股數限制)鉅額逐筆交易',
+        '預定轉讓方式及股數-轉讓股數': '80000008000000',
+        '預定轉讓總股數-自有持股': '16000000',
+        '目前持有股數-自有持股': '67037104',
+      });
+
+      expect(t.transferShares, 16000000);
+    });
+
+    test('單一方式：總股數與方式別股數相同（live 2892：259000／259000）', () {
+      final t = TpexInsiderTransfer.fromJson(<String, dynamic>{
+        'SecuritiesCompanyCode': '2892',
+        'Date': '1150925',
+        '預定轉讓方式及股數-轉讓方式': ' 一般交易(每日得轉讓股數限制)',
+        '預定轉讓方式及股數-轉讓股數': ' 259000',
+        '預定轉讓總股數-自有持股': '259000',
+        '目前持有股數-自有持股': '259726',
+      });
+
+      expect(t.transferShares, 259000);
+    });
+
+    // 總股數欄空（舊資料／格式變動）才退回方式別股數；此時若仍讀出比持股
+    // 還多的股數，代表格式又不如預期：整筆跳過（計畫轉讓不可能超過持有）
+    test('轉讓股數大於目前持股 → 視為格式異常、整筆跳過', () {
+      final row = <String, dynamic>{
+        'SecuritiesCompanyCode': '3189',
+        'Date': '1150828',
+        '預定轉讓方式及股數-轉讓方式': '一般交易(每日得轉讓股數限制)鉅額逐筆交易',
+        '預定轉讓方式及股數-轉讓股數': '80000008000000',
+        '目前持有股數-自有持股': '67037104',
+      };
+      expect(TpexInsiderTransfer.tryFromJson(row), isNull);
+    });
+
+    // 申報表把總股數分成自有、保留運用決定權信託兩格；方式別股數是兩者合計。
+    // 只讀自有會把信託部分算成 0（「由受託人持有者」自有為 0）
+    test('信託股數：轉讓股數＝自有＋信託總股數', () {
+      final t = TpexInsiderTransfer.fromJson(<String, dynamic>{
+        'SecuritiesCompanyCode': '2548',
+        'Date': '1150824',
+        '預定轉讓方式及股數-轉讓方式': '一般交易(每日得轉讓股數限制)',
+        '預定轉讓方式及股數-轉讓股數': '300000',
+        '預定轉讓總股數-自有持股': '0',
+        '預定轉讓總股數-保留運用決定權信託股數': '300000',
+        '目前持有股數-自有持股': '0',
+        '目前持有股數-保留運用決定權信託股數': '500000',
+      });
+      expect(t.transferShares, 300000);
+    });
+
+    // 轉讓含信託時會超過「自有」持股，防線要和自有＋信託比，不能誤擋
+    test('防線比的是自有＋信託持股：含信託的轉讓不被誤擋', () {
+      final t = TpexInsiderTransfer.tryFromJson(<String, dynamic>{
+        'SecuritiesCompanyCode': '2548',
+        'Date': '1150824',
+        '預定轉讓總股數-自有持股': '100',
+        '預定轉讓總股數-保留運用決定權信託股數': '1000',
+        '目前持有股數-自有持股': '100',
+        '目前持有股數-保留運用決定權信託股數': '1000',
+      });
+      expect(t?.transferShares, 1100);
+    });
+
+    test('總股數兩格都解析不出數字（如「--」）→ 退回方式別股數', () {
       final t = TpexInsiderTransfer.fromJson(<String, dynamic>{
         'SecuritiesCompanyCode': '2061',
         'Date': '1150618',
-        '預定轉讓方式及股數-轉讓方式': '一般交易(每日得轉讓股數限制)',
         '預定轉讓方式及股數-轉讓股數': '500000',
-        '預定轉讓總股數-自有持股': '999999', // 若誤用此欄會讀成 999999
+        '預定轉讓總股數-自有持股': '--',
         '目前持有股數-自有持股': '3232155',
       });
+      expect(t.transferShares, 500000);
+    });
 
-      expect(
-        t.transferShares,
-        500000,
-        reason: '方式別股數欄有值時須優先，不得被 fallback 蓋成總股數',
-      );
+    test('目前持股不明（0／空）→ 無從比較，保留', () {
+      final t = TpexInsiderTransfer.tryFromJson(<String, dynamic>{
+        'SecuritiesCompanyCode': '2061',
+        'Date': '1150618',
+        '預定轉讓方式及股數-轉讓股數': '500000',
+      });
+      expect(t?.transferShares, 500000);
     });
   });
 
@@ -124,6 +199,26 @@ void main() {
         ..['預定轉讓總股數-自有持股'] = '88000';
       final t = TpexInsiderTransfer.tryFromTwseJson(row);
       expect(t!.transferShares, 88000);
+    });
+
+    test('🚨 兩種方式並存：以總股數為準（與 TPEx 同規則）', () {
+      final row = twseRow()
+        ..['預定轉讓方式及股數-轉讓方式'] = ' 一般交易(每日得轉讓股數限制)鉅額逐筆交易'
+        ..['預定轉讓方式及股數-轉讓股數'] = ' 80000008000000'
+        ..['預定轉讓總股數-自有持股'] = '16000000'
+        ..['目前持有股數-自有持股'] = '67037104';
+      expect(
+        TpexInsiderTransfer.tryFromTwseJson(row)!.transferShares,
+        16000000,
+      );
+    });
+
+    test('轉讓股數大於目前持股 → 整筆跳過（與 TPEx 同規則）', () {
+      final row = twseRow()
+        ..['預定轉讓方式及股數-轉讓股數'] = ' 80000008000000'
+        ..['預定轉讓總股數-自有持股'] = ''
+        ..['目前持有股數-自有持股'] = '67037104';
+      expect(TpexInsiderTransfer.tryFromTwseJson(row), isNull);
     });
 
     test('無效代號/日期 → null 不炸', () {

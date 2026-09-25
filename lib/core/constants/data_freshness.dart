@@ -286,4 +286,14 @@ abstract final class DataFreshness {
 
   /// 價格警示觸發判定的歷史價格回溯天數
   static const int alertPriceHistoryDays = 2;
+
+  // ==================================================
+  // 資料修復
+  // ==================================================
+
+  /// 內部人轉讓解析改以「預定轉讓總股數」為準的生效日（見
+  /// `TpexInsiderTransfer`）。申報日在此日前的「兩種方式擠在同一格」列（舊規則寫入）股數不可信
+  /// （被接成一個大數或解析失敗成 0），同步時清除；申報日在此日後的
+  /// 同類列以總股數寫入、是對的，不能一起刪。
+  static final DateTime insiderMultiMethodLegacyCutoff = DateTime(2026, 9, 26);
 }

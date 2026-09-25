@@ -452,7 +452,12 @@ class _AnomalyItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final valueColor = anomaly.severity == ChipSeverity.high
+    // 法人買超／賣超依方向上色（同頁法人動向慣例：買超紅、賣超綠）；其餘
+    // 是風險程度，依嚴重度。原本一律依嚴重度，「-6157張」賣超也是紅的。
+    final direction = anomaly.netDirection;
+    final valueColor = direction != null
+        ? context.priceColor(direction)
+        : anomaly.severity == ChipSeverity.high
         ? AppTheme.errorColor
         : AppTheme.warningColor;
 

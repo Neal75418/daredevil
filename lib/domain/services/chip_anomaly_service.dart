@@ -36,6 +36,7 @@ class ChipAnomaly {
     required this.stockName,
     required this.market,
     this.keyValue,
+    this.netDirection,
   });
 
   final ChipAnomalyType type;
@@ -46,6 +47,11 @@ class ChipAnomaly {
 
   /// 關鍵數值（如質押率、張數等）
   final String? keyValue;
+
+  /// 買賣方向（> 0 買超、< 0 賣超）。只有帶方向的異動（法人集中買賣）有值：
+  /// 畫面依它套漲跌色；其餘（質押率、融券倍數、持股上限、轉讓張數）是風險
+  /// 程度而非漲跌，維持嚴重度色。
+  final double? netDirection;
 }
 
 /// 籌碼異動偵測服務
@@ -485,6 +491,7 @@ class ChipAnomalyService {
         stockName: row.read<String>('name'),
         market: row.read<String>('market'),
         keyValue: '${isBuy ? '+' : '-'}$formatted',
+        netDirection: totalNet,
       );
     }).toList();
   }

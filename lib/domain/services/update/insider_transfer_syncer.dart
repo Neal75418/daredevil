@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import 'package:daredevil/core/exceptions/app_exception.dart';
+import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
@@ -34,10 +35,30 @@ class InsiderTransferSyncer {
   final TpexClient? _tpex;
   final TwseClient? _twse;
 
+  /// 清除舊解析規則寫入的「兩種方式擠在同一格」列（股數不可信、官方不會
+  /// 重給）。冪等、每次同步都跑，與當日有無新資料無關；失敗只記 warning，
+  /// 不擋當日寫入。
+  Future<void> _purgeLegacyMultiMethodRows() async {
+    try {
+      final deleted = await _db.deleteLegacyMultiMethodInsiderTransfers(
+        before: DataFreshness.insiderMultiMethodLegacyCutoff,
+      );
+      if (deleted > 0) {
+        AppLogger.info(
+          'InsiderTransferSyncer',
+          '清除 $deleted 筆舊規則寫入的多方式轉讓列（股數不可信）',
+        );
+      }
+    } catch (e) {
+      AppLogger.warning('InsiderTransferSyncer', '清除舊多方式轉讓列失敗', e);
+    }
+  }
+
   /// 同步內部人轉讓資料
   ///
   /// 回傳寫入的筆數。
   Future<int> sync() async {
+    await _purgeLegacyMultiMethodRows();
     try {
       // 雙源 per-source 隔離:單側故障記 warning、另一側照常;
       // 兩側都掛才往上拋(RateLimitException 一律直接 rethrow)

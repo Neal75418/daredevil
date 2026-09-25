@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/core/exceptions/app_exception.dart';
@@ -68,6 +70,26 @@ void main() {
       () => db.getAllActiveStocks(),
     ).thenAnswer((_) async => [_stock('2330', 'TWSE'), _stock('6538', 'TPEx')]);
     when(() => db.insertInsiderTransfers(any())).thenAnswer((_) async {});
+    when(
+      () => db.deleteLegacyMultiMethodInsiderTransfers(
+        before: any(named: 'before'),
+      ),
+    ).thenAnswer((_) async => 0);
+  });
+
+  // 舊解析規則寫入的多方式列股數錯誤、官方不會重給：每次同步先清（冪等）。
+  // 休市日 API 回空也要清——清理不依賴當日有沒有新資料
+  test('每次同步先清舊規則寫入的多方式列（API 回空也清）', () async {
+    when(() => twse.getInsiderTransfers()).thenAnswer((_) async => []);
+    when(() => tpex.getInsiderTransfers()).thenAnswer((_) async => []);
+
+    await syncer.sync();
+
+    verify(
+      () => db.deleteLegacyMultiMethodInsiderTransfers(
+        before: DataFreshness.insiderMultiMethodLegacyCutoff,
+      ),
+    ).called(1);
   });
 
   test('🚨 雙源合併寫入(上市+上櫃)', () async {

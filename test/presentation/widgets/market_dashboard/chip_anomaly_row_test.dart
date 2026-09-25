@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/core/theme/app_theme.dart';
+
 import 'package:daredevil/domain/services/chip_anomaly_service.dart'
     show ChipAnomaly, ChipAnomalyType, ChipSeverity, kZeroInsiderTransfer;
 import 'package:daredevil/presentation/providers/market_overview_provider.dart'
@@ -20,6 +22,7 @@ ChipAnomaly _anomaly(
   ChipSeverity severity = ChipSeverity.high,
   String market = 'TWSE',
   String? keyValue = '65.5%',
+  double? netDirection,
 }) {
   return ChipAnomaly(
     type: type,
@@ -28,6 +31,7 @@ ChipAnomaly _anomaly(
     stockName: name,
     market: market,
     keyValue: keyValue,
+    netDirection: netDirection,
   );
 }
 
@@ -93,6 +97,70 @@ void main() {
       );
 
       expect(find.text('65.5%'), findsOneWidget);
+    });
+
+    // 法人集中買賣是買超／賣超：依方向上色（買超紅、賣超綠，同頁法人動向
+    // 慣例）；原本依嚴重度一律紅色，「-6157張」賣超也是紅的
+    group('數值顏色', () {
+      Color? colorOf(WidgetTester tester, String text) =>
+          tester.widget<Text>(find.text(text)).style?.color;
+
+      testWidgets('法人集中買超 → 漲色、賣超 → 跌色', (tester) async {
+        widenViewport(tester);
+        await tester.pumpWidget(
+          buildTestApp(
+            ChipAnomalyRow(
+              anomalies: [
+                _anomaly(
+                  '4566',
+                  '時碩工業',
+                  type: ChipAnomalyType.institutionalSurge,
+                  keyValue: '+2898張',
+                  netDirection: 2898000,
+                ),
+                _anomaly(
+                  '2342',
+                  '茂矽',
+                  type: ChipAnomalyType.institutionalSurge,
+                  keyValue: '-6157張',
+                  netDirection: -6157000,
+                ),
+              ],
+            ),
+          ),
+        );
+        expect(
+          colorOf(tester, '+2898張'),
+          AppTheme.getPriceColor(1, Brightness.light),
+        );
+        expect(
+          colorOf(tester, '-6157張'),
+          AppTheme.getPriceColor(-1, Brightness.light),
+        );
+      });
+
+      // 質押率、融券倍數、持股上限、轉讓張數是風險程度，不是漲跌
+      testWidgets('無方向的異動 → 維持嚴重度色', (tester) async {
+        widenViewport(tester);
+        await tester.pumpWidget(
+          buildTestApp(
+            ChipAnomalyRow(
+              anomalies: [
+                _anomaly('7723', '築間', keyValue: '92.8%'),
+                _anomaly(
+                  '1809',
+                  '中釉',
+                  type: ChipAnomalyType.shortSurge,
+                  severity: ChipSeverity.medium,
+                  keyValue: '12.5倍',
+                ),
+              ],
+            ),
+          ),
+        );
+        expect(colorOf(tester, '92.8%'), AppTheme.errorColor);
+        expect(colorOf(tester, '12.5倍'), AppTheme.warningColor);
+      });
     });
 
     testWidgets('個股列壓縮為單行，不再顯示白話說明句', (tester) async {

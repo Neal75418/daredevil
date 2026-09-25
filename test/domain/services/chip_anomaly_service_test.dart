@@ -712,6 +712,8 @@ void main() {
         );
 
         expect(anomaly.keyValue, startsWith('+'));
+        // 畫面依方向上色（買超紅、賣超綠），不依嚴重度
+        expect(anomaly.netDirection, greaterThan(0));
       });
 
       test('大賣顯示負號（-）', () async {
@@ -723,6 +725,7 @@ void main() {
         );
 
         expect(anomaly.keyValue, startsWith('-'));
+        expect(anomaly.netDirection, lessThan(0));
       });
 
       test('keyValue 以張為單位（÷ 1000），非以股為單位', () async {
