@@ -233,7 +233,7 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
           ),
           const SizedBox(height: DesignTokens.spacing8),
           // 橫向捲動(2026-08-13):四段+長語系(en)在手機寬會溢出/折行
-          // ——與 SectionHeader trailing 同讓步策略,空間不夠自己捲
+          // ——空間不夠時自己捲;從第一個選項開始排(不反向),預設選項一定看得到
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SegmentedButton<RevenueSortBy>(
