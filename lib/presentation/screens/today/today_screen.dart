@@ -41,6 +41,8 @@ import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/providers/pinned_thesis_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/screens/today/widgets/data_stale_banner.dart';
+import 'package:daredevil/presentation/screens/today/widgets/history_building_banner.dart';
+import 'package:daredevil/presentation/providers/history_coverage_provider.dart';
 import 'package:daredevil/presentation/widgets/pinned_thesis_section.dart';
 import 'package:daredevil/presentation/widgets/stock_card.dart';
 import 'package:daredevil/presentation/widgets/stock_search_delegate.dart';
@@ -774,6 +776,38 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           },
         ),
 
+        // 歷史資料建置中：新安裝約十多次更新才補齊一年歷史，期間訊號以不完整
+        // 歷史計算。沒有任何資料時改由空狀態說明；更新中不顯示（進度條已在）。
+        Consumer(
+          builder: (context, ref, _) {
+            final hasData = ref.watch(
+              todayProvider.select((s) => s.dataDate != null),
+            );
+            final isUpdating = ref.watch(
+              todayProvider.select((s) => s.isUpdating),
+            );
+            // .value 而非 .asData：重算中沿用上一份，提示不會閃掉
+            final coverage = ref.watch(historyCoverageProvider).value;
+            if (!hasData ||
+                isUpdating ||
+                coverage == null ||
+                !coverage.isBuilding) {
+              return const SliverToBoxAdapter(child: SizedBox.shrink());
+            }
+            return SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  DesignTokens.spacing16,
+                  DesignTokens.spacing4,
+                  DesignTokens.spacing16,
+                  DesignTokens.spacing4,
+                ),
+                child: HistoryBuildingBanner(coverage: coverage),
+              ),
+            );
+          },
+        ),
+
         // 自選 MA 階段警示條:跌破(紅,2026-07-31 四階段風控)與站回
         // (綠,2026-08-21)。開 app 第一屏直接撞見——風控不能靠記得去掃描頁
         // 看,機會也一樣。兩條各自獨立渲染,同日都發生時並存不互相吃掉。
@@ -973,9 +1007,17 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               skipLoadingOnReload: true,
               data: (recommendations) {
                 if (recommendations.isEmpty) {
+                  // 完全沒有資料（全新安裝、或第一次更新沒寫進任何價格）
+                  // ≠ 今天沒有訊號
+                  final today = ref.watch(todayProvider);
                   return SliverFillRemaining(
                     hasScrollBody: false,
-                    child: EmptyStates.noRecommendations(onRefresh: _runUpdate),
+                    child: today.dataDate == null
+                        ? EmptyStates.firstBuild(
+                            isUpdating: today.isUpdating,
+                            onStart: _runUpdate,
+                          )
+                        : EmptyStates.noRecommendations(onRefresh: _runUpdate),
                   );
                 }
                 return _buildRecommendationsList(

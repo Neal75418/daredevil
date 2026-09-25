@@ -86,7 +86,8 @@
     "watchlistMaReclaim": "↗ 自選 {count} 檔站回均線:{names}",
     "dataStale": "資料落後 {count} 個交易日（最新 {date} 收盤）",
     "updateNow": "立即更新",
-    "alreadyLatest": "已是最新（{date} 收盤）"
+    "alreadyLatest": "已是最新（{date} 收盤）",
+    "historyBuilding": "歷史資料建置中 {percent}%（約再 {runs} 次更新補齊）· 期間長週期訊號（如 52 週新高）可能尚未出現"
   },
   "news": {
     "title": "市場新聞",
@@ -722,7 +723,11 @@
     "networkErrorHint": "請檢查網路連線後再試",
     "sourceUdn": "經濟日報",
     "sourceLtn": "自由財經",
-    "sourceAnnouncement": "公告"
+    "sourceAnnouncement": "公告",
+    "firstBuildIdleTitle": "尚未有資料",
+    "firstBuildRunningTitle": "正在建立資料…",
+    "firstBuildHint": "第一次更新需要幾分鐘；之後每次更新會逐步補齊約一年的歷史資料。",
+    "firstBuildStart": "開始建立"
   },
   "accessibility": {
     "stock": "股票 {symbol}",

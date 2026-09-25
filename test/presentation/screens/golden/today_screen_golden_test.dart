@@ -9,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
+import 'package:daredevil/domain/services/update/history_coverage.dart';
+import 'package:daredevil/presentation/providers/history_coverage_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/mode_recommendation_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
@@ -216,6 +218,11 @@ Widget buildTestWidget({
         (ref, mode) => SynchronousFuture(_testModeRecommendations),
       ),
       appClockProvider.overrideWithValue(const _FixedClock()),
+      // 建置進度固定為已補齊：否則會讀到共用測試 DB（其他測試寫入的股票、
+      // 沒有價格），golden 隨測試執行順序出現／消失建置橫幅
+      historyCoverageProvider.overrideWith(
+        (ref) => SynchronousFuture(const HistoryCoverage(covered: 1, total: 1)),
+      ),
     ],
     brightness: brightness,
   );

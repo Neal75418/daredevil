@@ -159,6 +159,24 @@ class EmptyStates {
     );
   }
 
+  /// 完全沒有資料（全新安裝）：與「今天沒有訊號」是不同的狀態，不可共用文案
+  static Widget firstBuild({required bool isUpdating, VoidCallback? onStart}) {
+    // 更新中不給按鈕；label 也要一起拿掉——它會進語意朗讀，留著會讓
+    // 螢幕閱讀器念出一顆畫面上不存在的按鈕
+    final onAction = isUpdating ? null : onStart;
+    return EmptyState(
+      icon: isUpdating
+          ? Icons.downloading_outlined
+          : Icons.cloud_download_outlined,
+      title: isUpdating
+          ? 'empty.firstBuildRunningTitle'.tr()
+          : 'empty.firstBuildIdleTitle'.tr(),
+      subtitle: 'empty.firstBuildHint'.tr(),
+      actionLabel: onAction == null ? null : 'empty.firstBuildStart'.tr(),
+      onAction: onAction,
+    );
+  }
+
   /// 無符合篩選條件的股票
   static Widget noFilterResults({VoidCallback? onClearFilter}) {
     return EmptyState(

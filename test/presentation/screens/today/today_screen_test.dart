@@ -10,7 +10,9 @@ import 'package:daredevil/core/constants/scoring_mode.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/domain/services/update_service.dart';
+import 'package:daredevil/domain/services/update/history_coverage.dart';
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
+import 'package:daredevil/presentation/providers/history_coverage_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
@@ -166,6 +168,8 @@ void main() {
     modeRecommendations,
     AppClock? clock,
     FakeTodayNotifier? todayNotifier,
+    HistoryCoverage? coverage,
+    Future<HistoryCoverage> Function(Ref)? coverageFn,
   }) {
     final today = todayState ?? const TodayState();
     final watchlist = watchlistState ?? WatchlistState();
@@ -180,6 +184,13 @@ void main() {
           return n;
         }),
         if (clock != null) appClockProvider.overrideWithValue(clock),
+        // 預設已補齊（不顯示建置橫幅），個別測試再覆寫
+        historyCoverageProvider.overrideWith(
+          coverageFn ??
+              (ref) => SynchronousFuture(
+                coverage ?? const HistoryCoverage(covered: 10, total: 10),
+              ),
+        ),
         watchlistProvider.overrideWith(() {
           final n = FakeWatchlistNotifier();
           n.initialState = watchlist;
@@ -534,6 +545,137 @@ void main() {
 
       expect(find.byType(StockListShimmer), findsNothing);
       expect(find.byType(CustomScrollView), findsOneWidget);
+    });
+  });
+
+  // 新安裝要約 18 次更新才補齊一年歷史；這段期間推薦是用不完整的歷史
+  // 算的，原本毫無告知。沒有任何資料時的空狀態也跟「今天沒訊號」同一句。
+  group('全新安裝：建置中', () {
+    Future<void> pump(
+      WidgetTester tester, {
+      required DateTime? dataDate,
+      required HistoryCoverage coverage,
+      bool isUpdating = false,
+    }) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(
+            dataDate: dataDate,
+            lastUpdate: dataDate,
+            isUpdating: isUpdating,
+          ),
+          clock: _FixedClock(DateTime(2026, 9, 18, 17)),
+          coverage: coverage,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    testWidgets('🚨 歷史未補齊 → 顯示建置進度', (tester) async {
+      await pump(
+        tester,
+        dataDate: DateTime(2026, 9, 18),
+        coverage: const HistoryCoverage(covered: 120, total: 540),
+      );
+      expect(find.text('today.historyBuilding'), findsOneWidget);
+    });
+
+    testWidgets('只剩零星缺漏（≤ 一輪回補上限）→ 不顯示', (tester) async {
+      await pump(
+        tester,
+        dataDate: DateTime(2026, 9, 18),
+        coverage: const HistoryCoverage(covered: 532, total: 540),
+      );
+      expect(find.text('today.historyBuilding'), findsNothing);
+    });
+
+    testWidgets('已補齊 → 不顯示', (tester) async {
+      await pump(
+        tester,
+        dataDate: DateTime(2026, 9, 18),
+        coverage: const HistoryCoverage(covered: 540, total: 540),
+      );
+      expect(find.text('today.historyBuilding'), findsNothing);
+    });
+
+    testWidgets('更新進行中 → 不顯示（進度條已在）', (tester) async {
+      await pump(
+        tester,
+        dataDate: DateTime(2026, 9, 18),
+        coverage: const HistoryCoverage(covered: 120, total: 540),
+        isUpdating: true,
+      );
+      expect(find.text('today.historyBuilding'), findsNothing);
+    });
+
+    testWidgets('🚨 完全沒有資料 → 首次建置的空狀態，不是「今日無訊號」', (tester) async {
+      // 股票主檔已同步、價格尚未寫入（0/540）：建置橫幅也不該出現，
+      // 沒資料時由空狀態說明
+      await pump(
+        tester,
+        dataDate: null,
+        coverage: const HistoryCoverage(covered: 0, total: 540),
+      );
+      expect(find.text('empty.firstBuildIdleTitle'), findsOneWidget);
+      expect(find.text('empty.firstBuildStart'), findsOneWidget);
+      expect(find.text('empty.noRecommendations'), findsNothing);
+      expect(find.text('today.historyBuilding'), findsNothing);
+    });
+
+    testWidgets('完全沒有資料且正在跑第一次更新 → 顯示建置中、不給按鈕', (tester) async {
+      await pump(
+        tester,
+        dataDate: null,
+        coverage: const HistoryCoverage(covered: 0, total: 0),
+        isUpdating: true,
+      );
+      expect(find.text('empty.firstBuildRunningTitle'), findsOneWidget);
+      expect(find.text('empty.firstBuildStart'), findsNothing);
+      // 朗讀文字也不能提到一顆不存在的按鈕
+      final semantics = tester.ensureSemantics();
+      expect(
+        find.bySemanticsLabel(RegExp('empty.firstBuildStart')),
+        findsNothing,
+      );
+      semantics.dispose();
+    });
+
+    // 每次 DB 更新都會重算進度；重算期間若當成「沒有進度」，提示會閃掉再出現
+    testWidgets('重算中沿用上一份進度，提示不閃掉', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(
+            dataDate: DateTime(2026, 9, 18),
+            lastUpdate: DateTime(2026, 9, 18),
+          ),
+          clock: _FixedClock(DateTime(2026, 9, 18, 17)),
+          coverageFn: (ref) => ref.watch(dataUpdateEpochProvider) == 0
+              ? SynchronousFuture(
+                  const HistoryCoverage(covered: 120, total: 540),
+                )
+              : Completer<HistoryCoverage>().future,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('today.historyBuilding'), findsOneWidget);
+
+      ProviderScope.containerOf(
+        tester.element(find.byType(TodayScreen)),
+      ).read(dataUpdateEpochProvider.notifier).bump();
+      await tester.pump();
+
+      expect(find.text('today.historyBuilding'), findsOneWidget);
+    });
+
+    testWidgets('有資料但今天沒訊號 → 維持原本的「今日無訊號」', (tester) async {
+      await pump(
+        tester,
+        dataDate: DateTime(2026, 9, 18),
+        coverage: const HistoryCoverage(covered: 540, total: 540),
+      );
+      expect(find.text('empty.noRecommendations'), findsOneWidget);
     });
   });
 

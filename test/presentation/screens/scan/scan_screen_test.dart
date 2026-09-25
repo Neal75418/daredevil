@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/presentation/providers/scan_provider.dart';
+import 'package:daredevil/presentation/providers/today_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/screens/scan/scan_screen.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
@@ -231,6 +232,44 @@ void main() {
       expect(find.byType(EmptyState), findsOneWidget);
     });
 
+    // 全新安裝時「全部」篩選也是空的，原本顯示「試著調整篩選條件」——
+    // 使用者根本沒設篩選，問題是還沒有資料
+    testWidgets('🚨 還沒有任何資料 → 首次建置的空狀態，不叫人調整篩選', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('empty.firstBuildIdleTitle'), findsOneWidget);
+      expect(find.text('empty.noFilterResults'), findsNothing);
+    });
+
+    testWidgets('還沒有任何資料且第一次更新進行中 → 顯示建置中', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildProviderTestApp(
+          const ScanScreen(),
+          overrides: [
+            scanProvider.overrideWith(() => FakeScanNotifier()),
+            settingsProvider.overrideWith(() => FakeSettingsNotifier()),
+            todayProvider.overrideWith(() => _UpdatingTodayNotifier()),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('empty.firstBuildRunningTitle'), findsOneWidget);
+    });
+
+    testWidgets('有資料但篩選沒結果 → 維持「無符合條件」', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(scanState: ScanState(dataDate: DateTime(2026, 9, 18))),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('empty.noFilterResults'), findsOneWidget);
+    });
+
     testWidgets('shows filtering indicator', (tester) async {
       widenViewport(tester);
       await tester.pumpWidget(
@@ -293,4 +332,9 @@ void main() {
       expect(find.byIcon(Icons.factory_outlined), findsOneWidget);
     });
   });
+}
+
+class _UpdatingTodayNotifier extends TodayNotifier {
+  @override
+  TodayState build() => const TodayState(isUpdating: true);
 }

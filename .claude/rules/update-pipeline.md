@@ -49,6 +49,13 @@ TDCC holding、dividend、insider transfer、quarterly report。
 - **Phase 0 市場日快照**：lookback 窗內整市場缺漏的交易日，1 次呼叫補該市場全部股票一天
   （TWSE MI_INDEX / TPEx afterTrading 歷史端點）。單次上限與連續零筆斷路器見
   `ApiConfig.historicalMarketDay*`
+- **「缺漏」的定義與今日頁共用**：`history_coverage.dart` 的 `findMissingMarketDays`
+  同時決定 Phase 0 要補哪些、今日頁「歷史資料建置中 N%」顯示多少——改門檻或窗口兩邊一起變。
+  ⚠️ 日曆漏標的休市日（颱風停市、新增國定假日、預估錯的農曆假日）在官方端點回 0 筆，
+  **永遠算缺漏**；畫面端以 `HistoryCoverage.isBuilding`（缺漏 > 一輪上限才顯示）容忍，
+  回補端則每輪仍會把它排進名額（各 1 次呼叫回 0 筆，並計入連續零筆斷路器）。
+  斷路器以（日, 市場）計數：**兩個相鄰的漏標日**＝連續 3 筆零 → 每輪 Phase 0 都停在同一處，
+  比它們更舊的缺漏補不到、今日頁的「約再 N 次」也不會收斂，直到漏標日滑出窗口
 - **Phase 1 per-symbol**：補個股殘缺。priority（自選＋熱門）追 250 天、非 priority 180 天早退
 - **Phase 1 的第三道閘**：覆蓋天數沒長的標的凍結 `DataFreshness.historicalBackfillBackoffDays = 30`
   天並跳過——**「是 needy」不等於「這輪會被同步」**

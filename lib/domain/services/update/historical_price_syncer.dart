@@ -6,10 +6,10 @@ import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/logger.dart';
-import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/price_repository.dart';
+import 'package:daredevil/domain/services/update/history_coverage.dart';
 
 /// 歷史價格資料同步器
 ///
@@ -208,9 +208,7 @@ class HistoricalPriceSyncer {
       final stocks = await _db.getStocksByMarket(market);
       if (stocks.isEmpty) continue;
       targets[market] = stocks.map((s) => s.symbol).toSet();
-      thresholds[market] =
-          (stocks.length * ApiConfig.historicalMarketDayMinCoverageRatio)
-              .ceil();
+      thresholds[market] = coverageThreshold(stocks.length);
     }
     if (targets.isEmpty) return 0;
 
@@ -226,23 +224,13 @@ class HistoricalPriceSyncer {
       startDate: windowStart,
       endDate: endDay,
     );
-    final tasks = <(DateTime, String)>[];
-    for (
-      var day = endDay.subtract(const Duration(days: 1));
-      !day.isBefore(windowStart) &&
-          tasks.length < ApiConfig.historicalMarketDayMaxCallsPerRun;
-      day = day.subtract(const Duration(days: 1))
-    ) {
-      if (!TaiwanCalendar.isTradingDay(day)) continue;
-      final dayKey = DateContext.formatYmd(day);
-      for (final market in targets.keys) {
-        if (tasks.length >= ApiConfig.historicalMarketDayMaxCallsPerRun) {
-          break;
-        }
-        final count = dayCounts[market]?[dayKey] ?? 0;
-        if (count < thresholds[market]!) tasks.add((day, market));
-      }
-    }
+    // 與今日頁建置進度共用同一份「補齊」定義（history_coverage.dart）
+    final tasks = findMissingMarketDays(
+      endDay: endDay,
+      thresholds: thresholds,
+      dayCounts: dayCounts,
+      limit: ApiConfig.historicalMarketDayMaxCallsPerRun,
+    );
     if (tasks.isEmpty) return 0;
 
     AppLogger.info(

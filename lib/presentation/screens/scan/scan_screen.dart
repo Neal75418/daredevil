@@ -16,6 +16,7 @@ import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/utils/responsive_helper.dart';
 import 'package:daredevil/presentation/providers/pinned_thesis_provider.dart';
 import 'package:daredevil/presentation/providers/scan_provider.dart';
+import 'package:daredevil/presentation/providers/today_provider.dart';
 import 'package:daredevil/presentation/providers/stock_browsing_context_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/screens/scan/widgets/industry_filter_chip.dart';
@@ -72,6 +73,14 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     required int totalScanned,
     required DateTime? dataDate,
   }) {
+    // 還沒有任何資料（全新安裝）：不是篩選的問題，別叫人去調整篩選。
+    // 更新由今日頁負責（有進度與錯誤回饋），這裡只說明狀態、不給按鈕。
+    if (dataDate == null) {
+      return EmptyStates.firstBuild(
+        isUpdating: ref.watch(todayProvider.select((s) => s.isUpdating)),
+      );
+    }
+
     // 對於「全部」篩選，使用簡單的空狀態
     if (filter == ScanFilter.all) {
       return EmptyStates.noFilterResults(

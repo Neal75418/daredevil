@@ -86,7 +86,8 @@
     "watchlistMaReclaim": "↗ {count} watchlist stock(s) reclaimed MA: {names}",
     "dataStale": "Data is {count} trading day(s) behind (latest close {date})",
     "updateNow": "Update now",
-    "alreadyLatest": "Up to date ({date} close)"
+    "alreadyLatest": "Up to date ({date} close)",
+    "historyBuilding": "Building price history {percent}% (about {runs} more updates) · long-horizon signals (e.g. 52-week highs) may not appear yet"
   },
   "news": {
     "title": "Market News",
@@ -722,7 +723,11 @@
     "networkErrorHint": "Please check your connection and try again",
     "sourceUdn": "UDN Money",
     "sourceLtn": "LTN Business",
-    "sourceAnnouncement": "Announcements"
+    "sourceAnnouncement": "Announcements",
+    "firstBuildIdleTitle": "No data yet",
+    "firstBuildRunningTitle": "Building data…",
+    "firstBuildHint": "The first update takes a few minutes; later updates gradually fill in about a year of history.",
+    "firstBuildStart": "Start building"
   },
   "accessibility": {
     "stock": "Stock {symbol}",
