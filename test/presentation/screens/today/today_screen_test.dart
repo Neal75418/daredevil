@@ -34,8 +34,9 @@ import 'package:daredevil/presentation/providers/today_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/screens/today/today_screen.dart';
 import 'package:daredevil/presentation/screens/today/widgets/data_stale_banner.dart';
+import 'package:daredevil/presentation/widgets/score_tier_badge.dart';
 import 'package:daredevil/presentation/widgets/stock_card.dart';
-import 'package:daredevil/presentation/widgets/score_ring.dart';
+import 'package:daredevil/presentation/widgets/stock_preview_sheet.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/update_progress_banner.dart';
@@ -840,7 +841,13 @@ void main() {
       await tester.longPress(find.byType(StockCard));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
-      expect(tester.widget<ScoreRing>(find.byType(ScoreRing)).score, 30);
+      final badge = tester.widget<ScoreTierBadge>(
+        find.descendant(
+          of: find.byType(StockPreviewSheet),
+          matching: find.byType(ScoreTierBadge),
+        ),
+      );
+      expect(badge.shortScore, 30);
     });
   });
 

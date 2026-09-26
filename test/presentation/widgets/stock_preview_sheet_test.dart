@@ -1,8 +1,10 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/presentation/widgets/score_tier_badge.dart';
 import 'package:daredevil/presentation/widgets/stock_preview_sheet.dart';
 
 import '../../helpers/widget_test_helpers.dart';
@@ -116,14 +118,37 @@ void main() {
       expect(find.byIcon(Icons.star_outline_rounded), findsOneWidget);
     });
 
-    testWidgets('shows score section when score > 0', (tester) async {
+    // 預覽與卡片必須同一套分級：曾各用 80/60/40（等級字）、50/35/20（圓環色）
+    // 與卡片的 45/25/12，同一檔股票長按後顯示不同等級。40 分在舊標準是
+    // 「一般」、在卡片標準是「中」——選它讓兩套標準分得開。
+    testWidgets('評分區用卡片同一個分級徽章與分數', (tester) async {
       await tester.pumpWidget(
-        buildTestApp(StockPreviewSheet(data: createData(score: 85))),
+        buildTestApp(StockPreviewSheet(data: createData(score: 40))),
       );
       await tester.pump(const Duration(seconds: 1));
 
       expect(find.text(S.scoreLabel), findsOneWidget);
-      expect(find.text(S.scoreLevelStrong), findsOneWidget);
+      final badge = tester.widget<ScoreTierBadge>(find.byType(ScoreTierBadge));
+      expect(badge.shortScore, 40);
+      expect(find.text('score.tier.medium'.tr()), findsOneWidget);
+    });
+
+    testWidgets('無障礙標籤的分級與徽章一致', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        buildTestApp(StockPreviewSheet(data: createData(score: 40))),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      // 整段朗讀標籤（以代號開頭的那一段）要帶分級；只找分級字會被徽章自己
+      // 的文字節點滿足，驗不到朗讀標籤
+      expect(
+        find.bySemanticsLabel(
+          RegExp('2330.*${RegExp.escape('score.tier.medium'.tr())}'),
+        ),
+        findsOneWidget,
+      );
+      handle.dispose();
     });
 
     testWidgets('hides score section when score is null', (tester) async {

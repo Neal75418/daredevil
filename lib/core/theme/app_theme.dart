@@ -457,17 +457,6 @@ class AppTheme {
   static Color getFlatColor(Brightness brightness) =>
       PriceColors.flatFor(brightness);
 
-  /// 根據評分取得對應顏色
-  ///
-  /// [brightness] 用於解析最低分級的平盤灰——淺色主題需要更深的灰，
-  /// 深色主題的 [neutralColor] 對白底僅 2.58:1。
-  static Color getScoreColor(double score, Brightness brightness) {
-    if (score >= 50) return upColor;
-    if (score >= 35) return warningColor;
-    if (score >= 20) return cautionColor;
-    return getFlatColor(brightness);
-  }
-
   /// 高分股票的頂級金屬漸層
   static LinearGradient get premiumGradient => LinearGradient(
     colors: [

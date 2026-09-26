@@ -458,14 +458,6 @@ void main() {
         PriceColors.flatOnLight,
       );
     });
-
-    test('getScoreColor 最低分級解析為依主題的平盤色，非固定深色值', () {
-      expect(
-        AppTheme.getScoreColor(10, Brightness.light),
-        PriceColors.flatOnLight,
-      );
-      expect(AppTheme.getScoreColor(10, Brightness.dark), PriceColors.flat);
-    });
   });
 
   group('指標標籤徽章：文字對自身疊色底（C4）', () {

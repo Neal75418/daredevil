@@ -58,9 +58,9 @@ enum ScoringMode {
 
   /// Mode routing priority — eligibility-first assignment 時的優先順序
   ///
-  /// **2026-06-19 v2 audit 引入**：當一檔股票對多個 mode 都 eligible（罕見、但
-  /// edge case 存在）時，按此優先順序選擇 mode，數字越大優先級越高、tiebreak 用
-  /// max |modeScoreShort|。
+  /// **2026-06-19 v2 audit 引入**：當一檔股票對多個 mode 都合格時，按此優先
+  /// 順序選擇 mode，數字越大優先級越高。只在「資格＋分數都合格」的模式之間比
+  /// （見 `qualifiesForRouting`）。三個模式的值各不相同，不會平手。
   ///
   /// 設計理由：
   /// - **weaknessObserve (pullbackEntry) 3 — 最 actionable**：「強股回檔進場」是
@@ -68,8 +68,12 @@ enum ScoringMode {
   /// - **momentumEntry 2 — 中**：「起漲候選」是研究階段
   /// - **strengthObserve 1 — 監控**：「強勢觀察」純監控、不急
   ///
-  /// 實務上 Mode B / Mode C eligibility 已透過 todayPct (>0 vs ≤0) 互斥，這個
-  /// priority 主要處理 Mode A / Mode C 邊界 case（罕見）。
+  /// 會同時合格的組合：
+  /// - Mode A／Mode C：當日 -4%～0% 兩者都收，回檔優先
+  /// - Mode A／Mode B：當日 0%（不含）～+8% 兩者都收，起漲優先、即使強勢分數
+  ///   較高——「優先順序 vs 分數強弱」是產品取捨，不是 bug
+  /// - Mode B／Mode C 以 todayPct (>0 vs ≤0) 互斥；todayPct 為 null（新股、
+  ///   價格缺漏）時兩者都放行，回檔優先
   int get routingPriority => switch (this) {
     ScoringMode.weaknessObserve => 3, // pullbackEntry — 最 actionable
     ScoringMode.momentumEntry => 2,
@@ -184,15 +188,13 @@ abstract final class ModeFilters {
   /// 改大此值即可（一行）。三個 tab 共用。
   static const int modeRecommendationCap = 30;
 
-  /// 指派 floor：best-eligible mode 的 |modeScoreShort| 必須 ≥ 10 才指派
+  /// 指派 floor：模式的 modeScoreShort 必須 ≥ 10 才能被選為分頁
   ///
-  /// 避免 eligibility-first 把「主要 mode 不合格、次要 mode 只有 trivial
-  /// 分數」的股票塞進非主要 tab。
+  /// 避免「主要 mode 不合格、次要 mode 只有 trivial 分數」的股票塞進非主要
+  /// tab，也讓只有長期分數的股票不進訊號分頁。
   ///
-  /// 範例：股票 X 有 A=80（但 today +10% 被擋）/ B=0 / C=-2（today -1%）
-  /// - 無 floor：C(-2) 是唯一合格 → 出現在 Mode C 弱勢 tab 但 score -2
-  ///   是噪音、排在 -50 處置股下面也很怪
-  /// - 有 floor ≥ 10：bestAbs = 2 < 10 → 整檔 drop ✅（今天訊號狀態不穩、
-  ///   跳過比誤導好）
-  static const int minRoutedAbsScore = 10;
+  /// 在挑選**之前**逐模式篩（與訊號門檻一起，見 `qualifiesForRouting`）：
+  /// 選完才檢查會讓弱的高優先模式擠掉強的低優先模式、整檔消失。不取絕對值：
+  /// 所有使用者模式都是正分設計，負的模式分數不是訊號。
+  static const int minRoutedShortScore = 10;
 }

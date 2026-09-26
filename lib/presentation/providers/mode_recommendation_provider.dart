@@ -215,7 +215,7 @@ bool isMarketUptrend(
 /// - mode 訊號本身不到門檻（<12）的股票，靠不相關的 neutral **正分**（例如
 ///   HIGH_DIVIDEND_YIELD +18、與 momentum 無關）把 blended 灌到 ≥12、誤放行
 ///   進 eligibility（momentumEntry 的 isEligibleForMode 本身不檢查
-///   score>0，只擋在最後的 minRoutedAbsScore floor）。
+///   score>0，只擋在 minRoutedShortScore floor）。
 ///
 /// 改用 modeScores 判斷後，兩個方向都修正 —— tier 判斷跟 eligibility /
 /// 排名用同一組分數，不再有兩套口徑不一致的問題。
@@ -226,6 +226,27 @@ bool isSignalTier(Map<ScoringMode, ModeStockScore> modeScores) =>
           s.modeScoreShort >= RuleParams.minScoreThreshold ||
           s.modeScoreLong >= RuleParams.minScoreThreshold,
     );
+
+/// 該模式**自己的**分數夠格進訊號分頁：較高者達訊號門檻（與卡片徽章同一個
+/// 數、同一條線，見 [ModeRecommendation.displayScore]），且短期分數達指派
+/// floor（[ModeFilters.minRoutedShortScore]）。
+///
+/// 分派時先用它篩掉不合格的模式，再依 [ScoringMode.routingPriority] 挑。
+/// 選完才檢查（2026-09-26 前的做法）會造成兩個問題：
+/// - 弱的高優先模式擠掉強的低優先模式、整檔消失：2026-09-24 資料重放，
+///   2454 起漲短期 0 分先被選中、再被 floor 擋下，強勢 38 分的訊號因此
+///   不在任何分頁（修正後強勢分頁候選 55 → 60 檔）
+/// - 選中模式不到訊號門檻，卡片顯示「觀察」混進訊號分頁（例：起漲 10 分、
+///   另有強勢訊號過門檻）
+///
+/// 短期分數不取絕對值：所有使用者模式都是正分設計，負的模式分數不是訊號。
+@visibleForTesting
+bool qualifiesForRouting(ModeStockScore score) =>
+    (score.modeScoreShort > score.modeScoreLong
+            ? score.modeScoreShort
+            : score.modeScoreLong) >=
+        RuleParams.minScoreThreshold &&
+    score.modeScoreShort >= ModeFilters.minRoutedShortScore;
 
 /// ETF／ETN 宇宙過濾判定——`stock_master.industry` 有 `ETF` 與 `上櫃ETF`
 /// 兩種標記並存（158＋14 檔），用 contains 一次涵蓋。
@@ -324,9 +345,9 @@ bool isEligibleForMode({
 /// **2026-06-19 audit Action 5b — eligibility-first 指派**
 ///
 /// 從「max |score| 指派 → 後 anti-filter drop」改成「**filter-aware
-/// assignment**」：每檔股票只在「合格 mode」之間選 max |scoreShort|，0 個
-/// 合格 OR 合格但 |score| < [ModeFilters.minRoutedAbsScore] floor 則整檔
-/// drop。
+/// assignment**」：每檔股票只在「合格 mode」之間依 routingPriority 挑選，
+/// 0 個合格則整檔 drop。合格＝[isEligibleForMode] 且 [qualifiesForRouting]
+/// （分數也在挑選前篩，見該函式說明的 2026-09-26 修正）。
 ///
 /// ## 為什麼換架構
 ///
@@ -422,16 +443,16 @@ final _modeAssignmentsProvider =
           .read(databaseProvider)
           .getActiveWarningsMapBatch(allCandidateSymbols);
 
-      // STEP 5 — eligibility-first 指派 + floor + routing priority
+      // STEP 5 — 先篩（eligibility＋qualifiesForRouting）再依 routing priority 挑
       //
-      // **2026-06-19 v2 audit**：multi-mode eligible 時，先按 ScoringMode.routingPriority
-      // 高者勝（pullbackEntry 3 > momentumEntry 2 > strengthObserve 1）、tiebreak
-      // 用 max |scoreShort|。Mode C 是「進場時機」最 actionable、應優先 surface。
+      // **2026-06-19 v2 audit**：多個模式都合格時，ScoringMode.routingPriority
+      // 高者勝（pullbackEntry 3 > momentumEntry 2 > strengthObserve 1）。
+      // Mode C 是「進場時機」最 actionable、應優先 surface。
       final assignmentMap = <ScoringMode, List<ModeStockScore>>{
         for (final m in ScoringMode.userFacingModes) m: <ModeStockScore>[],
       };
       var droppedNoEligible = 0;
-      var droppedBelowFloor = 0;
+      var droppedBelowQualification = 0;
       var droppedEtf = 0;
       var droppedDisposal = 0;
       var droppedObservation = 0;
@@ -487,7 +508,7 @@ final _modeAssignmentsProvider =
 
         ScoringMode? bestMode;
         var bestPriority = -1;
-        var bestAbs = -1.0;
+        var hadEligible = false;
         for (final mEntry in modes.entries) {
           if (!isEligibleForMode(
             mode: mEntry.key,
@@ -499,23 +520,23 @@ final _modeAssignmentsProvider =
           )) {
             continue;
           }
+          hadEligible = true;
+          // 先篩再挑：分數不合格的模式不參與優先順序比較
+          if (!qualifiesForRouting(mEntry.value)) continue;
+          // priority 高者勝（三個模式的值各不相同，不會平手）
           final priority = mEntry.key.routingPriority;
-          final absScore = mEntry.value.modeScoreShort.abs();
-          // 優先 priority 高者；同 priority 用 max |score| tiebreak
-          if (priority > bestPriority ||
-              (priority == bestPriority && absScore > bestAbs)) {
+          if (priority > bestPriority) {
             bestPriority = priority;
-            bestAbs = absScore;
             bestMode = mEntry.key;
           }
         }
 
         if (bestMode == null) {
-          droppedNoEligible++;
-          continue;
-        }
-        if (bestAbs < ModeFilters.minRoutedAbsScore) {
-          droppedBelowFloor++;
+          if (hadEligible) {
+            droppedBelowQualification++;
+          } else {
+            droppedNoEligible++;
+          }
           continue;
         }
         assignmentMap[bestMode]!.add(modes[bestMode]!);
@@ -527,7 +548,7 @@ final _modeAssignmentsProvider =
             'B=${assignmentMap[ScoringMode.strengthObserve]!.length} '
             'C=${assignmentMap[ScoringMode.weaknessObserve]!.length} '
             'droppedNoEligible=$droppedNoEligible '
-            'droppedBelowFloor=$droppedBelowFloor '
+            'droppedBelowQualification=$droppedBelowQualification '
             'droppedEtf=$droppedEtf '
             'droppedDisposal=$droppedDisposal '
             'droppedObservation=$droppedObservation',

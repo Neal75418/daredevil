@@ -577,10 +577,6 @@
   },
   "score": {
     "label": "Signal Score",
-    "strong": "Signal Strength: High",
-    "watch": "Signal Strength: Medium",
-    "normal": "Signal Strength: Normal",
-    "wait": "Signal Strength: Low",
     "points": "pts",
     "tier": {
       "strong": "Strong",

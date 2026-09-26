@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import 'package:daredevil/core/constants/animations.dart';
+import 'package:daredevil/core/constants/score_tier.dart';
 import 'package:daredevil/core/extensions/trend_state_extension.dart';
 import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
@@ -13,7 +14,7 @@ import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
 import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
 import 'package:daredevil/presentation/widgets/reason_tags.dart';
-import 'package:daredevil/presentation/widgets/score_ring.dart';
+import 'package:daredevil/presentation/widgets/score_tier_badge.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 
 /// 股票預覽資料
@@ -94,7 +95,7 @@ class StockPreviewSheet extends StatelessWidget {
     }
     if (data.score != null && data.score! > 0) {
       parts.add(S.accessibilityScore(data.score!.toInt()));
-      parts.add(_getScoreLevel(data.score!));
+      parts.add(ScoreTier.fromScore(data.score!).i18nKey.tr());
     }
     return parts.join(', ');
   }
@@ -376,40 +377,19 @@ class StockPreviewSheet extends StatelessWidget {
     );
   }
 
+  /// 與卡片同一個分級徽章：同一檔股票長按前後必須顯示同一個等級
+  /// （曾各用 80/60/40 等級字、50/35/20 圓環色，與卡片的強中弱不一致）。
   Widget _buildScoreSection(ThemeData theme) {
-    final scoreColor = AppTheme.getScoreColor(data.score!, theme.brightness);
-
     return Row(
       children: [
-        // 使用共用 ScoreRing 元件（extraLarge 尺寸）
-        ScoreRing(
-          score: data.score!,
-          size: ScoreRingSize.extraLarge,
-        ).animate().scale(
-          begin: const Offset(0.5, 0.5),
-          delay: AnimDurations.press,
-          duration: AnimDurations.moderate,
-          curve: AnimCurves.bounce,
+        Text(
+          S.scoreLabel,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
-        const SizedBox(width: DesignTokens.spacing16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              S.scoreLabel,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            Text(
-              _getScoreLevel(data.score!),
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: scoreColor,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
+        const SizedBox(width: DesignTokens.spacing12),
+        ScoreTierBadge(score: data.score!),
       ],
     );
   }
@@ -432,6 +412,4 @@ class StockPreviewSheet extends StatelessWidget {
         .fadeIn(delay: AnimDurations.press, duration: AnimDurations.normal)
         .slideY(begin: 0.1, duration: AnimDurations.normal);
   }
-
-  String _getScoreLevel(double score) => S.getScoreLevel(score);
 }

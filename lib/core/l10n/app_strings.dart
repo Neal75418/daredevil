@@ -96,19 +96,6 @@ class S {
   // 評分
   // ==================================================
   static String get scoreLabel => 'score.label'.tr();
-  static String get scoreLevelStrong => 'score.strong'.tr();
-  // 下三者無外部呼叫者,但由 [getScoreLevel] 裸名消費(2026-08-15 審計:
-  // 外部 grep `S.x` 會誤判死碼,類內傳遞性存活)
-  static String get scoreLevelWatch => 'score.watch'.tr();
-  static String get scoreLevelNormal => 'score.normal'.tr();
-  static String get scoreLevelWait => 'score.wait'.tr();
-
-  static String getScoreLevel(double score) {
-    if (score >= 80) return scoreLevelStrong;
-    if (score >= 60) return scoreLevelWatch;
-    if (score >= 40) return scoreLevelNormal;
-    return scoreLevelWait;
-  }
 
   // ==================================================
   // 趨勢

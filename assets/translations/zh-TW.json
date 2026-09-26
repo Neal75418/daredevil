@@ -577,10 +577,6 @@
   },
   "score": {
     "label": "訊號評分",
-    "strong": "訊號強度：高",
-    "watch": "訊號強度：中",
-    "normal": "訊號強度：一般",
-    "wait": "訊號強度：低",
     "points": "分",
     "tier": {
       "strong": "強",
