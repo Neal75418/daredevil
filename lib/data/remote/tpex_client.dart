@@ -40,7 +40,10 @@ class TpexClient {
 
   static const String _tag = 'TPEX';
 
-  /// 「回應未帶日期」的哨兵值——回補守衛用，見 [getAllMarginTradingData]。
+  /// 「回應未帶日期」的哨兵值——每日價格、法人、融資券共用的追蹤日期
+  /// fail-closed 防線（見 [getAllDailyPrices]、[getAllInstitutionalData]、
+  /// [getAllMarginTradingData]）：解析不到回應日期時退回此哨兵值，讓下游一律
+  /// 判定為「缺日期」整批丟棄，不落回請求日或今天。
   /// 刻意選一個不可能是交易日的日期，讓「回應沒帶日期」與「日期不符」收斂到
   /// 同一條 fail-closed 路徑。
   static final DateTime _unknownDateSentinel = DateTime.utc(1970);
@@ -51,16 +54,45 @@ class TpexClient {
     ttl: const Duration(minutes: CacheConfig.marketClientCacheTtlMin),
   );
 
-  /// 新版 afterTrading/otc（歷史回補替代端點）→ [TpexDailyPrice] 列表。
+  /// 歷史全市場行情（`/www/zh-tw/afterTrading/dailyQuotes`；回補與未定案重抓用）
   ///
-  /// 舊 daily_close_quotes 端點自 2026-06 起忽略歷史 date（永遠回最新日，
-  /// 與 TWSE STOCK_DAY_ALL 同症狀）；/www/zh-tw/afterTrading/otc?type=EW
-  /// 經 2026-07-12 活體驗證支援歷史日期。
-  ///
-  /// row 佈局：[代號, 名稱, 收盤, 漲跌(帶號、可為「除息」等非數字), 開,
-  /// 高, 低, 成交股數, 成交金額, 成交筆數, ...]。
-  /// 回應日期 ≠ [requestedDate] → 回空（端點失效防護）。public 供測試。
-  static List<TpexDailyPrice> parseAfterTradingOtcDailyPrices(
+  /// 口徑與每日端點 daily_close_quotes 相同（含定價交易、含零股，＝官方
+  /// 個股日成交資訊）。舊的 `afterTrading/otc` 是「不含定價、整張」口徑，
+  /// 只有官方的 91–98%，已停用（2026-09-26 實測）。
+  Future<List<TpexDailyPrice>> getAllDailyPricesHistorical(DateTime date) {
+    return MarketClientMixin.executeRequest(_tag, '歷史全市場價格', () async {
+      final dateStr = TwParseUtils.formatDateSlash(date);
+      final cacheKey = 'dailyQuotesHist:$dateStr';
+      final cached = _cache.get(cacheKey) as List<TpexDailyPrice>?;
+      if (cached != null) return cached;
+
+      final response = await _dio.get(
+        '/www/zh-tw/afterTrading/dailyQuotes',
+        queryParameters: {'date': dateStr, 'response': 'json'},
+      );
+      if (response.statusCode != 200) {
+        throw ApiException(
+          '$_tag API error: ${response.statusCode}',
+          response.statusCode,
+        );
+      }
+      final data = MarketClientMixin.decodeResponseData(
+        response.data,
+        _tag,
+        '歷史全市場價格',
+      );
+      if (data == null) return <TpexDailyPrice>[];
+
+      final result = parseDailyQuotesPrices(data, date);
+      if (result.isNotEmpty) _cache.put(cacheKey, result);
+      return result;
+    });
+  }
+
+  /// dailyQuotes 回應 → 行情列。頂層 `date`（YYYYMMDD）≠ 請求日期就整批
+  /// 丟棄（端點失效防護）。刻意不走 `extractTpexTable`：它在回應沒帶日期時
+  /// 會退回請求日期（fail-open）。public 供測試。
+  static List<TpexDailyPrice> parseDailyQuotesPrices(
     Map<dynamic, dynamic> json,
     DateTime requestedDate,
   ) {
@@ -77,60 +109,14 @@ class TpexClient {
     final rows = first['data'];
     if (rows is! List) return const [];
 
+    final day = DateContext.normalize(requestedDate);
     final result = <TpexDailyPrice>[];
     for (final raw in rows) {
-      if (raw is! List || raw.length < 8) continue;
-      final code = raw[0]?.toString().trim() ?? '';
-      if (code.isEmpty) continue;
-      result.add(
-        TpexDailyPrice(
-          date: requestedDate,
-          code: code,
-          name: raw[1]?.toString().trim() ?? '',
-          close: TwParseUtils.parsePrice(raw[2]?.toString()),
-          change: TwParseUtils.parseFormattedDouble(raw[3]?.toString()),
-          open: TwParseUtils.parsePrice(raw[4]?.toString()),
-          high: TwParseUtils.parsePrice(raw[5]?.toString()),
-          low: TwParseUtils.parsePrice(raw[6]?.toString()),
-          volume: TwParseUtils.parseFormattedDouble(raw[7]?.toString()),
-        ),
-      );
+      if (raw is! List) continue;
+      final parsed = parseDailyPriceRow(raw, day);
+      if (parsed != null) result.add(parsed);
     }
     return result;
-  }
-
-  /// 歷史全市場行情（新版 afterTrading/otc；backfill 用）。
-  Future<List<TpexDailyPrice>> getAllDailyPricesHistorical(DateTime date) {
-    return MarketClientMixin.executeRequest(_tag, '歷史全市場價格', () async {
-      final dateStr =
-          '${date.year.toString().padLeft(4, '0')}/'
-          '${date.month.toString().padLeft(2, '0')}/'
-          '${date.day.toString().padLeft(2, '0')}';
-      final cacheKey = 'otcDailyHist:$dateStr';
-      final cached = _cache.get(cacheKey) as List<TpexDailyPrice>?;
-      if (cached != null) return cached;
-
-      final response = await _dio.get(
-        '/www/zh-tw/afterTrading/otc',
-        queryParameters: {'date': dateStr, 'type': 'EW', 'response': 'json'},
-      );
-      if (response.statusCode != 200) {
-        throw ApiException(
-          '$_tag API error: ${response.statusCode}',
-          response.statusCode,
-        );
-      }
-      final data = MarketClientMixin.decodeResponseData(
-        response.data,
-        _tag,
-        '歷史全市場價格',
-      );
-      if (data == null) return <TpexDailyPrice>[];
-
-      final result = parseAfterTradingOtcDailyPrices(data, date);
-      _cache.put(cacheKey, result);
-      return result;
-    });
   }
 
   /// 取得最新交易日所有上櫃股票價格（OHLCV）
@@ -170,15 +156,22 @@ class TpexClient {
 
       final table = MarketClientMixin.extractTpexTable(
         data,
-        targetDate,
+        _unknownDateSentinel,
         _tag,
         '全市場價格',
       );
       if (table == null) return [];
 
+      // 端點無視請求日期，寫入日期只能信回應；回應沒帶日期就整批丟棄，
+      // 不可退回請求日期（fail-closed）
+      if (table.date == _unknownDateSentinel) {
+        AppLogger.warning(_tag, '全市場價格回應缺日期，整批丟棄');
+        return [];
+      }
+
       final result = MarketClientMixin.parseRows(
         rows: table.rows,
-        parser: (row) => _parseDailyPriceRow(row, table.date),
+        parser: (row) => parseDailyPriceRow(row, table.date),
         tag: _tag,
         operation: '全市場價格',
         date: table.date,
@@ -188,10 +181,10 @@ class TpexClient {
     });
   }
 
-  /// 解析每日價格資料列
+  /// 解析每日行情列（daily_close_quotes 與 dailyQuotes 共用，兩者欄位相同）
   ///
-  /// 列格式: [代號, 名稱, 收盤, 漲跌, 開盤, 最高, 最低, 均價, 成交股數, 成交金額, 成交筆數, 最後買價, 最後賣價, 發行股數, 次日參考價, 次日漲停價, 次日跌停價]
-  TpexDailyPrice? _parseDailyPriceRow(List<dynamic> row, DateTime date) {
+  /// 列格式: [代號, 名稱, 收盤, 漲跌, 開盤, 最高, 最低, 均價, 成交股數, 成交金額, 成交筆數, 最後買價, 最後買量, 最後賣價, 最後賣量, 發行股數, 次日參考價, 次日漲停價, 次日跌停價]
+  static TpexDailyPrice? parseDailyPriceRow(List<dynamic> row, DateTime date) {
     return MarketClientMixin.safeParseRow(
       row: row,
       minLength: 11,
@@ -252,11 +245,17 @@ class TpexClient {
 
       final table = MarketClientMixin.extractTpexTable(
         data,
-        targetDate,
+        _unknownDateSentinel,
         _tag,
         '法人資料',
       );
       if (table == null) return [];
+
+      if (table.date == _unknownDateSentinel ||
+          (date != null && !DateContext.isSameDay(table.date, date))) {
+        AppLogger.warning(_tag, '法人回應日期 ${table.date} 缺失或 ≠ 請求 $date，整批丟棄');
+        return [];
+      }
 
       final result = MarketClientMixin.parseRows(
         rows: table.rows,
@@ -523,17 +522,23 @@ class TpexClient {
       );
       if (data == null) return [];
 
-      // extractTpexTable 在回應缺日期表頭時會 fallback 到傳入的日期。回補
-      // （明確指定日期）時若拿請求日期當 fallback，「回應沒帶日期」的列會被
-      // 蓋上請求日期、騙過下游的日期過濾（fail open）。改傳 sentinel：回應
-      // 沒帶日期 → table.date == sentinel ≠ 請求日期 → 下方守衛擋掉。
+      // extractTpexTable 在回應缺日期表頭時會 fallback 到傳入的日期。一律傳
+      // sentinel（不分是否帶請求日期）：拿請求日期或 _clock.now() 當
+      // fallback，都會把「回應沒帶日期」的列蓋上一個看似合法的日期、騙過
+      // 下游的日期過濾（fail open）。改傳 sentinel 後，回應沒帶日期
+      // → table.date == sentinel，下方守衛直接擋掉，不落庫。
       final table = MarketClientMixin.extractTpexTable(
         data,
-        date != null ? _unknownDateSentinel : _clock.now(),
+        _unknownDateSentinel,
         _tag,
         '融資融券',
       );
       if (table == null) return [];
+
+      if (table.date == _unknownDateSentinel) {
+        AppLogger.warning(_tag, '融資融券回應缺日期，整批丟棄');
+        return [];
+      }
 
       // 端點失效防護（fail closed）：回應日期不符或無從判定 → 整批丟棄
       if (date != null && !DateContext.isSameDay(table.date, date)) {
@@ -1264,24 +1269,31 @@ class TpexClient {
     _cache.clear();
   }
 
+  /// 清除回應快取（每輪更新開始時呼叫，理由同 TwseClient.clearCache）
+  void clearCache() => _cache.clear();
+
   /// 上櫃現股當沖交易統計（逐檔）
   ///
-  /// **與上市的日期語意相反**：TWSE TWTB4U 吃 `date` 參數，那條路的守衛是
-  /// 「回應日期 ≠ 請求日期就整批丟棄」；本端點**無視 `date` 參數、永遠回最新
-  /// 交易日**（2026-08-23 實測六個日期回同一份資料、md5 相同），故資料日期
-  /// 取自回應的 `date`，呼叫端據此寫入，不可用請求日期。
+  /// 帶 `date=YYYY/MM/DD` 回指定日（2026-09-26 實測回到 2024-01）；不帶時回
+  /// 最新交易日。
   ///
   /// 回應含兩張表：第一張是全市場彙總，**逐檔在第二張**——不可重用只取
   /// `tables.first` 的既有 helper。`stat` 是小寫 `ok`（上市是大寫 `OK`）。
-  Future<List<TpexDayTrading>> getAllDayTradingData() {
+  Future<List<TpexDayTrading>> getAllDayTradingData({DateTime? date}) {
     return MarketClientMixin.executeRequest(_tag, '當沖資料', () async {
-      const cacheKey = 'tpexDayTrading';
+      final cacheKey = date == null
+          ? 'tpexDayTrading'
+          : 'tpexDayTrading:${TwParseUtils.formatDateCompact(date)}';
       final cached = _cache.get(cacheKey) as List<TpexDayTrading>?;
       if (cached != null) return cached;
 
       final response = await _dio.get(
         ApiEndpoints.tpexDayTrading,
-        queryParameters: {'type': 'Daily', 'response': 'json'},
+        queryParameters: {
+          'type': 'Daily',
+          'response': 'json',
+          if (date != null) 'date': TwParseUtils.formatDateSlash(date),
+        },
         options: Options(headers: {'Accept': 'application/json'}),
       );
 
@@ -1310,22 +1322,31 @@ class TpexClient {
         return const <TpexDayTrading>[];
       }
 
-      // 日期上下界:parseAdDateOrNull 只擋 year < 2000。此路徑刻意放棄了上市
-      // 那道「回應日期 ≠ 請求日期就丟棄」的守衛（端點無視請求日期），而那道
-      // 守衛同時兼任「端點凍結偵測器」。本檔已有兩個端點靜默凍在某一天的
-      // 前例，故在此補回下界；未來日期一律拒收（會寫出永遠讀不到的列）。
-      final now = DateContext.normalize(_clock.now());
-      if (dataDate.isAfter(now)) {
-        AppLogger.warning(_tag, '當沖回應日期 $dataDate 在未來，整批丟棄');
-        return const <TpexDayTrading>[];
-      }
-      final staleDays = now.difference(dataDate).inDays;
-      if (staleDays > ApiConfig.tpexDayTradingMaxStaleDays) {
-        AppLogger.warning(
-          _tag,
-          '當沖回應日期 $dataDate 已過期 $staleDays 天（端點可能凍結），整批丟棄',
-        );
-        return const <TpexDayTrading>[];
+      if (date != null) {
+        // 帶日期請求：回應日期必須相等（與上市 TWTB4U 相同的守衛）
+        if (!DateContext.isSameDay(dataDate, date)) {
+          AppLogger.warning(_tag, '當沖回應日期 $dataDate ≠ 請求 $date，整批丟棄');
+          return const <TpexDayTrading>[];
+        }
+      } else {
+        // 不帶日期時沒有請求日期可比，以未來／過期守衛兼任端點凍結偵測。
+        //
+        // 日期上下界:parseAdDateOrNull 只擋 year < 2000，本路徑另補下界——
+        // 本檔已有兩個端點靜默凍在某一天的前例，過期守衛同時兼任「端點凍結
+        // 偵測器」；未來日期一律拒收（會寫出永遠讀不到的列）。
+        final now = DateContext.normalize(_clock.now());
+        if (dataDate.isAfter(now)) {
+          AppLogger.warning(_tag, '當沖回應日期 $dataDate 在未來，整批丟棄');
+          return const <TpexDayTrading>[];
+        }
+        final staleDays = now.difference(dataDate).inDays;
+        if (staleDays > ApiConfig.tpexDayTradingMaxStaleDays) {
+          AppLogger.warning(
+            _tag,
+            '當沖回應日期 $dataDate 已過期 $staleDays 天（端點可能凍結），整批丟棄',
+          );
+          return const <TpexDayTrading>[];
+        }
       }
 
       // 逐檔在第二張表：**兩張表都是 6 欄**，不能用欄數判別（早期版本正是

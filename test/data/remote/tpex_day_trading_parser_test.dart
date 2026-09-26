@@ -233,4 +233,40 @@ void main() {
     expect(result.length, 1, reason: '不得因首列殘缺就整批丟棄');
     expect(result.single.code, '1815');
   });
+
+  group('帶日期請求（2026-09-26 實測端點吃 date=YYYY/MM/DD）', () {
+    test('帶 date 參數、快取 key 含日期', () async {
+      stub(body(date: '20260821'));
+      await client.getAllDayTradingData(date: DateTime(2026, 8, 21));
+      await client.getAllDayTradingData(date: DateTime(2026, 8, 20));
+      final captured = verify(
+        () => dio.get<dynamic>(
+          any(),
+          queryParameters: captureAny(named: 'queryParameters'),
+          options: any(named: 'options'),
+        ),
+      ).captured;
+      expect(captured, hasLength(2), reason: '不同日期不得共用快取');
+      expect((captured[0] as Map)['date'], '2026/08/21');
+    });
+
+    test('回應日期 = 請求日期 → 正常（不套過期守衛）', () async {
+      // 時鐘 9/26、資料 8/21（差 36 天 > tpexDayTradingMaxStaleDays 7 天）；
+      // 請求歷史日時過期守衛不適用
+      final c = TpexClient(dio: dio, clock: _FixedClock(DateTime(2026, 9, 26)));
+      stub(body(date: '20260821'));
+      expect(
+        await c.getAllDayTradingData(date: DateTime(2026, 8, 21)),
+        hasLength(3),
+      );
+    });
+
+    test('回應日期 ≠ 請求日期 → 整批丟棄', () async {
+      stub(body(date: '20260821'));
+      expect(
+        await client.getAllDayTradingData(date: DateTime(2026, 8, 20)),
+        isEmpty,
+      );
+    });
+  });
 }

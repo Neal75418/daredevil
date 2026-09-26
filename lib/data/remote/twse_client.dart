@@ -84,8 +84,16 @@ class TwseClient {
 
       // 用 response 內標示的日期（可能跟 requested date 不同：例如該日非
       // 交易日，TWSE 會回最近一個交易日的資料）
-      final dateStr = data['date']?.toString() ?? '';
-      final responseDate = TwParseUtils.parseAdDate(dateStr);
+      //
+      // 回應日期是寫入日期的唯一依據：解析不出就整批丟棄，不可退回今天
+      // （寫錯日期比沒資料糟，且會騙過定案判斷）
+      final responseDate = TwParseUtils.parseAdDateOrNull(
+        data['date']?.toString(),
+      );
+      if (responseDate == null) {
+        AppLogger.warning(_tag, '全市場價格回應缺日期或無法解析，整批丟棄');
+        return <TwseDailyPrice>[];
+      }
 
       final result = MarketClientMixin.parseRows(
         rows: rows,
@@ -278,7 +286,8 @@ class TwseClient {
   /// CSV 欄位：`[日期(民國), 證券代號, 證券名稱, 成交股數, 成交金額, 開, 高, 低,
   /// 收, 漲跌價差, 成交筆數]`。剝掉首欄「日期」後，剩餘 10 欄即與 JSON `data`
   /// row 同佈局（`[代號, 名稱, 成交股數, …]`）。日期改放頂層 `date`（轉 8 碼西元
-  /// 字串供 [TwParseUtils.parseAdDate] 沿用）。無有效資料列時回傳 null。
+  /// 字串，供呼叫端以 [TwParseUtils.parseAdDateOrNull] 解析、解析失敗時
+  /// fail-closed 整批丟棄）。無有效資料列時回傳 null。
   @visibleForTesting
   static Map<String, dynamic>? parseDailyPriceCsvToMap(String csv) {
     String? adDate;
@@ -354,8 +363,14 @@ class TwseClient {
       final rows = MarketClientMixin.validateTwseStat(data, _tag, '法人資料');
       if (rows == null) return [];
 
-      final dateStr = data['date']?.toString() ?? '';
-      final parsedDate = TwParseUtils.parseAdDate(dateStr);
+      final parsedDate = TwParseUtils.parseAdDateOrNull(
+        data['date']?.toString(),
+      );
+      if (parsedDate == null ||
+          (date != null && !DateContext.isSameDay(parsedDate, date))) {
+        AppLogger.warning(_tag, '法人回應日期 ${data['date']} 缺失或 ≠ 請求 $date，整批丟棄');
+        return <TwseInstitutional>[];
+      }
 
       final result = MarketClientMixin.parseRows(
         rows: rows,
@@ -412,9 +427,13 @@ class TwseClient {
 
       // 回應自帶日期:非交易日查詢時 TWSE 會回最近有資料的那天,
       // 用 request date 落庫會把資料標成錯的日子
-      final parsedDate = TwParseUtils.parseAdDate(
-        data['date']?.toString() ?? '',
+      final parsedDate = TwParseUtils.parseAdDateOrNull(
+        data['date']?.toString(),
       );
+      if (parsedDate == null) {
+        AppLogger.warning(_tag, '外資持股回應缺日期或無法解析，整批丟棄');
+        return <TwseForeignShareholding>[];
+      }
 
       final result = MarketClientMixin.parseRows(
         rows: rows,
@@ -637,8 +656,13 @@ class TwseClient {
 
       // entries 一律蓋**回應自身的日期**（非請求日期）——回補時呼叫端據此
       // 過濾，端點若回錯日期只會被丟棄，不會寫出錯誤日期的列
-      final dateStr = data['date']?.toString() ?? '';
-      final responseDate = TwParseUtils.parseAdDate(dateStr);
+      final responseDate = TwParseUtils.parseAdDateOrNull(
+        data['date']?.toString(),
+      );
+      if (responseDate == null) {
+        AppLogger.warning(_tag, '融資融券回應缺日期或無法解析，整批丟棄');
+        return <TwseMarginTrading>[];
+      }
 
       // 資料在 'tables' 陣列中，第二個表格含個股資料
       final tables = data['tables'] as List<dynamic>?;
@@ -1765,4 +1789,8 @@ class TwseClient {
     _dio.close(force: false);
     _cache.clear();
   }
+
+  /// 清除回應快取。每輪更新開始時呼叫：常駐的 App 跨午夜時，前一輪的
+  /// 快取會讓舊資料被當成本輪抓的，進而誤判定案。
+  void clearCache() => _cache.clear();
 }

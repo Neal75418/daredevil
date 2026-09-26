@@ -250,17 +250,17 @@ class PriceRepository implements IPriceRepository {
   ///
   /// 詳細語意見 [IPriceRepository.backfillTpexPricesByDate]。
   ///
-  /// 實作走 TPEx `getAllDailyPricesHistorical`（afterTrading/otc；舊
-  /// daily_close_quotes 端點同樣自 2026-06 起忽略歷史 date），
-  /// 接著 [TpexPriceSource.processDailyPrices] 轉成 DB Companion 並依
-  /// [targetSymbols] 過濾，最後一次 batch insert。
+  /// 實作走 TPEx `getAllDailyPricesHistorical`（afterTrading/dailyQuotes，
+  /// 官方口徑，與每日端點相同；舊 daily_close_quotes 端點自 2026-06 起
+  /// 忽略歷史 date），接著 [TpexPriceSource.processDailyPrices] 轉成
+  /// DB Companion 並依 [targetSymbols] 過濾，最後一次 batch insert。
   @override
   Future<int> backfillTpexPricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,
   }) async {
     try {
-      // 歷史回補走新版 afterTrading/otc（舊端點同樣忽略 date 參數）
+      // 歷史回補走 afterTrading/dailyQuotes（官方口徑，與每日端點相同）
       final prices = await _tpexSource.fetchAllDailyPricesHistorical(date);
       if (prices.isEmpty) return 0;
 

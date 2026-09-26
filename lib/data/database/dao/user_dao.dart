@@ -212,6 +212,18 @@ mixin UserDaoMixin on $AppDatabase {
     );
   }
 
+  /// 不存在才寫入（已存在就回既有值、不覆寫）
+  ///
+  /// 給「第一次寫入後就不再變動」的設定用，例如定案追蹤起始日。用會覆寫的
+  /// [setSetting] 時，App 與 launchd 同時首次執行會互相蓋掉。
+  Future<String> getOrInitSetting(String key, String initialValue) async {
+    await into(appSettings).insert(
+      AppSettingsCompanion.insert(key: key, value: initialValue),
+      mode: InsertMode.insertOrIgnore,
+    );
+    return (await getSetting(key))!;
+  }
+
   /// 刪除設定
   Future<void> deleteSetting(String key) {
     return (delete(appSettings)..where((t) => t.key.equals(key))).go();

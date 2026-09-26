@@ -56,9 +56,9 @@ import 'dart:io';
 
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
-import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/date_context.dart';
+import 'package:daredevil/core/utils/day_trading_ratio.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 
@@ -249,11 +249,10 @@ Future<int> runTpexDayTradingCli(List<String> args) async {
               skippedNoPrice++;
               continue;
             }
-            var ratio = (d.volume / total) * 100;
-            if (ratio > DataFreshness.dayTradingMaxValidRatio) {
-              ratio = DataFreshness.dayTradingMaxValidRatio;
-            }
-            if (ratio < 0) ratio = 0;
+            final ratio = computeDayTradingRatio(
+              tradeVolume: d.volume,
+              totalVolume: total,
+            )!; // total 已排除 null 與 ≤ 0（volByDay 只收 volume > 0）
             entries.add(
               DayTradingCompanion.insert(
                 symbol: d.stockId,

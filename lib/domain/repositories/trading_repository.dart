@@ -23,10 +23,9 @@ abstract class ITradingRepository {
 
   /// 同步上櫃當沖（TPEx `/www/zh-tw/intraday/stat`，免費無額度）
   ///
-  /// **刻意不收日期**：端點無視請求日期、永遠回最新交易日，寫入日期取自回應。
-  /// 收一個做不到的參數只會誘使呼叫端以為自己能指定歷史日。歷史回補另循
-  /// FinMind（逐檔、吃額度），不走這條。
-  Future<int> syncAllDayTradingFromTpex({bool force = false});
+  /// 帶 [date] 可指定歷史日（2026-09-26 實測回到 2024-01）；不傳日期時取
+  /// 最新交易日。寫入日期一律取自回應的 `date`。
+  Future<int> syncAllDayTradingFromTpex({DateTime? date, bool force = false});
 
   // ==================================================
   // 融資融券

@@ -48,6 +48,7 @@ import 'package:daredevil/data/database/dao/insider_holding_dao.dart';
 import 'package:daredevil/data/database/dao/insider_transfer_dao.dart';
 import 'package:daredevil/data/database/dao/institutional_dao.dart';
 import 'package:daredevil/data/database/dao/margin_trading_dao.dart';
+import 'package:daredevil/data/database/dao/market_day_fetch_dao.dart';
 import 'package:daredevil/data/database/dao/market_index_dao.dart';
 import 'package:daredevil/data/database/dao/market_overview_dao.dart';
 import 'package:daredevil/data/database/dao/news_dao.dart';
@@ -113,6 +114,7 @@ import 'package:daredevil/data/database/dao/valuation_dao.dart';
     // 大盤指數歷史（Phase 5.2）
     MarketIndex,
     QuarterlyReport,
+    MarketDayFetch,
   ],
 )
 class AppDatabase extends $AppDatabase
@@ -140,6 +142,7 @@ class AppDatabase extends $AppDatabase
         InsiderTransferDaoMixin,
         QuarterlyReportDaoMixin,
         MarketOverviewDaoMixin,
+        MarketDayFetchDaoMixin,
         CalibrationCacheDaoMixin {
   /// 純 Dart constructor — caller 注入 [QueryExecutor]
   ///
@@ -211,6 +214,7 @@ class AppDatabase extends $AppDatabase
       await _ensureWatchlistGroupsSchema();
       await _ensurePinnedThesisSchema();
       await _ensureQuarterlyReportSchema();
+      await _ensureMarketDayFetchSchema();
       await ensurePriceAlertManagedByColumn();
       await _ensureRetiredSchemaDropped();
       await ensureInsiderTransferPk();
@@ -345,6 +349,15 @@ class AppDatabase extends $AppDatabase
   /// 既有 DB 冪等補建、新裝機由 createAll 先建好此處 no-op,零資料損失。
   Future<void> _ensureQuarterlyReportSchema() async {
     await Migrator(this).createTable(quarterlyReport);
+  }
+
+  /// 盤後資料抓取狀態表（2026-09-26，additive）。
+  ///
+  /// 沿 [_ensureQuarterlyReportSchema] 先例：**不 bump fingerprint**。指紋
+  /// bump 會 wipe 全部行情表，為加一張新表付這代價不成比例。createTable＝
+  /// CREATE TABLE IF NOT EXISTS：既有 DB 冪等補建，新裝機由 createAll 先建好。
+  Future<void> _ensureMarketDayFetchSchema() async {
+    await Migrator(this).createTable(marketDayFetch);
   }
 
   /// `price_alert` 補 `managed_by` 欄（2026-08-16）。
@@ -661,6 +674,9 @@ class AppDatabase extends $AppDatabase
   /// - 新增 / 刪除 / 重命名 column
   /// - 改 primary key / unique key / index
   /// - 新增 / 刪除 table
+  ///
+  /// 例外：純新增、不動既有表的 table 可比照 `_ensureQuarterlyReportSchema`
+  /// 用 `Migrator.createTable` 補建而不 bump（2026-08-06 起的先例）。
   ///
   /// 字串值是不透明的，只要跟前一個版本不同就會觸發 reset。建議用
   /// `<stage>-<feature>-<date>` 格式，方便看 git blame 追歷史。

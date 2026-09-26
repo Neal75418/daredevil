@@ -142,4 +142,11 @@ abstract final class TwParseUtils {
   static String formatDateCompact(DateTime date) {
     return '${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}';
   }
+
+  /// 格式化日期為斜線西元格式（"2024/01/24"），供 TPEx API 查詢用
+  static String formatDateSlash(DateTime date) {
+    return '${date.year.toString().padLeft(4, '0')}/'
+        '${date.month.toString().padLeft(2, '0')}/'
+        '${date.day.toString().padLeft(2, '0')}';
+  }
 }

@@ -2,11 +2,16 @@
 //
 // 背景：TWSE STOCK_DAY_ALL 與 TPEx daily_close_quotes 自 2026-06 起忽略
 // 歷史 date 參數（memory: afterclose_twse_stock_day_all_no_date）。
-// 替代端點（2026-07-12 活體驗證）：
+// 替代端點：
 //   TWSE  MI_INDEX?date=yyyyMMdd&type=ALLBUT0999 → tables[] 內含
 //         「每日收盤行情」表（fields 以 證券代號 開頭）
-//   TPEx  /www/zh-tw/afterTrading/otc?date=yyyy/MM/dd&type=EW
+//   TPEx  /www/zh-tw/afterTrading/dailyQuotes?date=yyyy/MM/dd（官方口徑，
+//         與每日端點 daily_close_quotes 相同；2026-09-26 起取代舊的
+//         afterTrading/otc）
 // fixture 取自真實回應削減版。
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/data/remote/tpex_client.dart';
@@ -153,101 +158,42 @@ void main() {
     });
   });
 
-  group('TpexClient.parseAfterTradingOtcDailyPrices', () {
-    final fixture = {
-      'stat': 'ok',
-      'date': '20240315',
-      'tables': [
-        {
-          'title': '上櫃股票每日收盤行情(不含定價)',
-          'fields': [
-            '代號',
-            '名稱',
-            '收盤 ',
-            '漲跌',
-            '開盤 ',
-            '最高 ',
-            '最低',
-            '成交股數  ',
-            ' 成交金額(元)',
-            ' 成交筆數 ',
-          ],
-          'data': [
-            [
-              '5347',
-              '世界',
-              '95.10',
-              '-1.20',
-              '96.00',
-              '96.50',
-              '94.80',
-              '12,345,678',
-              '1,175,000,000',
-              '8,888',
-            ],
-            [
-              '006201',
-              '元大富櫃50',
-              '46.85',
-              '+0.51',
-              '46.52',
-              '47.80',
-              '46.52',
-              '200,019',
-              '7,273,620',
-              '28',
-            ],
-            // 除息日漲跌欄非數字
-            [
-              '4444',
-              '除息股',
-              '50.00',
-              '除息',
-              '49.80',
-              '50.20',
-              '49.50',
-              '1,000',
-              '50,000',
-              '10',
-            ],
-          ],
-        },
-      ],
-    };
+  group('TpexClient.parseDailyQuotesPrices（afterTrading/dailyQuotes，官方口徑）', () {
+    Map<String, dynamic> fixture() =>
+        jsonDecode(
+              File(
+                'test/data/remote/fixtures/tpex_daily_quotes_20260709.json',
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
 
-    test('欄位對映（TPEx 收盤在前、成交股數在第 8 欄）', () {
-      final prices = TpexClient.parseAfterTradingOtcDailyPrices(
-        fixture,
-        DateTime(2024, 3, 15),
+    test('成交股數取 index 8（含定價與零股，＝官方個股日成交資訊）', () {
+      final rows = TpexClient.parseDailyQuotesPrices(
+        fixture(),
+        DateTime(2026, 7, 9),
       );
-      expect(prices.length, 3);
-
-      final v = prices.firstWhere((p) => p.code == '5347');
-      expect(v.date, DateTime(2024, 3, 15));
-      expect(v.close, 95.10);
-      expect(v.change, -1.20);
-      expect(v.open, 96.00);
-      expect(v.high, 96.50);
-      expect(v.low, 94.80);
-      expect(v.volume, 12345678);
-    });
-
-    test('漲跌欄非數字（除息）→ change null、其餘照常', () {
-      final prices = TpexClient.parseAfterTradingOtcDailyPrices(
-        fixture,
-        DateTime(2024, 3, 15),
-      );
-      final ex = prices.firstWhere((p) => p.code == '4444');
-      expect(ex.change, isNull);
-      expect(ex.close, 50.0);
-    });
-
-    test('回應日期 ≠ 請求日期 → 空（TPEx 舊端點正是這樣壞的）', () {
+      final c = rows.firstWhere((r) => r.code == '3624');
       expect(
-        TpexClient.parseAfterTradingOtcDailyPrices(
-          fixture,
-          DateTime(2024, 3, 18),
-        ),
+        c.volume,
+        1581074,
+        reason: '官方 1,581 張；afterTrading/otc 是 1,436,000',
+      );
+      expect(c.close, 144.0);
+      expect(c.date, DateTime(2026, 7, 9));
+    });
+
+    test('權證被 isTpexPriceCode 濾掉，ETF 保留', () {
+      final codes = TpexClient.parseDailyQuotesPrices(
+        fixture(),
+        DateTime(2026, 7, 9),
+      ).map((r) => r.code);
+      expect(codes, containsAll(['3624', '006201']));
+      expect(codes, isNot(contains('700019')));
+    });
+
+    test('回應日期 ≠ 請求日期 → 整批丟棄', () {
+      expect(
+        TpexClient.parseDailyQuotesPrices(fixture(), DateTime(2026, 7, 8)),
         isEmpty,
       );
     });

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/utils/date_context.dart';
+import 'package:daredevil/core/utils/day_trading_ratio.dart';
 import 'package:daredevil/data/database/app_database.drift.dart';
 import 'package:daredevil/data/database/tables/market_data_tables.drift.dart';
 
@@ -302,5 +303,56 @@ mixin DayTradingDaoMixin on $AppDatabase {
       }
     }
     return map;
+  }
+
+  /// 成交量更正後，重算 [day] 當天 [symbols] 的當沖比例
+  ///
+  /// 分母用同日（整天範圍，涵蓋歷史上的變體時間戳）價格成交量；分母缺失
+  /// 或為 0 時**保留原比例**，不改寫成 0。回傳實際更新的列數。
+  Future<int> recomputeDayTradingRatios({
+    required DateTime day,
+    required Set<String> symbols,
+  }) async {
+    if (symbols.isEmpty) return 0;
+    final start = DateTime(day.year, day.month, day.day);
+    final end = DateTime(day.year, day.month, day.day + 1);
+    final rows =
+        await (select(dayTrading)..where(
+              (t) =>
+                  t.date.isBiggerOrEqualValue(start) &
+                  t.date.isSmallerThanValue(end) &
+                  t.symbol.isIn(symbols),
+            ))
+            .get();
+    if (rows.isEmpty) return 0;
+    final prices =
+        await (select(dailyPrice)..where(
+              (t) =>
+                  t.date.isBiggerOrEqualValue(start) &
+                  t.date.isSmallerThanValue(end) &
+                  t.symbol.isIn(rows.map((r) => r.symbol)),
+            ))
+            .get();
+    final volumes = {
+      for (final p in prices)
+        if (p.volume != null) p.symbol: p.volume!.toDouble(),
+    };
+    var updated = 0;
+    await batch((b) {
+      for (final r in rows) {
+        final ratio = computeDayTradingRatio(
+          tradeVolume: r.tradeVolume,
+          totalVolume: volumes[r.symbol],
+        );
+        if (ratio == null) continue;
+        b.update(
+          dayTrading,
+          DayTradingCompanion(dayTradingRatio: Value(ratio)),
+          where: (t) => t.symbol.equals(r.symbol) & t.date.equals(r.date),
+        );
+        updated++;
+      }
+    });
+    return updated;
   }
 }

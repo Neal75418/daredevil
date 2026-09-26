@@ -424,3 +424,31 @@ class InsiderTransfer extends Table {
     transferMethod,
   };
 }
+
+/// 盤後資料的抓取狀態（2026-09-26）
+///
+/// 每組（資料集, 市場, 資料日）記最後一次**全市場**抓取成功寫入的時間。
+/// 「是否定案」由 `fetched_at` 與資料日算出（見 `isFetchFinal`），刻意不存
+/// 旗標，避免旗標與事實不同步。只有全市場抓取會寫入；逐檔、部分股票的
+/// 抓取不代表那天整個市場已抓過。
+@DataClassName('MarketDayFetchEntry')
+class MarketDayFetch extends Table {
+  /// `MarketDataset.code`
+  TextColumn get dataset => text()();
+
+  /// `MarketCode.twse`／`MarketCode.tpex`
+  TextColumn get market => text()();
+
+  /// 資料日（與 daily_price.date 同樣正規化為當地午夜）
+  DateTimeColumn get date => dateTime()();
+
+  /// 抓取時間：台北牆鐘（`AppClock.now()`），取本輪更新開始的時刻。
+  /// 比實際發出請求早，只會讓判定偏向「未定案」。
+  DateTimeColumn get fetchedAt => dateTime()();
+
+  /// 該次寫入的列數（診斷用）
+  IntColumn get rowCount => integer()();
+
+  @override
+  Set<Column> get primaryKey => {dataset, market, date};
+}

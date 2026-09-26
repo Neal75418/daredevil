@@ -4,6 +4,7 @@ import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/stock_patterns.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/core/utils/date_context.dart';
+import 'package:daredevil/core/utils/day_trading_ratio.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/safe_execution.dart';
@@ -122,8 +123,8 @@ class TradingRepository implements ITradingRepository {
   /// window、寫入與統計日誌完全相同，抽出共用避免兩份實作漂移。
   ///
   /// [dataDate] 已 normalize 的資料日。上市傳請求日（端點吃日期、且有
-  /// 「回應日期≠請求日期就丟棄」的守衛）；上櫃傳**回應的日期**（端點無視請求
-  /// 日期、永遠回最新交易日）。
+  /// 「回應日期≠請求日期就丟棄」的守衛）；上櫃傳回應的日期（帶日期請求時
+  /// client 已保證等於請求日）。
   Future<int> _persistDayTrading({
     required DateTime dataDate,
     required String market,
@@ -162,12 +163,13 @@ class TradingRepository implements ITradingRepository {
     for (final item in items) {
       if (!StockPatterns.isValidCode(item.code)) continue;
 
-      final total = volumeMap[item.code] ?? 0;
-      var ratio = total > 0 ? (item.volume / total) * 100 : 0.0;
-      if (ratio > DataFreshness.dayTradingMaxValidRatio) {
-        ratio = DataFreshness.dayTradingMaxValidRatio;
-      }
-      if (ratio < 0) ratio = 0;
+      // 分母缺失寫 0：0 在當沖語意下是「無當沖」，分母未知時給非零值是編造
+      final ratio =
+          computeDayTradingRatio(
+            tradeVolume: item.volume,
+            totalVolume: volumeMap[item.code],
+          ) ??
+          0.0;
 
       entries.add(
         DayTradingCompanion.insert(
@@ -240,16 +242,18 @@ class TradingRepository implements ITradingRepository {
 
   /// 同步上櫃當沖（TPEx `/www/zh-tw/intraday/stat`，免費無額度）
   ///
-  /// **日期由回應決定**：端點無視請求日期、永遠回最新交易日，故先取資料再依
-  /// 其 `date` 做新鮮度檢查與寫入。照抄上市的「用請求日期寫入」會把最新資料
-  /// 掛到錯誤的日子上，而且筆數正常、毫無訊號。
-  ///
-  /// 呼叫端不傳日期正是為此——簽章上就杜絕誤用。
+  /// **日期由回應決定**：即使帶 [date] 請求指定日，寫入日期仍取自回應的
+  /// `date`（而非請求日）——client 端已對「回應日期 ≠ 請求日期」做整批丟棄
+  /// 的守衛，能落到這裡的資料兩者必然相同。不傳日期時取最新交易日，寫入
+  /// 日期一律取自回應。
   @override
-  Future<int> syncAllDayTradingFromTpex({bool force = false}) async {
+  Future<int> syncAllDayTradingFromTpex({
+    DateTime? date,
+    bool force = false,
+  }) async {
     try {
       // 端點免費且 client 端有快取，先抓再判新鮮度的成本可忽略
-      final data = await _tpexClient.getAllDayTradingData();
+      final data = await _tpexClient.getAllDayTradingData(date: date);
       if (data.isEmpty) return 0;
 
       final dataDate = DateContext.normalize(data.first.date);

@@ -265,6 +265,22 @@ void main() {
       });
     });
 
+    group('formatDateSlash', () {
+      test('formats date as YYYY/MM/DD', () {
+        expect(
+          TwParseUtils.formatDateSlash(DateTime(2025, 6, 15)),
+          '2025/06/15',
+        );
+      });
+
+      test('pads single digits', () {
+        expect(
+          TwParseUtils.formatDateSlash(DateTime(2026, 7, 9)),
+          '2026/07/09',
+        );
+      });
+    });
+
     group('round-trip conversions', () {
       test('parseSlashRocDate → toRocDateString preserves date', () {
         const rocStr = '114/06/15';

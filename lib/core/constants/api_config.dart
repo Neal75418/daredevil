@@ -246,6 +246,22 @@ abstract final class ApiConfig {
   /// 連續零筆中止閾值（端點失效防護，同市場日快照回補）
   static const int tradingBackfillMaxConsecutiveZeroDays = 3;
 
+  // ==================================================
+  // 盤後資料定案（2026-09-26）
+  //
+  // 設計見 docs/plans/2026-09-26-market-data-finality-design.md。
+  // ==================================================
+
+  /// 沒有既有回補門檻可沿用的資料集（上市／上櫃當沖、法人兩市場），其定案
+  /// 狀態的記錄門檻比例（相對該市場在市股票數）
+  static const double finalityNewDatasetMinCoverageRatio = 0.5;
+
+  /// 未定案日重抓：每組（資料集, 市場）每輪最多幾天
+  static const int finalityRefetchMaxDaysPerRun = 10;
+
+  /// 未定案日重抓的呼叫間隔（毫秒）
+  static const int finalityRefetchCallDelayMs = 1000;
+
   /// 財報同步回溯天數（約 2 年）
   static const int financialSyncLookbackDays = 730;
 

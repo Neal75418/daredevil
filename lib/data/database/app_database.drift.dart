@@ -74,6 +74,9 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
   late final i10.$MarketIndexTable marketIndex = i10.$MarketIndexTable(this);
   late final i7.$QuarterlyReportTable quarterlyReport = i7
       .$QuarterlyReportTable(this);
+  late final i7.$MarketDayFetchTable marketDayFetch = i7.$MarketDayFetchTable(
+    this,
+  );
   @override
   Iterable<i0.TableInfo<i0.Table, Object?>> get allTables =>
       allSchemaEntities.whereType<i0.TableInfo<i0.Table, Object?>>();
@@ -110,6 +113,7 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
     stockEvent,
     marketIndex,
     quarterlyReport,
+    marketDayFetch,
     i1.idxStockMasterIndustry,
     i2.idxDailyPriceDateSymbol,
     i3.idxDailyInstitutionalDate,
@@ -385,4 +389,6 @@ class $AppDatabaseManager {
       i10.$$MarketIndexTableTableManager(_db, _db.marketIndex);
   i7.$$QuarterlyReportTableTableManager get quarterlyReport =>
       i7.$$QuarterlyReportTableTableManager(_db, _db.quarterlyReport);
+  i7.$$MarketDayFetchTableTableManager get marketDayFetch =>
+      i7.$$MarketDayFetchTableTableManager(_db, _db.marketDayFetch);
 }

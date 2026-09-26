@@ -4770,6 +4770,216 @@ typedef $$InsiderTransferTableProcessedTableManager =
       i1.InsiderTransferEntry,
       i0.PrefetchHooks Function({bool symbol})
     >;
+typedef $$MarketDayFetchTableCreateCompanionBuilder =
+    i1.MarketDayFetchCompanion Function({
+      required String dataset,
+      required String market,
+      required DateTime date,
+      required DateTime fetchedAt,
+      required int rowCount,
+      i0.Value<int> rowid,
+    });
+typedef $$MarketDayFetchTableUpdateCompanionBuilder =
+    i1.MarketDayFetchCompanion Function({
+      i0.Value<String> dataset,
+      i0.Value<String> market,
+      i0.Value<DateTime> date,
+      i0.Value<DateTime> fetchedAt,
+      i0.Value<int> rowCount,
+      i0.Value<int> rowid,
+    });
+
+class $$MarketDayFetchTableFilterComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$MarketDayFetchTable> {
+  $$MarketDayFetchTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnFilters<String> get dataset => $composableBuilder(
+    column: $table.dataset,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<String> get market => $composableBuilder(
+    column: $table.market,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get rowCount => $composableBuilder(
+    column: $table.rowCount,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+}
+
+class $$MarketDayFetchTableOrderingComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$MarketDayFetchTable> {
+  $$MarketDayFetchTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnOrderings<String> get dataset => $composableBuilder(
+    column: $table.dataset,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<String> get market => $composableBuilder(
+    column: $table.market,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get rowCount => $composableBuilder(
+    column: $table.rowCount,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+}
+
+class $$MarketDayFetchTableAnnotationComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$MarketDayFetchTable> {
+  $$MarketDayFetchTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.GeneratedColumn<String> get dataset =>
+      $composableBuilder(column: $table.dataset, builder: (column) => column);
+
+  i0.GeneratedColumn<String> get market =>
+      $composableBuilder(column: $table.market, builder: (column) => column);
+
+  i0.GeneratedColumn<DateTime> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  i0.GeneratedColumn<DateTime> get fetchedAt =>
+      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+
+  i0.GeneratedColumn<int> get rowCount =>
+      $composableBuilder(column: $table.rowCount, builder: (column) => column);
+}
+
+class $$MarketDayFetchTableTableManager
+    extends
+        i0.RootTableManager<
+          i0.GeneratedDatabase,
+          i1.$MarketDayFetchTable,
+          i1.MarketDayFetchEntry,
+          i1.$$MarketDayFetchTableFilterComposer,
+          i1.$$MarketDayFetchTableOrderingComposer,
+          i1.$$MarketDayFetchTableAnnotationComposer,
+          $$MarketDayFetchTableCreateCompanionBuilder,
+          $$MarketDayFetchTableUpdateCompanionBuilder,
+          (
+            i1.MarketDayFetchEntry,
+            i0.BaseReferences<
+              i0.GeneratedDatabase,
+              i1.$MarketDayFetchTable,
+              i1.MarketDayFetchEntry
+            >,
+          ),
+          i1.MarketDayFetchEntry,
+          i0.PrefetchHooks Function()
+        > {
+  $$MarketDayFetchTableTableManager(
+    i0.GeneratedDatabase db,
+    i1.$MarketDayFetchTable table,
+  ) : super(
+        i0.TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              i1.$$MarketDayFetchTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              i1.$$MarketDayFetchTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () => i1
+              .$$MarketDayFetchTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                i0.Value<String> dataset = const i0.Value.absent(),
+                i0.Value<String> market = const i0.Value.absent(),
+                i0.Value<DateTime> date = const i0.Value.absent(),
+                i0.Value<DateTime> fetchedAt = const i0.Value.absent(),
+                i0.Value<int> rowCount = const i0.Value.absent(),
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.MarketDayFetchCompanion(
+                dataset: dataset,
+                market: market,
+                date: date,
+                fetchedAt: fetchedAt,
+                rowCount: rowCount,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String dataset,
+                required String market,
+                required DateTime date,
+                required DateTime fetchedAt,
+                required int rowCount,
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.MarketDayFetchCompanion.insert(
+                dataset: dataset,
+                market: market,
+                date: date,
+                fetchedAt: fetchedAt,
+                rowCount: rowCount,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), i0.BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MarketDayFetchTableProcessedTableManager =
+    i0.ProcessedTableManager<
+      i0.GeneratedDatabase,
+      i1.$MarketDayFetchTable,
+      i1.MarketDayFetchEntry,
+      i1.$$MarketDayFetchTableFilterComposer,
+      i1.$$MarketDayFetchTableOrderingComposer,
+      i1.$$MarketDayFetchTableAnnotationComposer,
+      $$MarketDayFetchTableCreateCompanionBuilder,
+      $$MarketDayFetchTableUpdateCompanionBuilder,
+      (
+        i1.MarketDayFetchEntry,
+        i0.BaseReferences<
+          i0.GeneratedDatabase,
+          i1.$MarketDayFetchTable,
+          i1.MarketDayFetchEntry
+        >,
+      ),
+      i1.MarketDayFetchEntry,
+      i0.PrefetchHooks Function()
+    >;
 i0.Index get idxShareholdingDate => i0.Index(
   'idx_shareholding_date',
   'CREATE INDEX idx_shareholding_date ON shareholding (date)',
@@ -10782,6 +10992,386 @@ class InsiderTransferCompanion
           ..write('currentHolding: $currentHolding, ')
           ..write('validPeriodStart: $validPeriodStart, ')
           ..write('validPeriodEnd: $validPeriodEnd, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MarketDayFetchTable extends i2.MarketDayFetch
+    with i0.TableInfo<$MarketDayFetchTable, i1.MarketDayFetchEntry> {
+  @override
+  final i0.GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MarketDayFetchTable(this.attachedDatabase, [this._alias]);
+  static const i0.VerificationMeta _datasetMeta = const i0.VerificationMeta(
+    'dataset',
+  );
+  @override
+  late final i0.GeneratedColumn<String> dataset = i0.GeneratedColumn<String>(
+    'dataset',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _marketMeta = const i0.VerificationMeta(
+    'market',
+  );
+  @override
+  late final i0.GeneratedColumn<String> market = i0.GeneratedColumn<String>(
+    'market',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _dateMeta = const i0.VerificationMeta(
+    'date',
+  );
+  @override
+  late final i0.GeneratedColumn<DateTime> date = i0.GeneratedColumn<DateTime>(
+    'date',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _fetchedAtMeta = const i0.VerificationMeta(
+    'fetchedAt',
+  );
+  @override
+  late final i0.GeneratedColumn<DateTime> fetchedAt =
+      i0.GeneratedColumn<DateTime>(
+        'fetched_at',
+        aliasedName,
+        false,
+        type: i0.DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const i0.VerificationMeta _rowCountMeta = const i0.VerificationMeta(
+    'rowCount',
+  );
+  @override
+  late final i0.GeneratedColumn<int> rowCount = i0.GeneratedColumn<int>(
+    'row_count',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<i0.GeneratedColumn> get $columns => [
+    dataset,
+    market,
+    date,
+    fetchedAt,
+    rowCount,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'market_day_fetch';
+  @override
+  i0.VerificationContext validateIntegrity(
+    i0.Insertable<i1.MarketDayFetchEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = i0.VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('dataset')) {
+      context.handle(
+        _datasetMeta,
+        dataset.isAcceptableOrUnknown(data['dataset']!, _datasetMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_datasetMeta);
+    }
+    if (data.containsKey('market')) {
+      context.handle(
+        _marketMeta,
+        market.isAcceptableOrUnknown(data['market']!, _marketMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_marketMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+        _dateMeta,
+        date.isAcceptableOrUnknown(data['date']!, _dateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(
+        _fetchedAtMeta,
+        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fetchedAtMeta);
+    }
+    if (data.containsKey('row_count')) {
+      context.handle(
+        _rowCountMeta,
+        rowCount.isAcceptableOrUnknown(data['row_count']!, _rowCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rowCountMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<i0.GeneratedColumn> get $primaryKey => {dataset, market, date};
+  @override
+  i1.MarketDayFetchEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return i1.MarketDayFetchEntry(
+      dataset: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}dataset'],
+      )!,
+      market: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}market'],
+      )!,
+      date: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.dateTime,
+        data['${effectivePrefix}date'],
+      )!,
+      fetchedAt: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.dateTime,
+        data['${effectivePrefix}fetched_at'],
+      )!,
+      rowCount: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}row_count'],
+      )!,
+    );
+  }
+
+  @override
+  $MarketDayFetchTable createAlias(String alias) {
+    return $MarketDayFetchTable(attachedDatabase, alias);
+  }
+}
+
+class MarketDayFetchEntry extends i0.DataClass
+    implements i0.Insertable<i1.MarketDayFetchEntry> {
+  /// `MarketDataset.code`
+  final String dataset;
+
+  /// `MarketCode.twse`／`MarketCode.tpex`
+  final String market;
+
+  /// 資料日（與 daily_price.date 同樣正規化為當地午夜）
+  final DateTime date;
+
+  /// 抓取時間：台北牆鐘（`AppClock.now()`），取本輪更新開始的時刻。
+  /// 比實際發出請求早，只會讓判定偏向「未定案」。
+  final DateTime fetchedAt;
+
+  /// 該次寫入的列數（診斷用）
+  final int rowCount;
+  const MarketDayFetchEntry({
+    required this.dataset,
+    required this.market,
+    required this.date,
+    required this.fetchedAt,
+    required this.rowCount,
+  });
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    map['dataset'] = i0.Variable<String>(dataset);
+    map['market'] = i0.Variable<String>(market);
+    map['date'] = i0.Variable<DateTime>(date);
+    map['fetched_at'] = i0.Variable<DateTime>(fetchedAt);
+    map['row_count'] = i0.Variable<int>(rowCount);
+    return map;
+  }
+
+  i1.MarketDayFetchCompanion toCompanion(bool nullToAbsent) {
+    return i1.MarketDayFetchCompanion(
+      dataset: i0.Value(dataset),
+      market: i0.Value(market),
+      date: i0.Value(date),
+      fetchedAt: i0.Value(fetchedAt),
+      rowCount: i0.Value(rowCount),
+    );
+  }
+
+  factory MarketDayFetchEntry.fromJson(
+    Map<String, dynamic> json, {
+    i0.ValueSerializer? serializer,
+  }) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return MarketDayFetchEntry(
+      dataset: serializer.fromJson<String>(json['dataset']),
+      market: serializer.fromJson<String>(json['market']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
+      rowCount: serializer.fromJson<int>(json['rowCount']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({i0.ValueSerializer? serializer}) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'dataset': serializer.toJson<String>(dataset),
+      'market': serializer.toJson<String>(market),
+      'date': serializer.toJson<DateTime>(date),
+      'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
+      'rowCount': serializer.toJson<int>(rowCount),
+    };
+  }
+
+  i1.MarketDayFetchEntry copyWith({
+    String? dataset,
+    String? market,
+    DateTime? date,
+    DateTime? fetchedAt,
+    int? rowCount,
+  }) => i1.MarketDayFetchEntry(
+    dataset: dataset ?? this.dataset,
+    market: market ?? this.market,
+    date: date ?? this.date,
+    fetchedAt: fetchedAt ?? this.fetchedAt,
+    rowCount: rowCount ?? this.rowCount,
+  );
+  MarketDayFetchEntry copyWithCompanion(i1.MarketDayFetchCompanion data) {
+    return MarketDayFetchEntry(
+      dataset: data.dataset.present ? data.dataset.value : this.dataset,
+      market: data.market.present ? data.market.value : this.market,
+      date: data.date.present ? data.date.value : this.date,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+      rowCount: data.rowCount.present ? data.rowCount.value : this.rowCount,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MarketDayFetchEntry(')
+          ..write('dataset: $dataset, ')
+          ..write('market: $market, ')
+          ..write('date: $date, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('rowCount: $rowCount')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(dataset, market, date, fetchedAt, rowCount);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is i1.MarketDayFetchEntry &&
+          other.dataset == this.dataset &&
+          other.market == this.market &&
+          other.date == this.date &&
+          other.fetchedAt == this.fetchedAt &&
+          other.rowCount == this.rowCount);
+}
+
+class MarketDayFetchCompanion
+    extends i0.UpdateCompanion<i1.MarketDayFetchEntry> {
+  final i0.Value<String> dataset;
+  final i0.Value<String> market;
+  final i0.Value<DateTime> date;
+  final i0.Value<DateTime> fetchedAt;
+  final i0.Value<int> rowCount;
+  final i0.Value<int> rowid;
+  const MarketDayFetchCompanion({
+    this.dataset = const i0.Value.absent(),
+    this.market = const i0.Value.absent(),
+    this.date = const i0.Value.absent(),
+    this.fetchedAt = const i0.Value.absent(),
+    this.rowCount = const i0.Value.absent(),
+    this.rowid = const i0.Value.absent(),
+  });
+  MarketDayFetchCompanion.insert({
+    required String dataset,
+    required String market,
+    required DateTime date,
+    required DateTime fetchedAt,
+    required int rowCount,
+    this.rowid = const i0.Value.absent(),
+  }) : dataset = i0.Value(dataset),
+       market = i0.Value(market),
+       date = i0.Value(date),
+       fetchedAt = i0.Value(fetchedAt),
+       rowCount = i0.Value(rowCount);
+  static i0.Insertable<i1.MarketDayFetchEntry> custom({
+    i0.Expression<String>? dataset,
+    i0.Expression<String>? market,
+    i0.Expression<DateTime>? date,
+    i0.Expression<DateTime>? fetchedAt,
+    i0.Expression<int>? rowCount,
+    i0.Expression<int>? rowid,
+  }) {
+    return i0.RawValuesInsertable({
+      if (dataset != null) 'dataset': dataset,
+      if (market != null) 'market': market,
+      if (date != null) 'date': date,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (rowCount != null) 'row_count': rowCount,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  i1.MarketDayFetchCompanion copyWith({
+    i0.Value<String>? dataset,
+    i0.Value<String>? market,
+    i0.Value<DateTime>? date,
+    i0.Value<DateTime>? fetchedAt,
+    i0.Value<int>? rowCount,
+    i0.Value<int>? rowid,
+  }) {
+    return i1.MarketDayFetchCompanion(
+      dataset: dataset ?? this.dataset,
+      market: market ?? this.market,
+      date: date ?? this.date,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      rowCount: rowCount ?? this.rowCount,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    if (dataset.present) {
+      map['dataset'] = i0.Variable<String>(dataset.value);
+    }
+    if (market.present) {
+      map['market'] = i0.Variable<String>(market.value);
+    }
+    if (date.present) {
+      map['date'] = i0.Variable<DateTime>(date.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = i0.Variable<DateTime>(fetchedAt.value);
+    }
+    if (rowCount.present) {
+      map['row_count'] = i0.Variable<int>(rowCount.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = i0.Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MarketDayFetchCompanion(')
+          ..write('dataset: $dataset, ')
+          ..write('market: $market, ')
+          ..write('date: $date, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('rowCount: $rowCount, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();

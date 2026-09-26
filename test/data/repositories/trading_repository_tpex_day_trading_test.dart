@@ -297,6 +297,17 @@ void main() {
     expect(rows, isNotEmpty, reason: '沒東西可寫時不該把既有資料清掉');
   });
 
+  test('帶 date 呼叫 syncAllDayTradingFromTpex 時，date 原封不動轉發給 client', () async {
+    await seedPrice('6104', dataDay, 4000);
+    when(
+      () => mockTpex.getAllDayTradingData(date: dataDay),
+    ).thenAnswer((_) async => [row('6104')]);
+
+    await repo.syncAllDayTradingFromTpex(date: dataDay);
+
+    verify(() => mockTpex.getAllDayTradingData(date: dataDay)).called(1);
+  });
+
   test('🚨 force 不得繞過覆蓋閘門（語意是重抓，不是硬寫假資料）', () async {
     await db.upsertStocks([
       for (var i = 0; i < 40; i++)
