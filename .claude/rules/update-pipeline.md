@@ -55,7 +55,10 @@ TDCC holding、dividend、insider transfer、quarterly report。
   **永遠算缺漏**；畫面端以 `HistoryCoverage.isBuilding`（缺漏 > 一輪上限才顯示）容忍，
   回補端則每輪仍會把它排進名額（各 1 次呼叫回 0 筆，並計入連續零筆斷路器）。
   斷路器以（日, 市場）計數：**兩個相鄰的漏標日**＝連續 3 筆零 → 每輪 Phase 0 都停在同一處，
-  比它們更舊的缺漏補不到、今日頁的「約再 N 次」也不會收斂，直到漏標日滑出窗口
+  比它們更舊的缺漏補不到、今日頁的「約再 N 次」也不會收斂，直到漏標日滑出窗口。
+  反方向同樣有害：**多列的休市日會被跳過、那天的缺漏永遠不回補**（2025-10-07 曾因此只剩
+  55 檔價格）。日曆每年核對：`dart run tool/check_twse_holidays.dart <年>`（年度公告）；
+  颱風停市不在公告內，以證交所 FMTQIK 每日成交資訊確認。需更新時每日更新摘要會附「交易日曆待更新」
 - **Phase 1 per-symbol**：補個股殘缺。priority（自選＋熱門）追 250 天、非 priority 180 天早退
 - **Phase 1 的第三道閘**：覆蓋天數沒長的標的凍結 `DataFreshness.historicalBackfillBackoffDays = 30`
   天並跳過——**「是 needy」不等於「這輪會被同步」**

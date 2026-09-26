@@ -364,6 +364,15 @@ class UpdateService {
       // 的股票補價格資料，順序顛倒的話今天新設的那批會少一天的資料。
       await _refreshTrailingAlertsFailSafe(ctx);
 
+      // 交易日曆到期提醒：日曆過期影響的是正在跑的更新，放在每日摘要讓
+      // user 看得到（不改程式碼的期間 CI 不會跑）。不 recordError——
+      // 否則 launchd 每天都回報失敗
+      final calendarNotice = TaiwanCalendar.coverageNotice(_clock.now());
+      if (calendarNotice != null) {
+        AppLogger.warning('UpdateService', calendarNotice);
+        result.calendarNotice = calendarNotice;
+      }
+
       await _finishUpdate(ctx, result);
 
       return result;
@@ -415,13 +424,31 @@ class UpdateService {
     }
   }
 
-  /// PARTIAL run 的持久化訊息:含失敗步驟細節,截斷至 500 字。
+  /// update_run 的狀態與訊息（CLI 印的也是這份訊息）。
   ///
-  /// 2026-07-29 審查:僅寫死「部分更新成功」時,update_run 表事後無法
-  /// 重建故障現場(7/28「誤判更新掛死」事件中 message 空白即為此病)。
-  static String _partialRunMessage(List<String> errors) {
-    final joined = '部分更新成功(${errors.length} 項失敗): ${errors.join('; ')}';
-    return joined.length <= 500 ? joined : '${joined.substring(0, 497)}…';
+  /// - 狀態只看 [errors]：交易日曆提醒不算失敗，否則 launchd 每天回報失敗
+  /// - 訊息：PARTIAL 時含失敗步驟細節（2026-07-29 審查：僅寫死「部分更新
+  ///   成功」時，update_run 表事後無法重建故障現場）；需更新交易日曆時結尾
+  ///   附提醒。整體截斷至 500 字，提醒先扣掉長度再截斷
+  @visibleForTesting
+  static ({String status, String message}) runOutcome(
+    List<String> errors, {
+    required bool calendarStale,
+  }) {
+    final suffix = calendarStale ? '；交易日曆待更新' : '';
+    final limit = 500 - suffix.length;
+    final body = errors.isEmpty
+        ? '更新完成'
+        : '部分更新成功(${errors.length} 項失敗): ${errors.join('; ')}';
+    final fitted = body.length <= limit
+        ? body
+        : '${body.substring(0, limit - 3)}…';
+    return (
+      status: errors.isEmpty
+          ? UpdateStatus.success.code
+          : UpdateStatus.partial.code,
+      message: '$fitted$suffix',
+    );
   }
 
   // ==================================================
@@ -1160,25 +1187,18 @@ class UpdateService {
           '分析=${result.stocksAnalyzed}$usageStr',
     );
 
-    final status = result.errors.isEmpty
-        ? UpdateStatus.success.code
-        : UpdateStatus.partial.code;
-    await _db.finishUpdateRun(
-      ctx.runId,
-      status,
-      message: result.errors.isEmpty
-          ? '更新完成'
-          : _partialRunMessage(result.errors),
+    final (:status, :message) = runOutcome(
+      result.errors,
+      calendarStale: result.calendarNotice != null,
     );
+    await _db.finishUpdateRun(ctx.runId, status, message: message);
 
     result.success = true;
     // message 與 update_run 用同一份(2026-08-15 稽核):CLI 只印 message 與
     // exit code,若這裡無條件寫「更新完成」,20 個 recordError 的內容對維運
     // 完全不可見——本專案有「自動更新靜默斷 13 天」的前科。
     // success 語意維持「主流程完成」不變(輔助資料失敗不算主流程失敗)。
-    result.message = result.errors.isEmpty
-        ? '更新完成'
-        : _partialRunMessage(result.errors);
+    result.message = message;
 
     // 擷取警示價格資料
     await _fetchAlertPrices(ctx, result);
@@ -1363,12 +1383,16 @@ class UpdateResult {
   /// 警告數量
   int get warningCount => errors.length;
 
+  /// 交易日曆需要更新時的提醒（見 [TaiwanCalendar.coverageNotice]）；
+  /// 不算錯誤、不影響 [hasErrors]
+  String? calendarNotice;
+
   String get summary {
     if (skipped) return message ?? '跳過更新';
     if (!success) return '更新失敗: ${errors.join(', ')}';
-    if (errors.isNotEmpty) {
-      return '分析 $stocksAnalyzed 檔（${errors.length} 項警告）';
-    }
-    return '分析 $stocksAnalyzed 檔';
+    final base = errors.isNotEmpty
+        ? '分析 $stocksAnalyzed 檔（${errors.length} 項警告）'
+        : '分析 $stocksAnalyzed 檔';
+    return calendarNotice == null ? base : '$base；交易日曆待更新';
   }
 }

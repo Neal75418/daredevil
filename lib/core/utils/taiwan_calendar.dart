@@ -1,6 +1,16 @@
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/utils/logger.dart';
 
+/// 休市日資料的來源
+enum CalendarSource {
+  /// 證交所「市場開休市日期」公告（含春節前「無交易、僅結算交割」日）
+  twse,
+
+  /// 人事行政總處辦公日曆表。證交所春節前會多休幾天（2026 年是 2/12、
+  /// 2/13），這類日子要等證交所公告才能補上
+  government,
+}
+
 /// 台灣股市交易日曆
 ///
 /// 提供台灣證券交易所（TWSE）與櫃買中心（TPEx）的交易日驗證。
@@ -14,10 +24,13 @@ class TaiwanCalendar {
   /// 是否已記錄過期警告（避免重複警告）
   static bool _hasLoggedExpiryWarning = false;
 
-  /// 2024 年台股休市日
+  /// 2024 年台股休市日（2026-09-26 以證交所公告與每日成交資訊逐日核對）
   static final Set<DateTime> _holidays2024 = {
     // 元旦
     DateTime.utc(2024, 1, 1),
+    // 春節前市場無交易、僅辦理結算交割
+    DateTime.utc(2024, 2, 6),
+    DateTime.utc(2024, 2, 7),
     // 農曆春節 (2/8-2/14)
     DateTime.utc(2024, 2, 8),
     DateTime.utc(2024, 2, 9),
@@ -35,26 +48,33 @@ class TaiwanCalendar {
     DateTime.utc(2024, 5, 1),
     // 端午節 (6/10)
     DateTime.utc(2024, 6, 10),
+    // 凱米颱風停市
+    DateTime.utc(2024, 7, 24),
+    DateTime.utc(2024, 7, 25),
     // 中秋節 (9/17)
     DateTime.utc(2024, 9, 17),
+    // 山陀兒颱風停市
+    DateTime.utc(2024, 10, 2),
+    DateTime.utc(2024, 10, 3),
     // 國慶日
     DateTime.utc(2024, 10, 10),
+    // 康芮颱風停市
+    DateTime.utc(2024, 10, 31),
   };
 
-  /// 2025 年台股休市日
+  /// 2025 年台股休市日（2026-09-26 以證交所公告與每日成交資訊逐日核對）
   static final Set<DateTime> _holidays2025 = {
     // 元旦
     DateTime.utc(2025, 1, 1),
-    // 農曆春節 (1/27-2/4)
+    // 春節前市場無交易、僅辦理結算交割
+    DateTime.utc(2025, 1, 23),
+    DateTime.utc(2025, 1, 24),
+    // 農曆春節（1/27-1/31；2/3 起開始交易）
     DateTime.utc(2025, 1, 27),
     DateTime.utc(2025, 1, 28),
     DateTime.utc(2025, 1, 29),
     DateTime.utc(2025, 1, 30),
     DateTime.utc(2025, 1, 31),
-    DateTime.utc(2025, 2, 1),
-    DateTime.utc(2025, 2, 2),
-    DateTime.utc(2025, 2, 3),
-    DateTime.utc(2025, 2, 4),
     // 228 和平紀念日
     DateTime.utc(2025, 2, 28),
     // 兒童節/清明節 (4/3-4/4)
@@ -62,16 +82,12 @@ class TaiwanCalendar {
     DateTime.utc(2025, 4, 4),
     // 勞動節
     DateTime.utc(2025, 5, 1),
-    // 端午節 (5/30-6/2)
+    // 端午節（5/31 週六，補假 5/30 週五）
     DateTime.utc(2025, 5, 30),
-    DateTime.utc(2025, 5, 31),
-    DateTime.utc(2025, 6, 1),
-    DateTime.utc(2025, 6, 2),
     // 教師節（9/28 週日，補假 9/29 週一；2025 新增國定假日）
     DateTime.utc(2025, 9, 29),
-    // 中秋節 (10/6-10/7)
+    // 中秋節
     DateTime.utc(2025, 10, 6),
-    DateTime.utc(2025, 10, 7),
     // 國慶日
     DateTime.utc(2025, 10, 10),
     // 光復節（10/25 週六，補假 10/24 週五；2025 新增國定假日）
@@ -80,7 +96,8 @@ class TaiwanCalendar {
     DateTime.utc(2025, 12, 25),
   };
 
-  /// 2026 年台股休市日（預估）
+  /// 2026 年台股休市日（2026-09-26 核對：9/24 前以證交所每日成交資訊逐日比對、
+  /// 其後以證交所年度公告；7/10 颱風停市不在年度公告內）
   static final Set<DateTime> _holidays2026 = {
     // 元旦
     DateTime.utc(2026, 1, 1),
@@ -97,18 +114,18 @@ class TaiwanCalendar {
     // 228 和平紀念日（2/28 週六，補假 2/27 週五）
     DateTime.utc(2026, 2, 27),
     DateTime.utc(2026, 2, 28),
-    // 兒童節/清明節 (4/3-4/6 estimated)
+    // 兒童節/清明節（4/3-4/6）
     DateTime.utc(2026, 4, 3),
     DateTime.utc(2026, 4, 4),
     DateTime.utc(2026, 4, 5),
     DateTime.utc(2026, 4, 6),
     // 勞動節
     DateTime.utc(2026, 5, 1),
-    // 端午節 (6/19 estimated)
+    // 端午節（6/19）
     DateTime.utc(2026, 6, 19),
     // 颱風停市（TWSE 證實 20260710 無交易資料）
     DateTime.utc(2026, 7, 10),
-    // 中秋節 (9/25 estimated)
+    // 中秋節（9/25）
     DateTime.utc(2026, 9, 25),
     // 教師節（9/28 週一）
     DateTime.utc(2026, 9, 28),
@@ -121,46 +138,86 @@ class TaiwanCalendar {
     DateTime.utc(2026, 12, 25),
   };
 
-  /// 2027 年台股休市日（預估）
+  /// 2027 年台股休市日（政府行事曆版，待證交所公告確認）
   ///
-  /// 農曆日期根據萬年曆推算，實際日期以證交所公告為準
+  /// 依人事行政總處 116 年辦公日曆表（行政院 2026-05-21 院授人培字第
+  /// 1153026132 號函核定；官方 Excel 逐格解析）的平日放假日；週末本來就
+  /// 休市不列。證交所春節前另休的「無交易、僅結算交割」日（2024～2026 都是
+  /// 政府春節假期前的兩個平日）要等證交所公告後補上，並把 [_years] 的 2027
+  /// 來源改為 [CalendarSource.twse]。
   static final Set<DateTime> _holidays2027 = {
-    // 元旦
+    // 開國紀念日
     DateTime.utc(2027, 1, 1),
-    // 農曆春節 (2/5-2/11 estimated，農曆初一約 2/6)
+    // 小年夜、除夕、春節（初三），初一、初二逢週末於 2/9、2/10 補假
+    DateTime.utc(2027, 2, 4),
     DateTime.utc(2027, 2, 5),
-    DateTime.utc(2027, 2, 6),
-    DateTime.utc(2027, 2, 7),
     DateTime.utc(2027, 2, 8),
     DateTime.utc(2027, 2, 9),
     DateTime.utc(2027, 2, 10),
-    DateTime.utc(2027, 2, 11),
-    // 228 和平紀念日（週日，補假週一）
-    DateTime.utc(2027, 2, 28),
+    // 和平紀念日（2/28 週日，補假）
     DateTime.utc(2027, 3, 1),
-    // 兒童節/清明節 (4/4-4/5 estimated)
-    DateTime.utc(2027, 4, 4),
+    // 清明節；兒童節（4/4 週日）於清明節次日補假
     DateTime.utc(2027, 4, 5),
-    // 勞動節 (5/1 週六，不需列入，週末本來就休市)
-    // 端午節 (6/9 estimated)
+    DateTime.utc(2027, 4, 6),
+    // 勞動節（5/1 週六，補假）
+    DateTime.utc(2027, 4, 30),
+    // 端午節
     DateTime.utc(2027, 6, 9),
-    // 中秋節 (10/15 estimated)
-    DateTime.utc(2027, 10, 15),
-    // 國慶日（週日，補假週一）
-    DateTime.utc(2027, 10, 10),
+    // 中秋節
+    DateTime.utc(2027, 9, 15),
+    // 孔子誕辰紀念日／教師節
+    DateTime.utc(2027, 9, 28),
+    // 國慶日（10/10 週日，補假）
     DateTime.utc(2027, 10, 11),
+    // 臺灣光復暨金門古寧頭大捷紀念日
+    DateTime.utc(2027, 10, 25),
+    // 行憲紀念日（12/25 週六，補假）
+    DateTime.utc(2027, 12, 24),
+    // 117 年開國紀念日（2028/1/1 週六，補假）
+    DateTime.utc(2027, 12, 31),
   };
+
+  /// 各年份的休市日與來源。新增或更新年份時改這裡；核對工具：
+  /// `dart run tool/check_twse_holidays.dart <西元年>`（年度公告），颱風停市等
+  /// 臨時休市要另以證交所每日成交資訊（FMTQIK）確認。
+  ///
+  /// 2026-09-26 核對：2024-01～2026-09-24 以證交所每日成交資訊逐日比對實際
+  /// 交易日（0 不一致）；2026-09-25 以後以證交所年度公告為準。
+  static final Map<int, ({CalendarSource source, Set<DateTime> days})> _years =
+      {
+        2024: (source: CalendarSource.twse, days: _holidays2024),
+        2025: (source: CalendarSource.twse, days: _holidays2025),
+        2026: (source: CalendarSource.twse, days: _holidays2026),
+        2027: (source: CalendarSource.government, days: _holidays2027),
+      };
 
   /// 所有休市日彙總
   static final Set<DateTime> _allHolidays = {
-    ..._holidays2024,
-    ..._holidays2025,
-    ..._holidays2026,
-    ..._holidays2027,
+    for (final year in _years.values) ...year.days,
   };
 
   /// 日曆資料涵蓋的最大年份
-  static const int _maxYear = 2027;
+  static final int _maxYear = _years.keys.reduce((a, b) => a > b ? a : b);
+
+  /// [year] 的休市日來源；未涵蓋的年份回 null
+  static CalendarSource? sourceOf(int year) => _years[year]?.source;
+
+  /// 日曆需要更新時回傳提醒文字，否則 null。
+  ///
+  /// - 今年不是證交所確認版（含超出涵蓋範圍）→ 整年提醒
+  /// - 12 月起，下一年還不是證交所確認版 → 提醒（證交所通常於年底公告）
+  ///
+  /// 放在每日更新的摘要，而不是依日期觸發的測試：日曆過期影響的是正在
+  /// 跑的 App，不改程式碼的期間 CI 不會跑。
+  static String? coverageNotice(DateTime now) {
+    for (final year in [now.year, if (now.month == 12) now.year + 1]) {
+      if (sourceOf(year) != CalendarSource.twse) {
+        return '交易日曆 $year 年尚未依證交所公告更新，休市日可能有誤'
+            '（dart run tool/check_twse_holidays.dart $year）';
+      }
+    }
+    return null;
+  }
 
   /// 檢查日期是否為台股交易日
   ///

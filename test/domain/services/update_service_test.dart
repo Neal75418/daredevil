@@ -25,6 +25,7 @@ import 'package:daredevil/domain/repositories/price_repository.dart'
 import 'package:daredevil/domain/services/scoring_service.dart';
 import 'package:daredevil/domain/services/update/news_mention_snapshot_service.dart';
 import 'package:daredevil/domain/services/thesis/thesis_monitor_service.dart';
+import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/domain/services/update_service.dart';
 import 'package:daredevil/domain/services/update_service_deps.dart';
@@ -229,8 +230,12 @@ void main() {
     WarningRepository? warning,
     InsiderRepository? insider,
     ThesisMonitorService? thesisMonitor,
+    AppClock? clock,
   }) {
     return UpdateService(
+      // 固定在非 12 月：預設用系統時鐘時，12 月起交易日曆提醒會附在
+      // message 上，整份測試的結果隨執行日期改變
+      clock: clock ?? _Clock(DateTime(2026, 7, 6, 15, 30)),
       database: mockDb,
       repositories: UpdateRepositories(
         stock: mockStockRepo,
@@ -251,6 +256,74 @@ void main() {
       ),
     );
   }
+
+  // 日曆過期影響的是正在跑的更新，提醒放在每日更新的摘要（不改程式碼的
+  // 期間 CI 不會跑）；不算失敗，否則 launchd 每天都回報失敗
+  group('交易日曆到期提醒', () {
+    test('12 月起下一年未經證交所確認：摘要附提醒、不算失敗', () async {
+      final result = await buildService(
+        clock: _Clock(DateTime(2026, 12, 2, 15, 30)),
+      ).runDailyUpdate(forDate: tradingDay);
+
+      expect(result.calendarNotice, contains('2027'));
+      expect(result.summary, contains('交易日曆待更新'));
+      expect(result.errors.where((e) => e.contains('交易日曆')), isEmpty);
+      // App 內更新紀錄與 CLI 印的都是這份 message（狀態見 runOutcome 測試）
+      expect(result.message, contains('交易日曆待更新'));
+      final written =
+          verify(
+                () => mockDb.finishUpdateRun(
+                  any(),
+                  any(),
+                  message: captureAny(named: 'message'),
+                ),
+              ).captured.single
+              as String?;
+      expect(written, contains('交易日曆待更新'));
+    });
+
+    test('有警告又需更新日曆：摘要兩者都呈現', () {
+      final result = UpdateResult(date: tradingDay)
+        ..success = true
+        ..stocksAnalyzed = 3
+        ..calendarNotice = '交易日曆 2027 年尚未依證交所公告更新';
+      result.recordError('TDCC 失敗');
+      expect(result.summary, '分析 3 檔（1 項警告）；交易日曆待更新');
+    });
+
+    // 狀態只看錯誤：日曆提醒不算失敗（否則 launchd 每天回報失敗）
+    group('runOutcome', () {
+      test('沒有錯誤、需更新日曆：狀態仍是成功，訊息附提醒', () {
+        final o = UpdateService.runOutcome(const [], calendarStale: true);
+        expect(o.status, UpdateStatus.success.code);
+        expect(o.message, '更新完成；交易日曆待更新');
+      });
+
+      test('沒有錯誤、日曆正常：更新完成', () {
+        final o = UpdateService.runOutcome(const [], calendarStale: false);
+        expect(o.status, UpdateStatus.success.code);
+        expect(o.message, '更新完成');
+      });
+
+      test('有錯誤：部分成功，提醒不影響狀態', () {
+        for (final stale in [false, true]) {
+          final o = UpdateService.runOutcome(const [
+            'TDCC 失敗',
+          ], calendarStale: stale);
+          expect(o.status, UpdateStatus.partial.code, reason: '$stale');
+        }
+      });
+    });
+
+    test('日曆涵蓋且已確認：不提醒', () async {
+      final result = await buildService(
+        clock: _Clock(DateTime(2026, 10, 1, 15, 30)),
+      ).runDailyUpdate(forDate: tradingDay);
+
+      expect(result.calendarNotice, isNull);
+      expect(result.summary, isNot(contains('交易日曆')));
+    });
+  });
 
   group('async 錯誤衛生(2026-07-30 審查)', () {
     test('run 起手狀態是 RUNNING(孤兒 sweep 才能區分中斷 vs 部分失敗)', () async {
@@ -432,6 +505,29 @@ void main() {
       );
       expect(captured, endsWith('…'));
       expect(captured, startsWith('部分更新成功'));
+    });
+
+    test('超長錯誤又需更新交易日曆：仍在 500 字內、提醒保留在結尾', () async {
+      when(
+        () => mockTdcc.getAllHoldingDistribution(),
+      ).thenThrow(Exception('boom ${'x' * 700}'));
+
+      await buildService(
+        clock: _Clock(DateTime(2026, 12, 2, 15, 30)),
+      ).runDailyUpdate(forDate: tradingDay);
+
+      final captured =
+          verify(
+                () => mockDb.finishUpdateRun(
+                  any(),
+                  UpdateStatus.partial.code,
+                  message: captureAny(named: 'message'),
+                ),
+              ).captured.single
+              as String;
+      expect(captured.length, lessThanOrEqualTo(500));
+      expect(captured, contains('…'));
+      expect(captured, endsWith('交易日曆待更新'));
     });
 
     test('半個市場價格取得失敗必須可見（TWSE 空、TPEx 有資料）', () async {
@@ -1308,4 +1404,12 @@ void main() {
       ).called(1);
     });
   });
+}
+
+class _Clock implements AppClock {
+  const _Clock(this._now);
+  final DateTime _now;
+
+  @override
+  DateTime now() => _now;
 }

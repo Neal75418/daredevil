@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:workmanager/workmanager.dart';
 
@@ -181,50 +181,20 @@ Future<void> _showUpdateNotification(UpdateResult result) async {
     return;
   }
 
-  String title;
-  String body;
-
   // 背景 isolate 無法使用 EasyLocalization，
   // 以 platform locale 決定語系（zh → 中文，其餘 → 英文）
-  final isChinese = Platform.localeName.startsWith('zh');
-
-  if (result.skipped) {
-    title = isChinese ? '今日無更新' : 'No update today';
-    body = result.message ?? (isChinese ? '非交易日' : 'Non-trading day');
-  } else if (result.success) {
-    title = isChinese ? '盤後資料已更新' : 'Market data updated';
-
-    final parts = <String>[];
-    if (result.stocksAnalyzed > 0) {
-      parts.add(
-        isChinese
-            ? '分析 ${result.stocksAnalyzed} 檔'
-            : '${result.stocksAnalyzed} stocks analyzed',
-      );
-    }
-    if (result.errors.isNotEmpty) {
-      parts.add(
-        isChinese
-            ? '${result.errors.length} 個警告'
-            : '${result.errors.length} warnings',
-      );
-    }
-
-    body = parts.isNotEmpty
-        ? parts.join(isChinese ? '，' : ', ')
-        : (isChinese ? '更新完成' : 'Update complete');
-  } else {
-    title = isChinese ? '更新失敗' : 'Update failed';
-    body = result.message ?? (isChinese ? '請稍後重試' : 'Please try again later');
-  }
+  final text = updateNotificationText(
+    result,
+    isChinese: Platform.localeName.startsWith('zh'),
+  );
 
   // payload 故意留 null：背景更新通知非單一股票，沒有可導航目的地。
   // _onNotificationTapped 對 null / empty payload 會跳過 onTapCallback，
   // 避免導航到 /stock/background_update 這種不存在的 route。
   await NotificationService.instance.showNotification(
     id: _generateNotificationId(),
-    title: title,
-    body: body,
+    title: text.title,
+    body: text.body,
   );
 }
 
@@ -232,4 +202,43 @@ Future<void> _showUpdateNotification(UpdateResult result) async {
 int _generateNotificationId() {
   final now = DateTime.now();
   return now.year * 10000 + now.month * 100 + now.day;
+}
+
+/// 背景更新通知的標題與內文。手機靠背景更新自動跑，這則通知是 user 最常
+/// 看到的更新結果，交易日曆待更新的提醒也要在這裡。
+@visibleForTesting
+({String title, String body}) updateNotificationText(
+  UpdateResult result, {
+  required bool isChinese,
+}) {
+  if (result.skipped) {
+    return (
+      title: isChinese ? '今日無更新' : 'No update today',
+      body: result.message ?? (isChinese ? '非交易日' : 'Non-trading day'),
+    );
+  }
+  if (!result.success) {
+    return (
+      title: isChinese ? '更新失敗' : 'Update failed',
+      body: result.message ?? (isChinese ? '請稍後重試' : 'Please try again later'),
+    );
+  }
+  final parts = <String>[
+    if (result.stocksAnalyzed > 0)
+      isChinese
+          ? '分析 ${result.stocksAnalyzed} 檔'
+          : '${result.stocksAnalyzed} stocks analyzed',
+    if (result.errors.isNotEmpty)
+      isChinese
+          ? '${result.errors.length} 個警告'
+          : '${result.errors.length} warnings',
+    if (result.calendarNotice != null)
+      isChinese ? '交易日曆待更新' : 'trading calendar needs update',
+  ];
+  return (
+    title: isChinese ? '盤後資料已更新' : 'Market data updated',
+    body: parts.isNotEmpty
+        ? parts.join(isChinese ? '，' : ', ')
+        : (isChinese ? '更新完成' : 'Update complete'),
+  );
 }
