@@ -29,6 +29,7 @@ import 'package:daredevil/presentation/providers/providers.dart';
 
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/mode_recommendation_provider.dart';
+import 'package:daredevil/presentation/providers/selected_mode_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/providers/today_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
@@ -75,6 +76,11 @@ class FakeTodayNotifier extends TodayNotifier {
     runUpdateCalls++;
     return UpdateResult(date: DateTime(2026, 9, 18))..success = true;
   }
+}
+
+class _PullbackModeNotifier extends SelectedModeNotifier {
+  @override
+  ScoringMode build() => ScoringMode.weaknessObserve;
 }
 
 class _FixedClock implements AppClock {
@@ -798,6 +804,95 @@ void main() {
       expect(find.byType(IndustryRankingSection), findsOneWidget);
       // 族群卡片的進場動畫計時器推完
       await tester.pump(const Duration(seconds: 2));
+    });
+  });
+
+  // 回檔分頁不顯示強中弱：四條主訊號擇一成立，幾乎每檔只觸發一條，98% 的
+  // 卡片都是「弱」——分級在這個分頁沒有資訊量，哪種回檔看規則標籤
+  group('回檔分頁不顯示分級', () {
+    final pullback = ModeRecommendation(
+      symbol: '2330',
+      rank: 1,
+      modeScoreShort: 15,
+      modeScoreLong: 15,
+      reasons: const [],
+      stockName: '台積電',
+      latestClose: 1000,
+      priceChange: -1.2,
+      trendState: 'UP',
+    );
+
+    Future<void> pumpMode(
+      WidgetTester tester, {
+      required bool pullbackTab,
+    }) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
+          modeRecommendations: (ref, mode) => SynchronousFuture([pullback]),
+          extraOverrides: [
+            if (pullbackTab)
+              selectedModeProvider.overrideWith(_PullbackModeNotifier.new),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    // 卡片自己的朗讀標籤（StockCard 最外層 Semantics 的 label）
+    String cardLabel(WidgetTester tester) => tester
+        .widget<Semantics>(
+          find
+              .descendant(
+                of: find.byType(StockCard),
+                matching: find.byType(Semantics),
+              )
+              .first,
+        )
+        .properties
+        .label!;
+
+    testWidgets('回檔卡片沒有分級徽章、朗讀標籤不念分數', (tester) async {
+      await pumpMode(tester, pullbackTab: true);
+      expect(find.byType(ScoreTierBadge), findsNothing);
+      expect(cardLabel(tester), contains('台積電')); // 確認讀到的是這張卡
+      expect(cardLabel(tester), isNot(contains(S.accessibilityScore(15))));
+    });
+
+    testWidgets('從回檔分頁長按的預覽沒有評分區', (tester) async {
+      await pumpMode(tester, pullbackTab: true);
+      await tester.longPress(find.byType(StockCard));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(StockPreviewSheet), findsOneWidget);
+      expect(find.byType(ScoreTierBadge), findsNothing);
+      expect(find.text(S.scoreLabel), findsNothing);
+    });
+
+    testWidgets('起漲分頁照常顯示分級徽章與朗讀分數', (tester) async {
+      await pumpMode(tester, pullbackTab: false);
+      expect(find.byType(ScoreTierBadge), findsOneWidget);
+      expect(cardLabel(tester), contains(S.accessibilityScore(15)));
+    });
+
+    // 起漲分頁有未確認上升趨勢的股票時走分艙路徑（前艙＋收合的後艙），
+    // 那條路徑也要照常顯示分級
+    testWidgets('起漲分頁分艙時前艙卡片照常顯示分級徽章', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
+          modeRecommendations: (ref, mode) => SynchronousFuture([
+            rec('1111', trend: 'UP'),
+            rec('2222', trend: 'DOWN'),
+          ]),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      final cards = find.byType(StockCard).evaluate().length;
+      expect(cards, greaterThan(0));
+      expect(find.byType(ScoreTierBadge), findsNWidgets(cards));
     });
   });
 

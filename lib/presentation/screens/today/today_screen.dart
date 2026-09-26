@@ -191,6 +191,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               split.qualified,
               watchlistSymbols,
               showLimitMarkers,
+              showScoreTier: mode.showsScoreTier,
               browsingContext: browsingContext,
             ),
             _buildTrendGateHeader(
@@ -205,6 +206,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 split.gated,
                 watchlistSymbols,
                 showLimitMarkers,
+                showScoreTier: mode.showsScoreTier,
                 dimmed: true,
                 browsingContext: browsingContext,
               ),
@@ -217,6 +219,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       recommendations,
       watchlistSymbols,
       showLimitMarkers,
+      showScoreTier: mode.showsScoreTier,
     );
   }
 
@@ -281,6 +284,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     List<ModeRecommendation> recommendations,
     Set<String> watchlistSymbols,
     bool showLimitMarkers, {
+    required bool showScoreTier,
     bool dimmed = false,
     List<ModeRecommendation>? browsingContext,
   }) {
@@ -298,6 +302,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         watchlistSymbols,
         index,
         showLimitMarkers,
+        showScoreTier: showScoreTier,
         browsingContext: ctx,
       );
       // 淡化與族群轉向的 0 檔卡同語彙(同 0.45):掃過去自然跳過,點開仍可互動
@@ -395,6 +400,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     Set<String> watchlistSymbols,
     int index,
     bool showLimitMarkers, {
+    required bool showScoreTier,
     List<ModeRecommendation>? browsingContext,
   }) {
     final rec = recommendations[index];
@@ -413,9 +419,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           market: rec.market,
           latestClose: rec.latestClose,
           priceChange: rec.priceChange,
-          // 朗讀標籤用的分數：與徽章顯示的同一個（較高者）
-          score: rec.displayScore,
-          dualScore: (rec.modeScoreShort, rec.modeScoreLong),
+          // 朗讀標籤用的分數：與徽章顯示的同一個（較高者）。不分級的分頁
+          // （見 ScoringMode.showsScoreTier）兩者都不給：徽章與朗讀都不出現
+          score: showScoreTier ? rec.displayScore : null,
+          dualScore: showScoreTier
+              ? (rec.modeScoreShort, rec.modeScoreLong)
+              : null,
           reasons: rec.reasonTypes,
           warningReasons: rec.warningReasons,
           trendState: rec.trendState,
@@ -440,7 +449,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 stockName: rec.stockName,
                 latestClose: rec.latestClose,
                 priceChange: rec.priceChange,
-                score: rec.displayScore,
+                score: showScoreTier ? rec.displayScore : null,
                 trendState: rec.trendState,
                 reasons: rec.reasonTypes,
                 isInWatchlist: isInWatchlist,

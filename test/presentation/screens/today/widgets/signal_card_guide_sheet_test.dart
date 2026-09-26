@@ -69,10 +69,11 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('標題與四段說明', (tester) async {
+  testWidgets('標題與五段說明', (tester) async {
     await pump(tester);
     expect(find.text('訊號卡怎麼看'), findsOneWidget);
     expect(find.text('強／中／弱／觀察'), findsOneWidget);
+    expect(find.text('回檔分頁'), findsOneWidget);
     expect(find.text('5日／60日'), findsOneWidget);
     expect(find.text('數字'), findsOneWidget);
     expect(find.text('卡片上的其他資訊'), findsOneWidget);
@@ -90,7 +91,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('不是漲跌預測'), findsOneWidget);
-    // 今日卡也可能出現「觀察」（路由門檻低於訊號層），說明不能漏
+    // 掃描、自選頁的卡片會出現「觀察」（觀察區 8–11 分），說明不能漏
     expect(find.textContaining('觀察：低於 $weak'), findsOneWidget);
   });
 
@@ -125,6 +126,41 @@ void main() {
     );
     expect(find.textContaining('持平為灰色'), findsOneWidget);
     expect(find.textContaining('價格欄是最新收盤價與當日漲跌幅'), findsOneWidget);
+  });
+
+  // 四種回檔用卡片標籤的原文，使用者才對得上；並擋掉曾提案的
+  // 「成立就是完整符合」（暗示回檔訊號較強，回測不支持）
+  testWidgets('回檔分頁：說明為何不分級、用標籤原文列出四種回檔', (tester) async {
+    await pump(tester);
+    expect(find.textContaining('擇一成立'), findsOneWidget);
+    final tags = zhTw['reasons'] as Map<String, dynamic>;
+    for (final key in [
+      'pullbackToMa10',
+      'pullbackToMa20',
+      'hammerAtSupport',
+      'kdHighPullback',
+    ]) {
+      expect(
+        find.textContaining(tags[key] as String),
+        findsOneWidget,
+        reason: key,
+      );
+    }
+    expect(find.textContaining('看標籤是哪一種回檔'), findsOneWidget);
+    expect(find.textContaining('完整符合'), findsNothing);
+  });
+
+  testWidgets('en：回檔分頁說明用標籤原文', (tester) async {
+    await pump(tester, locale: const Locale('en'));
+    expect(find.text('Pullback tab'), findsOneWidget);
+    final tags = en['reasons'] as Map<String, dynamic>;
+    for (final key in ['pullbackToMa10', 'pullbackToMa20']) {
+      expect(
+        find.textContaining(tags[key] as String),
+        findsOneWidget,
+        reason: key,
+      );
+    }
   });
 
   testWidgets('附短版免責聲明', (tester) async {

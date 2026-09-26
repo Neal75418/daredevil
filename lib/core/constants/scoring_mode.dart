@@ -56,6 +56,15 @@ enum ScoringMode {
     ScoringMode.neutral => 'scoringMode.neutral',
   };
 
+  /// 今日分頁的卡片（與從該分頁開啟的預覽）是否顯示強中弱分級
+  ///
+  /// 回檔不顯示：四條主訊號（強勢回檔 MA10／MA20、支撐錘子、KD 高檔回落）
+  /// 擇一成立，幾乎每檔只觸發一條（12／15／18 分）：2026-09-26 以 51 天的
+  /// daily_reason 加總，回檔合格檔次 98.7% 落在「弱」——分級在這個分頁沒有
+  /// 資訊量，只會被讀成「弱訊號」。
+  /// 分數只反映是哪一條規則，規則種類已顯示在卡片標籤上。
+  bool get showsScoreTier => this != ScoringMode.weaknessObserve;
+
   /// Mode routing priority — eligibility-first assignment 時的優先順序
   ///
   /// **2026-06-19 v2 audit 引入**：當一檔股票對多個 mode 都合格時，按此優先

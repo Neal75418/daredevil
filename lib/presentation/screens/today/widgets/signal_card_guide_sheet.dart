@@ -68,6 +68,10 @@ class SignalCardGuideSheet extends StatelessWidget {
               ),
             ),
             _Section(
+              title: 'today.cardGuide.pullbackTitle'.tr(),
+              body: 'today.cardGuide.pullbackBody'.tr(),
+            ),
+            _Section(
               title: 'today.cardGuide.horizonTitle'.tr(),
               body: 'today.cardGuide.horizonBody'.tr(),
             ),
