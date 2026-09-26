@@ -56,7 +56,7 @@ void main() {
 
     final rows = await db
         .customSelect(
-          "SELECT transfer_method, transfer_shares FROM insider_transfer "
+          'SELECT transfer_method, transfer_shares FROM insider_transfer '
           "WHERE symbol='2442'",
         )
         .get();

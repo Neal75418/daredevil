@@ -16,7 +16,7 @@ List<String> captureLogs(void Function() body) {
   runZoned(
     body,
     zoneSpecification: ZoneSpecification(
-      print: (_, __, ___, line) => out.add(line),
+      print: (_, _, _, line) => out.add(line),
     ),
   );
   return out;

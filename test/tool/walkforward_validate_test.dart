@@ -136,18 +136,10 @@ void main() {
 
     test('🚨 每折樣本外觸發皆為 0 → 同樣是 setup 錯誤', () {
       final empty = [
-        FoldResult(
+        const FoldResult(
           testYear: 2024,
-          short: const HorizonComparison(
-            newSwe: 0,
-            oldSwe: 0,
-            newActiveRules: 0,
-          ),
-          long: const HorizonComparison(
-            newSwe: 0,
-            oldSwe: 0,
-            newActiveRules: 0,
-          ),
+          short: HorizonComparison(newSwe: 0, oldSwe: 0, newActiveRules: 0),
+          long: HorizonComparison(newSwe: 0, oldSwe: 0, newActiveRules: 0),
           testFirings: 0,
         ),
       ];

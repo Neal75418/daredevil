@@ -117,8 +117,8 @@ void main() {
     // 只依賴 items,無關變更(searchQuery 等)必須保留**同一個實例**
     group('watchedSymbols 快取(select 穩定性)', () {
       final items = [
-        WatchlistItemData(symbol: '2330', stockName: '台積電'),
-        WatchlistItemData(symbol: '2317', stockName: '鴻海'),
+        const WatchlistItemData(symbol: '2330', stockName: '台積電'),
+        const WatchlistItemData(symbol: '2317', stockName: '鴻海'),
       ];
 
       test('🚨 無關欄位 copyWith 保留同一實例(identical)', () {
@@ -157,7 +157,7 @@ void main() {
         final state = WatchlistState(items: items);
         expect(state.watchedSymbols, {'2330', '2317'});
         final next = state.copyWith(
-          items: [WatchlistItemData(symbol: '2454', stockName: '聯發科')],
+          items: [const WatchlistItemData(symbol: '2454', stockName: '聯發科')],
         );
         expect(next.watchedSymbols, {'2454'});
       });

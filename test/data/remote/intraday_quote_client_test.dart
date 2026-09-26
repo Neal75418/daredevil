@@ -60,7 +60,7 @@ void main() {
   }
 
   test('🚨 上市用 tse_ 前綴、上櫃用 otc_(對調就拿不到報價)', () async {
-    final adapter = _FakeAdapter((_, __) => _misBody(['2330', '6538']));
+    final adapter = _FakeAdapter((_, _) => _misBody(['2330', '6538']));
     await clientWith(adapter).fetchQuotes({'2330': 'TWSE', '6538': 'TPEx'});
 
     expect(adapter.requests.length, 1);
@@ -73,7 +73,7 @@ void main() {
 
   test('🚨 超過 35 檔分批,不漏送不重送', () async {
     final symbols = {for (var i = 0; i < 71; i++) '${1000 + i}': 'TWSE'};
-    final adapter = _FakeAdapter((_, __) => _misBody(const []));
+    final adapter = _FakeAdapter((_, _) => _misBody(const []));
     await clientWith(adapter).fetchQuotes(symbols);
 
     expect(adapter.requests.length, 3, reason: '71 = 35 + 35 + 1');
@@ -88,7 +88,7 @@ void main() {
 
   test('🚨 單批失敗不影響其他批(盤中缺一檔 > 整批沒有)', () async {
     final adapter = _FakeAdapter((i, _) {
-      if (i == 0) throw const SocketException_('batch 0 down');
+      if (i == 0) throw const FakeSocketException('batch 0 down');
       return _misBody(['9999']);
     });
     final r = await clientWith(
@@ -105,7 +105,7 @@ void main() {
     // (adapter 直接拋例外不是真實路徑——Dio 會包成 DioException。)
     final adapter = _FakeAdapter(
       // 小寫 doctype:2026-08-08 二次審查指出偵測原本大小寫敏感
-      (_, __) => '<!doctype html><html><body>Too many requests</body></html>',
+      (_, _) => '<!doctype html><html><body>Too many requests</body></html>',
     );
     await expectLater(
       clientWith(adapter).fetchQuotes({'2330': 'TWSE'}),
@@ -115,7 +115,7 @@ void main() {
   });
 
   test('空輸入 → 不打 API', () async {
-    final adapter = _FakeAdapter((_, __) => _misBody(const []));
+    final adapter = _FakeAdapter((_, _) => _misBody(const []));
     expect((await clientWith(adapter).fetchQuotes(const {})).quotes, isEmpty);
     expect(adapter.requests, isEmpty);
   });
@@ -127,7 +127,7 @@ void main() {
   group('錯誤浮出 errors', () {
     test('🚨 批次失敗時 errors 帶回錯誤型別與訊息', () async {
       final adapter = _FakeAdapter(
-        (_, __) => throw const SocketException_('connection refused'),
+        (_, _) => throw const FakeSocketException('connection refused'),
       );
       final r = await clientWith(adapter).fetchQuotes({'2330': 'TWSE'});
 
@@ -142,7 +142,7 @@ void main() {
     });
 
     test('全部成功時 errors 為空', () async {
-      final adapter = _FakeAdapter((_, __) => _misBody(['2330']));
+      final adapter = _FakeAdapter((_, _) => _misBody(['2330']));
       final r = await clientWith(adapter).fetchQuotes({'2330': 'TWSE'});
       expect(r.quotes['2330']?.price, 100.0);
       expect(r.errors, isEmpty);
@@ -150,7 +150,7 @@ void main() {
 
     test('部分批次失敗:成功批的報價與失敗批的錯誤並存', () async {
       final adapter = _FakeAdapter((i, _) {
-        if (i == 0) throw const SocketException_('batch 0 down');
+        if (i == 0) throw const FakeSocketException('batch 0 down');
         return _misBody(['9999']);
       });
       final r = await clientWith(
@@ -163,16 +163,16 @@ void main() {
   });
 
   test('MIS 回應前綴空行仍能解析(2026-08-08 實測的真實行為)', () async {
-    final adapter = _FakeAdapter((_, __) => '\n\n\n\n${_misBody(['2330'])}');
+    final adapter = _FakeAdapter((_, _) => '\n\n\n\n${_misBody(['2330'])}');
     final r = await clientWith(adapter).fetchQuotes({'2330': 'TWSE'});
     expect(r.quotes['2330']?.price, 100.0);
   });
 }
 
 /// 本地例外型別:避免 import dart:io 只為了丟一個網路錯誤
-class SocketException_ implements Exception {
-  const SocketException_(this.message);
+class FakeSocketException implements Exception {
+  const FakeSocketException(this.message);
   final String message;
   @override
-  String toString() => 'SocketException_: $message';
+  String toString() => 'FakeSocketException: $message';
 }

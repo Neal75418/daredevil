@@ -9,8 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
-import 'package:daredevil/data/models/tpex/models.dart';
-import 'package:daredevil/data/models/twse/models.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/data/repositories/insider_repository.dart';

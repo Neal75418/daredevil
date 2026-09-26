@@ -1,3 +1,6 @@
+// CLI tool — print 為預期輸出（launchd 日誌），關閉 avoid_print lint。
+// ignore_for_file: avoid_print
+//
 // 盤中提醒檢查(macOS launchd,2026-08-08)。
 //
 // 為什麼要有這支:app 內的輪詢是前景計時器,關掉 app 就停了。macOS 有

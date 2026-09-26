@@ -362,7 +362,7 @@ void main() {
           any(),
           force: any(named: 'force'),
         ),
-      ).thenThrow(RateLimitException('quota'));
+      ).thenThrow(const RateLimitException('quota'));
 
       await expectLater(
         syncer.syncInstitutionalData(date: date, backfillDays: 4),

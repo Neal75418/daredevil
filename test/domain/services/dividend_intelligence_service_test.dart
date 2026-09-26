@@ -186,8 +186,11 @@ void main() {
         currentPrices: {}, // no current price
       );
 
-      final info = result.stockDividends.first;
-      // currentPrice falls back to avgCost = 500
+      // 沒有現價時以平均成本（500）估市值：市值殖利率＝成本殖利率＝
+      // 10 × 1000 ÷ (500 × 1000) × 100 = 2%。原本這裡只取值不斷言
+      expect(result.stockDividends.first.symbol, '2330');
+      expect(result.portfolioYieldOnMarket, closeTo(2.0, 0.01));
+      expect(result.portfolioYieldOnMarket, result.portfolioYieldOnCost);
     });
 
     test('calculates portfolio yields correctly', () {

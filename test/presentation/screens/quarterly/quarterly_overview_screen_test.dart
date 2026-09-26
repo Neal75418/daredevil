@@ -1,6 +1,5 @@
 // 季報總覽:淨利率欄+EPS 年增背景條(2026-08-13)
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/data/database/dao/quarterly_report_dao.dart';

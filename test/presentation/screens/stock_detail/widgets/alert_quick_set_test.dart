@@ -28,7 +28,7 @@ void main() {
   testWidgets('資料足夠時列出全部五種快捷鈕,各自帶算好的價位', (tester) async {
     widen(tester);
     await tester.pumpWidget(
-      buildTestApp(AlertQuickSet(bars: bars(30), onSelected: (_, __) {})),
+      buildTestApp(AlertQuickSet(bars: bars(30), onSelected: (_, _) {})),
     );
     // 五種:跌破5MA/跌破10MA/跌破月線/突破月線/突破20日高 + 守門價 = 6
     expect(find.byType(ActionChip), findsNWidgets(6));
@@ -62,7 +62,7 @@ void main() {
   testWidgets('資料不足 → 只顯示算得出來的,不硬湊', (tester) async {
     widen(tester);
     await tester.pumpWidget(
-      buildTestApp(AlertQuickSet(bars: bars(8), onSelected: (_, __) {})),
+      buildTestApp(AlertQuickSet(bars: bars(8), onSelected: (_, _) {})),
     );
     expect(find.byType(ActionChip), findsOneWidget); // 只有 5MA
   });
@@ -70,7 +70,7 @@ void main() {
   testWidgets('完全無資料 → 整個區塊收起,不留空殼', (tester) async {
     widen(tester);
     await tester.pumpWidget(
-      buildTestApp(AlertQuickSet(bars: const [], onSelected: (_, __) {})),
+      buildTestApp(AlertQuickSet(bars: const [], onSelected: (_, _) {})),
     );
     expect(find.byType(ActionChip), findsNothing);
     expect(tester.takeException(), isNull);
@@ -135,7 +135,7 @@ void main() {
           AlertQuickSet(
             bars: bars(30), // 最新收盤 129
             currentPrice: 129,
-            onSelected: (_, __) {},
+            onSelected: (_, _) {},
           ),
         ),
       );
@@ -154,7 +154,7 @@ void main() {
           AlertQuickSet(
             bars: bars(30),
             currentPrice: null,
-            onSelected: (_, __) {},
+            onSelected: (_, _) {},
           ),
         ),
       );
@@ -172,7 +172,7 @@ void main() {
             bars: bars(30),
             currentPrice: null, // 不給現價,單測 existingTargets 的效果
             existingTargets: {(AlertParams.typeBelow, 127.0)}, // 5MA
-            onSelected: (_, __) {},
+            onSelected: (_, _) {},
           ),
         ),
       );
@@ -194,7 +194,7 @@ void main() {
             bars: bars(30),
             currentPrice: null,
             existingTargets: {(AlertParams.typeBelow, 119.5)},
-            onSelected: (_, __) {},
+            onSelected: (_, _) {},
           ),
         ),
       );
@@ -212,7 +212,7 @@ void main() {
             // 不給現價:避免與「已成立」邏輯糾纏,單測 existingTargets
             currentPrice: null,
             existingTargets: const <(String, double)>{},
-            onSelected: (_, __) {},
+            onSelected: (_, _) {},
           ),
         ),
       );
@@ -236,7 +236,7 @@ void main() {
             bars: bars(30),
             // 2026-08-10 是週一,10:30 在 09:00~13:30 之內
             now: DateTime(2026, 8, 10, 10, 30),
-            onSelected: (_, __) {},
+            onSelected: (_, _) {},
           ),
         ),
       );
@@ -250,7 +250,7 @@ void main() {
           AlertQuickSet(
             bars: bars(30),
             now: DateTime(2026, 8, 10, 20, 0), // 同一天晚上 8 點
-            onSelected: (_, __) {},
+            onSelected: (_, _) {},
           ),
         ),
       );
@@ -264,7 +264,7 @@ void main() {
           AlertQuickSet(
             bars: bars(30),
             now: DateTime(2026, 8, 8, 10, 30), // 週六同一時刻
-            onSelected: (_, __) {},
+            onSelected: (_, _) {},
           ),
         ),
       );

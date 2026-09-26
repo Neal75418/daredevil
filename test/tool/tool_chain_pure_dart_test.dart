@@ -21,7 +21,7 @@ void main() {
   for (final entry in [
     'tool/daily_update.dart',
     'tool/intraday_alert_check.dart',
-  ])
+  ]) {
     test('$entry 的 import 閉包不得含 flutter/easy_localization/dart:ui', () {
       const banned = [
         'package:flutter/',
@@ -99,4 +99,5 @@ void main() {
       expect(visited, contains(anchor));
       expect(visited.length, greaterThan(5));
     });
+  }
 }

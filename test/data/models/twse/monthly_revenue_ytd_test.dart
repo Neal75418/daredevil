@@ -24,9 +24,9 @@ Map<String, dynamic> twseJson({
   '營業收入-去年當月營收': '200000000',
   '營業收入-上月比較增減(%)': '4.17',
   '營業收入-去年同月增減(%)': '25.0',
-  if (ytdCur != null) '累計營業收入-當月累計營收': ytdCur,
-  if (ytdPrior != null) '累計營業收入-去年累計營收': ytdPrior,
-  if (ytdPct != null) '累計營業收入-前期比較增減(%)': ytdPct,
+  '累計營業收入-當月累計營收': ?ytdCur,
+  '累計營業收入-去年累計營收': ?ytdPrior,
+  '累計營業收入-前期比較增減(%)': ?ytdPct,
 };
 
 void main() {

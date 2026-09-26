@@ -12,7 +12,6 @@
 // - 正分對走 **mutex group**——取分數最高即為「保留最強證據」,語意正確。
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:daredevil/core/constants/reason_type.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
@@ -47,7 +46,7 @@ void main() {
     });
 
     test('邊界:恰在 EXODUS 門檻上由 EXODUS 接手', () {
-      final atThreshold = FundamentalParams.foreignExodusThreshold; // -2.0
+      const atThreshold = FundamentalParams.foreignExodusThreshold; // -2.0
       expect(
         decreasing.evaluate(ctxWithForeignChange(atThreshold), emptyStock),
         isNull,

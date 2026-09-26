@@ -481,7 +481,7 @@ void main() {
               createTestPrice(
                 symbol: 'm$i',
                 close: 100 * (1 + returns[i] / 100),
-                date: base.add(Duration(days: len)),
+                date: base.add(const Duration(days: len)),
               ),
             ],
         };

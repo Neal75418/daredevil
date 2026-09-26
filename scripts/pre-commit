@@ -1,7 +1,7 @@
 #!/bin/bash
 # Pre-commit hook for Daredevil
 # - Only formats staged .dart files (auto-fix + re-stage)
-# - Only analyzes lib/ (skip test/ info-level noise)
+# - Analyzes the whole project (lib/test/tool/bin); infos fail too
 
 set -e
 
@@ -39,9 +39,11 @@ else
     echo "📝 No staged .dart files to format"
 fi
 
-# 2. Analyze lib/ only
+# 2. Analyze the whole project, infos included
+#    只查 lib/、放過 info 時，test/ 與 tool/ 累積到 86 個問題（其中一個是
+#    只取值不斷言的空轉測試）；清到 0 之後改為全專案、info 也擋（2026-09-26）
 echo "🔬 Running static analysis..."
-if ! flutter analyze --no-fatal-infos lib/; then
+if ! flutter analyze; then
     echo "❌ Analysis failed. Fix the errors above."
     exit 1
 fi

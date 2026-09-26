@@ -34,10 +34,10 @@ void main() {
     // momentum_breakout group:volumeSpike(hardcoded 22)與
     // techBreakout(hardcoded 20)。calibration 把 volumeSpike 歸零 →
     // short 的贏家應是 techBreakout,而非 hardcoded 分數較高的 volumeSpike。
-    final calibrated = CalibratedScoreContext(
-      shortScores: const {},
-      longScores: const {},
-      zeroedShortRules: const {'VOLUME_SPIKE'},
+    const calibrated = CalibratedScoreContext(
+      shortScores: {},
+      longScores: {},
+      zeroedShortRules: {'VOLUME_SPIKE'},
     );
     final scored = scoreReasonsDualHorizon(
       ruleEngine: engine,
@@ -59,10 +59,10 @@ void main() {
   });
 
   test('🚨 落庫 reasons 的 calibrated 加總 == scoreShort(invariant)', () {
-    final calibrated = CalibratedScoreContext(
-      shortScores: const {},
-      longScores: const {},
-      zeroedShortRules: const {'VOLUME_SPIKE'},
+    const calibrated = CalibratedScoreContext(
+      shortScores: {},
+      longScores: {},
+      zeroedShortRules: {'VOLUME_SPIKE'},
     );
     final scored = scoreReasonsDualHorizon(
       ruleEngine: engine,

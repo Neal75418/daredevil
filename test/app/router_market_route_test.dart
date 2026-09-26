@@ -13,8 +13,7 @@ class _MockState extends Mock implements GoRouterState {}
 
 void main() {
   GoRoute marketRoute() =>
-      router.configuration.findMatch(Uri.parse(AppRoutes.market)).last.route
-          as GoRoute;
+      router.configuration.findMatch(Uri.parse(AppRoutes.market)).last.route;
 
   test('/market 對應到 market 路由', () {
     expect(marketRoute().name, 'market');

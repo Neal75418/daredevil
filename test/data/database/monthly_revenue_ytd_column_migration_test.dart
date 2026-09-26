@@ -32,11 +32,11 @@ void main() {
       'ALTER TABLE monthly_revenue DROP COLUMN ytd_yoy_growth',
     );
     await db1.customStatement(
-      "INSERT INTO stock_master (symbol, name, market, is_active, updated_at) "
+      'INSERT INTO stock_master (symbol, name, market, is_active, updated_at) '
       "VALUES ('2330', '台積電', 'TWSE', 1, 1754000000)",
     );
     await db1.customStatement(
-      "INSERT INTO monthly_revenue (symbol, date, revenue_year, revenue_month, revenue) "
+      'INSERT INTO monthly_revenue (symbol, date, revenue_year, revenue_month, revenue) '
       "VALUES ('2330', 1754000000, 2026, 7, 250000000)",
     );
     await db1.close();
@@ -44,7 +44,7 @@ void main() {
     final db2 = AppDatabase(NativeDatabase(dbFile));
     final rows = await db2
         .customSelect(
-          "SELECT symbol, revenue, ytd_yoy_growth FROM monthly_revenue",
+          'SELECT symbol, revenue, ytd_yoy_growth FROM monthly_revenue',
         )
         .get();
     expect(rows, hasLength(1), reason: '既有營收列必須保留');

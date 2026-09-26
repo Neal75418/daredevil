@@ -5,7 +5,6 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/data/database/app_database.dart';
-import 'package:daredevil/data/models/tpex/tpex_insider_transfer.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/domain/services/update/insider_transfer_syncer.dart';

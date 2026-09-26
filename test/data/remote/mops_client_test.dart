@@ -137,7 +137,7 @@ void main() {
     test('🚨 累計欄自洽失配 → ytd 設 null,單月欄仍完好(不整列拒收)', () {
       // 單月三欄自洽([5][6][7] vs [8][9]),但累計增減 [12] 與 [10][11]
       // 重算差 30 個百分點——累計欄壞不該拖累單月資料
-      final line =
+      const line =
           '"115/08/04","115/7","9999","X","ELEC","1100","1000","1000",'
           '"10.0","10.0","2000","1000","70.0","-"\n';
       final rows = MopsClient.parseRevenueCsv(
@@ -151,7 +151,7 @@ void main() {
     });
 
     test('舊版式(僅 10 欄)→ 列仍解析,ytd 為 null(向後相容)', () {
-      final line =
+      const line =
           '"115/08/04","115/7","9998","X","ELEC","1100","1000","1000",'
           '"10.0","10.0"\n';
       final rows = MopsClient.parseRevenueCsv(

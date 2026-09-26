@@ -243,7 +243,7 @@ void main() {
     // 上櫃股的持股/當沖/融資覆蓋系統性稀疏——「沒被量測」與「實測中性」
     // 在 UI 上逐 pixel 相同,仍是謊報,使用者可能據此誤讀一檔只是沒資料
     // 的股票。
-    final service = ChipAnalysisService();
+    const service = ChipAnalysisService();
 
     ChipStrengthResult run({
       List<DailyInstitutionalEntry> inst = const [],
@@ -389,7 +389,7 @@ void main() {
     // 實測)——過半股票帶「高度集中」加分、域只加不減,是籌碼分數 3.4×
     // 偏多偏斜的唯一來源。重定為百分位對稱錨定:
     //   ≥85(p90)+20 | ≥75(p75)+8 | 45–75 中性 | ≤45(p25)−8 | ≤30(p10)−20
-    final service = const ChipAnalysisService();
+    const service = ChipAnalysisService();
 
     int scoreWith(List<HoldingDistributionEntry> holding) => service
         .compute(
@@ -466,7 +466,7 @@ void main() {
     // ——持股 25% 的股票憑空拿最大加分(反向則誤發 penalty)。null=沒量
     // 到,不是 0%;與集中度域同一修法:端點缺值 → 不可計算 → 不動分、
     // 不算已量測。
-    final service = const ChipAnalysisService();
+    const service = ChipAnalysisService();
 
     ChipStrengthResult runShare(List<double?> ratios) => service.compute(
       institutionalHistory: [],
@@ -522,7 +522,7 @@ void main() {
     // 0 分、同一顆「極弱」徽章——與「沒資料畫成極弱」同一類謊言,主角
     // 換成 neutral。baseline 移到 50 後:中性=50=中性帶、偏空的扣分終於
     // 看得見、排序單調性保持。
-    final service = const ChipAnalysisService();
+    const service = ChipAnalysisService();
 
     test('🚨 六域齊全且全部中性 → baseline 分、評「中性」,不得評「極弱」', () {
       DailyInstitutionalEntry inst(int d) => DailyInstitutionalEntry(

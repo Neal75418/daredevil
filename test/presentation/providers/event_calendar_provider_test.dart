@@ -59,7 +59,7 @@ StockEventEntry createEvent({
 // ==========================================
 
 void main() {
-  test("syncSourceKeys 的 i18n 兩語系齊全(動態組 key 躲得過字面 parity 守門)", () {
+  test('syncSourceKeys 的 i18n 兩語系齊全(動態組 key 躲得過字面 parity 守門)', () {
     for (final locale in ['zh-TW', 'en']) {
       final j =
           jsonDecode(

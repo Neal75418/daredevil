@@ -10,7 +10,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/data/database/app_database.dart';
-import 'package:daredevil/data/models/tpex/models.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/data/repositories/trading_repository.dart';

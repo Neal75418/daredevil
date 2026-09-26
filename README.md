@@ -209,7 +209,7 @@ flutter run
 ```bash
 flutter pub get                                                # 安裝依賴
 flutter test                                                   # 執行測試
-flutter analyze --no-fatal-infos                               # 靜態分析（同 pre-commit hook）
+flutter analyze                                                # 靜態分析（全專案、info 也擋；同 pre-commit hook 與 CI）
 dart format .                                                  # 格式化程式碼
 dart run build_runner build --delete-conflicting-outputs        # 程式碼生成
 ```

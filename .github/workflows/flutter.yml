@@ -72,8 +72,10 @@ jobs:
       - name: Verify formatting
         run: dart format --output=none --set-exit-if-changed .
 
+      # 整個專案（lib/test/tool/bin），info 也算失敗：只查 lib/、放過 info 時，
+      # test/ 與 tool/ 累積到 86 個問題，其中一個是只取值不斷言的空轉測試
       - name: Analyze project source
-        run: flutter analyze --no-fatal-infos lib/
+        run: flutter analyze
 
   # ── Job 2: 測試 shards（3 個並行）──────────────────────────────────
   test:

@@ -27,7 +27,7 @@ void main() {
     registerFallbackValue(RequestOptions(path: '/'));
   });
 
-  final suffixes = ApiEndpoints.quarterlyReportIndustrySuffixes;
+  const suffixes = ApiEndpoints.quarterlyReportIndustrySuffixes;
 
   Response<dynamic> ok(List<dynamic> body) => Response<dynamic>(
     requestOptions: RequestOptions(path: '/'),
@@ -124,7 +124,7 @@ void main() {
         stubByPath(
           failing: {suffixes.first},
           rows: rowsFor(label),
-          error: () => RateLimitException('quota'),
+          error: () => const RateLimitException('quota'),
         );
         await expectLater(call(), throwsA(isA<RateLimitException>()));
       });

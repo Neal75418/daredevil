@@ -3,7 +3,6 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/data/database/app_database.dart';
-import 'package:daredevil/data/models/twse/quarterly_report_entry.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/domain/services/update/quarterly_report_syncer.dart';

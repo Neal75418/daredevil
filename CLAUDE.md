@@ -49,7 +49,7 @@
 `pre-commit`：
 1. **補做 CLI 重編** — 若上次 post-commit 留下 `.git/cli-rebuild-pending` 就同步補上（失敗則擋下 commit）
 2. **Auto-format** — 格式化 staged `.dart` 檔案並重新 stage
-3. **Analyze** — `flutter analyze --no-fatal-infos lib/`
+3. **Analyze** — `flutter analyze`（全專案、info 也擋；CI 同）
 
 `post-commit`：動到 `lib/`、`bin/`、`tool/`、`ops/launchd/`、`pubspec` 時**背景重編 launchd 的 CLI 產物**（`install.sh --cli-only`，約 9s）。
 

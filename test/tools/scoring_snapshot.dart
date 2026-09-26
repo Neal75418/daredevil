@@ -17,13 +17,10 @@ import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:daredevil/core/constants/calibrated_scores/calibrated_score_context.dart';
 import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_registry.dart';
 import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_table.dart';
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
-import 'package:daredevil/core/constants/reason_type.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
-import 'package:daredevil/core/constants/rule_params_institutional.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';

@@ -189,7 +189,7 @@ void main() {
     // 180 天:forward window(60)使最後評估日 = day 119,窗(90)起點 = day 29
     // → day 0 真正出窗。第一版種 150 天時最後評估日 89、cutoff = day -1,
     // day 0 反而在窗內——mutation 存活抓到這個算術錯誤。
-    final days = InstitutionalParams.institutionalStreakLookbackDays + 90;
+    const days = InstitutionalParams.institutionalStreakLookbackDays + 90;
     await seedPrices('1111', days);
     // day 0 在窗外;day 100 在窗內(防「整串被濾光」的空集合假綠);
     // day 29/28 = 最後評估日(119)的窗界兩側——生產查詢是 >= evalDate-90,
@@ -450,7 +450,7 @@ void main() {
     // 這裡造一檔「前 120 根密集、然後停牌兩年、再恢復」的股票:
     // 恢復後的 bar 其 i−120 錨點落在停牌之前,日曆距離 > 400 天。
     const lookback = 120;
-    final gapSym = 'GAP1';
+    const gapSym = 'GAP1';
     await db.upsertStocks([
       StockMasterCompanion.insert(symbol: gapSym, name: gapSym, market: 'TWSE'),
     ]);

@@ -100,8 +100,8 @@ void main() {
 
     final plan = await db
         .customSelect(
-          "EXPLAIN QUERY PLAN UPDATE daily_price SET open=NULL, high=NULL, "
-          "low=NULL, close=NULL WHERE close = 0",
+          'EXPLAIN QUERY PLAN UPDATE daily_price SET open=NULL, high=NULL, '
+          'low=NULL, close=NULL WHERE close = 0',
         )
         .get();
     final detail = plan.map((r) => r.read<String>('detail')).join(' | ');
