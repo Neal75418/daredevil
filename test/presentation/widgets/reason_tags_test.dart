@@ -135,12 +135,8 @@ void main() {
       final textColor = tester.widget<Text>(find.text('DarkTag')).style!.color!;
 
       // ReasonTags 兩個真實使用點的卡片底色：stock_preview_sheet.dart 是
-      // colorScheme.surface；stock_card.dart 走 AppTheme.cardDecoration，
-      // 高分卡片（score >= 80）在深色主題另外套用 premiumGradient
-      // （darkSurface → darkElevated@50%），實測該情境下合成色略深，
-      // brandOnDecorative 仍達 5.76:1（低於平面 surface 的 6.08:1，但
-      // 仍遠高於 4.5 門檻）。此處以 colorScheme.surface（較保守、較常見
-      // 的情境）為準。
+      // colorScheme.surface；stock_card.dart 走 AppTheme.cardDecoration。
+      // 此處以 colorScheme.surface 為準。
       final composite = ColorContrast.compositeOver(
         Color.from(alpha: 1.0, red: tint.r, green: tint.g, blue: tint.b),
         AppTheme.darkTheme.colorScheme.surface,

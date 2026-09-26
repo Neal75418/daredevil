@@ -165,9 +165,6 @@ abstract final class DesignTokens {
   /// 大陰影模糊半徑 - 覆蓋層、底部彈出面板
   static const double shadowBlurLg = 20.0;
 
-  /// 光暈模糊半徑 - Premium 卡片的品牌光暈
-  static const double shadowBlurGlow = 16.0;
-
   /// 小陰影偏移 - 輕微浮起感
   static const Offset shadowOffsetSm = Offset(0, 1);
 
@@ -176,9 +173,6 @@ abstract final class DesignTokens {
 
   /// 上方陰影偏移 - 底部彈出面板
   static const Offset shadowOffsetUp = Offset(0, -5);
-
-  /// 光暈擴散半徑 - 內縮光暈效果
-  static const double shadowSpreadGlow = -4.0;
 
   // ==================================================
   // 語意色（status indicators）

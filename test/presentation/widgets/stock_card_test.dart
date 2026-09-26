@@ -29,6 +29,35 @@ void main() {
   });
 
   group('StockCard', () {
+    // 強弱只由分級徽章表達。曾有「分數 ≥ 80 在深色主題換漸層底」的第二層
+    // 視覺，門檻與強／中／弱（45／25／12）不同、淺色主題又看不到。
+    testWidgets('深色主題下高分與低分卡片外框樣式相同', (tester) async {
+      BoxDecoration cardDecoration() => tester
+          .widgetList<Container>(find.byType(Container))
+          .map((c) => c.decoration)
+          .whereType<BoxDecoration>()
+          .firstWhere((d) => d.borderRadius == BorderRadius.circular(16));
+
+      await tester.pumpWidget(
+        buildTestApp(
+          const StockCard(symbol: '2330', score: 100),
+          brightness: Brightness.dark,
+        ),
+      );
+      final high = cardDecoration();
+
+      await tester.pumpWidget(
+        buildTestApp(
+          const StockCard(symbol: '2330', score: 15),
+          brightness: Brightness.dark,
+        ),
+      );
+      final low = cardDecoration();
+
+      expect(high.gradient, isNull);
+      expect(high, low);
+    });
+
     testWidgets('displays symbol', (tester) async {
       await tester.pumpWidget(buildTestApp(const StockCard(symbol: '2330')));
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 
 /// Daredevil 應用程式主題系統
@@ -457,46 +456,9 @@ class AppTheme {
   static Color getFlatColor(Brightness brightness) =>
       PriceColors.flatFor(brightness);
 
-  /// 高分股票的頂級金屬漸層
-  static LinearGradient get premiumGradient => LinearGradient(
-    colors: [
-      SemanticColors.darkSurface,
-      SemanticColors.darkElevated.withValues(alpha: 0.5),
-    ],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
   /// 卡片裝飾（含細微邊框）
-  static BoxDecoration cardDecoration(
-    BuildContext context, {
-    bool isPremium = false,
-  }) {
+  static BoxDecoration cardDecoration(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // 如果是高分卡片且在深色模式，使用特殊樣式
-    if (isPremium && isDark) {
-      return BoxDecoration(
-        gradient: premiumGradient,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: SemanticColors.darkOutline.withValues(alpha: 0.5),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: DesignTokens.opacity20),
-            blurRadius: DesignTokens.shadowBlurMd,
-            offset: DesignTokens.shadowOffsetMd,
-          ),
-          BoxShadow(
-            color: primaryColor.withValues(alpha: 0.05),
-            blurRadius: DesignTokens.shadowBlurGlow,
-            spreadRadius: DesignTokens.shadowSpreadGlow,
-          ),
-        ],
-      );
-    }
 
     return BoxDecoration(
       color: isDark ? _cardDark : _cardLight,

@@ -169,10 +169,7 @@ class _StockCardState extends State<StockCard> {
                   horizontal: DesignTokens.stockCardMarginH,
                   vertical: DesignTokens.stockCardMarginV,
                 ),
-                decoration: AppTheme.cardDecoration(
-                  context,
-                  isPremium: (widget.score ?? 0) >= 80,
-                ),
+                decoration: AppTheme.cardDecoration(context),
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
