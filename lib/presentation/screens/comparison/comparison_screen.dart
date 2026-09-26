@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:daredevil/core/l10n/app_strings.dart';
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/presentation/providers/comparison_provider.dart';
@@ -14,6 +13,7 @@ import 'package:daredevil/presentation/screens/comparison/widgets/comparison_tab
 import 'package:daredevil/presentation/screens/comparison/widgets/price_overlay_chart.dart';
 import 'package:daredevil/presentation/screens/comparison/widgets/radar_comparison_chart.dart';
 import 'package:daredevil/presentation/screens/comparison/widgets/stock_picker_sheet.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 比較畫面 - 並排顯示多檔股票分析
 class ComparisonScreen extends ConsumerStatefulWidget {
@@ -46,11 +46,10 @@ class _ComparisonScreenState extends ConsumerState<ComparisonScreen> {
       return;
     }
 
-    final symbol = await showModalBottomSheet<String>(
+    final symbol = await showAppBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
       builder: (context) => StockPickerSheet(existingSymbols: state.symbols),
     );
 

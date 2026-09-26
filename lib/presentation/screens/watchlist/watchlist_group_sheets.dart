@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 顯示「移到分組」picker（股票長按 → 移到分組）
 ///
@@ -19,11 +19,10 @@ Future<void> showMoveToGroupSheet({
   required int? currentGroupId,
 }) {
   HapticFeedback.selectionClick();
-  return showModalBottomSheet(
+  return showAppBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
     builder: (sheetContext) => _MoveToGroupSheet(
       ref: ref,
       symbol: symbol,
@@ -40,11 +39,10 @@ Future<void> showManageGroupsSheet({
   required WidgetRef ref,
 }) {
   HapticFeedback.selectionClick();
-  return showModalBottomSheet(
+  return showAppBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
     builder: (sheetContext) => _ManageGroupsSheet(ref: ref),
   );
 }

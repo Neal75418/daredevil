@@ -32,9 +32,8 @@ abstract final class Breakpoints {
 
   /// Modal bottom sheet 最大寬度。
   ///
-  /// 寬視窗（桌面）下 modal bottom sheet 預設撐滿全寬、不置中，閱讀體驗差；
-  /// 給 `showModalBottomSheet(constraints:)` 限寬後 Flutter 會自動水平置中，
-  /// 窄視窗（< 此值）則仍維持滿寬。
+  /// 底部面板的最大寬度（[showAppBottomSheet] 使用）。Material 3 預設亦為
+  /// 640；明寫以免依賴主題預設。窄視窗（< 此值）仍滿寬。
   static const double sheetMaxWidth = 640;
 }
 

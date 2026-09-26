@@ -13,6 +13,7 @@ import 'package:daredevil/presentation/screens/calendar/widgets/add_event_sheet.
 import 'package:daredevil/presentation/screens/calendar/widgets/event_detail_sheet.dart';
 import 'package:daredevil/presentation/screens/calendar/widgets/event_list_tile.dart';
 import 'package:daredevil/presentation/screens/calendar/widgets/upcoming_events_section.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 事件行事曆頁面
 class EventCalendarScreen extends ConsumerStatefulWidget {
@@ -825,11 +826,10 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
   }
 
   void _showAddEvent() {
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
       builder: (context) => AddEventSheet(initialDate: _selectedDay),
     );
   }

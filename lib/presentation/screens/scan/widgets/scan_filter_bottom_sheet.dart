@@ -2,9 +2,9 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/domain/models/scan_models.dart';
 import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 顯示分組篩選條件的底部選單
 ///
@@ -16,11 +16,10 @@ void showScanFilterBottomSheet({
   required ValueChanged<ScanFilter> onFilterSelected,
 }) {
   final theme = Theme.of(context);
-  showModalBottomSheet(
+  showAppBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: theme.colorScheme.surface,
-    constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),

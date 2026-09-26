@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:daredevil/core/constants/app_routes.dart';
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
@@ -18,6 +17,7 @@ import 'package:daredevil/presentation/screens/portfolio/widgets/performance_car
 import 'package:daredevil/presentation/screens/portfolio/widgets/portfolio_summary_card.dart';
 import 'package:daredevil/presentation/screens/portfolio/widgets/position_card.dart';
 import 'package:daredevil/presentation/screens/portfolio/widgets/add_transaction_sheet.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 投資組合 Tab（嵌入 Watchlist 頁面）
 class PortfolioTab extends ConsumerStatefulWidget {
@@ -254,11 +254,10 @@ class _PortfolioTabState extends ConsumerState<PortfolioTab> {
 
   void _showAddTransaction() {
     HapticFeedback.lightImpact();
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
       builder: (context) => const AddTransactionSheet(),
     );
   }

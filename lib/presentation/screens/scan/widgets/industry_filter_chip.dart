@@ -2,8 +2,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 產業篩選 Chip — 點擊展開下拉選單
 class IndustryFilterChip extends StatelessWidget {
@@ -36,11 +36,10 @@ class IndustryFilterChip extends StatelessWidget {
   }
 
   void _showIndustryPicker(BuildContext context, ThemeData theme) {
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: theme.colorScheme.surface,
-      constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),

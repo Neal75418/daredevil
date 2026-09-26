@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
@@ -14,6 +13,7 @@ import 'package:daredevil/presentation/providers/event_calendar_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/screens/calendar/widgets/add_event_sheet.dart';
 import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 顯示事件詳情 Bottom Sheet
 void showEventDetailSheet(
@@ -21,11 +21,10 @@ void showEventDetailSheet(
   StockEventEntry event, {
   VoidCallback? onDelete,
 }) {
-  showModalBottomSheet(
+  showAppBottomSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
     builder: (context) => EventDetailSheet(event: event, onDelete: onDelete),
   );
 }
@@ -251,13 +250,10 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                       nav.pop();
                       // 使用 navigator 的 overlay context 避免 deactivated context
                       final parentContext = nav.context;
-                      showModalBottomSheet(
+                      showAppBottomSheet(
                         context: parentContext,
                         isScrollControlled: true,
                         useSafeArea: true,
-                        constraints: const BoxConstraints(
-                          maxWidth: Breakpoints.sheetMaxWidth,
-                        ),
                         builder: (_) => AddEventSheet(existingEvent: event),
                       );
                     },

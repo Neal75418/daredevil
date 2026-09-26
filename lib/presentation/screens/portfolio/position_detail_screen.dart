@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
@@ -13,6 +12,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
 import 'package:daredevil/presentation/screens/portfolio/widgets/add_transaction_sheet.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 持倉明細頁面
 class PositionDetailScreen extends ConsumerWidget {
@@ -83,13 +83,10 @@ class PositionDetailScreen extends ConsumerWidget {
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          showModalBottomSheet(
+          showAppBottomSheet(
             context: context,
             isScrollControlled: true,
             useSafeArea: true,
-            constraints: const BoxConstraints(
-              maxWidth: Breakpoints.sheetMaxWidth,
-            ),
             builder: (context) => AddTransactionSheet(initialSymbol: symbol),
           );
         },
@@ -230,13 +227,10 @@ class PositionDetailScreen extends ConsumerWidget {
             tx: tx,
             theme: theme,
             onEdit: () async {
-              await showModalBottomSheet(
+              await showAppBottomSheet(
                 context: context,
                 isScrollControlled: true,
                 useSafeArea: true,
-                constraints: const BoxConstraints(
-                  maxWidth: Breakpoints.sheetMaxWidth,
-                ),
                 builder: (_) =>
                     AddTransactionSheet(initialSymbol: symbol, existingTx: tx),
               );

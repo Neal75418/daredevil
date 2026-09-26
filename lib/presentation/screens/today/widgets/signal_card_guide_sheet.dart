@@ -5,6 +5,7 @@ import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/presentation/widgets/score_tier_badge.dart';
 import 'package:daredevil/presentation/widgets/stock_card_sparkline.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 「訊號卡怎麼看」說明（今日訊號標題旁的 ⓘ 進入）。
 ///
@@ -13,7 +14,7 @@ import 'package:daredevil/presentation/widgets/stock_card_sparkline.dart';
 class SignalCardGuideSheet extends StatelessWidget {
   const SignalCardGuideSheet({super.key});
 
-  static Future<void> show(BuildContext context) => showModalBottomSheet<void>(
+  static Future<void> show(BuildContext context) => showAppBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,

@@ -9,6 +9,7 @@ import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/pinned_thesis_provider.dart';
 import 'package:daredevil/presentation/providers/stock_browsing_context_provider.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 釘選論點追蹤區（出場層 Phase 2，今日頁頂部 / 警示頁共用）
 ///
@@ -131,7 +132,7 @@ class _PinnedThesisSectionState extends ConsumerState<PinnedThesisSection> {
         .archivedTheses();
     if (!context.mounted) return;
 
-    await showModalBottomSheet<void>(
+    await showAppBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {

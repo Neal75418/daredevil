@@ -12,10 +12,10 @@ import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 import 'package:daredevil/presentation/providers/stock_detail_provider.dart';
 import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
 import 'package:daredevil/presentation/widgets/section_header.dart';
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/domain/services/alert/alert_target_calculator.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/alert_quick_set.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 到價提醒分頁 - 個股價格警示設定
 class AlertsTab extends ConsumerStatefulWidget {
@@ -426,11 +426,10 @@ class _AlertsTabState extends ConsumerState<AlertsTab> {
     WidgetRef ref,
     double? currentPrice,
   ) {
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
       builder: (context) => _AddAlertSheet(
         symbol: widget.symbol,
         currentPrice: currentPrice,

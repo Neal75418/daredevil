@@ -8,7 +8,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/constants/score_tier.dart';
 import 'package:daredevil/core/extensions/trend_state_extension.dart';
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
@@ -16,6 +15,7 @@ import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
 import 'package:daredevil/presentation/widgets/reason_tags.dart';
 import 'package:daredevil/presentation/widgets/score_tier_badge.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 股票預覽資料
 class StockPreviewData {
@@ -52,11 +52,10 @@ Future<void> showStockPreviewSheet({
 }) {
   HapticFeedback.mediumImpact();
 
-  return showModalBottomSheet(
+  return showAppBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
     builder: (context) => StockPreviewSheet(
       data: data,
       onViewDetails: onViewDetails,

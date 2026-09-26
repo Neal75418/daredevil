@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:daredevil/core/constants/app_routes.dart';
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
@@ -21,6 +20,7 @@ import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 新聞畫面 - 顯示近期市場新聞，支援篩選、搜尋與分類
 class NewsScreen extends ConsumerStatefulWidget {
@@ -184,11 +184,10 @@ class _AllNewsTabState extends ConsumerState<_AllNewsTab> {
   void _showNewsPreview(NewsItemEntry item, List<String> relatedStocks) {
     final theme = Theme.of(context);
 
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.5,
         minChildSize: 0.3,

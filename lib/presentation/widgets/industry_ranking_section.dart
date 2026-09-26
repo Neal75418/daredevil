@@ -12,6 +12,7 @@ import 'package:daredevil/domain/models/industry_ranking.dart';
 import 'package:daredevil/presentation/providers/industry_ranking_provider.dart';
 import 'package:daredevil/presentation/providers/stock_browsing_context_provider.dart';
 import 'package:daredevil/presentation/widgets/section_header.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 今日頁族群排行 section（使用者選股法則 L1：族群決定 80%）
 ///
@@ -347,7 +348,7 @@ class _IndustryCard extends ConsumerWidget {
   }
 
   void _showMembersSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet<void>(
+    showAppBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {
@@ -549,7 +550,7 @@ class _RotationCard extends ConsumerWidget {
   /// 成員依 **20 日報酬** 排序(見 IndustryRotation.topMembers),
   /// 過強者榜的標星——那是使用者點進來要找的東西。
   void _showMembersSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet<void>(
+    showAppBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {

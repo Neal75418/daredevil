@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:daredevil/core/constants/reason_type.dart';
 import 'package:daredevil/core/constants/risk_warnings.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
-import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/presentation/widgets/reason_tags.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 風險警示聚合徽章（option B）
 ///
@@ -22,7 +22,7 @@ import 'package:daredevil/presentation/widgets/reason_tags.dart';
 ///
 /// - 空 [warnings] → 不 render（zero-noise，對齊「健康即隱藏」哲學）
 /// - N == 1 → 只顯 icon；N ≥ 2 → icon + 數字
-/// - tap → [showModalBottomSheet] 列出每條警訊（嚴重度色點 + i18n label）
+/// - tap → [showAppBottomSheet] 列出每條警訊（嚴重度色點 + i18n label）
 class RiskBadgeCluster extends StatelessWidget {
   const RiskBadgeCluster({super.key, required this.warnings});
 
@@ -111,10 +111,9 @@ class RiskBadgeCluster extends StatelessWidget {
         return sa.compareTo(sb);
       });
 
-    showModalBottomSheet<void>(
+    showAppBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      constraints: const BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
       builder: (sheetContext) {
         final theme = Theme.of(sheetContext);
         return SafeArea(
