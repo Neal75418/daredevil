@@ -8,9 +8,11 @@ import 'package:daredevil/data/remote/tdcc_client.dart';
 import 'package:daredevil/data/remote/api_budget_tracker.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
+import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/data/repositories/analysis_repository.dart';
 import 'package:daredevil/data/repositories/fundamental_repository.dart';
 import 'package:daredevil/data/repositories/insider_repository.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 import 'package:daredevil/data/repositories/shareholding_repository.dart';
 import 'package:daredevil/data/repositories/trading_repository.dart';
 import 'package:daredevil/data/repositories/warning_repository.dart';
@@ -23,6 +25,7 @@ import 'package:daredevil/domain/repositories/news_repository.dart'
 import 'package:daredevil/domain/repositories/price_repository.dart'
     show MarketSyncResult;
 import 'package:daredevil/domain/services/scoring_service.dart';
+import 'package:daredevil/domain/services/update/market_day_refetcher.dart';
 import 'package:daredevil/domain/services/update/news_mention_snapshot_service.dart';
 import 'package:daredevil/domain/services/thesis/thesis_monitor_service.dart';
 import 'package:daredevil/core/utils/clock.dart';
@@ -44,6 +47,8 @@ class MockAnalysisRepository extends Mock implements AnalysisRepository {}
 
 class MockTdccClient extends Mock implements TdccClient {}
 
+class MockTwseClient extends Mock implements TwseClient {}
+
 class MockTpexClient extends Mock implements TpexClient {}
 
 class MockFundamentalRepository extends Mock implements FundamentalRepository {}
@@ -64,6 +69,10 @@ class MockWarningRepository extends Mock implements WarningRepository {}
 
 class MockInsiderRepository extends Mock implements InsiderRepository {}
 
+class MockMarketDayRefetcher extends Mock implements MarketDayRefetcher {}
+
+class _FakeLedger extends Fake implements MarketDayFetchLedger {}
+
 void main() {
   late MockAppDatabase mockDb;
   late MockStockRepository mockStockRepo;
@@ -76,11 +85,14 @@ void main() {
   // 2026-07-06 為週一交易日
   final tradingDay = DateTime(2026, 7, 6);
 
+  late MockMarketDayRefetcher mockRefetcher;
+
   setUpAll(() {
     registerFallbackValue(DateTime(2026, 7, 6));
     registerFallbackValue(
       ScoringBatchData(pricesMap: const {}, newsMap: const {}),
     );
+    registerFallbackValue(_FakeLedger());
   });
 
   setUp(() {
@@ -102,7 +114,13 @@ void main() {
     when(() => mockStockRepo.getAllStocks()).thenAnswer((_) async => []);
     when(() => mockStockRepo.syncStockList()).thenAnswer((_) async => 1000);
     // 價格：dataDate 與目標日一致 → 不觸發日期校正
-    when(() => mockPriceRepo.syncAllPricesForDate(any())).thenAnswer(
+    when(
+      () => mockPriceRepo.syncAllPricesForDate(
+        any(),
+        force: any(named: 'force'),
+        ledger: any(named: 'ledger'),
+      ),
+    ).thenAnswer(
       (_) async => MarketSyncResult(
         count: 100,
         candidates: const [],
@@ -214,6 +232,14 @@ void main() {
     when(
       () => mockDb.getLatestHoldingDistributionDate(any()),
     ).thenAnswer((_) async => null);
+
+    mockRefetcher = MockMarketDayRefetcher();
+    when(
+      () => mockRefetcher.refetchPending(
+        today: any(named: 'today'),
+        ledger: any(named: 'ledger'),
+      ),
+    ).thenAnswer((_) async => RefetchSummary());
   });
 
   /// 建立最小依賴的 UpdateService：
@@ -221,6 +247,7 @@ void main() {
   /// 只提供 required repositories（institutional 等為 null → 對應 syncer 不建立）。
   /// 各測試可額外注入 tpex / fundamental 以啟用對應 syncer。
   UpdateService buildService({
+    TwseClient? twse,
     TpexClient? tpex,
     FinMindClient? finMind,
     FundamentalRepository? fundamental,
@@ -230,6 +257,7 @@ void main() {
     WarningRepository? warning,
     InsiderRepository? insider,
     ThesisMonitorService? thesisMonitor,
+    MarketDayRefetcher? refetcher,
     AppClock? clock,
   }) {
     return UpdateService(
@@ -248,11 +276,17 @@ void main() {
         warning: warning,
         insider: insider,
       ),
-      clients: UpdateClients(tdcc: mockTdcc, tpex: tpex, finMind: finMind),
+      clients: UpdateClients(
+        tdcc: mockTdcc,
+        twse: twse,
+        tpex: tpex,
+        finMind: finMind,
+      ),
       services: UpdateServices(
         scoring: mockScoring,
         newsMentionSnapshot: newsMentionSnapshot,
         thesisMonitor: thesisMonitor,
+        marketDayRefetcher: refetcher ?? mockRefetcher,
       ),
     );
   }
@@ -533,7 +567,13 @@ void main() {
     test('半個市場價格取得失敗必須可見（TWSE 空、TPEx 有資料）', () async {
       // safeAwait 把來源失敗吞成空陣列：只有 TWSE 掛掉時 tpexPrices 非空、
       // 不進「兩者皆空」分支 → 用半個市場的資料照常評分且無人知曉。
-      when(() => mockPriceRepo.syncAllPricesForDate(any())).thenAnswer(
+      when(
+        () => mockPriceRepo.syncAllPricesForDate(
+          any(),
+          force: any(named: 'force'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer(
         (_) async => MarketSyncResult(
           count: 900,
           candidates: const [],
@@ -558,7 +598,13 @@ void main() {
       // → dataDate 早於 targetDate、觸發回滾。此時「TPEx 今日零筆」是預期的，
       // 而回滾後那一天的資料 DB 早已完整，記 error 會讓每個交易日早盤都假 partial。
       final prevDay = tradingDay.subtract(const Duration(days: 1));
-      when(() => mockPriceRepo.syncAllPricesForDate(any())).thenAnswer(
+      when(
+        () => mockPriceRepo.syncAllPricesForDate(
+          any(),
+          force: any(named: 'force'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer(
         (_) async => MarketSyncResult(
           count: 1200,
           candidates: const [],
@@ -923,7 +969,13 @@ void main() {
       when(
         () => mockTdcc.getAllHoldingDistribution(),
       ).thenAnswer((_) async => {});
-      when(() => mockPriceRepo.syncAllPricesForDate(any())).thenAnswer(
+      when(
+        () => mockPriceRepo.syncAllPricesForDate(
+          any(),
+          force: any(named: 'force'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer(
         (_) async => MarketSyncResult(
           count: 3,
           candidates: const ['2330'],
@@ -978,7 +1030,13 @@ void main() {
       when(
         () => mockTdcc.getAllHoldingDistribution(),
       ).thenAnswer((_) async => {});
-      when(() => mockPriceRepo.syncAllPricesForDate(any())).thenAnswer(
+      when(
+        () => mockPriceRepo.syncAllPricesForDate(
+          any(),
+          force: any(named: 'force'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer(
         (_) async => MarketSyncResult(
           count: 3,
           candidates: const ['2330'],
@@ -1074,7 +1132,13 @@ void main() {
       when(
         () => mockTdcc.getAllHoldingDistribution(),
       ).thenAnswer((_) async => {});
-      when(() => mockPriceRepo.syncAllPricesForDate(any())).thenAnswer(
+      when(
+        () => mockPriceRepo.syncAllPricesForDate(
+          any(),
+          force: any(named: 'force'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer(
         (_) async => MarketSyncResult(
           count: 3,
           candidates: const ['2330', '2317', '2454'],
@@ -1218,7 +1282,13 @@ void main() {
     }
 
     void stubCandidates(List<String> candidates) {
-      when(() => mockPriceRepo.syncAllPricesForDate(any())).thenAnswer(
+      when(
+        () => mockPriceRepo.syncAllPricesForDate(
+          any(),
+          force: any(named: 'force'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer(
         (_) async => MarketSyncResult(
           count: candidates.length,
           candidates: candidates,
@@ -1402,6 +1472,83 @@ void main() {
           endDate: any(named: 'endDate'),
         ),
       ).called(1);
+    });
+  });
+
+  group('盤後資料定案接線（2026-09-26）', () {
+    test('每輪開始清兩個 client 的快取', () async {
+      final twse = MockTwseClient();
+      final tpex = MockTpexClient();
+      await buildService(
+        twse: twse,
+        tpex: tpex,
+      ).runDailyUpdate(forDate: tradingDay);
+      verify(() => twse.clearCache()).called(1);
+      verify(() => tpex.clearCache()).called(1);
+    });
+
+    test('清快取發生在第一次抓取之前', () async {
+      final twse = MockTwseClient();
+      final tpex = MockTpexClient();
+      await buildService(
+        twse: twse,
+        tpex: tpex,
+      ).runDailyUpdate(forDate: tradingDay);
+      verifyInOrder([
+        () => twse.clearCache(),
+        () => tpex.clearCache(),
+        () => mockPriceRepo.syncAllPricesForDate(
+          any(),
+          force: any(named: 'force'),
+          ledger: any(named: 'ledger'),
+        ),
+      ]);
+    });
+
+    test('價格同步收到 ledger，時間＝本輪開始的時鐘值', () async {
+      await buildService().runDailyUpdate(forDate: tradingDay);
+      final captured = verify(
+        () => mockPriceRepo.syncAllPricesForDate(
+          any(),
+          force: any(named: 'force'),
+          ledger: captureAny(named: 'ledger'),
+        ),
+      ).captured;
+      final ledger = captured.single as MarketDayFetchLedger;
+      expect(ledger.fetchedAt, DateTime(2026, 7, 6, 15, 30));
+    });
+
+    test('重抓被呼叫；限流時結果帶限流錯誤', () async {
+      final summary = RefetchSummary()
+        ..rateLimitError = const RateLimitException('429');
+      when(
+        () => mockRefetcher.refetchPending(
+          today: any(named: 'today'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer((_) async => summary);
+      final result = await buildService().runDailyUpdate(forDate: tradingDay);
+      verify(
+        () => mockRefetcher.refetchPending(
+          today: any(named: 'today'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).called(1);
+      expect(result.hasRateLimitError, isTrue);
+    });
+
+    test('非交易日提早結束：不清快取、不重抓', () async {
+      final twse = MockTwseClient();
+      await buildService(twse: twse).runDailyUpdate(
+        forDate: DateTime(2026, 7, 11), // 週六
+      );
+      verifyNever(() => twse.clearCache());
+      verifyNever(
+        () => mockRefetcher.refetchPending(
+          today: any(named: 'today'),
+          ledger: any(named: 'ledger'),
+        ),
+      );
     });
   });
 }

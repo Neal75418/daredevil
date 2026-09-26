@@ -10,9 +10,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/constants/market_dataset.dart';
+import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 import 'package:daredevil/data/repositories/shareholding_repository.dart';
 
 class MockTwseClient extends Mock implements TwseClient {}
@@ -154,5 +158,22 @@ void main() {
       () => twse.getAllForeignShareholding(date: any(named: 'date')),
     ).thenAnswer((_) async => [row('2330', 69.17)]);
     expect(await repo.syncAllMarketShareholding(date: date), 1);
+  });
+
+  test('寫入後回報 (foreignShareholding, TWSE, 請求日, 列數)', () async {
+    when(
+      () => twse.getAllForeignShareholding(date: any(named: 'date')),
+    ).thenAnswer((_) async => [row('2330', 69.17), row('2317', 40.69)]);
+    final ledger = MarketDayFetchLedger(
+      database: db,
+      fetchedAt: DateTime(2026, 8, 15),
+    );
+    final n = await repo.syncAllMarketShareholding(date: date, ledger: ledger);
+    final r = ledger.recorded.single;
+    expect(
+      (r.dataset, r.market, r.rows),
+      (MarketDataset.foreignShareholding, MarketCode.twse, n),
+    );
+    expect(DateContext.isSameDay(r.date, date), isTrue);
   });
 }

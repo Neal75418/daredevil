@@ -1,4 +1,5 @@
 import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/constants/market_dataset.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/utils/clock.dart';
@@ -11,6 +12,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 import 'package:daredevil/data/repositories/price_candidate_filter.dart';
 import 'package:daredevil/data/repositories/twse_price_source.dart';
 import 'package:daredevil/data/repositories/tpex_price_source.dart';
@@ -210,6 +212,7 @@ class PriceRepository implements IPriceRepository {
   Future<int> backfillTwsePricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,
+    MarketDayFetchLedger? ledger,
   }) async {
     try {
       // 歷史回補走 MI_INDEX（STOCK_DAY_ALL 自 2026-06 起忽略 date 參數）
@@ -232,7 +235,14 @@ class PriceRepository implements IPriceRepository {
 
       if (filtered.isEmpty) return 0;
 
-      await _db.insertPrices(filtered);
+      await _db.transaction<void>(() async {
+        await _db.insertPrices(filtered);
+        await _afterMarketDayWrite(
+          market: MarketCode.twse,
+          entries: filtered,
+          ledger: ledger,
+        );
+      });
       return filtered.length;
     } on RateLimitException {
       rethrow;
@@ -258,6 +268,7 @@ class PriceRepository implements IPriceRepository {
   Future<int> backfillTpexPricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,
+    MarketDayFetchLedger? ledger,
   }) async {
     try {
       // 歷史回補走 afterTrading/dailyQuotes（官方口徑，與每日端點相同）
@@ -278,7 +289,14 @@ class PriceRepository implements IPriceRepository {
 
       if (filtered.isEmpty) return 0;
 
-      await _db.insertPrices(filtered);
+      await _db.transaction<void>(() async {
+        await _db.insertPrices(filtered);
+        await _afterMarketDayWrite(
+          market: MarketCode.tpex,
+          entries: filtered,
+          ledger: ledger,
+        );
+      });
       return filtered.length;
     } on RateLimitException {
       rethrow;
@@ -303,32 +321,41 @@ class PriceRepository implements IPriceRepository {
   Future<MarketSyncResult> syncAllPricesForDate(
     DateTime date, {
     bool force = false,
+    MarketDayFetchLedger? ledger,
   }) async {
     try {
       // 正規化日期至 UTC 午夜時間，確保跨時區一致性
       final normalizedDate = DateContext.normalize(date);
 
-      // 最佳化：先檢查 Database，避免不必要的 API 呼叫
-      if (!force) {
+      // 定案才跳過（spec §4.5(a)）。舊邏輯用「列數 > 門檻」，但 15:30 抓到的
+      // 是未含鉅額交易的初值，列數夠不代表數值已定案。當天的資料在當天不會
+      // 定案，所以交易日當天實際上每次都抓。
+      if (!force &&
+          await _db.isMarketDayFinal(
+            dataset: MarketDataset.prices,
+            market: MarketCode.twse,
+            date: normalizedDate,
+          ) &&
+          await _db.isMarketDayFinal(
+            dataset: MarketDataset.prices,
+            market: MarketCode.tpex,
+            date: normalizedDate,
+          )) {
         final existingCount = await _db.getPriceCountForDate(normalizedDate);
-        if (existingCount > DataFreshness.fullMarketThreshold) {
-          final candidates = await quickFilterCandidatesFromDb(
-            _db,
-            normalizedDate,
-          );
-
-          AppLogger.info(
-            'PriceRepo',
-            '價格同步: $existingCount 筆 (${DateContext.formatYmd(normalizedDate)}, 快取)',
-          );
-
-          return MarketSyncResult(
-            count: existingCount,
-            candidates: candidates,
-            dataDate: normalizedDate,
-            skipped: true,
-          );
-        }
+        final candidates = await quickFilterCandidatesFromDb(
+          _db,
+          normalizedDate,
+        );
+        AppLogger.info(
+          'PriceRepo',
+          '價格同步: $existingCount 筆 (${DateContext.formatYmd(normalizedDate)}, 已定案)',
+        );
+        return MarketSyncResult(
+          count: existingCount,
+          candidates: candidates,
+          dataDate: normalizedDate,
+          skipped: true,
+        );
       }
 
       // 平行取得上市與上櫃價格資料（錯誤隔離，允許部分成功）
@@ -374,11 +401,24 @@ class PriceRepository implements IPriceRepository {
         ...tpexResult.candidates,
       ];
 
-      // 寫入資料庫
-      if (allStockEntries.isNotEmpty) {
-        await _db.upsertStocks(allStockEntries);
-      }
-      await _db.insertPrices(allPriceEntries);
+      // 資料、當沖比例重算、抓取狀態在同一個 transaction：App 與 launchd
+      // 並行時，最後寫入者的資料與狀態一致
+      await _db.transaction<void>(() async {
+        if (allStockEntries.isNotEmpty) {
+          await _db.upsertStocks(allStockEntries);
+        }
+        await _db.insertPrices(allPriceEntries);
+        await _afterMarketDayWrite(
+          market: MarketCode.twse,
+          entries: twseResult.priceEntries,
+          ledger: ledger,
+        );
+        await _afterMarketDayWrite(
+          market: MarketCode.tpex,
+          entries: tpexResult.priceEntries,
+          ledger: ledger,
+        );
+      });
 
       // 決定資料日期
       final dataDate = twseResult.dataDate ?? tpexResult.dataDate;
@@ -424,5 +464,26 @@ class PriceRepository implements IPriceRepository {
       AppLogger.error('PriceRepo', '價格同步失敗', e, stack);
       throw DatabaseException('Failed to sync prices from TWSE/TPEX', e);
     }
+  }
+
+  /// 全市場價格寫入後：重算同日當沖比例（成交量可能被更正），並向 ledger
+  /// 回報實際寫入的資料日與列數。[entries] 為空（該市場抓取失敗）時不動作。
+  Future<void> _afterMarketDayWrite({
+    required String market,
+    required List<DailyPriceCompanion> entries,
+    required MarketDayFetchLedger? ledger,
+  }) async {
+    if (entries.isEmpty) return;
+    final day = DateContext.normalize(entries.first.date.value);
+    await _db.recomputeDayTradingRatios(
+      day: day,
+      symbols: {for (final e in entries) e.symbol.value},
+    );
+    await ledger?.report(
+      dataset: MarketDataset.prices,
+      market: market,
+      date: day,
+      rows: entries.length,
+    );
   }
 }

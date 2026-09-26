@@ -1,4 +1,5 @@
 import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/constants/market_dataset.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -26,11 +27,33 @@ void main() {
   late MockTpexClient mockTpexClient;
   late PriceRepository repository;
 
+  setUpAll(() {
+    registerFallbackValue(MarketDataset.prices);
+    registerFallbackValue(<String>{});
+  });
+
   setUp(() {
     mockDb = MockAppDatabase();
     mockFinMindClient = MockFinMindClient();
     mockTwseClient = MockTwseClient();
     mockTpexClient = MockTpexClient();
+
+    when(
+      () => mockDb.isMarketDayFinal(
+        dataset: any(named: 'dataset'),
+        market: any(named: 'market'),
+        date: any(named: 'date'),
+      ),
+    ).thenAnswer((_) async => false);
+    when(
+      () => mockDb.recomputeDayTradingRatios(
+        day: any(named: 'day'),
+        symbols: any(named: 'symbols'),
+      ),
+    ).thenAnswer((_) async => 0);
+    when(() => mockDb.transaction<void>(any())).thenAnswer((inv) async {
+      await (inv.positionalArguments[0] as Future<void> Function())();
+    });
 
     repository = PriceRepository(
       database: mockDb,
@@ -132,7 +155,17 @@ void main() {
     });
 
     group('syncAllPricesForDate', () {
-      test('skips sync when existing data exceeds threshold', () async {
+      // Ruling: 舊測試斷言「列數 > 1500 就跳過」，是 spec §4.5(a) 判為錯誤
+      // 的舊邏輯本身（15:30 抓到的初值列數已夠、但當天不可能定案）。改寫
+      // 為新語意：只有兩市場皆 isMarketDayFinal 才跳過。
+      test('兩市場皆已定案 → 跳過，不打 API', () async {
+        when(
+          () => mockDb.isMarketDayFinal(
+            dataset: any(named: 'dataset'),
+            market: any(named: 'market'),
+            date: any(named: 'date'),
+          ),
+        ).thenAnswer((_) async => true);
         when(
           () => mockDb.getPriceCountForDate(any()),
         ).thenAnswer((_) async => 1600);

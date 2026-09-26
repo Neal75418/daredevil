@@ -24,6 +24,10 @@ void main() {
   late MockTpexClient mockTpexClient;
   late InstitutionalRepository repo;
 
+  setUpAll(() {
+    registerFallbackValue(<String>{});
+  });
+
   setUp(() {
     mockDb = MockAppDatabase();
     mockClient = MockFinMindClient();
@@ -35,6 +39,15 @@ void main() {
       twseClient: mockTwseClient,
       tpexClient: mockTpexClient,
     );
+    when(() => mockDb.transaction<void>(any())).thenAnswer((inv) async {
+      await (inv.positionalArguments[0] as Future<void> Function())();
+    });
+    when(
+      () => mockDb.deleteInstitutionalRows(
+        day: any(named: 'day'),
+        symbols: any(named: 'symbols'),
+      ),
+    ).thenAnswer((_) async => 0);
   });
 
   // ==========================================

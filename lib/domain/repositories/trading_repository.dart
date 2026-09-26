@@ -1,4 +1,5 @@
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 
 /// 交易資料儲存庫介面
 ///
@@ -19,13 +20,21 @@ abstract class ITradingRepository {
   ///
   /// 上櫃對等見 [syncAllDayTradingFromTpex]（2026-08-23 接上；先前記載的
   /// 「TPEX 當沖端點被 Cloudflare 擋」指的是舊站路徑，櫃買改版後已 302）。
-  Future<int> syncAllDayTradingFromTwse({DateTime? date, bool force = false});
+  Future<int> syncAllDayTradingFromTwse({
+    DateTime? date,
+    bool force = false,
+    MarketDayFetchLedger? ledger,
+  });
 
   /// 同步上櫃當沖（TPEx `/www/zh-tw/intraday/stat`，免費無額度）
   ///
   /// 帶 [date] 可指定歷史日（2026-09-26 實測回到 2024-01）；不傳日期時取
   /// 最新交易日。寫入日期一律取自回應的 `date`。
-  Future<int> syncAllDayTradingFromTpex({DateTime? date, bool force = false});
+  Future<int> syncAllDayTradingFromTpex({
+    DateTime? date,
+    bool force = false,
+    MarketDayFetchLedger? ledger,
+  });
 
   // ==================================================
   // 融資融券
@@ -38,7 +47,11 @@ abstract class ITradingRepository {
   });
 
   /// 從 TWSE/TPEX 同步全市場融資融券資料。回傳同步筆數，null 表示已快取（跳過同步）。
-  Future<int?> syncAllMarginTrading({DateTime? date, bool force = false});
+  Future<int?> syncAllMarginTrading({
+    DateTime? date,
+    bool force = false,
+    MarketDayFetchLedger? ledger,
+  });
 
   /// 回補**指定歷史交易日**、**指定市場**的融資融券資料。
   ///
@@ -55,5 +68,6 @@ abstract class ITradingRepository {
   Future<({int twseRows, int tpexRows})> backfillMarginTradingByDate({
     required DateTime date,
     required Set<String> markets,
+    MarketDayFetchLedger? ledger,
   });
 }

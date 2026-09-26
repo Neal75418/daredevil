@@ -1,4 +1,5 @@
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 
 /// 三大法人買賣超資料儲存庫介面
 ///
@@ -19,7 +20,11 @@ abstract class IInstitutionalRepository {
   });
 
   /// 同步指定日期的全市場法人資料
-  Future<int> syncAllMarketInstitutional(DateTime date, {bool force = false});
+  Future<int> syncAllMarketInstitutional(
+    DateTime date, {
+    bool force = false,
+    MarketDayFetchLedger? ledger,
+  });
 
   /// 用 TWSE + TPEx batch endpoint 回補單一交易日**指定股票**的法人資料
   ///
@@ -55,6 +60,9 @@ abstract class IInstitutionalRepository {
   ///
   /// 供回補迴圈**在節流延遲前**預檢——已完整的天不睡不打。
   Future<bool> isDayComplete(DateTime date);
+
+  /// 該日法人兩市場是否都已定案（當日路徑的跳過判斷）
+  Future<bool> isDayFinal(DateTime date);
 
   /// 口徑遷移後的深回補是否尚未完整跑完
   ///

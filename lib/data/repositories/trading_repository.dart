@@ -13,6 +13,8 @@ import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
+import 'package:daredevil/core/constants/market_dataset.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 import 'package:daredevil/domain/repositories/trading_repository.dart';
 
 /// 交易資料 Repository
@@ -65,6 +67,7 @@ class TradingRepository implements ITradingRepository {
   Future<int> syncAllDayTradingFromTwse({
     DateTime? date,
     bool force = false,
+    MarketDayFetchLedger? ledger,
   }) async {
     try {
       final targetDate = DateContext.normalize(date ?? _clock.now());
@@ -107,6 +110,7 @@ class TradingRepository implements ITradingRepository {
               volume: item.totalVolume,
             ),
         ],
+        ledger: ledger,
       );
     } on RateLimitException {
       rethrow;
@@ -130,6 +134,7 @@ class TradingRepository implements ITradingRepository {
     required String market,
     required List<({String code, double buy, double sell, double volume})>
     items,
+    MarketDayFetchLedger? ledger,
   }) async {
     if (items.isEmpty) return 0;
 
@@ -196,7 +201,7 @@ class TradingRepository implements ITradingRepository {
     final deleteEnd = dataDate.add(
       const Duration(hours: DataFreshness.dayTradingDeleteWindowAfterHours),
     );
-    await _db.transaction(() async {
+    await _db.transaction<void>(() async {
       await _db.deleteDayTradingForDateRange(
         deleteStart,
         deleteEnd,
@@ -204,6 +209,12 @@ class TradingRepository implements ITradingRepository {
         batchSymbols: {for (final e in entries) e.symbol.value},
       );
       await _db.insertDayTradingData(entries);
+      await ledger?.report(
+        dataset: MarketDataset.dayTrading,
+        market: market,
+        date: dataDate,
+        rows: entries.length,
+      );
     });
 
     final high = entries
@@ -250,6 +261,7 @@ class TradingRepository implements ITradingRepository {
   Future<int> syncAllDayTradingFromTpex({
     DateTime? date,
     bool force = false,
+    MarketDayFetchLedger? ledger,
   }) async {
     try {
       // 端點免費且 client 端有快取，先抓再判新鮮度的成本可忽略
@@ -314,6 +326,7 @@ class TradingRepository implements ITradingRepository {
               volume: d.totalVolume,
             ),
         ],
+        ledger: ledger,
       );
     } on RateLimitException {
       rethrow;
@@ -351,6 +364,7 @@ class TradingRepository implements ITradingRepository {
   Future<int?> syncAllMarginTrading({
     DateTime? date,
     bool force = false,
+    MarketDayFetchLedger? ledger,
   }) async {
     try {
       final targetDate = date ?? _clock.now();
@@ -454,8 +468,21 @@ class TradingRepository implements ITradingRepository {
 
       // 合併並寫入（transaction 保護避免部分寫入）
       final allEntries = [...twseEntries, ...tpexEntries];
-      await _db.transaction(() async {
+      await _db.transaction<void>(() async {
         await _db.insertMarginTradingData(allEntries);
+        // 不帶日期請求：兩市場可能回不同日期，各自以回應日期回報
+        for (final (market, entries) in [
+          (MarketCode.twse, twseEntries),
+          (MarketCode.tpex, tpexEntries),
+        ]) {
+          if (entries.isEmpty) continue;
+          await ledger?.report(
+            dataset: MarketDataset.margin,
+            market: market,
+            date: entries.first.date.value,
+            rows: entries.length,
+          );
+        }
       });
 
       AppLogger.info(
@@ -481,6 +508,7 @@ class TradingRepository implements ITradingRepository {
   Future<({int twseRows, int tpexRows})> backfillMarginTradingByDate({
     required DateTime date,
     required Set<String> markets,
+    MarketDayFetchLedger? ledger,
   }) async {
     const empty = (twseRows: 0, tpexRows: 0);
     if (markets.isEmpty) return empty;
@@ -583,6 +611,18 @@ class TradingRepository implements ITradingRepository {
 
       await _db.transaction<void>(() async {
         await _db.insertMarginTradingData(entries);
+        for (final (market, marketEntries) in [
+          (MarketCode.twse, twseEntries),
+          (MarketCode.tpex, tpexEntries),
+        ]) {
+          if (marketEntries.isEmpty) continue;
+          await ledger?.report(
+            dataset: MarketDataset.margin,
+            market: market,
+            date: targetDate,
+            rows: marketEntries.length,
+          );
+        }
       });
 
       AppLogger.info(

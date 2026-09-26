@@ -10,6 +10,7 @@ import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/insider_repository.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 import 'package:daredevil/data/repositories/shareholding_repository.dart';
 import 'package:daredevil/data/repositories/trading_repository.dart';
 import 'package:daredevil/data/repositories/warning_repository.dart';
@@ -89,6 +90,7 @@ class MarketDataUpdater {
   Future<MarketDataSyncResult> syncMarketWideData({
     required DateTime date,
     bool force = false,
+    MarketDayFetchLedger? ledger,
   }) async {
     var twseDayTradingCount = 0;
     var tpexDayTradingCount = 0;
@@ -102,6 +104,7 @@ class MarketDataUpdater {
       twseDayTradingCount = await _tradingRepo.syncAllDayTradingFromTwse(
         date: date,
         force: force,
+        ledger: ledger,
       );
     } on RateLimitException {
       rethrow;
@@ -117,6 +120,7 @@ class MarketDataUpdater {
     try {
       tpexDayTradingCount = await _tradingRepo.syncAllDayTradingFromTpex(
         force: force,
+        ledger: ledger,
       );
     } on NetworkException catch (e) {
       // **只吞網路錯誤**。TPEx 掛掉時上市當沖、融資融券、外資持股都還好端端的，
@@ -125,37 +129,6 @@ class MarketDataUpdater {
       // 訊號，而且限流時四行後的融資融券同樣打 TPEx、照樣會死，吞了只是讓
       // 中止晚四行發生卻少一個來源的線索。
       AppLogger.warning('MarketDataUpdater', '上櫃當沖同步網路失敗（續跑）', e);
-    }
-
-    // 上櫃當沖缺口偵測（純 DB 查詢、零 API 額度）
-    //
-    // 上市漏掉的日子由下方 40 天窗自動補回；上櫃端點只給最新交易日，**漏一天
-    // 就永久少一天**。實測近 60 天 22 次 PARTIAL、1 次 FAILED（10.7%），
-    // 所以缺口不是罕見情況。
-    //
-    // **刻意只偵測不自動補**：補救走 FinMind、逐檔計費，補 3 天與補 6 年
-    // 同為 ~220 次呼叫，塞進每日路徑會天天跟財報同步搶額度。改為印出來讓
-    // 補救批次做（跑 `tool/backfill_tpex_day_trading.dart`）——這個缺口的
-    // 問題從來不是難修，是**無法察覺**。
-    try {
-      final gaps = await _db.findDayTradingGapDates(
-        market: MarketCode.tpex,
-        since: DateContext.normalize(
-          date,
-        ).subtract(const Duration(days: ApiConfig.tradingBackfillLookbackDays)),
-      );
-      if (gaps.isNotEmpty) {
-        tpexDayTradingGaps = gaps.length;
-        AppLogger.warning(
-          'MarketDataUpdater',
-          '上櫃當沖有 ${gaps.length} 個交易日缺資料'
-              '（最近: ${DateContext.formatYmd(gaps.last)}）——'
-              '端點不給歷史，需跑 tool/backfill_tpex_day_trading.dart 補',
-        );
-      }
-    } catch (e) {
-      // fail-soft：偵測本身絕不能成為更新失敗的原因
-      AppLogger.warning('MarketDataUpdater', '上櫃當沖缺口偵測失敗', e);
     }
 
     // 從 TWSE/TPEX 批次同步融資融券資料
@@ -168,6 +141,7 @@ class MarketDataUpdater {
       marginCount = await _tradingRepo.syncAllMarginTrading(
         date: date,
         force: force,
+        ledger: ledger,
       );
     } on RateLimitException {
       rethrow;
@@ -185,7 +159,7 @@ class MarketDataUpdater {
     // 機會是上市股的 4 倍。MI_QFIIS 免費、一次全市場,與當沖/融資融券同性質。
     try {
       foreignShareholdingCount = await _shareholdingRepo
-          .syncAllMarketShareholding(date: date, force: force);
+          .syncAllMarketShareholding(date: date, force: force, ledger: ledger);
     } on RateLimitException {
       rethrow;
     } on NetworkException {
@@ -201,6 +175,7 @@ class MarketDataUpdater {
       await _shareholdingRepo.backfillForeignShareholding(
         asOf: date,
         days: InstitutionalParams.foreignShareholdingLookbackDays + 1,
+        ledger: ledger,
       );
     } on RateLimitException {
       rethrow;
@@ -209,7 +184,33 @@ class MarketDataUpdater {
     }
 
     // 回補缺漏日（今日同步完才跑，確保當日資料不被回補預算排擠）
-    final backfilledDays = await _backfillMissingTradingDays(date);
+    final backfilledDays = await _backfillMissingTradingDays(date, ledger);
+
+    // 上櫃當沖缺口偵測（純 DB 查詢、零 API 額度）
+    //
+    // 回補後仍缺的日子計入摘要——上市有 40 天窗、上櫃走上面的 per-day
+    // 官方端點回補（皆要求該日價格覆蓋達門檻），此處只回報跨過回補後
+    // 仍未補到的天數。
+    try {
+      final gaps = await _db.findDayTradingGapDates(
+        market: MarketCode.tpex,
+        since: DateContext.normalize(
+          date,
+        ).subtract(const Duration(days: ApiConfig.tradingBackfillLookbackDays)),
+      );
+      if (gaps.isNotEmpty) {
+        tpexDayTradingGaps = gaps.length;
+        AppLogger.warning(
+          'MarketDataUpdater',
+          '上櫃當沖回補後仍缺 ${gaps.length} 個交易日'
+              '（最近: ${DateContext.formatYmd(gaps.last)}）；價格覆蓋不足的日子'
+              '會等價格補齊後再回補',
+        );
+      }
+    } catch (e) {
+      // fail-soft：偵測本身絕不能成為更新失敗的原因
+      AppLogger.warning('MarketDataUpdater', '上櫃當沖缺口偵測失敗', e);
+    }
 
     return MarketDataSyncResult(
       dayTradingCount: twseDayTradingCount,
@@ -229,8 +230,9 @@ class MarketDataUpdater {
   ///
   /// 掃 `[date - lookback, date - 1]` 內的交易日（[TaiwanCalendar]，新→舊），
   /// 以**三個獨立來源**（當沖、上市融資、上櫃融資）分別判斷缺漏與進度：
-  /// - **當沖**（僅上市，上櫃無全市場快照端點）走
-  ///   [TradingRepository.syncAllDayTradingFromTwse]（force 略過新鮮度檢查）。
+  /// - **當沖**（兩市場，各自要求價格覆蓋達門檻）上市走
+  ///   [TradingRepository.syncAllDayTradingFromTwse]、上櫃走
+  ///   [TradingRepository.syncAllDayTradingFromTpex]（皆 force 略過新鮮度檢查）。
   ///   前提：該日價格覆蓋須達門檻——當沖比例以價格表的成交量為分母，半覆蓋日
   ///   會把沒價格的股票全寫成 ratio 0（假資料），且之後筆數已足、永不重抓。
   /// - **融資融券**走 [TradingRepository.backfillMarginTradingByDate]，**逐市場**
@@ -252,7 +254,10 @@ class MarketDataUpdater {
   /// 讓 UpdateService 設 `rateLimitedAbort` 停掉後續 TWSE 呼叫。
   ///
   /// 回傳實際有進度的天數。
-  Future<int> _backfillMissingTradingDays(DateTime date) async {
+  Future<int> _backfillMissingTradingDays(
+    DateTime date,
+    MarketDayFetchLedger? ledger,
+  ) async {
     final endDay = DateContext.normalize(date);
     final windowStart = endDay.subtract(
       const Duration(days: ApiConfig.tradingBackfillLookbackDays),
@@ -268,6 +273,7 @@ class MarketDataUpdater {
 
     // 三個獨立來源的連續失敗計數；達門檻即在本次 run 標記 dead
     const srcDayTrading = 'dayTrading';
+    const srcTpexDayTrading = 'tpexDayTrading';
     final failures = <String, int>{};
     final dead = <String>{};
     void recordAttempt(String source, {required bool progressed}) {
@@ -349,6 +355,17 @@ class MarketDataUpdater {
         }
       }
 
+      // 當沖（上櫃）：端點帶 date 可取歷史（2026-09-26 實測）。與上市同樣
+      // 要求該日上櫃價格覆蓋達門檻，否則比例整片是 0
+      var canBackfillTpexDayTrading = false;
+      if (!dead.contains(srcTpexDayTrading) &&
+          tpexStocks > 0 &&
+          countOf(dayTradingCounts, day, MarketCode.tpex) <=
+              DataFreshness.twseBatchThreshold) {
+        canBackfillTpexDayTrading =
+            countOf(priceCounts, day, MarketCode.tpex) >= tpexThreshold;
+      }
+
       // 融資融券（per-market）
       final missingMarkets = <String>{
         if (!dead.contains(MarketCode.twse) &&
@@ -361,7 +378,11 @@ class MarketDataUpdater {
           MarketCode.tpex,
       };
 
-      if (!canBackfillDayTrading && missingMarkets.isEmpty) continue;
+      if (!canBackfillDayTrading &&
+          !canBackfillTpexDayTrading &&
+          missingMarkets.isEmpty) {
+        continue;
+      }
 
       if (apiDays > 0) await Future.delayed(backfillCallDelay);
       apiDays++;
@@ -374,6 +395,7 @@ class MarketDataUpdater {
           rows = await _tradingRepo.syncAllDayTradingFromTwse(
             date: day,
             force: true,
+            ledger: ledger,
           );
         } on RateLimitException {
           rethrow;
@@ -392,12 +414,37 @@ class MarketDataUpdater {
         dayProgressed |= progressed;
       }
 
+      if (canBackfillTpexDayTrading) {
+        var rows = 0;
+        try {
+          rows = await _tradingRepo.syncAllDayTradingFromTpex(
+            date: day,
+            force: true,
+            ledger: ledger,
+          );
+        } on RateLimitException {
+          rethrow;
+        } on NetworkException {
+          rethrow;
+        } on Exception catch (e) {
+          AppLogger.warning(
+            'MarketDataUpdater',
+            '上櫃當沖回補失敗 ${DateContext.formatYmd(day)}',
+            e,
+          );
+        }
+        final progressed = rows > DataFreshness.twseBatchThreshold;
+        recordAttempt(srcTpexDayTrading, progressed: progressed);
+        dayProgressed |= progressed;
+      }
+
       if (missingMarkets.isNotEmpty) {
         var result = (twseRows: 0, tpexRows: 0);
         try {
           result = await _tradingRepo.backfillMarginTradingByDate(
             date: day,
             markets: missingMarkets,
+            ledger: ledger,
           );
         } on RateLimitException {
           rethrow;
@@ -733,10 +780,15 @@ class MarketDataSyncResult {
   /// 而那正是最需要看見的訊號。
   final int tpexDayTradingCount;
 
-  /// 上櫃當沖缺資料的交易日數（40 天窗內）
+  /// 上櫃當沖缺資料的交易日數（40 天窗內，**回補後仍缺**）
   ///
-  /// 上市有 40 天窗自動回補、上櫃沒有——端點只給最新交易日。此欄位讓
-  /// 「漏了幾天」看得見，補救走 `tool/backfill_tpex_day_trading.dart`。
+  /// 兩市場在 40 天窗內都會自動回補（見 [_backfillMissingTradingDays]：
+  /// 上市走 [TradingRepository.syncAllDayTradingFromTwse]、上櫃走
+  /// [TradingRepository.syncAllDayTradingFromTpex]，皆帶 `date` 取歷史）。
+  /// 此欄位量的是回補跑完之後、上櫃當沖仍缺資料的交易日數——多半是該日
+  /// 上櫃價格覆蓋未達門檻（回補會整批跳過，見 `canBackfillTpexDayTrading`），
+  /// 等價格補齊後下一輪會再嘗試；亦可能是單輪回補天數上限
+  /// （[ApiConfig.tradingBackfillMaxDaysPerRun]）尚未輪到的較舊缺口。
   final int tpexDayTradingGaps;
 
   /// 融資融券同步筆數。null 表示已快取（跳過同步）。

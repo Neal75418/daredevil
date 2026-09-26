@@ -96,4 +96,26 @@ void main() {
     );
     expect(ok, isTrue);
   });
+
+  group('MarketDayFetchLedger.isNearMiss', () {
+    test(
+      'rows 達 need 的 finalityNearMissWarnRatio 以上（但仍 < need）→ near miss',
+      () {
+        // 設計文件舉例：上櫃法人／當沖 738–748 列 vs 門檻 664（headroom 約 1.1×）
+        expect(MarketDayFetchLedger.isNearMiss(738, 664), isTrue);
+      },
+    );
+
+    test('rows 恰為 need 的 finalityNearMissWarnRatio 倍數 → near miss（邊界含）', () {
+      expect(MarketDayFetchLedger.isNearMiss(80, 100), isTrue);
+    });
+
+    test('rows 遠低於 need（例如未發布時的 0 列）→ 不是 near miss', () {
+      expect(MarketDayFetchLedger.isNearMiss(0, 664), isFalse);
+    });
+
+    test('rows 略低於門檻的 near-miss 判斷邊界', () {
+      expect(MarketDayFetchLedger.isNearMiss(79, 100), isFalse);
+    });
+  });
 }

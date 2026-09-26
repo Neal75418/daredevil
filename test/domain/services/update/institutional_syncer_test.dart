@@ -42,6 +42,7 @@ void main() {
     when(() => mockRepo.isDeepBackfillPending()).thenAnswer((_) async => false);
     // 預設全缺漏（既有測試的行為前提）
     when(() => mockRepo.isDayComplete(any())).thenAnswer((_) async => false);
+    when(() => mockRepo.isDayFinal(any())).thenAnswer((_) async => false);
     when(
       () => mockRepo.syncAllMarketInstitutional(
         any(),
@@ -153,8 +154,9 @@ void main() {
       expect(result.syncedDays, 2); // 當日 + 7/9
     });
 
-    test('日常更新（!force）當日已完整也跳過（同晚二次更新 0 抓取）', () async {
+    test('日常更新（!force）當日已定案才跳過（同晚二次更新、隔天重跑 0 抓取）', () async {
       when(() => mockRepo.isDayComplete(any())).thenAnswer((_) async => true);
+      when(() => mockRepo.isDayFinal(any())).thenAnswer((_) async => true);
 
       final result = await syncer.syncInstitutionalData(
         date: date,
@@ -169,6 +171,21 @@ void main() {
         ),
       );
       expect(result.syncedDays, 0);
+    });
+
+    test('🚨 回歸：當日列數已完整但未定案 → 仍以 force: true 重抓', () async {
+      // 7/16–8/19 投信欄錯誤的成因：15:30 抓到初值、21:30 因列數夠而跳過
+      when(() => mockRepo.isDayComplete(any())).thenAnswer((_) async => true);
+
+      await syncer.syncInstitutionalData(
+        date: date,
+        force: false,
+        backfillDays: 4,
+      );
+
+      verify(
+        () => mockRepo.syncAllMarketInstitutional(date, force: true),
+      ).called(1);
     });
 
     test('isDayComplete 失敗 → 當缺漏處理照抓（fail-open 朝抓取）', () async {

@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/market_dataset.dart';
 import 'package:daredevil/core/utils/date_context.dart';
@@ -34,6 +36,13 @@ class MarketDayFetchLedger {
 
   List<LedgerRecord> get recorded => List.unmodifiable(_recorded);
 
+  /// [rows] 未達 [need] 但已達 [ApiConfig.finalityNearMissWarnRatio] 以上：
+  /// 門檻可能量測得偏緊，需要看得見（一般未達門檻多半是資料未發布的
+  /// 正常情況，不值得升級成 warning）
+  @visibleForTesting
+  static bool isNearMiss(int rows, int need) =>
+      rows >= need * ApiConfig.finalityNearMissWarnRatio;
+
   Future<bool> report({
     required MarketDataset dataset,
     required String market,
@@ -47,7 +56,18 @@ class MarketDayFetchLedger {
     );
     final need = (stocks * dataset.minCoverageRatio).ceil();
     if (stocks == 0 || rows < need) {
-      AppLogger.info('FetchLedger', '$label 寫入 $rows 列 < 門檻 $need，不記錄抓取狀態');
+      if (stocks > 0 && isNearMiss(rows, need)) {
+        // 15:30 資料未發布時 0 列是常態；但接近門檻（例如 headroom 僅約
+        // 1.1× 的上櫃法人／當沖）值得被看見，門檻可能需要重新量測
+        AppLogger.warning(
+          'FetchLedger',
+          '$label 寫入 $rows 列 < 門檻 $need，接近門檻（≥ 門檻 '
+              '${(ApiConfig.finalityNearMissWarnRatio * 100).round()}%），'
+              '門檻可能需要重新量測',
+        );
+      } else {
+        AppLogger.info('FetchLedger', '$label 寫入 $rows 列 < 門檻 $need，不記錄抓取狀態');
+      }
       return false;
     }
     if (dataset == MarketDataset.dayTrading) {

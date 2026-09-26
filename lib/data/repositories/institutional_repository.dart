@@ -1,6 +1,9 @@
 import 'package:drift/drift.dart';
 
+import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
+import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/constants/market_dataset.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/core/utils/date_context.dart';
@@ -12,6 +15,7 @@ import 'package:daredevil/data/models/extensions/dto_extensions.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 import 'package:daredevil/domain/repositories/institutional_repository.dart';
 
 /// 三大法人買賣超資料 Repository
@@ -102,6 +106,7 @@ class InstitutionalRepository implements IInstitutionalRepository {
   Future<int> syncAllMarketInstitutional(
     DateTime date, {
     bool force = false,
+    MarketDayFetchLedger? ledger,
   }) async {
     try {
       // 提高閾值以涵蓋上市+上櫃股票。
@@ -186,9 +191,75 @@ class InstitutionalRepository implements IInstitutionalRepository {
         ),
       );
 
+      // 回應明確列出、但三法人淨額全為 0 的代號（與上方過濾條件互補）
+      bool allZero(num total, num foreign, num trust) =>
+          total == 0 && foreign == 0 && trust == 0;
+      // 安全閥：parser 對解析不出的數字會退成 0（欄位改版時整個市場都會
+      // 變成「明確全 0」）。106 個交易日實測：上市最高 2.4%，上櫃平均 2.7%、
+      // 最高 5.5%（2026-09 量測）；比例超過門檻就不刪、只記 warning
+      Set<String> zeroSetOf(
+        String market,
+        List<({String code, bool zero})> rows,
+      ) {
+        final zeros = {
+          for (final r in rows)
+            if (r.zero) r.code,
+        };
+        if (rows.isNotEmpty &&
+            zeros.length >
+                rows.length * ApiConfig.institutionalZeroDeleteMaxRatio) {
+          AppLogger.warning(
+            'InstitutionalRepo',
+            '$market 法人回應 ${zeros.length}/${rows.length} 列三法人全 0，'
+                '比例異常（疑似欄位解析失敗），本次不刪舊列',
+          );
+          return const {};
+        }
+        return zeros;
+      }
+
+      final zeroSymbols = {
+        ...zeroSetOf(MarketCode.twse, [
+          for (final i in twseData)
+            (
+              code: i.code,
+              zero: allZero(i.totalNet, i.foreignNet, i.investmentTrustNet),
+            ),
+        ]),
+        ...zeroSetOf(MarketCode.tpex, [
+          for (final i in tpexData)
+            (
+              code: i.code,
+              zero: allZero(i.totalNet, i.foreignNet, i.investmentTrustNet),
+            ),
+        ]),
+      };
+
       // 合併並寫入
       final allEntries = [...twseEntries, ...tpexEntries];
-      await _db.insertInstitutionalData(allEntries);
+
+      await _db.transaction<void>(() async {
+        // 定案值全 0 的股票：刪掉初值列（DB 不存全 0 列；讀取端把沒有列當 0）
+        await _db.deleteInstitutionalRows(day: date, symbols: zeroSymbols);
+        await _db.insertInstitutionalData(allEntries);
+        // 兩市場各自回報；抓取失敗（回空）那邊的 entries 為空，不回報
+        if (twseEntries.isNotEmpty) {
+          await ledger?.report(
+            dataset: MarketDataset.institutional,
+            market: MarketCode.twse,
+            date: twseEntries.first.date.value,
+            rows: twseEntries.length,
+          );
+        }
+        if (tpexEntries.isNotEmpty) {
+          await ledger?.report(
+            dataset: MarketDataset.institutional,
+            market: MarketCode.tpex,
+            date: tpexEntries.first.date.value,
+            rows: tpexEntries.length,
+          );
+        }
+      });
 
       AppLogger.info(
         'InstitutionalRepo',
@@ -312,6 +383,20 @@ class InstitutionalRepository implements IInstitutionalRepository {
     final count = await _db.getInstitutionalCountForDate(date);
     return count > DataFreshness.fullMarketThreshold;
   }
+
+  /// 該日法人兩市場是否都已定案（當日路徑的跳過判斷）
+  @override
+  Future<bool> isDayFinal(DateTime date) async =>
+      await _db.isMarketDayFinal(
+        dataset: MarketDataset.institutional,
+        market: MarketCode.twse,
+        date: date,
+      ) &&
+      await _db.isMarketDayFinal(
+        dataset: MarketDataset.institutional,
+        market: MarketCode.tpex,
+        date: date,
+      );
 
   /// app_settings 的法人口徑版本 key
   static const String _dataVersionKey = 'institutional_data_version';

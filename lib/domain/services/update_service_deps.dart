@@ -18,6 +18,7 @@ import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/rule_accuracy_service.dart';
 import 'package:daredevil/domain/services/thesis/thesis_monitor_service.dart';
 import 'package:daredevil/domain/services/scoring_service.dart';
+import 'package:daredevil/domain/services/update/market_day_refetcher.dart';
 import 'package:daredevil/domain/services/update/news_mention_snapshot_service.dart';
 
 /// [UpdateService] 的 Repository 依賴群組
@@ -68,6 +69,7 @@ class UpdateServices {
     this.ruleAccuracy,
     this.thesisMonitor,
     this.newsMentionSnapshot,
+    this.marketDayRefetcher,
   });
 
   final AnalysisService? analysis;
@@ -80,4 +82,8 @@ class UpdateServices {
 
   /// 每日提及數快照（新聞熱度發現層）。null = 不快照（測試預設）。
   final NewsMentionSnapshotService? newsMentionSnapshot;
+
+  /// 未定案盤後資料重抓（spec §4.5(b)）。null 時由 [UpdateService] 用真實
+  /// 依賴建立；測試注入用。
+  final MarketDayRefetcher? marketDayRefetcher;
 }

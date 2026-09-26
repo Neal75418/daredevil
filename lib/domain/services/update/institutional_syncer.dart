@@ -4,6 +4,7 @@ import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/repositories/institutional_repository.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 
 /// 法人買賣超資料同步器
 ///
@@ -34,6 +35,7 @@ class InstitutionalSyncer {
     bool force = false,
     int backfillDays = ApiConfig.institutionalDailyBackfillDays,
     void Function(String message)? onProgress,
+    MarketDayFetchLedger? ledger,
   }) async {
     var syncedDays = 0;
     final errors = <String>[];
@@ -75,11 +77,16 @@ class InstitutionalSyncer {
       );
     }
 
-    // 1. 同步當日資料（force 必抓；日常路徑若當日已完整——同晚二次更新——
-    //    預檢跳過，不打 API）
-    if (force || !await _isComplete(date)) {
+    // 1. 當日：已定案才跳過（spec §4.5(a)）。當天的資料在當天不會定案，
+    //    所以交易日當天實際上每次都抓；決定要抓就傳 force: true，讓
+    //    repository 內的列數閘門不再二次攔截。
+    if (force || !await _isFinal(date)) {
       try {
-        await _institutionalRepo.syncAllMarketInstitutional(date, force: force);
+        await _institutionalRepo.syncAllMarketInstitutional(
+          date,
+          force: true,
+          ledger: ledger,
+        );
         syncedDays++;
       } on RateLimitException {
         rethrow;
@@ -117,6 +124,7 @@ class InstitutionalSyncer {
         await _institutionalRepo.syncAllMarketInstitutional(
           backDate,
           force: false,
+          ledger: ledger,
         );
         syncedDays++;
       } on RateLimitException {
@@ -160,6 +168,16 @@ class InstitutionalSyncer {
       return await _institutionalRepo.isDayComplete(date);
     } catch (e) {
       AppLogger.warning('InstitutionalSyncer', '法人完整性預檢失敗，視為缺漏', e);
+      return false;
+    }
+  }
+
+  /// 定案預檢；查詢失敗視為未定案（fail-open 朝抓取）
+  Future<bool> _isFinal(DateTime date) async {
+    try {
+      return await _institutionalRepo.isDayFinal(date);
+    } catch (e) {
+      AppLogger.warning('InstitutionalSyncer', '法人定案預檢失敗，視為未定案', e);
       return false;
     }
   }

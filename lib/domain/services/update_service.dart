@@ -16,6 +16,9 @@ import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
+import 'package:daredevil/data/remote/tpex_client.dart';
+import 'package:daredevil/data/remote/twse_client.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 import 'package:daredevil/domain/repositories/analysis_repository.dart';
 import 'package:daredevil/domain/repositories/price_repository.dart';
 import 'package:daredevil/domain/services/alert/trailing_ma_alert_service.dart';
@@ -24,6 +27,7 @@ import 'package:daredevil/domain/services/rule_accuracy_service.dart';
 import 'package:daredevil/domain/services/thesis/thesis_monitor_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/scoring_service.dart';
+import 'package:daredevil/domain/services/update/market_day_refetcher.dart';
 import 'package:daredevil/domain/services/update/news_mention_snapshot_service.dart';
 import 'package:daredevil/domain/services/update/update.dart';
 import 'package:daredevil/domain/services/update/zeroing_impact_reporter.dart';
@@ -139,7 +143,18 @@ class UpdateService {
                twseClient: clients.twse,
                tpexClient: clients.tpex,
              )
-           : null;
+           : null,
+       _twseClient = clients.twse,
+       _tpexClient = clients.tpex,
+       _marketDayRefetcher =
+           services.marketDayRefetcher ??
+           MarketDayRefetcher(
+             database: database,
+             priceRepository: repositories.price,
+             institutionalRepository: repositories.institutional,
+             tradingRepository: repositories.trading,
+             shareholdingRepository: repositories.shareholding,
+           );
 
   final AppDatabase _db;
   final AppClock _clock;
@@ -175,6 +190,9 @@ class UpdateService {
   final DividendSyncer? _dividendSyncer;
   final InsiderTransferSyncer? _insiderTransferSyncer;
   final QuarterlyReportSyncer? _quarterlyReportSyncer;
+  final TwseClient? _twseClient;
+  final TpexClient? _tpexClient;
+  final MarketDayRefetcher? _marketDayRefetcher;
 
   /// 取得或建立 ScoringService（延遲初始化）
   ScoringService get _scoring =>
@@ -281,6 +299,7 @@ class UpdateService {
       result: result,
       force: force,
       onProgress: onProgress,
+      ledger: MarketDayFetchLedger(database: _db, fetchedAt: _clock.now()),
     );
 
     try {
@@ -296,6 +315,11 @@ class UpdateService {
         );
         return result;
       }
+
+      // 清 client 快取：常駐 App 跨午夜時，前一輪的快取會被當成本輪抓的，
+      // 進而誤判定案（ledger 的時間是本輪開始時刻）
+      _twseClient?.clearCache();
+      _tpexClient?.clearCache();
 
       // 步驟 1.5：強制更新時清理無效資料
       if (force) {
@@ -316,6 +340,9 @@ class UpdateService {
         _syncMarketAndFundamentalData(ctx, ctx.normalizedDate),
         _syncNews(ctx),
       ).wait;
+
+      // 步驟 5.5：重抓未定案的日子（spec §4.5(b)）
+      await _refetchNonFinalDays(ctx);
 
       // 步驟 6：篩選候選股票 + 補充上櫃資料
       ctx.reportProgress(6, 10, '篩選候選股票');
@@ -626,6 +653,36 @@ class UpdateService {
     }
   }
 
+  /// 步驟 5.5：重抓未定案的日子（spec §4.5(b)）。放在所有當日同步之後，
+  /// 讓當日路徑先寫入；放在評分之前，讓回補的歷史進得了本輪評分。
+  Future<void> _refetchNonFinalDays(_UpdateContext ctx) async {
+    if (ctx.rateLimitedAbort) return;
+    final refetcher = _marketDayRefetcher;
+    if (refetcher == null) return;
+    try {
+      final summary = await refetcher.refetchPending(
+        today: _clock.now(),
+        ledger: ctx.ledger,
+      );
+      AppLogger.info('UpdateService', '步驟 5.5: ${summary.toLogLine()}');
+      for (final e in summary.errors) {
+        ctx.result.recordError('未定案重抓失敗: $e');
+      }
+      // staleOutOfWindow 只由 refetcher 記 warning、不進 errors：那些日子
+      // 不會自己消失，進 errors 會讓之後每一輪 launchd 都 exit 1（spec §6）
+      if (summary.rateLimited) {
+        ctx.rateLimitedAbort = true;
+        ctx.result.recordError(
+          '未定案重抓中止 (rate limit): ${summary.rateLimitError}',
+          summary.rateLimitError,
+        );
+      }
+    } catch (e) {
+      AppLogger.warning('UpdateService', '未定案重抓失敗', e);
+      ctx.result.recordError('未定案重抓失敗: $e', e);
+    }
+  }
+
   Future<DateTime> _syncDailyPrices(
     _UpdateContext ctx,
     DateTime normalizedDate,
@@ -634,6 +691,7 @@ class UpdateService {
       final syncResult = await _priceRepo.syncAllPricesForDate(
         normalizedDate,
         force: ctx.force,
+        ledger: ctx.ledger,
       );
 
       // 日期校正
@@ -688,6 +746,7 @@ class UpdateService {
         watchlistSymbols: watchlist.map((w) => w.symbol).toList(),
         popularStocks: _popularStocks,
         marketCandidates: ctx.marketCandidates,
+        ledger: ctx.ledger,
         onProgress: (msg) => ctx.reportProgress(4, 10, msg),
       );
       if (historyResult.syncedCount > 0) {
@@ -743,6 +802,7 @@ class UpdateService {
             ? ApiConfig.institutionalForceBackfillDays
             : ApiConfig.institutionalDailyBackfillDays,
         onProgress: (msg) => ctx.reportProgress(4, 10, msg),
+        ledger: ctx.ledger,
       );
       ctx.result.institutionalUpdated = instResult.estimatedCount;
     } on RateLimitException catch (e) {
@@ -803,6 +863,7 @@ class UpdateService {
       final marketResult = await marketUpdater.syncMarketWideData(
         date: normalizedDate,
         force: true,
+        ledger: ctx.ledger,
       );
 
       // 同步自選清單和熱門股的詳細籌碼
@@ -1322,6 +1383,7 @@ class _UpdateContext {
     required this.targetDate,
     required this.runId,
     required this.result,
+    required this.ledger,
     this.force = false,
     this.onProgress,
   }) : normalizedDate = targetDate;
@@ -1332,6 +1394,7 @@ class _UpdateContext {
   final UpdateResult result;
   final bool force;
   final UpdateProgressCallback? onProgress;
+  final MarketDayFetchLedger ledger;
   List<String> marketCandidates = [];
 
   /// 任一 syncer 撞到 [RateLimitException] 時翻起，後續 API-heavy 步驟自我

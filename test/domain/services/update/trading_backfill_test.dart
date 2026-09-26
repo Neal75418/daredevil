@@ -54,13 +54,17 @@ void main() {
   /// 每日路徑（今日同步）預設成功，讓測試專注在回補
   void stubTodaySync() {
     when(
-      () =>
-          mockTradingRepo.syncAllDayTradingFromTpex(force: any(named: 'force')),
+      () => mockTradingRepo.syncAllDayTradingFromTpex(
+        date: any(named: 'date'),
+        force: any(named: 'force'),
+        ledger: any(named: 'ledger'),
+      ),
     ).thenAnswer((_) async => 0);
     when(
       () => mockTradingRepo.syncAllDayTradingFromTwse(
         date: any(named: 'date'),
         force: any(named: 'force'),
+        ledger: any(named: 'ledger'),
       ),
     ).thenAnswer((_) async => 1000);
     when(
@@ -118,6 +122,7 @@ void main() {
       () => mockTradingRepo.backfillMarginTradingByDate(
         date: any(named: 'date'),
         markets: any(named: 'markets'),
+        ledger: any(named: 'ledger'),
       ),
     ).thenAnswer((_) async => (twseRows: twseRows, tpexRows: tpexRows));
   }
@@ -590,6 +595,56 @@ void main() {
         calls.last.contains(MarketCode.twse),
         isFalse,
         reason: '上市連 3 天不足額後應被標記 dead、不再嘗試',
+      );
+    });
+
+    test('上櫃當沖缺漏日：價格覆蓋達標時以官方端點帶日期回補', () async {
+      // 只有上櫃 7/13 缺當沖；上市與其他日子都完整
+      when(
+        () => mockDb.getDayTradingCountForDateAndMarket(any(), any()),
+      ).thenAnswer((inv) async {
+        final d = inv.positionalArguments[0] as DateTime;
+        final m = inv.positionalArguments[1] as String;
+        return (m == MarketCode.tpex && d == d13)
+            ? 0
+            : DataFreshness.twseBatchThreshold + 1;
+      });
+      when(
+        () => mockTradingRepo.syncAllDayTradingFromTpex(
+          date: d13,
+          force: true,
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer((_) async => 700);
+      await updater.syncMarketWideData(date: today);
+      verify(
+        () => mockTradingRepo.syncAllDayTradingFromTpex(
+          date: d13,
+          force: true,
+          ledger: any(named: 'ledger'),
+        ),
+      ).called(1);
+    });
+
+    test('上櫃當沖缺漏日：價格覆蓋不足時不回補', () async {
+      // stubCoverage 會重設當沖計數 stub，所以先呼叫它、再覆寫當沖計數
+      stubCoverage(priceCounts: {d13: tpexThreshold - 1});
+      when(
+        () => mockDb.getDayTradingCountForDateAndMarket(any(), any()),
+      ).thenAnswer((inv) async {
+        final d = inv.positionalArguments[0] as DateTime;
+        final m = inv.positionalArguments[1] as String;
+        return (m == MarketCode.tpex && d == d13)
+            ? 0
+            : DataFreshness.twseBatchThreshold + 1;
+      });
+      await updater.syncMarketWideData(date: today);
+      verifyNever(
+        () => mockTradingRepo.syncAllDayTradingFromTpex(
+          date: d13,
+          force: any(named: 'force'),
+          ledger: any(named: 'ledger'),
+        ),
       );
     });
   });

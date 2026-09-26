@@ -8,6 +8,7 @@ import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 import 'package:daredevil/data/repositories/price_repository.dart';
 import 'package:daredevil/domain/services/update/history_coverage.dart';
 
@@ -46,6 +47,7 @@ class HistoricalPriceSyncer {
     required List<String> popularStocks,
     required List<String> marketCandidates,
     void Function(String message)? onProgress,
+    MarketDayFetchLedger? ledger,
   }) async {
     // 分段計時（debug log）：各段耗時歸因。2026-07-15 in-app 實測曾為
     // phase0=1407ms（~540 次逐日 COUNT 的 isolate roundtrip，離線 harness
@@ -58,6 +60,7 @@ class HistoricalPriceSyncer {
     final marketDayRows = await _syncMissingMarketDays(
       date: date,
       onProgress: onProgress,
+      ledger: ledger,
     );
     final phase0Ms = phaseTimer.elapsedMilliseconds;
 
@@ -200,6 +203,7 @@ class HistoricalPriceSyncer {
   Future<int> _syncMissingMarketDays({
     required DateTime date,
     void Function(String message)? onProgress,
+    MarketDayFetchLedger? ledger,
   }) async {
     // 各市場目標股票集合與缺漏門檻
     final targets = <String, Set<String>>{};
@@ -250,10 +254,12 @@ class HistoricalPriceSyncer {
             ? await _priceRepo.backfillTwsePricesByDate(
                 date: day,
                 targetSymbols: targets[market]!,
+                ledger: ledger,
               )
             : await _priceRepo.backfillTpexPricesByDate(
                 date: day,
                 targetSymbols: targets[market]!,
+                ledger: ledger,
               );
         if (added > 0) {
           totalRows += added;

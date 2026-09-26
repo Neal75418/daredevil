@@ -262,6 +262,16 @@ abstract final class ApiConfig {
   /// 未定案日重抓的呼叫間隔（毫秒）
   static const int finalityRefetchCallDelayMs = 1000;
 
+  /// 列數未達門檻但達門檻此比例以上時，視為「near miss」升級為 warning
+  /// （例如上櫃法人／當沖 headroom 僅約 1.1×，738–748 列 vs 門檻 664）
+  static const double finalityNearMissWarnRatio = 0.8;
+
+  /// 法人全 0 刪列的安全閥：定案回應明確列出且三法人淨額全 0 的代號比例，
+  /// 超過此比例即視為 parser 解析失敗（欄位改版），本輪不刪舊列、只記
+  /// warning。106 個交易日實測：上市最高 2.4%，上櫃平均 2.7%、最高 5.5%
+  /// （2026-09 量測）。
+  static const double institutionalZeroDeleteMaxRatio = 0.1;
+
   /// 財報同步回溯天數（約 2 年）
   static const int financialSyncLookbackDays = 730;
 

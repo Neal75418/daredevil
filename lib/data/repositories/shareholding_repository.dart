@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/constants/market_dataset.dart';
 import 'package:daredevil/core/constants/chip_scoring_params.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/core/utils/date_context.dart';
@@ -11,6 +12,7 @@ import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 
 /// 持股相關 Repository
 ///
@@ -47,6 +49,7 @@ class ShareholdingRepository {
   Future<int> syncAllMarketShareholding({
     required DateTime date,
     bool force = false,
+    MarketDayFetchLedger? ledger,
   }) async {
     try {
       // 新鮮度檢查用**覆蓋率**而非「有沒有列」(2026-08-16 實機修正)。
@@ -93,7 +96,15 @@ class ShareholdingRepository {
       ];
       if (entries.isEmpty) return 0;
 
-      await _db.insertShareholdingData(entries);
+      await _db.transaction<void>(() async {
+        await _db.insertShareholdingData(entries);
+        await ledger?.report(
+          dataset: MarketDataset.foreignShareholding,
+          market: MarketCode.twse,
+          date: targetDate,
+          rows: entries.length,
+        );
+      });
       AppLogger.info(
         'ShareholdingRepo',
         '全市場外資持股: ${entries.length} 筆 '
@@ -123,6 +134,7 @@ class ShareholdingRepository {
   Future<int> backfillForeignShareholding({
     required DateTime asOf,
     int days = 5,
+    MarketDayFetchLedger? ledger,
   }) async {
     var filled = 0;
     // ⚠️ 用 subtractTradingDays 而非 getPreviousTradingDay:後者的語意是
@@ -134,7 +146,10 @@ class ShareholdingRepository {
     for (var i = 0; i < days; i++) {
       final day = i == 0 ? start : TaiwanCalendar.subtractTradingDays(start, i);
       try {
-        final written = await syncAllMarketShareholding(date: day);
+        final written = await syncAllMarketShareholding(
+          date: day,
+          ledger: ledger,
+        );
         if (written > 0) filled++;
       } on RateLimitException {
         rethrow;

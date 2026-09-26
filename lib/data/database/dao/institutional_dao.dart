@@ -165,6 +165,26 @@ mixin InstitutionalDaoMixin on $AppDatabase {
     return await (delete(dailyInstitutional)).go();
   }
 
+  /// 刪除 [day] 當天指定代號的法人列（整天範圍，涵蓋變體時間戳）
+  ///
+  /// 給「定案回應明確列出、但三法人淨額全為 0」的代號用：DB 不存全 0 列，
+  /// 讀取端把「沒有列」當成 0，所以初值非 0 的舊列必須刪掉。
+  Future<int> deleteInstitutionalRows({
+    required DateTime day,
+    required Set<String> symbols,
+  }) {
+    if (symbols.isEmpty) return Future.value(0);
+    final start = DateTime(day.year, day.month, day.day);
+    final end = DateTime(day.year, day.month, day.day + 1);
+    return (delete(dailyInstitutional)..where(
+          (t) =>
+              t.date.isBiggerOrEqualValue(start) &
+              t.date.isSmallerThanValue(end) &
+              t.symbol.isIn(symbols),
+        ))
+        .go();
+  }
+
   /// 計算某交易日已寫入的法人資料筆數（backfill per-day resume 判斷用，
   /// 與 [PriceDaoMixin.countPricesByDateAndMarket] 同模式；法人 phase
   /// 兩市場一起跑，故不分市場、比對全市場總數）。

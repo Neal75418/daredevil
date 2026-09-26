@@ -1,4 +1,5 @@
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 
 /// 價格資料儲存庫介面
 ///
@@ -39,6 +40,7 @@ abstract class IPriceRepository {
   Future<MarketSyncResult> syncAllPricesForDate(
     DateTime date, {
     bool force = false,
+    MarketDayFetchLedger? ledger,
   });
 
   /// 用 TWSE batch endpoint 回補單一交易日**所有**上市股票價格
@@ -59,6 +61,7 @@ abstract class IPriceRepository {
   Future<int> backfillTwsePricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,
+    MarketDayFetchLedger? ledger,
   });
 
   /// 用 TPEx OpenAPI batch endpoint 回補單一交易日**所有**上櫃股票價格
@@ -80,6 +83,7 @@ abstract class IPriceRepository {
   Future<int> backfillTpexPricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,
+    MarketDayFetchLedger? ledger,
   });
 }
 
