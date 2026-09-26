@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show SocketException;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -661,8 +662,8 @@ void main() {
           todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
           marketState: marketWithData(),
           extraOverrides: withIndustry,
-          // 有訊號時清單是一般 SliverList；空／載入中是 SliverFillRemaining，
-          // 會把後面的區塊推出畫面（另一個測試驗）
+          // 有訊號時清單是一般 SliverList；載入中是 SliverFillRemaining，
+          // 會把後面的區塊推出畫面
           modeRecommendations: (ref, mode) =>
               SynchronousFuture([rec('2330', trend: 'UP')]),
         ),
@@ -785,6 +786,65 @@ void main() {
       // 族群卡片進場動畫計時器推完
       await tester.pump(const Duration(seconds: 2));
     });
+
+    // 分頁沒有訊號時，空狀態曾用 SliverFillRemaining 撐滿剩下的畫面，族群
+    // 排行與財報入口必定落在第一屏下緣之外、也沒有提示。用手機尺寸（大畫面
+    // 任何排版都會過）。
+    for (final (name, icon, recs) in [
+      (
+        '沒有訊號',
+        Icons.inbox_outlined,
+        (Ref ref, ScoringMode mode) =>
+            SynchronousFuture(const <ModeRecommendation>[]),
+      ),
+      (
+        '訊號載入失敗',
+        Icons.error_outline_rounded,
+        (Ref ref, ScoringMode mode) =>
+            Future<List<ModeRecommendation>>.error(StateError('boom')),
+      ),
+      (
+        '網路錯誤',
+        Icons.wifi_off_rounded,
+        (Ref ref, ScoringMode mode) => Future<List<ModeRecommendation>>.error(
+          const SocketException('offline'),
+        ),
+      ),
+    ]) {
+      testWidgets('$name時空狀態用精簡版、族群排行緊接在後', (tester) async {
+        // 畫面拉高：844 高時測試字型下內容已超過剩餘空間，撐滿與不撐滿
+        // 量起來一樣，退化抓不到；1600 高時撐滿會把空狀態拉到近千高
+        tester.view.physicalSize = const Size(390, 1600);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          buildTestWidget(
+            todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
+            marketState: marketWithData(),
+            modeRecommendations: recs,
+            extraOverrides: withIndustry,
+          ),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        // 測試字型會高估文字高度、CI 也沒有中文字型，「第一屏看得到」無法
+        // 在這裡精確判斷。這裡驗修法的本質：空狀態是精簡版、不被撐滿，
+        // 族群排行緊接在後
+        // 2026-09-26 以真實字型在 390×844 量：精簡版 224 高、族群排行頂端
+        // 在 702（底部導覽列之上的可見範圍到 764）
+        final empty = find.byType(EmptyState);
+        final industry = find.byType(IndustryRankingSection);
+        expect(find.byIcon(icon), findsOneWidget); // 確認走到該狀態的分支
+        expect(tester.widget<EmptyState>(empty).compact, isTrue);
+        expect(tester.getSize(empty).height, lessThan(400));
+        expect(industry, findsOneWidget);
+        expect(
+          tester.getTopLeft(industry).dy,
+          moreOrLessEquals(tester.getBottomLeft(empty).dy, epsilon: 1),
+        );
+        // 族群卡片進場動畫計時器推完
+        await tester.pump(const Duration(seconds: 2));
+      });
+    }
 
     testWidgets('推薦清單為空時族群排行仍在頁面上', (tester) async {
       widenViewport(tester);
@@ -1094,7 +1154,7 @@ void main() {
       expect(find.text('disclaimer.short'), findsOneWidget);
     });
 
-    testWidgets('沒有訊號時也顯示（空狀態撐滿視窗，聲明在其下方）', (tester) async {
+    testWidgets('全新安裝的空狀態下方也顯示聲明', (tester) async {
       widenViewport(tester);
       await tester.pumpWidget(buildTestWidget());
       await tester.pump(const Duration(seconds: 1));

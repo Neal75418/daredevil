@@ -18,6 +18,7 @@ class EmptyState extends StatelessWidget {
     this.onAction,
     this.iconColor,
     this.useFlatIconColor = false,
+    this.compact = false,
   });
 
   final IconData icon;
@@ -35,6 +36,11 @@ class EmptyState extends StatelessWidget {
   /// 靜態工廠沒有 `BuildContext` 無法自行解析，故以旗標下放到 build。
   final bool useFlatIconColor;
 
+  /// 精簡版：放在頁面中段、後面還有其他區塊時用（今日頁分頁沒訊號）。
+  /// 完整版約 336 高，是為整頁空白設計的，放在中段會把後面的區塊推出
+  /// 第一屏；精簡版只縮圖示與間距，標題、說明、按鈕都保留。
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -48,14 +54,19 @@ class EmptyState extends StatelessWidget {
           '$title${subtitle != null ? ', $subtitle' : ''}${actionLabel != null ? ', $actionLabel' : ''}',
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.all(DesignTokens.spacing32),
+          padding: compact
+              ? const EdgeInsets.symmetric(
+                  horizontal: DesignTokens.spacing32,
+                  vertical: DesignTokens.spacing16,
+                )
+              : const EdgeInsets.all(DesignTokens.spacing32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // 帶有背景的動畫圖示
               Container(
-                    width: 120,
-                    height: 120,
+                    width: compact ? 64 : 120,
+                    height: compact ? 64 : 120,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
@@ -75,7 +86,7 @@ class EmptyState extends StatelessWidget {
                     ),
                     child: Icon(
                       icon,
-                      size: 56,
+                      size: compact ? 32 : 56,
                       color: effectiveColor.withValues(alpha: 0.7),
                     ),
                   )
@@ -88,7 +99,11 @@ class EmptyState extends StatelessWidget {
                     duration: AnimDurations.breathe,
                     curve: AnimCurves.breathe,
                   ),
-              const SizedBox(height: DesignTokens.spacing24),
+              SizedBox(
+                height: compact
+                    ? DesignTokens.spacing12
+                    : DesignTokens.spacing24,
+              ),
               // 標題
               Text(
                     title,
@@ -121,7 +136,11 @@ class EmptyState extends StatelessWidget {
                     .slideY(begin: 0.2, duration: AnimDurations.moderate),
               ],
               if (actionLabel != null && onAction != null) ...[
-                const SizedBox(height: DesignTokens.spacing24),
+                SizedBox(
+                  height: compact
+                      ? DesignTokens.spacing12
+                      : DesignTokens.spacing24,
+                ),
                 FilledButton.tonal(
                       onPressed: onAction,
                       child: Text(actionLabel!),
@@ -149,13 +168,17 @@ class EmptyStates {
   EmptyStates._();
 
   /// 今日無推薦
-  static Widget noRecommendations({VoidCallback? onRefresh}) {
+  static Widget noRecommendations({
+    VoidCallback? onRefresh,
+    bool compact = false,
+  }) {
     return EmptyState(
       icon: Icons.inbox_outlined,
       title: S.emptyNoRecommendations,
       subtitle: S.emptyNoRecommendationsHint,
       actionLabel: onRefresh != null ? S.refresh : null,
       onAction: onRefresh,
+      compact: compact,
     );
   }
 
@@ -234,7 +257,11 @@ class EmptyStates {
   }
 
   /// 錯誤狀態
-  static Widget error({required String message, VoidCallback? onRetry}) {
+  static Widget error({
+    required String message,
+    VoidCallback? onRetry,
+    bool compact = false,
+  }) {
     return EmptyState(
       icon: Icons.error_outline_rounded,
       title: S.emptyError,
@@ -242,11 +269,12 @@ class EmptyStates {
       actionLabel: onRetry != null ? S.retry : null,
       onAction: onRetry,
       iconColor: AppTheme.errorColor,
+      compact: compact,
     );
   }
 
   /// 網路錯誤
-  static Widget networkError({VoidCallback? onRetry}) {
+  static Widget networkError({VoidCallback? onRetry, bool compact = false}) {
     return EmptyState(
       icon: Icons.wifi_off_rounded,
       title: S.emptyNetworkError,
@@ -254,6 +282,7 @@ class EmptyStates {
       actionLabel: onRetry != null ? S.retry : null,
       onAction: onRetry,
       iconColor: AppTheme.errorColor,
+      compact: compact,
     );
   }
 }

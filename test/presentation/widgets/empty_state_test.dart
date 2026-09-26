@@ -18,6 +18,54 @@ void main() {
   }
 
   group('EmptyState', () {
+    // 精簡版給放在頁面中段的空狀態（今日頁分頁沒訊號時）：完整版約 336 高，
+    // 會把後面的區塊推出第一屏。內容不能少，只縮圖示與間距。
+    testWidgets('精簡版比完整版矮，標題、說明、按鈕都保留', (tester) async {
+      Future<double> heightOf({required bool compact}) async {
+        await tester.pumpWidget(
+          buildTestApp(
+            // 放在清單裡（不限高度）量：與今日頁的用法一致，EmptyState
+            // 依內容決定高度
+            ListView(
+              children: [
+                EmptyState(
+                  icon: Icons.inbox_outlined,
+                  title: 'T',
+                  subtitle: 'S',
+                  actionLabel: 'A',
+                  onAction: () {},
+                  compact: compact,
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('T'), findsOneWidget);
+        expect(find.text('S'), findsOneWidget);
+        expect(find.text('A'), findsOneWidget);
+        return tester.getSize(find.byType(EmptyState)).height;
+      }
+
+      final full = await heightOf(compact: false);
+      final compact = await heightOf(compact: true);
+      // 差值與字型無關：底圈 56＋上下內距 32＋兩處間距各 12
+      expect(full - compact, moreOrLessEquals(112, epsilon: 0.5));
+      // 圖示底圈仍是正圓（寬高同步縮）
+      expect(
+        tester.getSize(
+          find
+              .ancestor(
+                of: find.byIcon(Icons.inbox_outlined),
+                matching: find.byType(Container),
+              )
+              .first,
+        ),
+        const Size(64, 64),
+      );
+      expect(tester.widget<Icon>(find.byIcon(Icons.inbox_outlined)).size, 32);
+    });
+
     testWidgets('displays icon and title', (tester) async {
       await tester.pumpWidget(
         buildTestApp(

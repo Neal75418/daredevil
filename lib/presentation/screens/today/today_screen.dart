@@ -999,15 +999,24 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 if (recommendations.isEmpty) {
                   // 完全沒有資料（全新安裝、或第一次更新沒寫進任何價格）
                   // ≠ 今天沒有訊號
+                  //
+                  // 依內容高度顯示、不撐滿畫面，且用精簡版：撐滿
+                  // （SliverFillRemaining）或完整版（約 336 高）都會把族群
+                  // 排行與財報入口推到第一屏之外，分頁沒訊號時正是該看
+                  // 它們的時候。錯誤狀態同理。全新安裝時族群排行也沒資料、
+                  // 會自動收起，所以那個狀態維持完整版（改為貼齊頂端，
+                  // 不再於剩餘空間垂直置中）。
                   final today = ref.watch(todayProvider);
-                  return SliverFillRemaining(
-                    hasScrollBody: false,
+                  return SliverToBoxAdapter(
                     child: today.dataDate == null
                         ? EmptyStates.firstBuild(
                             isUpdating: today.isUpdating,
                             onStart: _runUpdate,
                           )
-                        : EmptyStates.noRecommendations(onRefresh: _runUpdate),
+                        : EmptyStates.noRecommendations(
+                            onRefresh: _runUpdate,
+                            compact: true,
+                          ),
                   );
                 }
                 return _buildRecommendationsList(
@@ -1028,11 +1037,17 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 void onRetry() =>
                     ref.invalidate(modeRecommendationsProvider(mode));
                 final msg = ErrorDisplay.message(e);
-                return SliverFillRemaining(
-                  hasScrollBody: false,
+                return SliverToBoxAdapter(
                   child: ErrorDisplay.isNetworkError(msg)
-                      ? EmptyStates.networkError(onRetry: onRetry)
-                      : EmptyStates.error(message: msg, onRetry: onRetry),
+                      ? EmptyStates.networkError(
+                          onRetry: onRetry,
+                          compact: true,
+                        )
+                      : EmptyStates.error(
+                          message: msg,
+                          onRetry: onRetry,
+                          compact: true,
+                        ),
                 );
               },
             );
