@@ -88,6 +88,18 @@ class RefetchSummary {
   final List<String> staleOutOfWindow = [];
   Object? rateLimitError;
 
+  /// 因限流或網路錯誤而中止的那一天；沒有中止時為 null。
+  ///
+  /// 只記第一次發生的（`??=`），已有值就不覆寫。呼叫端（`tool/
+  /// refetch_market_days.dart` 的 `computeNotAttempted`）用它直接標出
+  /// 「哪一天沒抓完」，不再從 [attempted] 次數回推——次數推算在中止發生於
+  /// 候選範圍內最舊那一天時會失準（`attempted == days.length`，看起來像
+  /// 「全部嘗試完畢」，但那一天其實沒有成功）。
+  ///
+  /// ⚠️ 多組（dataset, market）同時跑時（例如法人一次涵蓋兩市場），這個
+  /// 欄位只代表**第一個**中止的日子，不區分是哪一組先中止。
+  DateTime? stoppedAt;
+
   bool get rateLimited => rateLimitError != null;
 
   String toLogLine() {
@@ -267,6 +279,7 @@ class MarketDayRefetcher {
         await fetch();
       } on RateLimitException catch (e) {
         summary.rateLimitError = e;
+        summary.stoppedAt ??= day;
         return _AttemptOutcome.rateLimitAbort;
       } on NetworkException catch (e) {
         // 網路異常：單一（資料集, 市場, 日）失敗不代表整輪都會失敗（可能是
@@ -277,6 +290,7 @@ class MarketDayRefetcher {
           '${groups.map((g) => '${g.dataset.code}/${g.market}').join('+')} '
           '${DateContext.formatYmd(day)}: $e',
         );
+        summary.stoppedAt ??= day;
         return _AttemptOutcome.networkStop;
       } on Exception catch (e) {
         summary.errors.add(

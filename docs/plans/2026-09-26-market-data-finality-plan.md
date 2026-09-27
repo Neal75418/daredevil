@@ -4696,62 +4696,116 @@ Expected：全部通過。送 code review（文件改動；請 reviewer 對照�
 
 ## Task 15：既有資料修復（彩排 → 同意 → 實跑）
 
-spec §5。不改程式；每一步都唯讀或只寫副本，直到使用者同意。
+spec §5。不改程式；每一步都唯讀或只寫副本，直到使用者同意。副本一律放在 repo 外的絕對路徑，避免被誤加進版控。
 
 - [ ] **Step 1：確認 launchd 產物已含本次修改**
 
 Run: `grep "build=" <launchd stdout 日誌> | tail -1`（日誌路徑見 `ops/launchd/com.neo.daredevil.daily.plist` 的 `StandardOutPath`）
-Expected：最近一次執行的 build SHA 等於已提交的 HEAD。不是的話先跑 `ops/launchd/install.sh --cli-only`。
+Expected：build SHA 等於**最後一個動到 `lib/`、`bin/`、`tool/`、`ops/launchd/`、`pubspec` 的 commit**（只改文件的 commit 不會觸發重編）。不是的話先跑 `ops/launchd/install.sh --cli-only`。
 
 - [ ] **Step 2：建立彩排副本、決定修復的結束日**
 
 ```bash
+R="$HOME/tmp/daredevil-rehearsal"; mkdir -p "$R"
+DB="<app DB 路徑>"
 # 容器目錄沒有 -wal 檔時用 immutable；有 -wal 時改用 mode=ro（需 -shm 存在）
-sqlite3 "file:<app DB 路徑>?immutable=1" "vacuum into 'rehearsal.db'"
-cp rehearsal.db rehearsal_before.db
-sqlite3 rehearsal.db "select value from app_settings where key='finality_tracking_since'"
+sqlite3 "file:$DB?immutable=1" "vacuum into '$R/rehearsal.db'"
+cp "$R/rehearsal.db" "$R/rehearsal_before.db"
+SINCE=$(sqlite3 "$R/rehearsal.db" "select value from app_settings where key='finality_tracking_since'")
+echo "SINCE=$SINCE"
 ```
 
 修復範圍的結束日有兩個：
 
-- `TO`：價格與法人用，＝追蹤起始日的**前一個交易日**（起始日以後由每日重抓負責）。查不到起始日（Stage B 尚未上線）就停下、不要進行修復。
-- `VAL_TO`：估值用，＝**修復當天的前一個交易日**。估值不在每日重抓範圍，Stage C 上線前每天的估值都標錯日期，所以要修到最近一天。
+- `TO`：價格與法人用，＝追蹤起始日的前一天：`TO=$(date -j -v-1d -f %Y-%m-%d "$SINCE" +%Y-%m-%d)`。工具只處理交易日，取日曆前一天即等於前一個交易日；起始日以後由每日重抓負責。`SINCE` 查不到（Stage B 尚未上線）就停下、不要進行修復。
+- `VAL_TO`：估值用，＝**Stage C 提交日之前的最後一個交易日**（舊程式最後一次替估值標錯日期的那天；Stage C 在 9/29 前提交時是 9/24）。修到更晚無害，只是多打幾次呼叫。工具會拒絕 `--to` ≥ 台北今天。
 
-- [ ] **Step 3：先 dry-run 看呼叫數**
+- [ ] **Step 3：執行前置條件（`dart run` 曾卡在 build-hook lock 超過 20 分鐘）**
+
+1. 關掉 IDE 或終端機裡正在跑的 `flutter test`／`flutter run`，以及 App 本身；確認沒有其他 dart 行程：`pgrep -f "flutter_tester|dart run" | wc -l` 應為 0（不要用 `pgrep -fl`，會印出其他行程的環境變數）。
+2. 確認有網路（`dart run` 的 build hook 需要抓 sqlite3 預編譯檔）。
+3. 避開 15:30／21:30 launchd 排程時段。
+4. 下面第一條 dry-run 兼作暖機：**2 分鐘內沒有任何 `[refetch]` 輸出就 Ctrl-C 中止**，檢查是否有其他 dart 行程後再試，不要一直等。
+
+- [ ] **Step 4：先 dry-run 看呼叫數**
 
 ```bash
 # 逐條寫出，不用 for 迴圈：zsh 不會拆開未加引號的 $args，整串會變成一個參數
-dart run tool/refetch_market_days.dart --dataset prices --market TPEx --from 2025-06-10 --to "$TO" --db rehearsal.db --dry-run
-dart run tool/refetch_market_days.dart --dataset prices --market TWSE --from 2026-07-16 --to "$TO" --db rehearsal.db --dry-run
-dart run tool/refetch_market_days.dart --dataset institutional --from 2026-07-16 --to 2026-08-19 --db rehearsal.db --dry-run
-dart run tool/refetch_market_days.dart --dataset valuation --from 2026-07-15 --to "$VAL_TO" --db rehearsal.db --dry-run
+dart run tool/refetch_market_days.dart --dataset prices --market TPEx --from 2025-06-10 --to "$TO" --db "$R/rehearsal.db" --dry-run
+dart run tool/refetch_market_days.dart --dataset prices --market TWSE --from 2026-07-16 --to "$TO" --db "$R/rehearsal.db" --dry-run
+dart run tool/refetch_market_days.dart --dataset institutional --from 2026-07-16 --to 2026-08-19 --db "$R/rehearsal.db" --dry-run
+dart run tool/refetch_market_days.dart --dataset valuation --from 2026-07-15 --to "$VAL_TO" --db "$R/rehearsal.db" --dry-run
 ```
 
-Expected：以 `TO`＝9/24 計約 320／50／25／52 次呼叫（`TO` 越晚越多；法人一天一次涵蓋兩市場）。
+Expected：以 `TO`＝`VAL_TO`＝9/24 計為 319／51／25／52 個交易日（`TO` 越晚越多）。法人一天一次請求涵蓋兩市場。記下每條的交易日數，Step 5 的覆蓋檢查要用。
 
-- [ ] **Step 4：對副本實跑**：把 Step 3 的四條指令去掉 `--dry-run`，逐條執行，每條結束用 `echo $?` 確認退出碼 0。
+- [ ] **Step 5：對副本實跑**：把 Step 4 的四條指令去掉 `--dry-run`，逐條執行，每條結束用 `echo $?` 看退出碼。
 
-- [ ] **Step 5：驗收**
+退出碼 0 不代表完整（某天回 0 列不算錯誤），每條都要做覆蓋檢查；非 0 時依下表處理：
 
-(a) 範圍內與官方比對，不符列數歸零。以 Task 0 的比對腳本改讀 `rehearsal.db`：TPEx 價格用 `dailyQuotes` 抽 10 個分散在範圍內的日子全市場比對成交量；TWSE 價格用 MI_INDEX 抽 10 天；法人抽 5 天比 T86／上櫃；估值逐日比 BWIBBU_d。只比 `stock_master` 內 `is_active=1` 的股票。
+| 結果 | 處理 |
+|:--|:--|
+| 退出碼 1 或 4，且印出「下次可用 --to X 續跑」 | 原指令把 `--to` 換成 X 再跑（被限流時先等幾分鐘） |
+| 退出碼 1，沒有續跑提示（一般錯誤） | 依 stderr 列出的日子，逐日以 `--from D --to D` 補跑 |
+| 估值印出「回 0 筆: …」 | 逐日以 `--from D --to D` 補跑；仍為 0 筆就記下日期，交給使用者判斷 |
 
-(b) 範圍外不得變動——**雙向**比對（舊有新無＝被刪、新有舊無＝被加），並含 `day_trading`：
+覆蓋檢查（價格與法人；估值看「回 0 筆」清單為空即可）：
+
+```bash
+sqlite3 "$R/rehearsal.db" "select dataset, market, count(*), min(substr(date,1,10)), max(substr(date,1,10))
+  from market_day_fetch where substr(fetched_at,1,10) >= '<執行日 YYYY-MM-DD>' group by 1,2;"
+```
+
+Expected：prices/TPEx、prices/TWSE、institutional 兩市場的列數各等於 Step 4 該條的交易日數。少的日子就是寫入列數未達門檻或沒寫成功的日子，逐日補跑或記下原因。
+
+- [ ] **Step 6：驗收**
+
+(a) **範圍內與官方比對，不符列數歸零**。以 Task 0 的比對腳本改讀 `$R/rehearsal.db`：TPEx 價格用 `dailyQuotes` 抽 10 個分散在範圍內的日子全市場比對成交量；TWSE 價格用 MI_INDEX 抽 10 天；法人抽 5 天比 T86／上櫃；估值逐日比 BWIBBU_d。
+
+- 只比 `stock_master.market` **等於該修復市場**、且 `is_active=1` 的股票。
+- **轉市場股票另列**：工具只重抓目前屬於該市場的股票，2025-06 以後由上櫃轉上市的股票，上櫃期間的價格仍是舊口徑。用兩個分散日期（例如 2025-06-12 與 2026-07-14）的 `dailyQuotes` 回應取得當時的上櫃代號，與 `stock_master` 中目前 `market='TWSE'` 的代號取交集，列出檔數與代號，交給使用者決定是否處理。
+
+(b) **範圍外不得變動**——依（市場, 日期）雙向比對，並含 `day_trading`：
 
 ```bash
 for t in daily_price daily_institutional stock_valuation margin_trading shareholding day_trading; do
-  sqlite3 rehearsal_before.db "attach 'rehearsal.db' as n;
-    select '$t removed/changed', substr(date,1,10) d, count(*) from (select * from $t except select * from n.$t) group by d
+  sqlite3 "$R/rehearsal_before.db" "attach '$R/rehearsal.db' as n;
+    select '$t -', coalesce(m.market,'?'), substr(x.date,1,10), count(*) from (select * from $t except select * from n.$t) x left join stock_master m on m.symbol=x.symbol group by 2,3
     union all
-    select '$t added/changed', substr(date,1,10) d, count(*) from (select * from n.$t except select * from $t) group by d;"
+    select '$t +', coalesce(m.market,'?'), substr(x.date,1,10), count(*) from (select * from n.$t except select * from $t) x left join stock_master m on m.symbol=x.symbol group by 2,3;"
 done
 ```
 
-逐表確認列出的日期全部落在該表的修復範圍內；`day_trading` 的差異日期應落在價格修復範圍內，且只有 `day_trading_ratio` 欄不同（抽 3 筆比對確認）。
+判準：
 
-(c) 當沖比例：抽查 3 檔在修復範圍內的日子，`day_trading_ratio` ＝ `trade_volume ÷ 新成交量 × 100`。
+- `daily_price`：上櫃列只能落在 [2025-06-10, TO]，上市列只能落在 [2026-07-16, TO]。
+- `daily_institutional`：只能落在 [2026-07-16, 2026-08-19]。
+- `stock_valuation`：只能有上市列，且落在 [2026-07-15, VAL_TO]。
+- `day_trading`：日期落在價格修復範圍內，且只有 `day_trading_ratio` 欄不同（抽 3 筆比對確認）。
+- `margin_trading`、`shareholding`：不得有任何差異。
 
-- [ ] **Step 6：把彩排結果交給使用者，停下等同意**
+(c) **當沖比例**：抽查 3 檔在修復範圍內的日子，`day_trading_ratio` ＝ `trade_volume ÷ 新成交量 × 100`。
 
-回報內容：各範圍呼叫數與耗時、比對結果（修前／修後不符列數）、範圍外差異為 0 的證據、預計對實際 DB 執行的時段（避開 15:30／21:30）。**沒有明確同意不得進行 Step 7。**
+(d) **順便檢查三件事**：
+- 同一天有沒有兩列（變體時間戳）：對 `daily_price`、`daily_institutional`、`stock_valuation` 跑 `select symbol, substr(date,1,10), count(*) from <表> group by 1,2 having count(*)>1`，應為 0。
+- `stock_valuation` 在 2026-07-15 以前有沒有列：有的話那些是舊邏輯寫的、不在修復範圍，列出筆數交給使用者。
+- 估值寫入有外鍵：有代號不在 `stock_master` 時那一天整批失敗，會以「失敗日、退出碼 1」出現，Step 5 已處理。
 
-- [ ] **Step 7：（經同意後）對實際 DB 執行 Step 4 的指令（不帶 `--db`），再跑一次 Step 5(a) 的比對驗證實際 DB。**
+- [ ] **Step 7：把彩排結果交給使用者，停下等同意**
+
+回報內容：
+- 各範圍的呼叫數、耗時、補跑紀錄；
+- 比對結果（修前／修後不符列數）；
+- 範圍外差異的檢查結果；
+- 轉市場股票的檔數與代號，請使用者決定是否處理；
+- 7/15 以前舊估值列的筆數；
+- 預計對實際 DB 執行的時段（避開 15:30／21:30）。
+
+**沒有明確同意不得進行 Step 8。**
+
+- [ ] **Step 8：（經同意後）對實際 DB 執行**
+
+1. 關閉 App，確認 Step 3 的前置條件，避開排程時段。
+2. **先備份實際 DB**，出問題時可整檔還原：`sqlite3 "file:$DB?immutable=1" "vacuum into '$R/live_backup_before_repair.db'"`（有 -wal 時改 `mode=ro`）；確認 `pragma integrity_check` 為 `ok`。
+3. 執行 Step 5 的四條指令，**不帶 `--db`**（預設即實際 app DB），照 Step 5 的表處理非 0 退出碼並做覆蓋檢查（改查實際 DB）。
+4. 再跑一次 Step 6(a) 的比對，驗證實際 DB。

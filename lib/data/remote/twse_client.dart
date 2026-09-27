@@ -1,3 +1,5 @@
+import 'dart:math' show max;
+
 import 'package:dio/dio.dart';
 import 'package:meta/meta.dart';
 
@@ -119,6 +121,11 @@ class TwseClient {
   /// 回應日期 ≠ [requestedDate] → 回空（端點失效防護）。public 供測試。
   /// 解析 BWIBBU 估值列。public 供測試(主方法自建 Dio、不可注入)。
   ///
+  /// 日期取每列的 `Date`（民國 YYYMMDD）。15:30／21:30 時這個端點仍是前一
+  /// 交易日的資料；舊實作用呼叫當天的日期標記，2026-07-15 起 52 個交易日
+  /// 裡 35 天整批標成隔天。整批應只有一個日期：缺欄、解析失敗或出現多個
+  /// 日期 → 回 null、整批丟棄（寫錯日期比沒資料糟）。
+  ///
   /// **缺值一律回 null,不得寫 0**(2026-08-15 數值稽核):端點對「無法
   /// 計算」的欄位回 `-`——虧損公司無本益比、未配息無殖利率。舊實作
   /// `?? 0.0` 把它落庫成 0,與「本益比 0」(極度便宜)語意完全相反。
@@ -128,26 +135,34 @@ class TwseClient {
   ///
   /// 注意:交易所明確回的 `0.00`(如確定不配息)**是資訊**,照常保留;
   /// 只有解析不出數值時才回 null。
-  static List<TwseValuation> parseValuationRows(
-    List<dynamic> data,
-    DateTime resDate,
-  ) {
-    return data.map((item) {
+  static List<TwseValuation>? parseValuationRows(List<dynamic> data) {
+    DateTime? batchDate;
+    final result = <TwseValuation>[];
+    for (final item in data) {
       final map = item as Map<String, dynamic>;
+      final date = TwParseUtils.parseCompactRocDate(map['Date']?.toString());
+      if (date == null) return null;
+      if (batchDate != null && !DateContext.isSameDay(batchDate, date)) {
+        return null;
+      }
+      batchDate = date;
       double? num(String key) {
         final raw = map[key]?.toString().replaceAll(',', '');
         if (raw == null || raw.isEmpty) return null;
         return double.tryParse(raw);
       }
 
-      return TwseValuation(
-        code: map['Code']?.toString() ?? '',
-        date: resDate,
-        per: num('PEratio'),
-        pbr: num('PBratio'),
-        dividendYield: num('DividendYield'),
+      result.add(
+        TwseValuation(
+          code: map['Code']?.toString() ?? '',
+          date: date,
+          per: num('PEratio'),
+          pbr: num('PBratio'),
+          dividendYield: num('DividendYield'),
+        ),
       );
-    }).toList();
+    }
+    return result;
   }
 
   static List<TwseDailyPrice> parseMiIndexDailyPrices(
@@ -716,7 +731,7 @@ class TwseClient {
   ///
   /// 使用 TWSE Open Data API 取得可靠的結構化資料
   /// 端點: https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL
-  Future<List<TwseValuation>> getAllStockValuation({DateTime? date}) {
+  Future<List<TwseValuation>> getAllStockValuation() {
     return MarketClientMixin.executeRequest(_tag, '估值資料', () async {
       const cacheKey = 'valuation';
       final cached = _cache.get(cacheKey) as List<TwseValuation>?;
@@ -756,17 +771,93 @@ class TwseClient {
         AppLogger.warning(_tag, '估值資料: 非預期資料型別');
         return [];
       }
-      // Open Data 不回傳交易日。過去用 DateTime.now()（含時間戳）當 date，使
-      // PK (symbol,date) 每次同步都不同 → insertOrReplace 無法去重 → 重複膨脹。
-      // 正規化到當日 00:00（同 daily_price 口徑），同日多次同步即可去重。
-      final resDate = DateContext.normalize(date ?? DateTime.now());
 
-      final results = parseValuationRows(data, resDate);
-
-      AppLogger.info(_tag, '估值資料: ${results.length} 筆');
+      final results = parseValuationRows(data);
+      if (results == null) {
+        AppLogger.warning(_tag, '估值資料: 回應日期缺失、無法解析或不一致，整批丟棄');
+        return <TwseValuation>[];
+      }
+      final dateLabel = results.isEmpty
+          ? '無'
+          : DateContext.formatYmd(results.first.date);
+      AppLogger.info(_tag, '估值資料: ${results.length} 筆 ($dateLabel)');
       _cache.put(cacheKey, results);
       return results;
     });
+  }
+
+  /// 指定日期的上市估值（`/rwd/zh/afterTrading/BWIBBU_d`；修復工具用）
+  Future<List<TwseValuation>> getStockValuationForDate(DateTime date) {
+    return MarketClientMixin.executeRequest(_tag, '歷史估值', () async {
+      final dateStr = TwParseUtils.formatDateCompact(date);
+      final response = await _dio.get(
+        '/rwd/zh/afterTrading/BWIBBU_d',
+        queryParameters: {
+          'date': dateStr,
+          'selectType': 'ALL',
+          'response': 'json',
+        },
+      );
+      if (response.statusCode != 200) {
+        throw ApiException(
+          '$_tag API error: ${response.statusCode}',
+          response.statusCode,
+        );
+      }
+      final data = MarketClientMixin.decodeResponseData(
+        response.data,
+        _tag,
+        '歷史估值',
+      );
+      if (data == null) return <TwseValuation>[];
+      return parseBwibbuDaily(data, date);
+    });
+  }
+
+  /// BWIBBU_d 回應 → 估值列。依欄位名取值（欄序曾變動）；`-` 為 null；
+  /// 頂層 `date` ≠ 請求日期回空。資料可能直接在頂層或包在 `tables[0]`。
+  static List<TwseValuation> parseBwibbuDaily(
+    Map<dynamic, dynamic> json,
+    DateTime requestedDate,
+  ) {
+    if (json['date']?.toString() !=
+        TwParseUtils.formatDateCompact(requestedDate)) {
+      return const [];
+    }
+    final tables = json['tables'];
+    final Map<dynamic, dynamic> table =
+        (tables is List && tables.isNotEmpty && tables.first is Map)
+        ? tables.first as Map<dynamic, dynamic>
+        : json;
+    final fields = (table['fields'] as List?)
+        ?.map((f) => f.toString())
+        .toList();
+    final rows = table['data'];
+    if (fields == null || rows is! List) return const [];
+    int col(String name) => fields.indexWhere((f) => f.contains(name));
+    final code = col('證券代號');
+    final per = col('本益比');
+    final pbr = col('股價淨值比');
+    final yieldCol = col('殖利率');
+    if ([code, per, pbr, yieldCol].any((i) => i < 0)) return const [];
+    double? num(dynamic v) {
+      final raw = v?.toString().replaceAll(',', '').trim();
+      if (raw == null || raw.isEmpty || raw == '-') return null;
+      return double.tryParse(raw);
+    }
+
+    final day = DateContext.normalize(requestedDate);
+    return [
+      for (final r in rows)
+        if (r is List && r.length > [code, per, pbr, yieldCol].reduce(max))
+          TwseValuation(
+            code: r[code].toString().trim(),
+            date: day,
+            per: num(r[per]),
+            pbr: num(r[pbr]),
+            dividendYield: num(r[yieldCol]),
+          ),
+    ];
   }
 
   /// 取得上市公司每日重大訊息（當日檔）

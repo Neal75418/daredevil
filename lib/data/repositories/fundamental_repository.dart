@@ -161,31 +161,27 @@ class FundamentalRepository implements IFundamentalRepository {
     );
   }
 
-  /// 使用 TWSE BWIBBU_d 同步全市場估值資料（免費、無限制）
+  /// 使用 TWSE OpenAPI BWIBBU_ALL 同步全市場估值資料（最新一個交易日，日期
+  /// 取自回應；免費、無限制）
   ///
   /// 取代個別 FinMind 呼叫以進行每日更新。
   /// 注意：此方法僅同步上市股票，上櫃股票需使用 [syncOtcValuation]。
+  ///
+  /// 資料日一律取自回應（BWIBBU_ALL 每列的 `Date`）；[date] 參數目前被忽略，
+  /// 只為了介面（[IFundamentalRepository]）相容而保留。
   @override
   Future<int> syncAllMarketValuation(
     DateTime date, {
     bool force = false,
   }) async {
     try {
-      final data = await _twse.getAllStockValuation(date: date);
+      final data = await _twse.getAllStockValuation();
 
       if (data.isEmpty) return 0;
 
       // 轉換為 Database 資料
       // 過濾無效資料（通常 PE > 0，殖利率 >= 0）
-      final entries = data.map((r) {
-        return StockValuationCompanion.insert(
-          symbol: r.code,
-          date: r.date,
-          per: Value(r.per),
-          pbr: Value(r.pbr),
-          dividendYield: Value(r.dividendYield),
-        );
-      }).toList();
+      final entries = data.map(_toValuationCompanion).toList();
 
       await _db.insertValuationData(entries);
 
@@ -199,6 +195,37 @@ class FundamentalRepository implements IFundamentalRepository {
     } catch (e) {
       throw DatabaseException('Failed to sync TWSE all-market valuation', e);
     }
+  }
+
+  /// 用 BWIBBU_d 寫入指定日期的上市估值（修復工具用）
+  Future<int> syncTwseValuationForDate(DateTime date) async {
+    try {
+      final data = await _twse.getStockValuationForDate(date);
+      if (data.isEmpty) return 0;
+      await _db.insertValuationData(data.map(_toValuationCompanion).toList());
+      return data.length;
+    } on RateLimitException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e) {
+      throw DatabaseException(
+        'Failed to sync TWSE valuation for ${DateContext.formatYmd(date)}',
+        e,
+      );
+    }
+  }
+
+  /// [TwseValuation] → [StockValuationCompanion]，供
+  /// [syncAllMarketValuation]／[syncTwseValuationForDate] 共用。
+  StockValuationCompanion _toValuationCompanion(TwseValuation r) {
+    return StockValuationCompanion.insert(
+      symbol: r.code,
+      date: r.date,
+      per: Value(r.per),
+      pbr: Value(r.pbr),
+      dividendYield: Value(r.dividendYield),
+    );
   }
 
   /// 補充上櫃股票的估值資料（使用 TPEX OpenAPI 批次取得）

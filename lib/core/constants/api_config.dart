@@ -272,6 +272,12 @@ abstract final class ApiConfig {
   /// （2026-09 量測）。
   static const double institutionalZeroDeleteMaxRatio = 0.1;
 
+  /// 修復工具（`tool/refetch_market_days.dart`）逐日呼叫間隔（毫秒）
+  ///
+  /// 修復工具是人工一次性執行、範圍可能橫跨數月，比每輪自動重抓用的
+  /// [finalityRefetchCallDelayMs] 更保守，降低大範圍重抓觸發限流的風險。
+  static const int repairToolCallDelayMs = 3000;
+
   /// 財報同步回溯天數（約 2 年）
   static const int financialSyncLookbackDays = 730;
 

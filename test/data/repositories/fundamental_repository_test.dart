@@ -201,9 +201,7 @@ void main() {
   // ==========================================
   group('syncAllMarketValuation', () {
     test('returns 0 when TWSE returns empty data', () async {
-      when(
-        () => mockTwse.getAllStockValuation(date: any(named: 'date')),
-      ).thenAnswer((_) async => []);
+      when(() => mockTwse.getAllStockValuation()).thenAnswer((_) async => []);
 
       final result = await repo.syncAllMarketValuation(DateTime(2025, 1, 15));
 
@@ -212,7 +210,7 @@ void main() {
 
     test('rethrows NetworkException', () async {
       when(
-        () => mockTwse.getAllStockValuation(date: any(named: 'date')),
+        () => mockTwse.getAllStockValuation(),
       ).thenThrow(const NetworkException('Timeout'));
 
       await expectLater(
@@ -224,13 +222,49 @@ void main() {
     test('wraps other exceptions as DatabaseException', () async {
       // 之前 return 0 屬 silent failure（caller 看不出來是真 0 還是壞了）。
       when(
-        () => mockTwse.getAllStockValuation(date: any(named: 'date')),
+        () => mockTwse.getAllStockValuation(),
       ).thenThrow(Exception('unknown'));
 
       await expectLater(
         repo.syncAllMarketValuation(DateTime(2025, 1, 15)),
         throwsA(isA<DatabaseException>()),
       );
+    });
+  });
+
+  // ==========================================
+  // syncTwseValuationForDate
+  // ==========================================
+  group('syncTwseValuationForDate', () {
+    test('BWIBBU_d 回一筆 → 寫入 insertValuationData，日期取自資料本身', () async {
+      final captured = <List<StockValuationCompanion>>[];
+      when(() => mockTwse.getStockValuationForDate(any())).thenAnswer(
+        (_) async => [
+          TwseValuation(
+            date: DateTime(2026, 9, 24),
+            code: '1101',
+            per: 10.5,
+            pbr: 0.82,
+            dividendYield: 3.17,
+          ),
+        ],
+      );
+      when(() => mockDb.insertValuationData(any())).thenAnswer((
+        invocation,
+      ) async {
+        captured.add(
+          invocation.positionalArguments.first as List<StockValuationCompanion>,
+        );
+      });
+
+      final result = await repo.syncTwseValuationForDate(DateTime(2026, 9, 24));
+
+      expect(result, 1);
+      expect(captured, hasLength(1));
+      final companion = captured.single.single;
+      expect(companion.symbol.value, '1101');
+      expect(companion.date.value, DateTime(2026, 9, 24));
+      expect(companion.per.value, 10.5);
     });
   });
 

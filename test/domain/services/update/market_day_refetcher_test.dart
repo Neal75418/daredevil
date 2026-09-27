@@ -314,6 +314,24 @@ void main() {
       expect(calls, isEmpty);
     });
 
+    test('🚨 限流中止時 stoppedAt 記下出事的那一天（不是用次數回推）', () async {
+      when(
+        () => price.backfillTwsePricesByDate(
+          date: any(named: 'date'),
+          targetSymbols: any(named: 'targetSymbols'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenThrow(const RateLimitException('429'));
+      // 候選日只有 9/24 一天（見「順序」測試的註解），限流就發生在這天上
+      final s = await refetcher.refetchPending(today: today, ledger: ledger);
+      expect(s.stoppedAt, d);
+    });
+
+    test('正常跑完（沒有中止）時 stoppedAt 為 null', () async {
+      final s = await refetcher.refetchPending(today: today, ledger: ledger);
+      expect(s.stoppedAt, isNull);
+    });
+
     test('網路異常：只中止該組其餘天數，其他組照常執行', () async {
       when(
         () => price.backfillTwsePricesByDate(
@@ -328,6 +346,9 @@ void main() {
       expect(s.errors, isNotEmpty);
       expect(s.errors.single, contains('prices/TWSE'));
       expect(s.rateLimited, isFalse);
+      // 🚨 網路錯誤那條 stoppedAt 寫入路徑：候選日只有 9/24 一天，出事就
+      // 在這天
+      expect(s.stoppedAt, d);
     });
 
     test('網路異常：同一組後續天數會被跳過（其他組不受影響）', () async {
@@ -371,7 +392,7 @@ void main() {
     });
 
     test('沒有記錄到狀態的日子（例如颱風停市回 0 列），下輪仍是候選', () async {
-      // 「回 0 列不寫狀態」由 ledger 的門檻負責（Task 2 測試）；這裡釘的是
+      // 「回 0 列不寫狀態」由 ledger 的門檻負責（另有專門測試涵蓋）；這裡釘的是
       // refetcher 這一側：沒狀態的日子不會因為「這輪抓過」就被跳過
       await refetcher.refetchPending(today: today, ledger: ledger);
       calls.clear();

@@ -20,54 +20,67 @@ void main() {
   test('🚨 空字串/`-`(無法計算)必須落 NULL,不得寫成 0', () {
     final r = TwseClient.parseValuationRows([
       {
+        'Date': '1150814',
         'Code': '1101',
         'Name': '台泥',
         'PEratio': '-', // 虧損 → 無本益比
         'DividendYield': '-', // 未配息
         'PBratio': '0.85',
       },
-    ], d);
+    ])!;
     expect(r, hasLength(1));
     expect(r.first.per, isNull, reason: 'per=0 會被讀成「本益比 0」——那是極度便宜,語意完全相反');
     expect(r.first.dividendYield, isNull);
     expect(r.first.pbr, 0.85, reason: '有值的欄位不受影響');
+    expect(r.single.date, d);
   });
 
   test('空字串與缺欄位同樣落 NULL', () {
     final r = TwseClient.parseValuationRows([
-      {'Code': '1102', 'Name': '亞泥', 'PEratio': '', 'PBratio': '1.2'},
-    ], d);
+      {
+        'Date': '1150814',
+        'Code': '1102',
+        'Name': '亞泥',
+        'PEratio': '',
+        'PBratio': '1.2',
+      },
+    ])!;
     expect(r.first.per, isNull);
     expect(r.first.dividendYield, isNull, reason: '欄位缺席');
     expect(r.first.pbr, 1.2);
+    expect(r.single.date, d);
   });
 
   test('正常數值照常解析(確認不是把功能關掉)', () {
     final r = TwseClient.parseValuationRows([
       {
+        'Date': '1150814',
         'Code': '2330',
         'Name': '台積電',
         'PEratio': '27.76',
         'DividendYield': '0.92',
         'PBratio': '9.66',
       },
-    ], d);
+    ])!;
     expect(r.first.per, 27.76);
     expect(r.first.dividendYield, 0.92);
     expect(r.first.pbr, 9.66);
+    expect(r.single.date, d);
   });
 
   test('🚨 交易所明確回的 0.00 要保留(0 與 NULL 語意不同)', () {
     final r = TwseClient.parseValuationRows([
       {
+        'Date': '1150814',
         'Code': '1103',
         'Name': '嘉泥',
         'PEratio': '15.5',
         'DividendYield': '0.00',
         'PBratio': '1.1',
       },
-    ], d);
+    ])!;
     expect(r.first.dividendYield, 0.0, reason: '交易所明確回 0.00 是資訊,不該被當成缺值抹掉');
+    expect(r.single.date, d);
   });
 
   // 2026-08-15 對真實 API 回應實測:1,083 筆中 per 空字串 214 筆、
@@ -75,8 +88,14 @@ void main() {
   // 台積電 27.76 / 9.66 / 0.92 照常解析。
   test('千分位照常處理', () {
     final r = TwseClient.parseValuationRows([
-      {'Code': '9999', 'PEratio': '1,234.5', 'PBratio': '2.0'},
-    ], d);
+      {
+        'Date': '1150814',
+        'Code': '9999',
+        'PEratio': '1,234.5',
+        'PBratio': '2.0',
+      },
+    ])!;
     expect(r.first.per, 1234.5);
+    expect(r.single.date, d);
   });
 }
