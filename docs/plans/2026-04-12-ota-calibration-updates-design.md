@@ -15,7 +15,7 @@
 **Date**: 2026-04-12
 **Scope**: Over-The-Air 校準資料更新 — 讓 `tool/recalibrate.dart` 產出的新 calibration 能在不發 app 版本的前提下送到所有用戶
 **Status**: Design locked via `/brainstorming` (Q1-Q7), ready for implementation
-**Related**: [Stage 3+4 design](2026-04-12-stage3-4-design.md), [Stage 5a runtime loader design](2026-04-11-stage5a-runtime-loader-design.md), [`calibrated_scores_registry.dart`](../../lib/core/constants/calibrated_scores/calibrated_scores_registry.dart), [`tool/recalibrate.dart`](../../tool/recalibrate.dart)
+**Related**: Stage 3+4 design、Stage 5a runtime loader design（兩份已在 docs/plans 清理時移除，見 git 歷史 `8b4e2319`、`e8b9326a`）, [`calibrated_scores_registry.dart`](../../lib/core/constants/calibrated_scores/calibrated_scores_registry.dart), [`tool/recalibrate.dart`](../../tool/recalibrate.dart)
 
 ---
 
@@ -445,9 +445,9 @@ docs/plans/
 
 | File | Change |
 |:---|:---|
-| [`lib/data/database/tables/app_settings.dart`](../../lib/data/database/tables/app_settings.dart) | 加 6 個 nullable columns (`calibration*`) |
+| `lib/data/database/tables/app_settings.dart`（未採用，見檔頭第 2 點） | 加 6 個 nullable columns (`calibration*`) |
 | `lib/data/database/app_database.g.dart` | build_runner regenerate |
-| [`lib/data/database/daos/app_settings_dao.dart`](../../lib/data/database/daos/app_settings_dao.dart) | 加 `getCachedCalibration()`, `writeCalibration(...)`, `touchCalibrationLastCheckedAt(...)` |
+| `lib/data/database/daos/app_settings_dao.dart`（未採用，實作為 `dao/calibration_cache_dao.dart`） | 加 `getCachedCalibration()`, `writeCalibration(...)`, `touchCalibrationLastCheckedAt(...)` |
 | [`lib/core/constants/calibrated_scores/calibrated_scores_registry.dart`](../../lib/core/constants/calibrated_scores/calibrated_scores_registry.dart) | 加 `loadWithFallback({appSettingsDao, knownRuleIds})` method |
 | [`lib/main.dart`](../../lib/main.dart) | `loadFromAssets` → `loadWithFallback`；`runApp` 後加 `unawaited(calibrationUpdater.checkAndUpdate())` |
 | [`tool/recalibrate.dart`](../../tool/recalibrate.dart) | 產出 JSON 時順便算 SHA-256、產出 `calibration_manifest.json` |

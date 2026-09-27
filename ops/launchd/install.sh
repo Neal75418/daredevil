@@ -74,7 +74,7 @@ for target in intraday_alert_check daily_update; do
     echo "   $DART build cli --target=bin/$target.dart -o build/cli/$target" >&2
     exit 1
   }
-  rm -rf "$CLI_DIR/$target"
+  rm -rf "${CLI_DIR:?}/${target:?}"
   cp -R "build/cli/$target/bundle" "$CLI_DIR/$target"
   [ -x "$CLI_DIR/$target/bin/$target" ] || { echo "❌ $target 產物不可執行" >&2; exit 1; }
   # 標記檔放 bundle 根,CLI 執行時由 buildStamp() 沿 resolvedExecutable 往上找

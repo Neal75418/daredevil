@@ -288,7 +288,7 @@ flowchart LR
 | 基本面遞減 | 同群組內第 1／2／3+ 條分別乘 1.0／0.5／0.25（`fundamental_decay_groups.dart`） |
 | 加總 + 夾住 | `calculateScore` 是純算術：加總後夾上限 80。**沒有「加成」階段** |
 | 負分歸零 | 落庫前地板為 0；但內部 raw 分數是**有號的**（`floorAtZero: false`） |
-| 落庫閘門 | `|rawShort| ≥ 8 或 |rawLong| ≥ 8` 才寫 `daily_analysis`（MA 階梯穿越另有豁免） |
+| 落庫閘門 | `\|rawShort\| ≥ 8 或 \|rawLong\| ≥ 8` 才寫 `daily_analysis`（MA 階梯穿越另有豁免） |
 
 **投信主導 ±5** 不是合成階段的加成——它在規則內部就併進 `TriggeredReason.score`：
 買超連續 **+5**、賣超連續 **−5**（`institutional_rules.dart`）。2026-04 移除的是

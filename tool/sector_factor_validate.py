@@ -67,14 +67,10 @@ def summarize(label, vals):
     print(f"{label}: n={len(vals):4d}  mean={mean:+.4f}  正比例={pos:3.0f}%  t≈{t:+.2f}")
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    default_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibration.db")
-    ap.add_argument("--db", default=default_db, help="價格 SQLite（預設 tool/calibration.db）")
-    args = ap.parse_args()
-
-    con = sqlite3.connect(args.db)
-    industry = {s: i for s, i in con.execute("SELECT symbol, industry FROM stock_master")}
+def load_prices(db_path):
+    """讀 stock_master 與 daily_price → (symbol→industry, 交易日序列, symbol→{date: (close, vol)})。"""
+    con = sqlite3.connect(db_path)
+    industry = dict(con.execute("SELECT symbol, industry FROM stock_master"))
     dates = [r[0][:10] for r in con.execute(
         "SELECT DISTINCT date FROM daily_price ORDER BY date")]
     px = {}
@@ -83,50 +79,56 @@ def main():
         if close is not None:
             px.setdefault(sym, {})[d[:10]] = (close, vol or 0)
     con.close()
-    print(f"資料 {dates[0]} ~ {dates[-1]}、{len(dates)} 交易日、{len(px)} 檔\n")
+    return industry, dates, px
 
-    recs = []  # (date, ic, regime_up, qspread)
-    for gi in range(max(LOOKBACK, REGIME_LB), len(dates) - FORWARD, STEP):
-        d_back, d_now, d_fwd = dates[gi - LOOKBACK], dates[gi], dates[gi + FORWARD]
-        d_reg = dates[gi - REGIME_LB]
-        rows, reg = [], []
-        for sym, dd in px.items():
-            ind = industry.get(sym)
-            if not ind or ind == "ETF":
-                continue
-            a, b, c = dd.get(d_back), dd.get(d_now), dd.get(d_fwd)
-            if not a or not b or not c or a[0] <= 0 or b[0] <= 0:
-                continue
-            if b[0] * b[1] < MIN_TURNOVER:
-                continue
-            rows.append((ind, b[0] / a[0] - 1, c[0] / b[0] - 1))
-            r = dd.get(d_reg)
-            if r and r[0] > 0:
-                reg.append(b[0] / r[0] - 1)
-        if len(rows) < 50 or len(reg) < 50:
-            continue
-        regime_up = sum(reg) / len(reg) > 0
-        by_ind = {}
-        for ind, r20, _ in rows:
-            by_ind.setdefault(ind, []).append(r20)
-        smom = {i: st.median(v) for i, v in by_ind.items() if len(v) >= MIN_MEMBERS}
-        if len(smom) < 5:
-            continue
-        srt = sorted(smom, key=lambda k: smom[k])
-        m = len(srt)
-        spct = {ind: i / (m - 1) for i, ind in enumerate(srt)}
-        rr = [r for r in rows if r[0] in spct]
-        mean_fw = sum(r[2] for r in rr) / len(rr)
-        xs = [spct[r[0]] for r in rr]
-        ys = [r[2] - mean_fw for r in rr]
-        ic = spearman(xs, ys)
-        if ic is None:
-            continue
-        paired = sorted(zip(xs, ys))
-        k = max(1, len(paired) // 5)
-        qs = sum(y for _, y in paired[-k:]) / k - sum(y for _, y in paired[:k]) / k
-        recs.append((d_now, ic, regime_up, qs))
 
+def collect_rows(industry, px, d_back, d_now, d_fwd, d_reg):
+    """單一 as-of 日：每檔 (產業, 20D 動能, forward 20D 報酬) 與 regime 用的 120D 報酬。"""
+    rows, reg = [], []
+    for sym, dd in px.items():
+        ind = industry.get(sym)
+        if not ind or ind == "ETF":
+            continue
+        a, b, c = dd.get(d_back), dd.get(d_now), dd.get(d_fwd)
+        if not a or not b or not c or a[0] <= 0 or b[0] <= 0:
+            continue
+        if b[0] * b[1] < MIN_TURNOVER:
+            continue
+        rows.append((ind, b[0] / a[0] - 1, c[0] / b[0] - 1))
+        r = dd.get(d_reg)
+        if r and r[0] > 0:
+            reg.append(b[0] / r[0] - 1)
+    return rows, reg
+
+
+def evaluate_asof(rows, reg):
+    """單一 as-of 日的 (IC, regime_up, 分位 spread)；樣本不足回 None。"""
+    if len(rows) < 50 or len(reg) < 50:
+        return None
+    regime_up = sum(reg) / len(reg) > 0
+    by_ind = {}
+    for ind, r20, _ in rows:
+        by_ind.setdefault(ind, []).append(r20)
+    smom = {i: st.median(v) for i, v in by_ind.items() if len(v) >= MIN_MEMBERS}
+    if len(smom) < 5:
+        return None
+    srt = sorted(smom, key=smom.get)
+    m = len(srt)
+    spct = {ind: i / (m - 1) for i, ind in enumerate(srt)}
+    rr = [r for r in rows if r[0] in spct]
+    mean_fw = sum(r[2] for r in rr) / len(rr)
+    xs = [spct[r[0]] for r in rr]
+    ys = [r[2] - mean_fw for r in rr]
+    ic = spearman(xs, ys)
+    if ic is None:
+        return None
+    paired = sorted(zip(xs, ys))
+    k = max(1, len(paired) // 5)
+    qs = sum(y for _, y in paired[-k:]) / k - sum(y for _, y in paired[:k]) / k
+    return ic, regime_up, qs
+
+
+def report(recs):
     up = [ic for _, ic, u, _ in recs if u]
     dn = [ic for _, ic, u, _ in recs if not u]
     print("=" * 62)
@@ -153,6 +155,26 @@ def main():
         print(f"\n判讀：上升 regime IC {mu:+.3f} → "
               + ("有 edge、可考慮啟用" if mu > 0.02
                  else "無持續 edge → tilt 維持 dormant（W=0）"))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    default_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibration.db")
+    ap.add_argument("--db", default=default_db, help="價格 SQLite（預設 tool/calibration.db）")
+    args = ap.parse_args()
+
+    industry, dates, px = load_prices(args.db)
+    print(f"資料 {dates[0]} ~ {dates[-1]}、{len(dates)} 交易日、{len(px)} 檔\n")
+
+    recs = []  # (date, ic, regime_up, qspread)
+    for gi in range(max(LOOKBACK, REGIME_LB), len(dates) - FORWARD, STEP):
+        d_back, d_now, d_fwd = dates[gi - LOOKBACK], dates[gi], dates[gi + FORWARD]
+        d_reg = dates[gi - REGIME_LB]
+        rows, reg = collect_rows(industry, px, d_back, d_now, d_fwd, d_reg)
+        r = evaluate_asof(rows, reg)
+        if r is not None:
+            recs.append((d_now, *r))
+    report(recs)
 
 
 if __name__ == "__main__":

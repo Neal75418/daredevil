@@ -9,6 +9,8 @@
 
     <application
         android:label="Daredevil"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
