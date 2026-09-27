@@ -1,16 +1,17 @@
 // 文件裡的規則數必須與程式碼一致(2026-08-22)
 //
-// **為什麼需要**:規則數同時出現在 README.md、CLAUDE.md、docs/RULE_ENGINE.md、
-// .claude/rules/architecture.md **四份文件**。2026-08-22 盤點時四份一起寫著
-// 「64 條」,而 `RuleRegistry.defaultRules` 實際已是 70 條——沒有任何機制會在
-// 新增規則時提醒更新文件,於是四份同步錯了六條。
+// **為什麼需要**:規則數同時出現在 README.md、docs/RULE_ENGINE.md、
+// .claude/rules/architecture.md 多份文件。2026-08-22 盤點時四份文件(當時含
+// CLAUDE.md)一起寫著「64 條」,而 `RuleRegistry.defaultRules` 實際已是 70 條——
+// 沒有任何機制會在新增規則時提醒更新文件,於是四份同步錯了六條。
 //
-// 跨文件的重複事實是 silent drift 的溫床:改 code 的人不會想到要改四個 .md。
+// 跨文件的重複事實是 silent drift 的溫床:改 code 的人不會想到要改每個 .md。
 // 本測試把「文件數字 = 程式碼數字」變成 CI 會擋下的不變量。
 //
-// **只守這一個數字**:規則數是專案核心賣點、跨四份文件、且查證成本是一行
+// **只守這一個數字**:規則數是專案核心賣點、跨多份文件、且查證成本是一行
 // `.length`。其餘裝飾性計數(screens 數、client 數)已在同一次盤點中從文件
-// 移除——與其守一個沒意義的數字,不如讓它不存在。
+// 移除——與其守一個沒意義的數字,不如讓它不存在。CLAUDE.md 於 2026-09-27
+// 改為指向 `RuleRegistry.defaultRules`、不再寫數字,故自 docs map 移除。
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -23,7 +24,6 @@ void main() {
   /// 文件 → 該檔中所有「N 條規則 / N rules」樣式的數字
   final docs = {
     'README.md': RegExp(r'(\d+)\s*條(?:異常偵測)?規則'),
-    'CLAUDE.md': RegExp(r'(\d+)\s*條規則'),
     'docs/RULE_ENGINE.md': RegExp(r'(\d+)\s*條異常偵測規則'),
     '.claude/rules/architecture.md': RegExp(r'(\d+)\s*rules'),
   };

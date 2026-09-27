@@ -36,6 +36,7 @@ _See what changed, without noise._
 | 頁面                   | 功能                                                    |
 |:-----------------------|:--------------------------------------------------------|
 | **Today**              | 市場摘要 + 三模式選股（起漲候選 / 強勢觀察 / 回檔觀察） |
+| **Market**             | 大盤總覽                                                |
 | **Scan**               | 上市櫃全市場掃描，依評分排序                            |
 | **Watchlist**          | 自選清單狀態追蹤 + 無限滾動分頁                         |
 | **Stock Detail**       | 趨勢、關鍵價位、觸發訊號、新聞                          |
@@ -50,7 +51,7 @@ _See what changed, without noise._
 | **Quarterly**          | 季報財務                                                |
 | **Revenue**            | 月營收                                                  |
 | **Settings**           | 偏好設定                                                |
-| **Onboarding**         | 首次使用引導 + 免責聲明同意（既有安裝也會看到一次）      |
+| **Onboarding**         | 首次使用引導 + 免責聲明同意（既有安裝也會看到一次）     |
 
 ---
 
@@ -59,11 +60,11 @@ _See what changed, without noise._
 | 類別            | 技術                     |
 |:----------------|:-------------------------|
 | Framework       | Flutter 3.38 + Dart 3.10 |
-| State           | Riverpod 3.2.1           |
-| Database        | Drift (SQLite) 2.32      |
-| Network         | Dio 5.9.2                |
-| Navigation      | GoRouter 17.1.0          |
-| Crash Reporting | Sentry 9.15.0            |
+| State           | Riverpod 3               |
+| Database        | Drift (SQLite) 2         |
+| Network         | Dio 5                    |
+| Navigation      | GoRouter 17              |
+| Crash Reporting | Sentry 9                 |
 | Charts          | fl_chart + k_chart_plus  |
 | Code Gen        | Drift Dev                |
 | Testing         | Flutter Test + Mocktail  |
@@ -73,19 +74,21 @@ _See what changed, without noise._
 
 ## 資料來源
 
-| 資料     | 來源                                     | 頻率 |
-|:---------|:-----------------------------------------|:-----|
-| 台股日價 | TWSE / TPEX Open Data (主)、FinMind (備) | 每日 |
-| 法人籌碼 | TWSE T86 / TPEX（免費全市場）            | 每日 |
-| 基本面   | TWSE / TPEX / FinMind                    | 每週 |
-| 集保分布 | TDCC                                     | 每週 |
-| 新聞     | 多源 RSS                                 | 即時 |
+| 資料     | 來源                                                   | 頻率 |
+|:---------|:-------------------------------------------------------|:-----|
+| 台股日價 | TWSE / TPEX 官方 API；FinMind 做個股逐檔歷史回補與指數 | 每日 |
+| 法人籌碼 | TWSE T86 / TPEX（免費全市場）                          | 每日 |
+| 基本面   | TWSE / TPEX / FinMind                                  | 每日 |
+| 集保分布 | TDCC                                                   | 每週 |
+| 新聞     | 多源 RSS                                               | 即時 |
 
 ---
 
 ## 架構
 
 ### 資料流
+
+簡化圖：省略 Presentation 直接讀 DAO／API client 的少數路徑。
 
 ```mermaid
 flowchart LR
@@ -135,12 +138,12 @@ lib/
 ├── core/
 │   ├── constants/       # RuleParams (8 param 檔) + 閾值 / 設定常數
 │   ├── exceptions/      # AppException sealed hierarchy
-│   ├── services/        # CacheWarmup, Notification, Share
+│   ├── services/        # NotificationService
 │   ├── theme/           # AppTheme, DesignTokens, IndicatorColors
-│   └── utils/           # Logger, Result, Calendar, RequestDeduplicator, LruCache
+│   └── utils/           # Logger, TaiwanCalendar, DateContext, RequestDeduplicator, LruCache
 ├── data/
-│   ├── database/        # Drift SQLite (tables + DAOs)
-│   ├── remote/          # TWSE, TPEX, FinMind, TDCC, RSS（5 資料源）
+│   ├── database/        # Drift SQLite (tables + DAOs) + CacheWarmup
+│   ├── remote/          # TWSE, TPEX, FinMind, TDCC, MOPS, 盤中報價, RSS clients
 │   ├── repositories/    # Repository 實作 + price source / filter helpers
 │   └── models/          # API DTOs（JSON serialization）
 ├── domain/
@@ -161,13 +164,13 @@ lib/
 
 ---
 
-## 效能優化
+## 效能設計
 
-- **快取預熱** — App 啟動時預載自選股和推薦股資料，冷啟動快 30-40%
-- **Request Deduplication** — 避免重複 API 呼叫，減少 30-50% 網路請求
+- **快取預熱** — App 啟動時預載自選股的分析資料與歷史價格
+- **Request Deduplication** — Repository 層合併同時發出的相同 API 呼叫
 - **無限滾動分頁** — Watchlist 和 Scan 畫面採用虛擬化列表
 - **Isolate 並行運算** — 評分引擎使用 Isolate，typed DTO 序列化通訊
-- **資料庫索引優化** — 關鍵表格加入複合索引，查詢速度提升 30%
+- **資料庫索引** — 依查詢路徑在關鍵表格加複合索引
 
 ---
 
@@ -181,8 +184,6 @@ lib/
   （當前可交易檔數隨新股上市／下市浮動，更新日誌的 `CandidateSelector` 會印出實際候選數）
 - 卡片顯示最多 **2 條理由**（compact 佈局 1 條，詳情頁 3 條），落庫分數上限 **80 分**
 - 可調參數集中於 `lib/core/constants/rule_params_*.dart` 的 typed param classes
-
-詳見 [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md)
 
 ---
 
@@ -207,11 +208,8 @@ flutter run
 ### 開發指令
 
 ```bash
-flutter pub get                                                # 安裝依賴
-flutter test                                                   # 執行測試
-flutter analyze                                                # 靜態分析（全專案、info 也擋；同 pre-commit hook 與 CI）
-dart format .                                                  # 格式化程式碼
-dart run build_runner build --delete-conflicting-outputs        # 程式碼生成
+flutter analyze   # 靜態分析（全專案、info 也擋；同 pre-commit hook 與 CI）
+dart format .     # 格式化程式碼
 ```
 
 ---
@@ -223,9 +221,9 @@ dart run build_runner build --delete-conflicting-outputs        # 程式碼生�
 [CLAUDE.md](CLAUDE.md) 的「測試」章節。
 
 ```bash
-flutter test                       # 快速測試
+flutter test                       # 全部
 flutter test --coverage            # 含覆蓋率報告
-flutter test test/domain/services/ # 測試特定目錄
+flutter test test/domain/services/ # 特定目錄
 ```
 
 ---

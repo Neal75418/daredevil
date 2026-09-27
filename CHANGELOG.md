@@ -6,8 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `tool/refetch_market_days.dart`：指定日期範圍一律以官方歷史端點重抓價格、法人、當沖、融資券、外資持股或上市估值，
+  並記錄抓取狀態，用來修復既有的錯誤資料；可用 `--db` 對副本彩排、`--dry-run` 只印出交易日數與預估呼叫次數、不打 API
+
 ### Fixed
 
+- 15:30 抓到的當日價格與法人買賣超是初值（鉅額交易約 17:30 後才計入），當天列數夠就不再重抓，資料庫從此停在初值：
+  上市價格 2026-07-16 起 1,744 列成交量偏低、法人 7/16–8/19 有 330 列與官方不符。改為每個資料集逐市場、逐日記錄抓取時間，
+  只有隔天以後抓過的才算定案，每輪更新重抓未定案的日子；既有錯誤資料由修復工具補抓
+- 上櫃歷史價格回補走的端點是「不含定價交易、整張」口徑，2025-06-12～2026-07-14 共 266 天成交量只有官方的 91–98%；
+  改走官方口徑的 `dailyQuotes` 端點
+- 上市估值（本益比、淨值比、殖利率）用抓取當天的日期標記，但 15:30／21:30 回的仍是前一交易日資料，
+  2026-07-15 起 52 個交易日有 35 天整批標成隔天；改用回應裡每列的日期
+- 上櫃當沖同步沒帶日期、一律拿到最新日，歷史日期從來補不到；端點其實支援指定日期，改帶入
 - 交易日曆錯 23 天，以證交所公告與每日成交資訊（2024-01～2026-09 共 662 個交易日）逐日核對後修正：
   - 2024：漏列春節前「無交易、僅結算交割」2 天與颱風停市 5 天（凱米、山陀兒、康芮）
   - 2025：漏列春節前無交易 2 天；把 2/3、2/4、6/2、10/7 誤列為休市——缺漏偵測因此從未回補 2025-10-07（資料庫該日僅 55 檔價格）；
@@ -397,14 +410,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 大盤總覽新增 6 項資料區塊 + UI 架構重構。
 
-| Feature     | 說明                  |
-|:------------|:--------------------|
-| 券資比         | 融券/融資餘額比率           |
-| 漲停/跌停家數     | DAO 計算 ±9.5% 門檻     |
-| 成交額 vs 5 日均 | 當日成交額與均值比較          |
-| 注意/處置股摘要    | 各市場 active 警示股數量    |
-| 法人連續買賣超     | 外資/投信/自營商 streak 天數 |
-| 產業表現        | 產業平均漲跌幅與漲跌家數        |
+| Feature          | 說明                         |
+|:-----------------|:-----------------------------|
+| 券資比           | 融券/融資餘額比率            |
+| 漲停/跌停家數    | DAO 計算 ±9.5% 門檻          |
+| 成交額 vs 5 日均 | 當日成交額與均值比較         |
+| 注意/處置股摘要  | 各市場 active 警示股數量     |
+| 法人連續買賣超   | 外資/投信/自營商 streak 天數 |
+| 產業表現         | 產業平均漲跌幅與漲跌家數     |
 
 重構：提取 6 個子 widget、ComparisonCalculator、scoring_isolate converters
 
@@ -414,36 +427,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🔧 Fixed (2026-03-13)
 
-| 修復項目        | 說明                                                     | Commit    |
-|:------------|:-------------------------------------------------------|:----------|
-| 高股息指數名稱     | 對齊 TWSE API 回傳格式                                       | `b0acaf6` |
-| Dio timeout | 裸 `Dio()` 改用 `BaseOptions` 配置超時                        | `64d4f75` |
-| 排序重複        | `comparison_table.dart` 提取方法避免 3 次排序                   | `64d4f75` |
-| KD 陣列對齊     | 統一過濾 OHLC 非 null 記錄再提取                                 | `64d4f75` |
-| DI 分層       | `user_dao.checkAlerts()` 支援注入 `AlertEvaluationService` | `64d4f75` |
+| 修復項目       | 說明                                                       | Commit    |
+|:---------------|:-----------------------------------------------------------|:----------|
+| 高股息指數名稱 | 對齊 TWSE API 回傳格式                                     | `b0acaf6` |
+| Dio timeout    | 裸 `Dio()` 改用 `BaseOptions` 配置超時                     | `64d4f75` |
+| 排序重複       | `comparison_table.dart` 提取方法避免 3 次排序              | `64d4f75` |
+| KD 陣列對齊    | 統一過濾 OHLC 非 null 記錄再提取                           | `64d4f75` |
+| DI 分層        | `user_dao.checkAlerts()` 支援注入 `AlertEvaluationService` | `64d4f75` |
 
 ---
 
 ### ♻️ Refactored (2026-03-12)
 
-| 項目             | 說明                                            | Commit    |
-|:---------------|:----------------------------------------------|:----------|
-| Lint 警告        | 修復全部 68 項 flutter analyze info-level warnings | `90595dd` |
-| Design Tokens  | 統一間距/圓角使用 `DesignTokens` 常數                   | `37d4924` |
-| Gradle Wrapper | 升級至 8.14.2 for AGP 8.11.1                     | `b3ced3f` |
+| 項目           | 說明                                               | Commit    |
+|:---------------|:---------------------------------------------------|:----------|
+| Lint 警告      | 修復全部 68 項 flutter analyze info-level warnings | `90595dd` |
+| Design Tokens  | 統一間距/圓角使用 `DesignTokens` 常數              | `37d4924` |
+| Gradle Wrapper | 升級至 8.14.2 for AGP 8.11.1                       | `b3ced3f` |
 
 ---
 
 ### ✨ Added / ♻️ Refactored (2026-03-01~11)
 
-| 類型       | 項目         | 說明                              | Commit    |
-|:---------|:-----------|:--------------------------------|:----------|
-| feat     | AI 分析摘要    | 7 項改進提升摘要精確度                    | `cb8a2a3` |
-| fix      | 財報同步上限     | 限制 150 檔避免 FinMind 配額耗盡         | `04a570e` |
-| refactor | Code Smell | 5 批次系統性改善                       | `7733c3b` |
-| refactor | UI 代碼審查    | 全面 UI 層改進                       | `1b02877` |
-| refactor | Dead Code  | 移除未使用檔案、類和方法                    | `8f85425` |
-| ci       | CI/CD      | Actions 升級 + 快取 + pre-commit 優化 | `3bc3d20` |
+| 類型     | 項目         | 說明                                  | Commit    |
+|:---------|:-------------|:--------------------------------------|:----------|
+| feat     | AI 分析摘要  | 7 項改進提升摘要精確度                | `cb8a2a3` |
+| fix      | 財報同步上限 | 限制 150 檔避免 FinMind 配額耗盡      | `04a570e` |
+| refactor | Code Smell   | 5 批次系統性改善                      | `7733c3b` |
+| refactor | UI 代碼審查  | 全面 UI 層改進                        | `1b02877` |
+| refactor | Dead Code    | 移除未使用檔案、類和方法              | `8f85425` |
+| ci       | CI/CD        | Actions 升級 + 快取 + pre-commit 優化 | `3bc3d20` |
 
 **測試**: 全部 2526 cases 通過
 
@@ -455,12 +468,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 系統性改善代碼可維護性，消除重複代碼和 magic numbers。
 
-| 改進項目           | 效果                                        | 檔案數 |
-|:---------------|:------------------------------------------|:---:|
-| **提取批次查詢分組邏輯** | 共享 `_BatchQueryHelper.groupBySymbol()` 方法 |  4  |
-| **補充警示系統常數**   | 10+ magic numbers → `RuleParams` 集中管理     |  2  |
-| **提取錯誤處理模板**   | `_syncDataTemplate` 統一 try-catch 模式       |  1  |
-| **改善變數命名**     | 單字母變數 → 描述性命名                             |  2  |
+| 改進項目                 | 效果                                          | 檔案數 |
+|:-------------------------|:----------------------------------------------|:------:|
+| **提取批次查詢分組邏輯** | 共享 `_BatchQueryHelper.groupBySymbol()` 方法 |   4    |
+| **補充警示系統常數**     | 10+ magic numbers → `RuleParams` 集中管理     |   2    |
+| **提取錯誤處理模板**     | `_syncDataTemplate` 統一 try-catch 模式       |   1    |
+| **改善變數命名**         | 單字母變數 → 描述性命名                       |   2    |
 
 **關鍵改進細節**：
 
@@ -520,23 +533,23 @@ flowchart LR
 
 從 3 種基本價格警示擴充至 15 種高價值警示類型，涵蓋技術指標、成交量、風險控管等多個維度。
 
-| 批次          | 警示類型          |  測試數   | 說明                                                                                                            |
-|:------------|:--------------|:------:|:--------------------------------------------------------------------------------------------------------------|
-| **Batch 1** | 成交量警示         |   6    | `VOLUME_SPIKE`（爆量 4 倍 + 漲跌 1.5%）<br>`VOLUME_ABOVE`（成交量超過設定值）                                                  |
-| **Batch 2** | 52 週警示        |   6    | `WEEK_52_HIGH`（創 52 週新高）<br>`WEEK_52_LOW`（創 52 週新低）                                                           |
-| **Batch 3** | RSI/KD 指標警示   |   12   | `RSI_OVERBOUGHT`（RSI 超買）<br>`RSI_OVERSOLD`（RSI 超賣）<br>`KD_GOLDEN_CROSS`（KD 黃金交叉）<br>`KD_DEATH_CROSS`（KD 死亡交叉） |
-| **Batch 4** | 均線交叉 + 警示股票   |   12   | `CROSS_ABOVE_MA`（突破均線）<br>`CROSS_BELOW_MA`（跌破均線）<br>`TRADING_WARNING`（一般警示股票）<br>`TRADING_DISPOSAL`（處置股票）     |
-| **總計**      | **12 種新警示類型** | **36** | 從 3 種 → 15 種（13% → 65% 實作率）                                                                                   |
+| 批次        | 警示類型            | 測試數 | 說明                                                                                                                                |
+|:------------|:--------------------|:------:|:------------------------------------------------------------------------------------------------------------------------------------|
+| **Batch 1** | 成交量警示          |   6    | `VOLUME_SPIKE`（爆量 4 倍 + 漲跌 1.5%）<br>`VOLUME_ABOVE`（成交量超過設定值）                                                       |
+| **Batch 2** | 52 週警示           |   6    | `WEEK_52_HIGH`（創 52 週新高）<br>`WEEK_52_LOW`（創 52 週新低）                                                                     |
+| **Batch 3** | RSI/KD 指標警示     |   12   | `RSI_OVERBOUGHT`（RSI 超買）<br>`RSI_OVERSOLD`（RSI 超賣）<br>`KD_GOLDEN_CROSS`（KD 黃金交叉）<br>`KD_DEATH_CROSS`（KD 死亡交叉）   |
+| **Batch 4** | 均線交叉 + 警示股票 |   12   | `CROSS_ABOVE_MA`（突破均線）<br>`CROSS_BELOW_MA`（跌破均線）<br>`TRADING_WARNING`（一般警示股票）<br>`TRADING_DISPOSAL`（處置股票） |
+| **總計**    | **12 種新警示類型** | **36** | 從 3 種 → 15 種（13% → 65% 實作率）                                                                                                 |
 
 #### 技術實作細節
 
 **核心檔案修改**：
 
-| 檔案                          | 變更內容                                                      |  行數  |
-|:----------------------------|:----------------------------------------------------------|:----:|
+| 檔案                        | 變更內容                                                                        | 行數 |
+|:----------------------------|:--------------------------------------------------------------------------------|:----:|
 | `user_dao.dart`             | 新增 4 個批次查詢方法<br>新增 12 個檢查方法<br>擴充 switch case（12 個新 case） | +400 |
-| `price_alert_provider.dart` | 更新 `isImplemented` getter（4 次更新）                          | +20  |
-| `user_dao_alert_test.dart`  | 新增 4 個測試群組（36 個測試案例）                                      | +600 |
+| `price_alert_provider.dart` | 更新 `isImplemented` getter（4 次更新）                                         | +20  |
+| `user_dao_alert_test.dart`  | 新增 4 個測試群組（36 個測試案例）                                              | +600 |
 
 **批次查詢策略**（避免 N+1 問題）：
 
@@ -611,23 +624,23 @@ flowchart LR
 
 #### 死代碼清理（Phase 1）
 
-| 項目                     | 變更                                | 效果       |
-|:-----------------------|:----------------------------------|:---------|
-| IsolatePool 移除         | 刪除 231 行未使用程式碼                    | 減少認知負擔   |
+| 項目                   | 變更                                         | 效果             |
+|:-----------------------|:---------------------------------------------|:-----------------|
+| IsolatePool 移除       | 刪除 231 行未使用程式碼                      | 減少認知負擔     |
 | PersonalizationService | 刪除 325 行服務 + 2 張資料表 + 測試 mock     | 停止無效資料收集 |
-| 資料庫 Schema             | v1 → v2，migration 自動清理 user 相關表   | 自動升級     |
-| CLAUDE.md 更新           | 移除 IsolatePool 引用，更新 Isolate 並行描述 | 文件一致性    |
+| 資料庫 Schema          | v1 → v2，migration 自動清理 user 相關表      | 自動升級         |
+| CLAUDE.md 更新         | 移除 IsolatePool 引用，更新 Isolate 並行描述 | 文件一致性       |
 
 **Commits**: `95f8b93`
 
 #### 警示系統過濾（Phase 2）
 
-| 項目                     | 變更                                                     | 效果             |
-|:-----------------------|:-------------------------------------------------------|:---------------|
-| `isImplemented` getter | 新增到 `AlertType` enum（只有 ABOVE/BELOW/CHANGE_PCT 為 true） | 標記已實作類型        |
-| UI 過濾                  | `CreatePriceAlertDialog` 只顯示 3 種已實作警示類型                | 防止建立不會觸發的警示    |
-| Widget 測試              | 驗證過濾邏輯：應顯示 3 種、不應顯示其餘 20 種                             | 測試覆蓋率提升        |
-| 使用者體驗                  | 從 23 種 → 3 種可建立警示                                      | UI/Backend 一致性 |
+| 項目                   | 變更                                                           | 效果                   |
+|:-----------------------|:---------------------------------------------------------------|:-----------------------|
+| `isImplemented` getter | 新增到 `AlertType` enum（只有 ABOVE/BELOW/CHANGE_PCT 為 true） | 標記已實作類型         |
+| UI 過濾                | `CreatePriceAlertDialog` 只顯示 3 種已實作警示類型             | 防止建立不會觸發的警示 |
+| Widget 測試            | 驗證過濾邏輯：應顯示 3 種、不應顯示其餘 20 種                  | 測試覆蓋率提升         |
+| 使用者體驗             | 從 23 種 → 3 種可建立警示                                      | UI/Backend 一致性      |
 
 **Commits**: `3d6f6c8`
 
@@ -662,19 +675,19 @@ flowchart LR
 
 #### 今日/自選股票卡片資料修復
 
-| 修復項目    | 說明                                                                     |
-|:--------|:-----------------------------------------------------------------------|
-| 漲跌幅日期範圍 | `historyStart` 改以 `analysisDate` 為基準，避免長假後範圍反轉                         |
-| 批次計算短路  | 移除 `calculatePriceChangesBatch` 錯誤短路，API `priceChange` 可在 history 空時使用 |
-| 自選分析日期  | 改用 `analysisRepo.findLatestAnalysisDate()`，修復趨勢/分數/訊號缺失                |
+| 修復項目       | 說明                                                                                |
+|:---------------|:------------------------------------------------------------------------------------|
+| 漲跌幅日期範圍 | `historyStart` 改以 `analysisDate` 為基準，避免長假後範圍反轉                       |
+| 批次計算短路   | 移除 `calculatePriceChangesBatch` 錯誤短路，API `priceChange` 可在 history 空時使用 |
+| 自選分析日期   | 改用 `analysisRepo.findLatestAnalysisDate()`，修復趨勢/分數/訊號缺失                |
 
 #### 大盤總覽資料回退機制
 
-| 修復項目         | 說明                                  |
-|:-------------|:------------------------------------|
-| fallbackDate | 主要日期無資料時，自動回退到前一個交易日補齊              |
-| API 法人回退     | TWSE/TPEX 法人 API 回傳 null 時，用前一交易日重試 |
-| DB 分市場回退     | 漲跌家數、融資融券、成交額缺少某市場時，用前一交易日補齊        |
+| 修復項目      | 說明                                                     |
+|:--------------|:---------------------------------------------------------|
+| fallbackDate  | 主要日期無資料時，自動回退到前一個交易日補齊             |
+| API 法人回退  | TWSE/TPEX 法人 API 回傳 null 時，用前一交易日重試        |
+| DB 分市場回退 | 漲跌家數、融資融券、成交額缺少某市場時，用前一交易日補齊 |
 
 ---
 
@@ -707,13 +720,13 @@ flowchart TB
 
 #### Performance Optimizations
 
-| 項目                    | 效果                         |
-|:----------------------|:---------------------------|
-| Watchlist 無限滾動分頁      | 與 Scan 一致，降低記憶體佔用          |
-| 快取預熱服務                | 預載自選股 + Top 20，冷啟動快 30-40% |
-| Request Deduplication | 減少 30-50% 網路請求             |
-| 資料庫索引優化               | 4 個關鍵索引，查詢速度 +30%          |
-| Isolate 池重用           | 減少 20-30% 啟動開銷             |
+| 項目                   | 效果                                 |
+|:-----------------------|:-------------------------------------|
+| Watchlist 無限滾動分頁 | 與 Scan 一致，降低記憶體佔用         |
+| 快取預熱服務           | 預載自選股 + Top 20，冷啟動快 30-40% |
+| Request Deduplication  | 減少 30-50% 網路請求                 |
+| 資料庫索引優化         | 4 個關鍵索引，查詢速度 +30%          |
+| Isolate 池重用         | 減少 20-30% 啟動開銷                 |
 
 #### Architecture Improvements
 
@@ -736,24 +749,24 @@ flowchart TB
 
 #### Commits
 
-| Commit  | 內容                                                       |
-|:--------|:---------------------------------------------------------|
-| cfacc84 | Watchlist 分頁 + 快取預熱 + DTO Extension                      |
-| 0ae2e3e | Request Dedup + DB 索引                                    |
-| 1056b61 | AnalysisService 架構重構                                     |
-| 239957e | 測試覆蓋率 + TodayProvider 測試                                 |
+| Commit  | 內容                                      |
+|:--------|:------------------------------------------|
+| cfacc84 | Watchlist 分頁 + 快取預熱 + DTO Extension |
+| 0ae2e3e | Request Dedup + DB 索引                   |
+| 1056b61 | AnalysisService 架構重構                  |
+| 239957e | 測試覆蓋率 + TodayProvider 測試           |
 
 #### Key Files
 
-| 類型 | 檔案                          | 說明                    |
-|:---|:----------------------------|:----------------------|
-| 新增 | `cache_warmup_service.dart` | 快取預熱服務                |
-| 新增 | `dto_extensions.dart`       | DTO Extension 集中管理    |
-| 新增 | `request_deduplicator.dart` | Request Deduplication |
-| 新增 | ~~`isolate_pool.dart`~~     | Isolate 池重用（後已移除）     |
-| 修改 | `watchlist_provider.dart`   | 分頁邏輯                  |
-| 修改 | `watchlist_screen.dart`     | 無限滾動                  |
-| 修改 | `main.dart`                 | 整合快取預熱                |
+| 類型 | 檔案                        | 說明                       |
+|:-----|:----------------------------|:---------------------------|
+| 新增 | `cache_warmup_service.dart` | 快取預熱服務               |
+| 新增 | `dto_extensions.dart`       | DTO Extension 集中管理     |
+| 新增 | `request_deduplicator.dart` | Request Deduplication      |
+| 新增 | ~~`isolate_pool.dart`~~     | Isolate 池重用（後已移除） |
+| 修改 | `watchlist_provider.dart`   | 分頁邏輯                   |
+| 修改 | `watchlist_screen.dart`     | 無限滾動                   |
+| 修改 | `main.dart`                 | 整合快取預熱               |
 
 ---
 
