@@ -202,8 +202,18 @@ class FundamentalRepository implements IFundamentalRepository {
     try {
       final data = await _twse.getStockValuationForDate(date);
       if (data.isEmpty) return 0;
-      await _db.insertValuationData(data.map(_toValuationCompanion).toList());
-      return data.length;
+      // FK 過濾：BWIBBU_d 可能含 stock_master 尚未同步到的代碼，直接寫入
+      // 會因外鍵約束整批失敗（一檔未知代碼拖垮整天，同 shareholding_repository
+      // 的作法）
+      final known = (await _db.getAllActiveStocks())
+          .map((s) => s.symbol)
+          .toSet();
+      final filtered = data.where((r) => known.contains(r.code)).toList();
+      if (filtered.isEmpty) return 0;
+      await _db.insertValuationData(
+        filtered.map(_toValuationCompanion).toList(),
+      );
+      return filtered.length;
     } on RateLimitException {
       rethrow;
     } on NetworkException {

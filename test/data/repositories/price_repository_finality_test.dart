@@ -172,6 +172,35 @@ void main() {
     expect(dt.single.dayTradingRatio, 25.0, reason: '500 ÷ 2000 × 100');
   });
 
+  test('回補（backfillTpexPricesByDate）也記錄並重算、且記在 TPEx（不是 TWSE）', () async {
+    when(() => tpex.getAllDailyPricesHistorical(any())).thenAnswer(
+      (_) async => [tpexPrice('3624', 4000), tpexPrice('6488', 5000)],
+    );
+    final ledger = MarketDayFetchLedger(
+      database: db,
+      fetchedAt: DateTime(2026, 9, 25),
+    );
+    await repo.backfillTpexPricesByDate(
+      date: day,
+      targetSymbols: {'3624', '6488'},
+      ledger: ledger,
+    );
+    expect(ledger.recorded.single, (
+      dataset: MarketDataset.prices,
+      market: MarketCode.tpex,
+      date: day,
+      rows: 2,
+    ));
+    expect(
+      await db.isMarketDayFinal(
+        dataset: MarketDataset.prices,
+        market: MarketCode.tpex,
+        date: day,
+      ),
+      isTrue,
+    );
+  });
+
   test('回補（backfillTwsePricesByDate）也記錄並重算', () async {
     when(() => twse.getAllDailyPricesHistorical(any())).thenAnswer(
       (_) async => [twsePrice('1101', 2000), twsePrice('1102', 3000)],

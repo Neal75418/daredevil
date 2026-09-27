@@ -192,7 +192,7 @@ class UpdateService {
   final QuarterlyReportSyncer? _quarterlyReportSyncer;
   final TwseClient? _twseClient;
   final TpexClient? _tpexClient;
-  final MarketDayRefetcher? _marketDayRefetcher;
+  final MarketDayRefetcher _marketDayRefetcher;
 
   /// 取得或建立 ScoringService（延遲初始化）
   ScoringService get _scoring =>
@@ -657,10 +657,8 @@ class UpdateService {
   /// 讓當日路徑先寫入；放在評分之前，讓回補的歷史進得了本輪評分。
   Future<void> _refetchNonFinalDays(_UpdateContext ctx) async {
     if (ctx.rateLimitedAbort) return;
-    final refetcher = _marketDayRefetcher;
-    if (refetcher == null) return;
     try {
-      final summary = await refetcher.refetchPending(
+      final summary = await _marketDayRefetcher.refetchPending(
         today: _clock.now(),
         ledger: ctx.ledger,
       );

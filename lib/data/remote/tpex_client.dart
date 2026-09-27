@@ -96,10 +96,7 @@ class TpexClient {
     Map<dynamic, dynamic> json,
     DateTime requestedDate,
   ) {
-    final expected =
-        '${requestedDate.year.toString().padLeft(4, '0')}'
-        '${requestedDate.month.toString().padLeft(2, '0')}'
-        '${requestedDate.day.toString().padLeft(2, '0')}';
+    final expected = TwParseUtils.formatDateCompact(requestedDate);
     if (json['date']?.toString() != expected) return const [];
 
     final tables = json['tables'];

@@ -1505,17 +1505,34 @@ void main() {
       ]);
     });
 
-    test('價格同步收到 ledger，時間＝本輪開始的時鐘值', () async {
-      await buildService().runDailyUpdate(forDate: tradingDay);
-      final captured = verify(
+    test('價格同步收到 ledger，時間＝本輪開始的時鐘值（第一次 now() 呼叫，不是後面某次）', () async {
+      // 🚨 M2：固定時鐘（_Clock）不管呼叫幾次都回同一個值，測不出「用的是
+      // 不是第一次呼叫」。改用遞增時鐘，若實作在建立 ledger 之後又多呼叫一次
+      // `_clock.now()` 才拿去用，這裡就會抓到（fetchedAt 會變成之後的值）。
+      final clock = _IncrementingClock(DateTime(2026, 7, 6, 15, 30));
+      await buildService(clock: clock).runDailyUpdate(forDate: tradingDay);
+
+      final priceLedgerCaptured = verify(
         () => mockPriceRepo.syncAllPricesForDate(
           any(),
           force: any(named: 'force'),
           ledger: captureAny(named: 'ledger'),
         ),
       ).captured;
-      final ledger = captured.single as MarketDayFetchLedger;
-      expect(ledger.fetchedAt, DateTime(2026, 7, 6, 15, 30));
+      final priceLedger = priceLedgerCaptured.single as MarketDayFetchLedger;
+      expect(priceLedger.fetchedAt, clock.firstValue);
+
+      // 同一個 ledger 實例貫穿全程：refetcher 收到的必須與價格同步收到的是
+      // 同一個物件（不是另一個 fetchedAt 恰好相等的新實例）
+      final refetcherLedgerCaptured = verify(
+        () => mockRefetcher.refetchPending(
+          today: any(named: 'today'),
+          ledger: captureAny(named: 'ledger'),
+        ),
+      ).captured;
+      final refetcherLedger =
+          refetcherLedgerCaptured.single as MarketDayFetchLedger;
+      expect(identical(refetcherLedger, priceLedger), isTrue);
     });
 
     test('重抓被呼叫；限流時結果帶限流錯誤', () async {
@@ -1559,4 +1576,20 @@ class _Clock implements AppClock {
 
   @override
   DateTime now() => _now;
+}
+
+/// M2：每次呼叫回傳遞增的時間，讓「用第一次呼叫還是後面某次」可被測出來
+/// （固定時鐘 [_Clock] 不管呼叫幾次都回同一個值，測不出這件事）。
+class _IncrementingClock implements AppClock {
+  _IncrementingClock(this.firstValue);
+
+  final DateTime firstValue;
+  int _calls = 0;
+
+  @override
+  DateTime now() {
+    final value = firstValue.add(Duration(seconds: _calls));
+    _calls++;
+    return value;
+  }
 }

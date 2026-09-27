@@ -37,6 +37,9 @@ abstract class IPriceRepository {
   });
 
   /// 同步最新交易日所有價格並回傳快速篩選候選股
+  ///
+  /// ⚠️ 只有全市場抓取可傳 [ledger]；部分股票的呼叫（例如 tool/backfill 的
+  /// targetSymbols 子集）不得傳，否則會把缺股的日子標成定案。
   Future<MarketSyncResult> syncAllPricesForDate(
     DateTime date, {
     bool force = false,
@@ -58,6 +61,9 @@ abstract class IPriceRepository {
   ///
   /// 例外政策：[RateLimitException] / [NetworkException] rethrow；其他例外
   /// 包成 [DatabaseException]。
+  ///
+  /// ⚠️ 只有全市場抓取可傳 [ledger]；部分股票的呼叫（例如 tool/backfill 的
+  /// targetSymbols 子集）不得傳，否則會把缺股的日子標成定案。
   Future<int> backfillTwsePricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,
@@ -82,6 +88,9 @@ abstract class IPriceRepository {
   ///
   /// 例外政策：[RateLimitException] / [NetworkException] rethrow（交給呼叫端
   /// 決定 abort/retry）；其他例外包成 [DatabaseException]。
+  ///
+  /// ⚠️ 只有全市場抓取可傳 [ledger]；部分股票的呼叫（例如 tool/backfill 的
+  /// targetSymbols 子集）不得傳，否則會把缺股的日子標成定案。
   Future<int> backfillTpexPricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,

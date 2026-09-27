@@ -130,6 +130,45 @@ void main() {
     );
   });
 
+  test('上櫃當沖：寫入後回報 (dayTrading, TPEx, 資料日, 列數)', () async {
+    // 上櫃當沖有「批次層級的分母覆蓋閘門」：整個市場缺價格會整批跳過寫入
+    // （比例會全部算成 0），所以要先塞至少門檻份的當日 TPEx 價格才能過閘
+    await db.insertPrices([
+      DailyPriceCompanion.insert(
+        symbol: '3624',
+        date: day,
+        volume: const Value(1000),
+      ),
+    ]);
+    when(() => tpex.getAllDayTradingData(date: any(named: 'date'))).thenAnswer(
+      (_) async => [
+        for (final s in ['3624', '6488'])
+          TpexDayTrading(
+            date: day,
+            code: s,
+            name: s,
+            buyVolume: 1,
+            sellVolume: 1,
+            totalVolume: 100,
+          ),
+      ],
+    );
+    final ledger = MarketDayFetchLedger(
+      database: db,
+      fetchedAt: DateTime(2026, 9, 25),
+    );
+    await repo.syncAllDayTradingFromTpex(
+      date: day,
+      force: true,
+      ledger: ledger,
+    );
+    final r = ledger.recorded.single;
+    expect(
+      (r.dataset, r.market, r.date, r.rows),
+      (MarketDataset.dayTrading, MarketCode.tpex, day, 2),
+    );
+  });
+
   test('融資券回補：只回報有抓的市場', () async {
     when(
       () => tpex.getAllMarginTradingData(date: any(named: 'date')),

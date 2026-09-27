@@ -4789,7 +4789,7 @@ done
 (d) **順便檢查三件事**：
 - 同一天有沒有兩列（變體時間戳）：對 `daily_price`、`daily_institutional`、`stock_valuation` 跑 `select symbol, substr(date,1,10), count(*) from <表> group by 1,2 having count(*)>1`，應為 0。
 - `stock_valuation` 在 2026-07-15 以前有沒有列：有的話那些是舊邏輯寫的、不在修復範圍，列出筆數交給使用者。
-- 估值寫入有外鍵：有代號不在 `stock_master` 時那一天整批失敗，會以「失敗日、退出碼 1」出現，Step 5 已處理。
+- 估值寫入前已先以在市股票過濾，不在 `stock_master` 的代號會被略過、不會讓那一天整批失敗；若某天寫入列數明顯少於其他日子，查一下是不是過濾掉太多。
 
 - [ ] **Step 7：把彩排結果交給使用者，停下等同意**
 

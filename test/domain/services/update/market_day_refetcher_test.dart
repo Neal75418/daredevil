@@ -261,6 +261,67 @@ void main() {
         'margin',
         'foreignShareholding',
       ]);
+
+      // 🚨 I1a：只比對呼叫序列會漏掉「傳錯 ledger」「force 沒開」「日期錯位」
+      // 這類參數層級的錯誤，逐一釘住每個 repository 呼叫的實際參數。
+      // backfillTwse/TpexPricesByDate 介面本身沒有 force 參數（回補語意本就
+      // 隱含強制），故這兩個呼叫只釘 date/targetSymbols/ledger。
+      verify(
+        () => price.backfillTwsePricesByDate(
+          date: d,
+          targetSymbols: any(named: 'targetSymbols', that: isNotEmpty),
+          ledger: any(named: 'ledger', that: same(ledger)),
+        ),
+      ).called(1);
+      verify(
+        () => price.backfillTpexPricesByDate(
+          date: d,
+          targetSymbols: any(named: 'targetSymbols', that: isNotEmpty),
+          ledger: any(named: 'ledger', that: same(ledger)),
+        ),
+      ).called(1);
+      verify(
+        () => inst.syncAllMarketInstitutional(
+          d,
+          force: true,
+          ledger: any(named: 'ledger', that: same(ledger)),
+        ),
+      ).called(1);
+      verify(
+        () => trading.syncAllDayTradingFromTwse(
+          date: d,
+          force: true,
+          ledger: any(named: 'ledger', that: same(ledger)),
+        ),
+      ).called(1);
+      verify(
+        () => trading.syncAllDayTradingFromTpex(
+          date: d,
+          force: true,
+          ledger: any(named: 'ledger', that: same(ledger)),
+        ),
+      ).called(1);
+      verify(
+        () => trading.backfillMarginTradingByDate(
+          date: d,
+          markets: any(named: 'markets', that: equals({MarketCode.twse})),
+          ledger: any(named: 'ledger', that: same(ledger)),
+        ),
+      ).called(1);
+      verify(
+        () => trading.backfillMarginTradingByDate(
+          date: d,
+          markets: any(named: 'markets', that: equals({MarketCode.tpex})),
+          ledger: any(named: 'ledger', that: same(ledger)),
+        ),
+      ).called(1);
+      verify(
+        () => sh.syncAllMarketShareholding(
+          date: d,
+          force: true,
+          ledger: any(named: 'ledger', that: same(ledger)),
+        ),
+      ).called(1);
     });
 
     test('法人兩市場同一天只打一次', () async {
@@ -433,9 +494,22 @@ void main() {
       final s = await refetcher.refetchPending(today: today, ledger: ledger);
       const twse = (dataset: MarketDataset.prices, market: MarketCode.twse);
       const tpex = (dataset: MarketDataset.prices, market: MarketCode.tpex);
+      // 次日以後抓取（today = 9/29、資料日 9/24）：算定案
       expect(s.finalized[twse], 1);
       expect(s.finalized[tpex] ?? 0, 0);
       expect(s.toLogLine(), contains('prices/TWSE 1/1'));
+
+      // 🚨 M1：同日抓取（fetchedAt 與資料日同一天）不算定案，即使 ledger 有回報
+      // 這筆——finalized 計數必須額外過 isFetchFinal，不能只看「有沒有回報」
+      final sameDayLedger = MarketDayFetchLedger(database: db, fetchedAt: d);
+      final sameDaySummary = await refetcher.refetchRange(
+        dataset: MarketDataset.prices,
+        market: MarketCode.twse,
+        from: d,
+        to: d,
+        ledger: sameDayLedger,
+      );
+      expect(sameDaySummary.finalized[twse] ?? 0, 0);
     });
 
     test('滑出回補窗仍未定案（含完全沒有狀態列）→ 只列入 staleOutOfWindow，不進 errors', () async {
@@ -467,6 +541,24 @@ void main() {
         candidates - ApiConfig.finalityRefetchMaxDaysPerRun,
       );
       expect(s.toLogLine(), contains('剩 ${s.deferred[g]} 天'));
+    });
+
+    test('🚨 M6：tradingRepository 未注入時跳過當沖/融資券，但不拋例外、價格照常執行', () async {
+      final r = MarketDayRefetcher(
+        database: db,
+        priceRepository: price,
+        institutionalRepository: inst,
+        shareholdingRepository: sh,
+        callDelay: Duration.zero,
+      );
+      final s = await r.refetchPending(today: today, ledger: ledger);
+      expect(calls, contains('prices/TWSE'));
+      expect(calls, contains('prices/TPEx'));
+      expect(calls, contains('institutional'));
+      expect(calls, contains('foreignShareholding'));
+      expect(calls, isNot(contains('dayTrading/TWSE')));
+      expect(calls, isNot(contains('margin')));
+      expect(s.errors, isEmpty);
     });
 
     test('refetchRange：範圍內交易日不論狀態一律重抓', () async {

@@ -264,6 +264,21 @@ class MarketDayRefetcher {
     MarketDayFetchLedger ledger,
     RefetchSummary summary,
   ) async {
+    // M6：repository 未注入不是錯誤（呼叫端刻意精簡依賴），但被略過的
+    // 資料集必須看得見，否則「這組一直不定案」會被誤判成別的原因。只在
+    // 本次 _execute（即一輪重抓）記一次，不逐天重複洗版。
+    final skipped = <String>[
+      if (_institutionalRepo == null) '法人',
+      if (_tradingRepo == null) '當沖/融資券',
+      if (_shareholdingRepo == null) '外資持股',
+    ];
+    if (skipped.isNotEmpty) {
+      AppLogger.warning(
+        'MarketDayRefetcher',
+        '本輪未注入以下 repository，略過對應資料集的未定案重抓: ${skipped.join('、')}',
+      );
+    }
+
     var calls = 0;
     Future<_AttemptOutcome> attempt(
       List<FinalityGroup> groups,
@@ -299,13 +314,19 @@ class MarketDayRefetcher {
         );
       }
       for (final g in groups) {
+        // 🚨 M1：有回報不等於已定案——回報只代表這次寫入達到覆蓋率門檻，
+        // 定案仍要看抓取時間是否晚於資料日（isFetchFinal，spec §4.1）。
+        // 同日抓到的初值即使覆蓋率達標也可能被稽核更正。
         final done = ledger.recorded.any(
           (r) =>
               r.dataset == g.dataset &&
               r.market == g.market &&
               DateContext.isSameDay(r.date, day),
         );
-        if (done) summary.finalized[g] = (summary.finalized[g] ?? 0) + 1;
+        if (done &&
+            isFetchFinal(dataDate: day, fetchedAtTaipei: ledger.fetchedAt)) {
+          summary.finalized[g] = (summary.finalized[g] ?? 0) + 1;
+        }
       }
       return _AttemptOutcome.ok;
     }
