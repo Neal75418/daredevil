@@ -37,6 +37,7 @@ flowchart LR
 
 `UpdateService` — 協調所有 syncer 執行順序 + 錯誤處理。
 住在 `lib/domain/services/`，**不在 `update/` 底下**（`update/update.dart` 只是 barrel export）。
+`market_day_refetcher`／`news_mention_snapshot_service`／`history_coverage`／`zeroing_impact_reporter` 刻意不進 barrel，由使用者直接 import。
 
 ### 11 Syncer / Updater
 
@@ -163,10 +164,10 @@ TDCC holding、dividend、insider transfer、quarterly report。
 
 ### 3 Helpers
 
-| Helper | 職責 |
-|:---|:---|
-| `BatchDataBuilder` | 建構外資／董監等評分資料 Map，含衍生欄位 |
-| `BatchDataLoader` | 從 DB 平行載入評分批次資料 → `ScoringBatchData` |
+| Helper              | 職責                                                                                                                   |
+|:--------------------|:-----------------------------------------------------------------------------------------------------------------------|
+| `BatchDataBuilder`  | 建構外資／董監等評分資料 Map，含衍生欄位                                                                               |
+| `BatchDataLoader`   | 從 DB 平行載入評分批次資料 → `ScoringBatchData`                                                                        |
 | `CandidateSelector` | 選出評分候選。流動性下限＝20 日中位成交值 ≥ 3,000 萬 NTD，**套用於市場候選／熱門股／其餘可分析股票三者**，僅自選股豁免 |
 
 ### 跨 syncer 配額

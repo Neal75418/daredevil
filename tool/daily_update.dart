@@ -17,8 +17,9 @@
 //   # 一次性手動跑（從 repo root 執行讓 assets/ 找得到）：
 //   dart run tool/daily_update.dart
 //
-//   # launchd 自動排程（com.neo.daredevil.daily.plist）每天 15:30
-//   # 跑同一條指令。
+//   # launchd 自動排程（com.neo.daredevil.daily.plist）每天 15:30／21:30
+//   # 執行的是 bin/daily_update.dart 編出的 AOT 產物（ops/launchd/install.sh），
+//   # 不是 dart run——dart run 每次跑 build hook、需網路，開盤時曾因此斷線。
 //
 // ## 環境變數
 //

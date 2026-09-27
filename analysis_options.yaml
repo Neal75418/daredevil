@@ -8,7 +8,7 @@ analyzer:
     - "lib/generated/**"
   errors:
     invalid_annotation_target: ignore
-    # Downgrade const hints to info level (won't fail CI)
+    # Downgrade const hints to info level（CI 與 pre-commit 的 flutter analyze 連 info 也擋，仍須清掉）
     prefer_const_constructors: info
     prefer_const_declarations: info
 

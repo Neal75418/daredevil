@@ -4,9 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// tool/daily_update.dart 的純 Dart 守門(2026-07-30)。
 ///
-/// launchd 每天 15:30 以 `dart run tool/daily_update.dart` 跑盤後更新——
-/// `dart run` 沒有 dart:ui,import 閉包裡只要混進 flutter/easy_localization
-/// 就會編譯失敗。**而且是靜默失敗**:GUI 手動更新照常,只有 launchd 的
+/// launchd 每天 15:30／21:30 執行由 `bin/daily_update.dart` 編出的 AOT
+/// 產物（同一個 import 閉包）——純 Dart 編譯沒有 dart:ui,閉包裡只要混進
+/// flutter/easy_localization 就會編譯失敗。**而且是靜默失敗**:GUI 手動更新照常,只有 launchd 的
 /// stderr log 在累積錯誤。2026-07-18 `9a280c6a` 把 AppNumberFormat 用進
 /// rule_accuracy_service(其檔案 import easy_localization → dart:ui),
 /// 自動更新從此斷了 13 天才被發現(7/30 對帳 7/30 資料缺失時)。
