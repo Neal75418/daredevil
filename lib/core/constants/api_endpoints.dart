@@ -142,7 +142,9 @@ abstract final class ApiEndpoints {
   /// 上櫃現股當沖交易統計（逐檔）
   ///
   /// 新站路徑（舊的 `/web/stock/.../intraday_trading_list.php` 已 302）。
-  /// **無視 `date` 參數，永遠回最新交易日**——寫入日期必須取回應的 `date`。
+  /// 帶 `date=YYYY/MM/DD` 可取歷史（2026-09-26 實測回到 2024-01）；不帶時回
+  /// 最新交易日。寫入日期一律取回應的 `date`（即使有帶 `date` 也要比對回應與
+  /// 請求是否相符，見 `TpexClient.getAllDayTradingData`）。
   /// 回應含兩張表：第一張是全市場彙總，**逐檔資料在第二張**。
   static const String tpexDayTrading = '/www/zh-tw/intraday/stat';
 

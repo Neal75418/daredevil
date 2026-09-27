@@ -2,9 +2,11 @@ import 'package:daredevil/core/utils/json_parsers.dart';
 
 /// FinMind 當沖資料（`TaiwanStockDayTrading`）
 ///
-/// **歷史回補專用**。每日同步走免費的官方端點（上市 TWTB4U、上櫃
-/// `/www/zh-tw/intraday/stat`）；只有回補需要它，因為上櫃官方端點只給最新
-/// 交易日，而 FinMind 逐檔一次呼叫就能拉整段歷史（實測回到 2020-03）。
+/// **較久遠歷史回補專用**。每日同步與 40 天窗回補都走免費的官方端點（上市
+/// TWTB4U、上櫃 `/www/zh-tw/intraday/stat`，皆可帶 `date` 取歷史，上櫃
+/// 2026-09-26 實測回到 2024-01）；只有回補到官方端點涵蓋不到的更久以前
+/// （見 `tool/backfill_tpex_day_trading.dart`）才需要它，FinMind 逐檔一次
+/// 呼叫就能拉整段歷史（實測回到 2020-03）。
 ///
 /// 2026-08-21 實測：`Volume`／`BuyAmount`／`SellAmount` 與兩市場官方端點
 /// 逐位元相符（上櫃 6 檔、上市 5 檔），故可與官方資料寫入同一張表。

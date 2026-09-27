@@ -7,14 +7,22 @@
 //
 // ## 為什麼需要這支
 //
-// 上櫃官方端點 `/www/zh-tw/intraday/stat` **無視 date 參數、只給最新交易日**
-// （2026-08-23 實測六個日期回同一份資料、md5 相同），所以每日同步補得到今天、
-// 補不到過去。上市那邊沒這問題——TWTB4U 吃日期，`backfill.dart --only-day-trading`
-// 逐日回補即可，且走 TWSE 不吃 FinMind 額度。
+// 上櫃官方端點 `/www/zh-tw/intraday/stat` 其實吃 `date` 參數：2026-09-26
+// 以 `date=YYYY/MM/DD` 實測可取歷史，回到 2024-01。先前 2026-08-23 曾測過
+// 六個不同日期回傳同一份資料（md5 相同），當時原因未查明（可能是帶的日期
+// 格式不對）。每日更新已會自動回補 40 天內的缺漏（見
+// `MarketDataUpdater._backfillMissingTradingDays`）；40 天窗內、追蹤起始日
+// 以後未定案的日子由 `MarketDayRefetcher` 每輪自動重抓，滑出窗外則靠
+// `tool/refetch_market_days.dart` 手動觸發，同樣走官方端點。
 //
-// 歷史只能走 FinMind `TaiwanStockDayTrading`（實測回到 2020-03，欄位與兩市場
-// 官方逐位元相符）。免付費層不支援不帶 data_id 的全市場查詢，只能逐檔——
-// 但單檔一次呼叫可拉整段區間，所以成本是「檔數」而非「檔數 × 天數」。
+// 官方端點實測可回溯到 2024-01（更早未驗證，不是驗證過涵蓋不到）。8/21
+// 前上櫃當沖覆蓋率偏低的那段在已驗證範圍內，改用 `tool/
+// refetch_market_days.dart --dataset dayTrading --market TPEx` 免額度即
+// 可補，不需要本工具。本工具只在**更久以前**（2024-01 以前）使用：可先
+// 用上述修復工具試，不行再走 FinMind `TaiwanStockDayTrading` 逐檔（實測
+// 回到 2020-03，欄位與兩市場官方逐位元相符）。免付費層不支援不帶 data_id
+// 的全市場查詢，只能逐檔——但單檔一次呼叫可拉整段區間，所以成本是
+// 「檔數」而非「檔數 × 天數」。
 //
 // ## 使用方式
 //

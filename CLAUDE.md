@@ -29,7 +29,8 @@
 | `lib/core/utils/request_deduplicator.dart`       | Request Deduplication 機制                                                                                                               |
 | `lib/domain/services/rules/`                     | 70 條規則 (15 檔案，權威數字見 `RuleRegistry.defaultRules`)                                                                              |
 | `lib/domain/services/scoring_isolate.dart`       | Isolate 評分 (typed DTO 序列化)                                                                                                          |
-| `lib/domain/services/update/`                    | 更新元件 18 檔 (11 syncer/updater + 3 helpers + 快照/歸零報告/歷史覆蓋各 1 + barrel)；**coordinator `UpdateService` 在上一層 `lib/domain/services/`**                                                                      |
+| `lib/domain/services/update/`                    | 更新元件 19 檔 (11 syncer/updater + 3 helpers + 快照/歸零報告/歷史覆蓋各 1 + barrel + `market_day_refetcher.dart`)；**coordinator `UpdateService` 在上一層 `lib/domain/services/`**                                                                      |
+| `lib/domain/services/update/market_day_refetcher.dart` | 盤後資料定案判斷與步驟 5.5 未定案重抓（`market_day_fetch` 表、追蹤起始日、40 天回補窗）——未進 `update.dart` barrel，與 `news_mention_snapshot_service` 等慣例一致 |
 | `lib/data/database/tables/`                      | Drift 資料表定義                                                                                                                         |
 | `lib/data/database/dao/batch_query_mixin.dart`   | 批次查詢共享工具 (groupBySymbol)                                                                                                         |
 | `lib/domain/services/rule_accuracy_service.dart` | 推薦績效回測引擎 (多週期驗證)                                                                                                            |

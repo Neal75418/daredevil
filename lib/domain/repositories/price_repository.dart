@@ -68,8 +68,10 @@ abstract class IPriceRepository {
   ///
   /// 用於 backfill：相較於 `syncStockPrices(symbol)` 對每檔股票分別呼叫
   /// FinMind（per-symbol，2 年 backfill 數千 calls 必然吃光免費額度），
-  /// 本方法走 TPEx afterTrading 歷史端點（`getAllDailyPricesHistorical`；
-  /// 舊 daily_close_quotes 同樣忽略歷史 date），**一次 call 回該日
+  /// 本方法走 TPEx `afterTrading/dailyQuotes` 歷史端點
+  /// （`getAllDailyPricesHistorical`；官方口徑，含定價交易、含零股，與每日
+  /// 端點 `daily_close_quotes` 相同——舊的 `afterTrading/otc` 是「不含定價、
+  /// 整張」口徑，只有官方的 91–98%，已停用），**一次 call 回該日
   /// 全部上櫃股票**。完整 2 年 backfill 從約 8000×24 ≈ 19 萬次降到約 500 次，
   /// 且 TPEx OpenAPI 完全免費沒額度限制。
   ///

@@ -148,9 +148,20 @@ mixin DayTradingDaoMixin on $AppDatabase {
   /// 用於清理可能存在的重複記錄（由於 UTC/本地時間不一致）
   /// 找出「有價格但無當沖」的交易日（該市場）
   ///
-  /// **上櫃專屬需求**。上市當沖漏掉的日子由 `MarketDataUpdater` 的 40 天窗
-  /// 自動補回（TWTB4U 吃日期）；上櫃端點只給最新交易日，漏一天就永久少一天，
-  /// 除非手動跑 `tool/backfill_tpex_day_trading.dart`。
+  /// **上櫃專屬需求**。上市、上櫃當沖漏掉的日子都由 `MarketDataUpdater` 的
+  /// 40 天窗自動補回（上市 TWTB4U、上櫃 `/www/zh-tw/intraday/stat`，皆帶
+  /// `date` 取歷史，見 `_backfillMissingTradingDays`）。**兩個呼叫端**：
+  /// `MarketDataUpdater` 在回補跑完之後查「上櫃仍缺」的天數供每輪日誌
+  /// 回報——多半是該日上櫃價格覆蓋未達門檻（回補會整批跳過該日）或單輪
+  /// 回補天數上限尚未輪到；`tool/backfill_tpex_day_trading.dart` 則用它
+  /// 判斷該不該整批重打 FinMind（見該工具的「Resume / 缺口偵測」段）。
+  /// 40 天窗內、追蹤起始日以後未定案的日子由 `MarketDayRefetcher` 每輪
+  /// 自動重抓（步驟 5.5）；一旦滑出 40 天窗只會記 warning，需手動跑
+  /// `tool/refetch_market_days.dart --dataset dayTrading --market TPEx`
+  /// （同一套官方端點，免額度）。官方端點實測可回溯到 2024-01（更早未
+  /// 驗證，不是驗證過涵蓋不到）；8/21 前覆蓋率偏低那段在已驗證範圍內，
+  /// 上述指令即可補；2024-01 以前可先用同一支工具試，不行再走
+  /// `tool/backfill_tpex_day_trading.dart` 的 FinMind 逐檔。
   ///
   /// 價格表是「那天有沒有開市」的 ground truth（與回補迴圈同一判準）。
   /// 純 DB 查詢、**零 API 額度**——偵測便宜，補救才貴（FinMind 逐檔計費，

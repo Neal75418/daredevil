@@ -17,7 +17,7 @@ import 'package:daredevil/domain/services/update/history_coverage.dart';
 /// 負責確保分析所需的歷史價格資料完整。兩段式：
 /// - **Phase 0 市場日快照回補**：偵測 lookback 窗內「整個市場缺資料」的
 ///   交易日，逐日以 1 次 API 呼叫回補該市場全部股票（TWSE MI_INDEX /
-///   TPEx afterTrading 歷史端點）。非自選股不再受 per-symbol 早退門檻
+///   TPEx afterTrading/dailyQuotes 歷史端點）。非自選股不再受 per-symbol 早退門檻
 ///   （180 天）餓死——52 週規則需要 250 天。
 /// - **Phase 1 per-symbol 回補**：FinMind 逐檔逐月，處理個股殘缺
 ///   （新上市、恢復交易等 phase 0 覆蓋不到的情境）。

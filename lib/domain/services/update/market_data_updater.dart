@@ -114,8 +114,9 @@ class MarketDataUpdater {
       AppLogger.warning('MarketDataUpdater', '上市當沖資料同步失敗', e);
     }
 
-    // 上櫃當沖（2026-08-23 接上）。**不 rethrow 網路／限流例外**：這是三個
-    // 來源裡最不關鍵的一個，讓它中止整段會連帶犧牲融資融券與外資持股。
+    // 上櫃當沖（2026-08-23 接上）。**只吞 `NetworkException`**：這是三個
+    // 來源裡最不關鍵的一個，讓網路錯誤中止整段會連帶犧牲融資融券與外資
+    // 持股；`RateLimitException` 與其他例外不吞、往上拋（見下方 catch）。
     // 日期由回應決定、價格覆蓋不足會自行整批跳過——見 syncAllDayTradingFromTpex。
     try {
       tpexDayTradingCount = await _tradingRepo.syncAllDayTradingFromTpex(

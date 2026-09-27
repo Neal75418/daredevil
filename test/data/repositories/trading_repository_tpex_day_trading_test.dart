@@ -1,8 +1,9 @@
 // 上櫃當沖同步（真 in-memory DB）
 //
-// 與上市路徑的關鍵差異：端點無視請求日期、永遠回最新交易日，故**寫入日期取自
-// 回應**。上市那條的守衛是「回應日期 ≠ 請求日期就丟棄」，這裡反過來——若照抄
-// 用請求日期寫入，會把最新資料寫成歷史日期，而且筆數正常、毫無訊號。
+// 與上市路徑的關鍵差異：不帶 date 呼叫時端點永遠回最新交易日，故**寫入日期
+// 取自回應**，不可用呼叫當下的日期寫入。帶 date 時該端點也吃日期（見檔尾
+// 「帶 date 呼叫」測試），但寫入日期仍以回應為準——若照抄上市那套「用請求
+// 日期寫入」，沒帶 date 時會把最新資料寫成錯誤日期，而且筆數正常、毫無訊號。
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -93,7 +94,11 @@ void main() {
       startDate: older,
       endDate: older,
     );
-    expect(onOlder, isNotEmpty, reason: '端點無視請求日期；用今天寫入會把資料掛在錯誤的日子上');
+    expect(
+      onOlder,
+      isNotEmpty,
+      reason: '不帶 date 呼叫時用今天寫入會把資料掛在錯誤的日子上，必須信回應的 date',
+    );
   });
 
   test('🚨 不得刪掉同日的上市當沖資料', () async {

@@ -123,7 +123,7 @@ void main() {
     );
   });
 
-  test('🚨 上櫃當沖缺口要被偵測並回報（上市有 40 天窗、上櫃沒有）', () async {
+  test('🚨 上櫃當沖缺口（回補跑完後仍缺）要被偵測並回報', () async {
     when(
       () => db.findDayTradingGapDates(
         market: any(named: 'market'),
@@ -137,7 +137,7 @@ void main() {
       r.tpexDayTradingGaps,
       2,
       reason:
-          '端點只給最新交易日，漏掉的日子不會自己回來——'
+          '此欄位量的是「回補跑完之後仍缺」的天數（回補本身已自動嘗試 40 天窗）——'
           '看不見就等於永久遺失',
     );
   });

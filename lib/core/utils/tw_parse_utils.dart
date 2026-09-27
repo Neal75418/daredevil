@@ -55,8 +55,9 @@ abstract final class TwParseUtils {
   /// 而未驗證內容，導致 `0000-12-18` 等錯誤年份寫入 DB 並污染走勢圖與均線。
   ///
   /// [parseAdDate] 的嚴格版。當日期本身就是「這批資料屬於哪天」的唯一依據時
-  /// （例如上櫃當沖端點無視請求日期、只能信回應的 `date`），回退成今天會把
-  /// 最新資料寫成錯誤日期且毫無訊號——那種情況必須拿 null 整批丟棄。
+  /// （例如上櫃當沖端點不帶 `date` 參數呼叫時永遠回最新交易日，只能信回應的
+  /// `date`），回退成今天會把最新資料寫成錯誤日期且毫無訊號——那種情況必須拿
+  /// null 整批丟棄。
   static DateTime? parseAdDateOrNull(String? dateStr) {
     if (dateStr == null || dateStr.length != 8) return null;
 
@@ -77,8 +78,9 @@ abstract final class TwParseUtils {
   /// [parseAdDateOrNull] 的寬鬆版：無效時回**今日午夜**。
   ///
   /// 適用於「日期只是輔助、資料本身另有來源」的路徑。若日期就是「這批資料
-  /// 屬於哪天」的唯一依據（例如上櫃當沖端點無視請求日期、只能信回應的
-  /// `date`），必須用嚴格版——回退成今天會把最新資料寫成錯誤日期且毫無訊號。
+  /// 屬於哪天」的唯一依據（例如上櫃當沖端點不帶 `date` 參數呼叫時永遠回最新
+  /// 交易日，只能信回應的 `date`），必須用嚴格版——回退成今天會把最新資料寫成
+  /// 錯誤日期且毫無訊號。
   static DateTime parseAdDate(String dateStr) =>
       parseAdDateOrNull(dateStr) ?? DateContext.normalize(DateTime.now());
 

@@ -5,8 +5,10 @@
 //   `stat` 是小寫 'ok'（上市是大寫 'OK'，照抄會整批誤判失敗）、
 //   逐檔資料在 **第二張** table（第一張是全市場彙總，既有 helper 取 first）。
 //
-// 日期語意與上市相反：此端點無視 `date` 參數永遠回最新交易日，故寫入日期
-// 必須取回應的 `date`，不可用請求日期。
+// 日期語意與上市相反：不帶 `date` 參數時此端點永遠回最新交易日；帶 `date`
+// 時則可取歷史（見檔尾「帶日期請求」group，2026-09-26 實測回到 2024-01）。
+// 兩種情況寫入日期都必須取回應的 `date`，不可用請求日期——即使帶了 date，
+// 仍要比對回應與請求是否相符，不符就整批丟棄。
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -149,7 +151,7 @@ void main() {
     expect(
       result.first.date,
       DateTime(2026, 8, 19),
-      reason: '端點無視 date 參數永遠回最新交易日；用請求日期會把最新資料寫成歷史日',
+      reason: '不帶 date 參數呼叫時端點永遠回最新交易日；用請求日期會把最新資料寫成歷史日',
     );
   });
 

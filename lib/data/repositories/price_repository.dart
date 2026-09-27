@@ -256,7 +256,7 @@ class PriceRepository implements IPriceRepository {
     }
   }
 
-  /// 用 TPEx afterTrading 歷史端點回補單一交易日**所有**上櫃股票價格
+  /// 用 TPEx `afterTrading/dailyQuotes` 歷史端點回補單一交易日**所有**上櫃股票價格
   ///
   /// 詳細語意見 [IPriceRepository.backfillTpexPricesByDate]。
   ///
@@ -324,7 +324,8 @@ class PriceRepository implements IPriceRepository {
     MarketDayFetchLedger? ledger,
   }) async {
     try {
-      // 正規化日期至 UTC 午夜時間，確保跨時區一致性
+      // 正規化日期至裝置本地午夜時間（DateContext.normalize 是本地時間，
+      // 非 UTC），以匹配資料庫中儲存的日期格式
       final normalizedDate = DateContext.normalize(date);
 
       // 定案才跳過（spec §4.5(a)）。舊邏輯用「列數 > 門檻」，但 15:30 抓到的

@@ -47,7 +47,7 @@ TDCC holding、dividend、insider transfer、quarterly report。
 **`HistoricalPriceSyncer`** — 三道閘，缺一都會讓「該補的沒補」看起來像正常結束
 
 - **Phase 0 市場日快照**：lookback 窗內整市場缺漏的交易日，1 次呼叫補該市場全部股票一天
-  （TWSE MI_INDEX / TPEx afterTrading 歷史端點）。單次上限與連續零筆斷路器見
+  （TWSE MI_INDEX／TPEx afterTrading/dailyQuotes 歷史端點）。單次上限與連續零筆斷路器見
   `ApiConfig.historicalMarketDay*`
 - **「缺漏」的定義與今日頁共用**：`history_coverage.dart` 的 `findMissingMarketDays`
   同時決定 Phase 0 要補哪些、今日頁「歷史資料建置中 N%」顯示多少——改門檻或窗口兩邊一起變。
@@ -104,13 +104,22 @@ TDCC holding、dividend、insider transfer、quarterly report。
 **`MarketDataUpdater`** — 除當日籌碼外還有兩類回補
 
 - **當沖／融資缺漏日**：TWSE ~21:00 才發布，早更新錯過的日子掃 40 天窗補回
-- **上櫃當沖**（2026-08-23）：走 `/www/zh-tw/intraday/stat`，免費、1 次呼叫拿
-  842 檔。**日期語意與上市相反**——該端點無視 `date` 參數、永遠回最新交易日，
-  故寫入日期取自回應；上市那條的守衛是「回應日期 ≠ 請求日期就丟棄」。
-  另有兩道閘：價格覆蓋不足整批跳過（分母全缺會寫出一整片假的 0，而 0 在當沖
-  語意下是合法值），失敗不 rethrow（三個來源裡最不關鍵，中止會犧牲融資與外資
-  持股）。**歷史回補不走這條**——端點只給最新日，回補循 FinMind
-  `TaiwanStockDayTrading`（逐檔、吃額度，僅手動 CLI）
+- **上櫃當沖**（2026-08-23 接上）：走 `/www/zh-tw/intraday/stat`，免費、1 次呼叫拿
+  842 檔。端點帶 `date=YYYY/MM/DD` 可取歷史（2026-09-26 實測回到 2024-01）；
+  每日路徑不帶日期，回最新交易日，寫入日期一律取自回應（即使帶 date 仍須
+  比對回應與請求是否相符，不符整批丟棄，與上市 TWTB4U 的守衛對稱）。
+  40 天缺漏回補**兩市場都做**（上市 TWTB4U、上櫃同端點皆帶 date），各自
+  要求該日價格覆蓋達門檻才回補（分母全缺會寫出一整片假的 0，而 0 在當沖
+  語意下是合法值）。**每日路徑只吞 `NetworkException`**——`RateLimitException`
+  與其他例外都往上拋（見 `syncMarketWideData` 的上櫃當沖 try/catch，只有
+  一個 `on NetworkException` 分支）；**40 天回補路徑限流與網路錯誤都
+  rethrow**（`_backfillMissingTradingDays` 的 `canBackfillTpexDayTrading`
+  分支）。官方端點實測可回溯到 2024-01（更早未驗證，不是「驗證過涵蓋不
+  到」）；8/21 前覆蓋率偏低那段在已驗證範圍內，
+  `tool/refetch_market_days.dart --dataset dayTrading --market TPEx`
+  免額度即可補；2024-01 以前可先用同一支工具試，不行再走 FinMind
+  `TaiwanStockDayTrading`（逐檔、吃額度，僅手動 CLI
+  `tool/backfill_tpex_day_trading.dart`）
 - **全市場外資持股**（2026-08-16）：`syncAllMarketShareholding` / `backfillForeignShareholding`
   走 MI_QFIIS——同樣是免費、全市場的那一類，加它是為了修 FOREIGN_* 規則在 TWSE/TPEx 之間
   4 倍的觸發不對稱
@@ -125,6 +134,32 @@ TDCC holding、dividend、insider transfer、quarterly report。
 - 遷移由 **pending marker** 驅動（`isDeepBackfillPending` / `markDeepBackfillComplete`）——
   被限流打斷的那輪下次會**接續**，不會靜默退回 15 天淺窗
 - 回補逐日 `onProgress` 回報
+
+### `MarketDayRefetcher`（步驟 5.5：重抓未定案的日子）
+
+- **定案規則**：一筆（資料集, 市場, 資料日）只有在「抓取時間的台北日期 >
+  資料日」時才算定案，狀態存在新表 `market_day_fetch`（PK
+  `(dataset, market, date)`，`beforeOpen` 補建、不 bump schema fingerprint）
+- **ledger 在寫入 transaction 內回報**：`MarketDayFetchLedger.report` 由
+  repository 在寫入資料的**同一個 transaction** 內呼叫，回報實際寫入的
+  市場、資料日、列數——事實由源頭回報，不由呼叫端回推；只有全市場抓取會
+  拿到 ledger，逐檔或部分股票的路徑傳 null 不記錄
+- **每輪步驟 5.5**（`UpdateService._refetchNonFinalDays`）發生在步驟
+  3.8–5 的並行同步（`_syncAuxiliaryData`／`_syncInstitutionalData`／
+  `_syncMarketAndFundamentalData`／`_syncNews` 的 `.wait`）之後，**步驟 6
+  篩選候選（含 6.5 上櫃候選補充同步 `_syncOtcCandidatesData`）與評分之前**
+  ——5.5 之後仍有 6.5 這段額外的上櫃同步。
+  追蹤起始日（`finality_tracking_since`，第一次執行更新時寫入
+  `app_settings`，之後不覆寫）以後、40 個日曆天回補窗
+  （`ApiConfig.tradingBackfillLookbackDays`）內、沒有定案狀態列的交易日才
+  是候選；每組（資料集×市場）每輪最多重抓 `ApiConfig.finalityRefetchMaxDaysPerRun`
+  （10）天，剩下的留給下一輪
+- 追蹤 `prices`、`institutional`、`dayTrading`、`margin`（兩市場）、
+  `foreignShareholding`（僅上市）共 9 組
+- 滑出 40 天窗仍未定案的日子只記 warning（筆數與前 10 筆），不進
+  errors——它們不會自己消失，進 errors 會讓之後每一輪 launchd 都 exit 1；
+  需用修復工具 `tool/refetch_market_days.dart` 手動處理（重用同一套
+  `refetchRange` 抓取邏輯，不受每輪上限、回補窗、追蹤起始日限制）
 
 ### 3 Helpers
 
@@ -150,6 +185,10 @@ TDCC holding、dividend、insider transfer、quarterly report。
   尾端 ≤9 次記帳。**遺失方向是放寬不是保守**——少記 → 下輪超發 → 402，正是持久化要防的
   那件事
 - 儲存失敗一律 fail-open 回「無歷史」
+
+> 步驟 5.5 未定案重抓（`MarketDayRefetcher`，見上）發生在步驟 3.8–5 並行同步
+> 之後、步驟 6／6.5 篩選候選與上櫃補充同步之前，更在 Post-Update 之前——讓
+> 回補到的歷史進得了本輪評分。
 
 ### Post-Update（5 個 fail-safe service）
 

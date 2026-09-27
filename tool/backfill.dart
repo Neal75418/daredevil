@@ -29,7 +29,7 @@
 // ## Backfill 資料源（6 個，per-day batch 架構）
 //
 //   1. daily_price           via backfillTwsePricesByDate / backfillTpexPricesByDate
-//                            （MI_INDEX / afterTrading 歷史端點，逐交易日整市場）
+//                            （MI_INDEX / afterTrading/dailyQuotes 歷史端點，逐交易日整市場）
 //   2. daily_institutional   via backfillInstitutionalByDate（T86/TPEx 批次）
 //   3. day_trading           via TradingRepository.syncAllDayTradingFromTwse
 //   4. monthly_revenue       via FundamentalRepository.syncMonthlyRevenue

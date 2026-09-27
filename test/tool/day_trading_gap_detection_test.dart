@@ -1,13 +1,18 @@
 // 缺口偵測 — 上櫃當沖的專屬需求
 //
-// 上市當沖漏掉的日子由 `_backfillMissingTradingDays` 的 40 天窗自動補回
-// （TWTB4U 吃日期）。上櫃沒有這條路：端點只給最新交易日，漏一天就永久少一天，
-// 除非手動跑 FinMind CLI。實測近 60 天有 22 次 PARTIAL、1 次 FAILED（10.7%），
-// 所以缺口不是罕見情況。
+// 上市、上櫃當沖漏掉的日子都由 `_backfillMissingTradingDays` 的 40 天窗自動
+// 補回（上市 TWTB4U、上櫃 `/www/zh-tw/intraday/stat`，皆帶 date 取歷史）；
+// 本檔測的 `findDayTradingGapDates` 查的是**回補跑完之後仍缺**的天數，多半
+// 是該日上櫃價格覆蓋未達門檻（回補會整批跳過）或單輪回補天數上限尚未輪到。
+// 實測近 60 天有 22 次 PARTIAL、1 次 FAILED（10.7%），所以缺口不是罕見情況。
 //
-// 而補缺口的成本與缺口大小無關——FinMind 逐檔計費、單次可拉整段區間，
-// 補 3 天和補 6 年都是 220 次呼叫。所以偵測要便宜（純 DB 查詢、零額度），
-// 補救要批次。
+// 40 天窗內、追蹤起始日以後未定案的日子由 `MarketDayRefetcher` 每輪重抓；
+// 窗外只記 warning，需手動跑 `tool/refetch_market_days.dart --dataset
+// dayTrading --market TPEx`（同一套官方端點，免額度）。官方端點實測可
+// 回溯到 2024-01（更早未驗證，不是驗證過涵蓋不到）；2024-01 以前可先用
+// 同一支工具試，不行再走 FinMind CLI（`tool/backfill_tpex_day_trading.dart`），
+// 其成本與缺口大小無關——逐檔計費、單次可拉整段區間，補 3 天和補 6 年都
+// 是 220 次呼叫。所以偵測要便宜（純 DB 查詢、零額度），補救要批次。
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 
