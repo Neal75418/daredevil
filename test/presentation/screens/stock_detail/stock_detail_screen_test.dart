@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/providers/stock_detail_provider.dart';
@@ -19,12 +20,13 @@ class FakeStockDetailNotifier extends StockDetailNotifier {
   FakeStockDetailNotifier(super.symbol);
 
   StockDetailState initialState = const StockDetailState();
+  int loadDataCalls = 0;
 
   @override
   StockDetailState build() => initialState;
 
   @override
-  Future<void> loadData() async {}
+  Future<void> loadData() async => loadDataCalls++;
 
   @override
   Future<void> loadFundamentals() async {}
@@ -110,6 +112,8 @@ void main() {
     addTearDown(() => tester.view.resetPhysicalSize());
   }
 
+  FakeStockDetailNotifier? lastStockNotifier;
+
   Widget buildTestWidget({
     StockDetailState? stockState,
     PriceAlertState? alertState,
@@ -125,7 +129,7 @@ void main() {
         stockDetailProvider.overrideWith2((symbol) {
           final n = FakeStockDetailNotifier(symbol);
           n.initialState = stock;
-          return n;
+          return lastStockNotifier = n;
         }),
         priceAlertProvider.overrideWith(() {
           final n = FakePriceAlertNotifier();
@@ -225,6 +229,110 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       expect(find.byType(NestedScrollView), findsOneWidget);
+    });
+  });
+
+  group('已有內容時的重載（背景 epoch）', () {
+    final withContent = StockPriceState(
+      latestPrice: DailyPriceEntry(
+        symbol: '2330',
+        date: DateTime(2026, 2, 13),
+        close: 600,
+      ),
+    );
+
+    testWidgets('載入中仍顯示內容，不切成整頁 shimmer', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: StockDetailState(
+            price: withContent,
+            loading: const LoadingState(isLoading: true),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(StockDetailShimmer), findsNothing);
+      expect(find.byType(NestedScrollView), findsOneWidget);
+    });
+
+    testWidgets('重載失敗：保留內容，以 banner 顯示錯誤與重試', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: StockDetailState(
+            price: withContent,
+            error: 'Database error',
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(EmptyState), findsNothing);
+      expect(find.byType(NestedScrollView), findsOneWidget);
+      expect(find.byType(MaterialBanner), findsOneWidget);
+      expect(find.text('Database error'), findsOneWidget);
+    });
+
+    testWidgets('只有股名（無價格）也算有內容', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: StockDetailState(
+            price: StockPriceState(
+              stock: StockMasterEntry(
+                symbol: '2330',
+                name: '台積電',
+                market: 'TWSE',
+                isActive: true,
+                updatedAt: DateTime(2026, 2, 13),
+              ),
+            ),
+            error: 'Database error',
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(EmptyState), findsNothing);
+      expect(find.byType(MaterialBanner), findsOneWidget);
+    });
+
+    testWidgets('banner：重試呼叫 loadData、關閉清掉錯誤', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: StockDetailState(
+            price: withContent,
+            error: 'Database error',
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      final callsBefore = lastStockNotifier!.loadDataCalls;
+
+      await tester.tap(find.text('common.retry'));
+      await tester.pump();
+      expect(lastStockNotifier!.loadDataCalls, callsBefore + 1);
+
+      await tester.tap(find.text('common.dismiss'));
+      await tester.pump();
+      expect(find.byType(MaterialBanner), findsNothing);
+      expect(find.byType(NestedScrollView), findsOneWidget);
+    });
+
+    testWidgets('沒有內容時照舊顯示整頁錯誤，不顯示 banner', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: const StockDetailState(error: 'Database error'),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.byType(MaterialBanner), findsNothing);
     });
   });
 }

@@ -63,7 +63,8 @@ class StockHeaderData {
     reasons: s.reasons.map((r) => r.reasonType).toList(),
     dataDate: s.dataDate,
     hasDataMismatch: s.hasDataMismatch,
-    // 載入中不判定缺漏（避免非同步子狀態未到位時閃現假提示）
+    // 首次載入中不判定缺漏（避免非同步子狀態未到位時閃現假提示）；已有
+    // 內容的背景重載沿用現有資料判定，提示不隨重載消失再出現
     missingDomains: _computeMissingDomains(s),
   );
 
@@ -71,7 +72,7 @@ class StockHeaderData {
   /// domain 對 ETF 豁免（比照 `FundamentalSyncer` 的 isEtfCode 跳過邏輯），
   /// 否則提示會對所有 ETF 永久誤報。
   static List<String> _computeMissingDomains(StockDetailState s) {
-    if (s.loading.isLoading ||
+    if ((s.loading.isLoading && !s.hasContent) ||
         s.loading.isLoadingFundamentals ||
         s.loading.isLoadingChip) {
       return const [];

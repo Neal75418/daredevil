@@ -201,6 +201,10 @@ class StockDetailState {
   // 便捷存取 — 減少 header / tab 的鏈式存取
 
   double? get priceChange => price.priceChange;
+
+  /// 頁首有可顯示的內容（股名或價格）。重載期間與重載失敗時，有內容就
+  /// 保留畫面、不切成整頁 shimmer／錯誤頁（與掃描、自選、今日頁一致）。
+  bool get hasContent => price.stock != null || price.latestPrice != null;
   String? get stockName => price.stock?.name;
   String? get stockMarket => price.stock?.market;
   String? get stockIndustry => price.stock?.industry;

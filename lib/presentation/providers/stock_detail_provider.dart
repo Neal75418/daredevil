@@ -49,9 +49,20 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
   /// 空白且永久卡死。同 instance 重跑 field 保留,據此排自動 reload。
   var _hasLoadedOnce = false;
 
+  /// [loadData] 的世代號：每輪載入遞增，await 之後比對，過期（已有較新的
+  /// 一輪）就放棄寫入——最新的請求勝出。build() 重跑時也遞增，讓重建前
+  /// 發起的載入作廢：`_active` 會在 build() 被設回 true 擋不住它們，而
+  /// build() 排的自動重載是 microtask，舊一輪已排入佇列的續行會先跑。
+  var _loadGeneration = 0;
+
+  /// 最新一輪載入的 Future（[_load]，或 build() 排定的自動重載），被取代
+  /// 的 [loadData] 呼叫改等它
+  Future<void>? _latestLoad;
+
   @override
   StockDetailState build() {
     _active = true;
+    _loadGeneration++;
     ref.onDispose(() => _active = false);
     // finMindClientProvider 用 watch 而非 read(2026-07-29 審查修正):
     // 使用者更新 token 會讓該 provider 重建(watch finMindTokenProvider),舊 client 的 Dio 隨即被
@@ -85,8 +96,8 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
     ref.onDispose(() => timer.cancel());
 
     // M6 follow-up：runUpdate 完成後 bump dataUpdateEpoch；同股票頁面
-    // 停留時若背景觸發更新，自動 reload 拿到最新分析。loadData() 沒有
-    // 去重，重複觸發時可能同時有兩輪在跑；`_active` 只擋 dispose 後寫入。
+    // 停留時若背景觸發更新，自動 reload 拿到最新分析。與進行中的載入
+    // 重疊時由 [_loadGeneration] 保證較新的一輪勝出。
     ref.listen(dataUpdateEpochProvider, (_, _) {
       if (!_active) return;
       if (state.price.analysis == null && state.reasons.isEmpty) return;
@@ -94,10 +105,11 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
     });
 
     // 非首次 build(token 更換觸發的重建):state 即將被下方回傳值清空,
-    // 排 microtask 自動重載——這是清空後唯一的恢復管道(見 _hasLoadedOnce)
+    // 排 microtask 自動重載——這是清空後唯一的恢復管道(見 _hasLoadedOnce)。
+    // 登記為最新一輪，重建前發起的 loadData() 呼叫端改等這次重載完成
     if (_hasLoadedOnce) {
-      Future.microtask(() {
-        if (_active) loadData();
+      _latestLoad = Future.microtask(() async {
+        if (_active) await loadData();
       });
     }
 
@@ -121,9 +133,24 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
     return result.stage == MarketStage.insufficient ? null : result.stage;
   }
 
-  /// 載入股票詳情資料
+  /// 載入股票詳情資料。
+  ///
+  /// 回傳的 Future 在最新一輪完成時才完成：被較新一輪取代時改等較新那輪，
+  /// 呼叫端（巡檢換股 `_swapTo`）據此判斷資料已到位再切換畫面。
   Future<void> loadData() async {
+    var run = _latestLoad = _load(++_loadGeneration);
+    while (true) {
+      await run;
+      final latest = _latestLoad;
+      // 沒有更新的一輪就結束
+      if (latest == null || identical(latest, run)) return;
+      run = latest;
+    }
+  }
+
+  Future<void> _load(int generation) async {
     _hasLoadedOnce = true;
+    bool isCurrent() => _active && generation == _loadGeneration;
     state = state.copyWith(isLoading: true, error: null);
 
     try {
@@ -134,7 +161,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
       // 決定分析資料的查詢日期
       // 使用資料庫最新價格日期，確保盤前/非交易日也能顯示上次分析結果
       final latestDataDate = await _marketRepo.getLatestDataDate();
-      if (!_active) return;
+      if (!isCurrent()) return;
       final analysisDate = latestDataDate != null
           ? DateContext.normalize(latestDataDate)
           : normalizedToday;
@@ -167,7 +194,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
         ),
         _db.isInWatchlist(_symbol),
       ).wait;
-      if (!_active) return;
+      if (!isCurrent()) return;
       var instHistory = dbInstHistory;
 
       // 從最近價格提取最新與前一日（recentPrices 依日期降序排列）
@@ -182,7 +209,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
       // DB 無法人資料時從 API 取得
       if (instHistory.isEmpty) {
         final apiResult = await _chipLoader.fetchInstitutionalFromApi(_symbol);
-        if (!_active) return;
+        if (!isCurrent()) return;
         instHistory = apiResult.data;
       }
 
@@ -224,7 +251,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
         marketStage: _currentMarketStage(),
       );
       final summary = const SummaryLocalizer().localize(summaryData);
-      if (!_active) return;
+      if (!isCurrent()) return;
 
       state = state.copyWith(
         stock: stock,
@@ -241,9 +268,13 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
       );
     } catch (e) {
       AppLogger.warning('StockDetailNotifier', '載入股票詳情失敗: $_symbol', e);
+      if (!isCurrent()) return;
       state = state.copyWith(isLoading: false, error: ErrorDisplay.message(e));
     }
   }
+
+  /// 關閉已有內容時的重載錯誤 banner
+  void clearError() => state = state.copyWith(error: null);
 
   /// 切換自選股 — 同步更新全域 watchlistProvider
   ///

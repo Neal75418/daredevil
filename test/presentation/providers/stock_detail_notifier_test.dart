@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
@@ -776,6 +778,247 @@ void main() {
             '2026-08-01 複審:重建清空後必須自動 reload——否則使用者換個'
             ' token,開著的個股頁靜默變空白且永久卡死(epoch listener 的'
             ' guard 恰在清空後擋住自己,無任何恢復管道)',
+      );
+    });
+  });
+
+  group('StockDetailNotifier.loadData 重入', () {
+    test('較早發起、較晚完成的載入不得覆蓋較新的結果', () async {
+      setupLoadDataMocks();
+      final older = DateTime(2026, 2, 12);
+      final newer = DateTime(2026, 2, 13);
+      final firstDate = Completer<DateTime?>();
+      var dateCalls = 0;
+      when(() => mockDb.getLatestDataDate()).thenAnswer((_) {
+        dateCalls++;
+        return dateCalls == 1 ? firstDate.future : Future.value(newer);
+      });
+      when(
+        () => mockDb.getAnalysis(_testSymbol, older),
+      ).thenAnswer((_) async => createAnalysis(score: 10));
+      when(
+        () => mockDb.getAnalysis(_testSymbol, newer),
+      ).thenAnswer((_) async => createAnalysis(score: 90));
+
+      final notifier = container.read(
+        stockDetailProvider(_testSymbol).notifier,
+      );
+      final first = notifier.loadData();
+      await notifier.loadData();
+      expect(
+        container
+            .read(stockDetailProvider(_testSymbol))
+            .price
+            .analysis!
+            .scoreShort,
+        90,
+      );
+
+      firstDate.complete(older);
+      await first;
+
+      expect(
+        container
+            .read(stockDetailProvider(_testSymbol))
+            .price
+            .analysis!
+            .scoreShort,
+        90,
+        reason: '第一次載入讀到的是更新前的資料，晚到時不得蓋掉第二次的結果',
+      );
+    });
+
+    test('重建前發起的載入，續行排在自動重載之前（microtask 窗口）：不得寫入舊資料，呼叫端等到自動重載完成', () async {
+      // 舊一輪停在 .wait（getStock 未完成）；同一段同步程式裡依序完成它、
+      // 重建 notifier——舊一輪的續行 microtask 排在 build() 的自動重載之前
+      setupLoadDataMocks();
+      final older = DateTime(2026, 2, 12);
+      final newer = DateTime(2026, 2, 13);
+      var dateCalls = 0;
+      when(() => mockDb.getLatestDataDate()).thenAnswer((_) async {
+        dateCalls++;
+        return dateCalls == 1 ? older : newer;
+      });
+      when(
+        () => mockDb.getAnalysis(_testSymbol, older),
+      ).thenAnswer((_) async => createAnalysis(score: 10));
+      when(
+        () => mockDb.getAnalysis(_testSymbol, newer),
+      ).thenAnswer((_) async => createAnalysis(score: 90));
+      final blockedStock = Completer<StockMasterEntry?>();
+      var stockCalls = 0;
+      when(() => mockDb.getStock(_testSymbol)).thenAnswer((_) {
+        stockCalls++;
+        return stockCalls == 1
+            ? blockedStock.future
+            : Future.value(createStock());
+      });
+
+      final localContainer = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(mockDb),
+          finMindClientProvider.overrideWith((ref) => MockFinMindClient()),
+          insiderRepositoryProvider.overrideWithValue(mockInsiderRepo),
+          dataSyncServiceProvider.overrideWithValue(mockDataSyncService),
+          ruleAccuracyServiceProvider.overrideWithValue(mockRuleAccuracy),
+          appClockProvider.overrideWithValue(mockClock),
+          watchlistProvider.overrideWith(() => MockWatchlistNotifier()),
+        ],
+      );
+      addTearDown(localContainer.dispose);
+      final scores = <double?>[];
+      final sub = localContainer.listen(
+        stockDetailProvider(_testSymbol),
+        (_, next) => scores.add(next.price.analysis?.scoreShort),
+      );
+      addTearDown(sub.close);
+
+      final stale = localContainer
+          .read(stockDetailProvider(_testSymbol).notifier)
+          .loadData();
+      await Future<void>.delayed(Duration.zero);
+
+      blockedStock.complete(createStock());
+      localContainer.invalidate(finMindClientProvider);
+      localContainer.read(stockDetailProvider(_testSymbol));
+      await stale;
+      expect(
+        localContainer.read(stockDetailProvider(_testSymbol)).hasContent,
+        isTrue,
+        reason: '呼叫端（_swapTo）在 await 回來時據此切換畫面，不得先於自動重載完成',
+      );
+      await Future<void>.delayed(Duration.zero);
+      await localContainer.pump();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(scores, isNot(contains(10)), reason: '重建前的舊資料不得出現在畫面上');
+      expect(scores.last, 90);
+    });
+
+    test('被取代那一輪的 Future 等到最新一輪寫入後才完成（_swapTo 依此切換）', () async {
+      setupLoadDataMocks();
+      final older = DateTime(2026, 2, 12);
+      final newer = DateTime(2026, 2, 13);
+      final firstDate = Completer<DateTime?>();
+      final secondDate = Completer<DateTime?>();
+      var dateCalls = 0;
+      when(() => mockDb.getLatestDataDate()).thenAnswer((_) {
+        dateCalls++;
+        return dateCalls == 1 ? firstDate.future : secondDate.future;
+      });
+      when(
+        () => mockDb.getAnalysis(_testSymbol, newer),
+      ).thenAnswer((_) async => createAnalysis(score: 90));
+
+      final notifier = container.read(
+        stockDetailProvider(_testSymbol).notifier,
+      );
+      var firstDone = false;
+      final first = notifier.loadData().then((_) => firstDone = true);
+      final second = notifier.loadData();
+
+      firstDate.complete(older);
+      await Future<void>.delayed(Duration.zero);
+      expect(firstDone, isFalse, reason: '最新一輪還沒寫入，呼叫端不該以為已載完');
+
+      secondDate.complete(newer);
+      await first;
+      final state = container.read(stockDetailProvider(_testSymbol));
+      expect(state.loading.isLoading, isFalse);
+      expect(state.price.analysis!.scoreShort, 90);
+      await second;
+    });
+
+    test('被取代的載入晚到失敗時，不得把錯誤寫進較新的結果', () async {
+      setupLoadDataMocks();
+      final firstDate = Completer<DateTime?>();
+      var dateCalls = 0;
+      when(() => mockDb.getLatestDataDate()).thenAnswer((_) {
+        dateCalls++;
+        return dateCalls == 1 ? firstDate.future : Future.value(_defaultDate);
+      });
+
+      final notifier = container.read(
+        stockDetailProvider(_testSymbol).notifier,
+      );
+      final first = notifier.loadData();
+      await notifier.loadData();
+
+      firstDate.completeError(Exception('Database error'));
+      await first;
+
+      final state = container.read(stockDetailProvider(_testSymbol));
+      expect(state.error, isNull);
+      expect(state.price.analysis, isNotNull);
+    });
+
+    test('重建（換 token）前發起的載入，晚到時不得寫入重建後的 state', () async {
+      setupLoadDataMocks();
+      final older = DateTime(2026, 2, 12);
+      final newer = DateTime(2026, 2, 13);
+      final firstDate = Completer<DateTime?>();
+      var dateCalls = 0;
+      when(() => mockDb.getLatestDataDate()).thenAnswer((_) {
+        dateCalls++;
+        return dateCalls == 1 ? firstDate.future : Future.value(newer);
+      });
+      when(
+        () => mockDb.getAnalysis(_testSymbol, older),
+      ).thenAnswer((_) async => createAnalysis(score: 10));
+      when(
+        () => mockDb.getAnalysis(_testSymbol, newer),
+      ).thenAnswer((_) async => createAnalysis(score: 90));
+
+      // factory override：每次 invalidate 產生新 instance，才會重建 notifier
+      final localContainer = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(mockDb),
+          finMindClientProvider.overrideWith((ref) => MockFinMindClient()),
+          insiderRepositoryProvider.overrideWithValue(mockInsiderRepo),
+          dataSyncServiceProvider.overrideWithValue(mockDataSyncService),
+          ruleAccuracyServiceProvider.overrideWithValue(mockRuleAccuracy),
+          appClockProvider.overrideWithValue(mockClock),
+          watchlistProvider.overrideWith(() => MockWatchlistNotifier()),
+        ],
+      );
+      addTearDown(localContainer.dispose);
+      final sub = localContainer.listen(
+        stockDetailProvider(_testSymbol),
+        (_, _) {},
+      );
+      addTearDown(sub.close);
+
+      final stale = localContainer
+          .read(stockDetailProvider(_testSymbol).notifier)
+          .loadData();
+
+      // 重建 → build() 排 microtask 自動重載（讀到 newer）
+      localContainer.invalidate(finMindClientProvider);
+      await localContainer.pump();
+      await Future<void>.delayed(Duration.zero);
+      await localContainer.pump();
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        localContainer
+            .read(stockDetailProvider(_testSymbol))
+            .price
+            .analysis
+            ?.scoreShort,
+        90,
+        reason: '前置：重建後的自動重載已完成',
+      );
+
+      firstDate.complete(older);
+      await stale;
+
+      expect(
+        localContainer
+            .read(stockDetailProvider(_testSymbol))
+            .price
+            .analysis!
+            .scoreShort,
+        90,
+        reason: '_active 在 build() 重跑時被設回 true，擋不住重建前的載入',
       );
     });
   });

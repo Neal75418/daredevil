@@ -98,4 +98,23 @@ void main() {
       isNot(contains('stockDetail.domain.distribution')),
     );
   });
+
+  group('主載入中的缺漏判定', () {
+    test('已有內容的背景重載：沿用現有資料判定，提示不消失', () {
+      final data = StockHeaderData.fromState(
+        StockDetailState(
+          price: StockPriceState(stock: stock('2357')),
+          loading: const LoadingState(isLoading: true),
+        ),
+      );
+      expect(data.missingDomains, contains('stockDetail.domain.price'));
+    });
+
+    test('首次載入（尚無內容）不判定缺漏', () {
+      final data = StockHeaderData.fromState(
+        const StockDetailState(loading: LoadingState(isLoading: true)),
+      );
+      expect(data.missingDomains, isEmpty);
+    });
+  });
 }

@@ -102,6 +102,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
     final provider = stockDetailProvider(_symbol);
     final isLoading = ref.watch(provider.select((s) => s.loading.isLoading));
     final error = ref.watch(provider.select((s) => s.error));
+    final hasContent = ref.watch(provider.select((s) => s.hasContent));
     final stockName = ref.watch(provider.select((s) => s.stockName));
     final isInWatchlist = ref.watch(provider.select((s) => s.isInWatchlist));
     final priceChangeRaw = ref.watch(provider.select((s) => s.priceChange));
@@ -158,9 +159,11 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
       ),
       body: Container(
         decoration: BoxDecoration(gradient: bgGradient),
-        child: isLoading
+        // 已有內容時的重載（背景 epoch）保留畫面：shimmer 與整頁錯誤只給
+        // 沒有內容的情況，重載失敗改以 app bar 下方的 banner 顯示
+        child: isLoading && !hasContent
             ? const SafeArea(child: StockDetailShimmer())
-            : error != null
+            : error != null && !hasContent
             ? SafeArea(
                 child: ErrorDisplay.isNetworkError(error)
                     ? EmptyStates.networkError(
@@ -281,6 +284,28 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
                       ),
                     ],
                   ),
+
+                  if (error != null)
+                    SliverToBoxAdapter(
+                      child: MaterialBanner(
+                        content: Text(error),
+                        leading: const Icon(Icons.error_outline),
+                        actions: [
+                          TextButton(
+                            onPressed: () => ref
+                                .read(stockDetailProvider(_symbol).notifier)
+                                .loadData(),
+                            child: Text('common.retry'.tr()),
+                          ),
+                          TextButton(
+                            onPressed: () => ref
+                                .read(stockDetailProvider(_symbol).notifier)
+                                .clearError(),
+                            child: Text('common.dismiss'.tr()),
+                          ),
+                        ],
+                      ),
+                    ),
 
                   // 股票標題
                   SliverToBoxAdapter(
