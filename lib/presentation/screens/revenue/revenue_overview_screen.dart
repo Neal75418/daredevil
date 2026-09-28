@@ -262,8 +262,9 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
     ({double mom, double yoy, double ytd}) maxAbs,
   ) {
     final isWatched = watchlistSymbols.contains(row.symbol);
-    // 營收單位千元 → 轉元再交給 compact(億/萬)
-    final revenueLabel = LocalizedNumberFormat.compact(row.revenue * 1000);
+    final revenueLabel = LocalizedNumberFormat.compactFromThousands(
+      row.revenue,
+    );
 
     // 低基期(單月年增極端、累計平庸=一次性認列):淡化+標記,列不裁
     // ——完整性定稿(2026-08-05)只允許動視覺與排序,不允許動成員資格

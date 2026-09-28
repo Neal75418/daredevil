@@ -299,10 +299,10 @@ class _QuarterlyReportOverviewScreenState
             const SizedBox(width: DesignTokens.spacing12),
             _numCell(
               theme,
-              // 淨利單位千元 → 轉元再 compact(億/萬);負值(虧損)照實顯示
+              // 負值（虧損）照實顯示
               row.netIncome == null
                   ? '--'
-                  : LocalizedNumberFormat.compact(row.netIncome! * 1000),
+                  : LocalizedNumberFormat.compactFromThousands(row.netIncome!),
               color: theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: DesignTokens.spacing12),

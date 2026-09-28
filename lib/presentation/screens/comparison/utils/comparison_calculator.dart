@@ -82,8 +82,20 @@ abstract final class ComparisonCalculator {
   // 3) Institutional net aggregation
   // ==================================================
 
-  /// 使用 [getNet] 存取器，彙總前 5 筆的法人買賣超，
-  /// 回傳格式化顯示值（以張為單位，即 /1000）、原始合計值及對應顏色。
+  /// 法人買賣超的彙總窗：最近幾個交易日（對應「外資5日淨買」等欄位標籤）。
+  static const int institutionalNetDays = 5;
+
+  /// 依日期取最近 [institutionalNetDays] 筆。DAO 依日期升冪回傳、查詢窗通常比
+  /// 5 個交易日寬，直接取前 5 筆會拿到最舊的幾天，所以不依賴輸入順序。
+  static Iterable<DailyInstitutionalEntry> _latestInstitutional(
+    List<DailyInstitutionalEntry> entries,
+  ) {
+    final sorted = [...entries]..sort((a, b) => b.date.compareTo(a.date));
+    return sorted.take(institutionalNetDays);
+  }
+
+  /// 使用 [getNet] 存取器，彙總最近 [institutionalNetDays] 個交易日的法人買賣超，
+  /// 回傳格式化顯示值（以張為單位，即 /1000）、原始合計值（股）及對應顏色。
   static ({String display, double? numeric, Color? color})
   aggregateInstitutionalNet(
     List<DailyInstitutionalEntry>? entries,
@@ -95,7 +107,7 @@ abstract final class ComparisonCalculator {
     }
 
     double total = 0;
-    for (final entry in entries.take(5)) {
+    for (final entry in _latestInstitutional(entries)) {
       total += getNet(entry);
     }
 
@@ -107,6 +119,23 @@ abstract final class ComparisonCalculator {
         : AppTheme.getPriceColor(lots.toDouble(), brightness);
 
     return (display: display, numeric: total, color: color);
+  }
+
+  /// 雷達圖法人軸的滿分範圍：±5,000 萬股（5 萬張）。
+  static const double foreignNetRadarFullScaleShares = 5e7;
+
+  /// 雷達圖法人軸：最近 [institutionalNetDays] 個交易日外資淨買超（股）換算
+  /// 0~100，[foreignNetRadarFullScaleShares] 為滿分範圍；無資料回中性 50。
+  static double foreignNetRadarScore(List<DailyInstitutionalEntry>? entries) {
+    if (entries == null || entries.isEmpty) return 50;
+    double totalNet = 0;
+    for (final entry in _latestInstitutional(entries)) {
+      totalNet += entry.foreignNet ?? 0;
+    }
+    return ((totalNet / foreignNetRadarFullScaleShares) * 50 + 50).clamp(
+      0,
+      100,
+    );
   }
 
   // ==================================================

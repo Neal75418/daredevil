@@ -42,4 +42,28 @@ void main() {
       expect(LocalizedNumberFormat.compact(-999), '-999');
     });
   });
+
+  group('LocalizedNumberFormat.compactFromThousands（財報欄位以千元儲存）', () {
+    test('千元值換成元再分級：1,353,387 千元 → 13.5 億', () {
+      // 上櫃產業 EPS、季報、月營收的金額欄位都是千元（見各 model 欄位註解）
+      expect(
+        LocalizedNumberFormat.compactFromThousands(1_353_387),
+        '13.5unit.billion',
+      );
+    });
+
+    test('小金額落萬級：25 千元 → 2.5 萬', () {
+      expect(
+        LocalizedNumberFormat.compactFromThousands(25),
+        '2.5unit.tenThousand',
+      );
+    });
+
+    test('虧損保留負號', () {
+      expect(
+        LocalizedNumberFormat.compactFromThousands(-1_353_387),
+        '-13.5unit.billion',
+      );
+    });
+  });
 }

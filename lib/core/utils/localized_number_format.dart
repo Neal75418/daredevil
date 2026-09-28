@@ -24,4 +24,9 @@ class LocalizedNumberFormat {
     }
     return AppNumberFormat.integer(value);
   }
+
+  /// 以千元儲存的財報金額（月營收、季報淨利、產業 EPS 淨利等）轉成元，再交給
+  /// [compact] 分級顯示。
+  static String compactFromThousands(double thousands) =>
+      compact(thousands * 1000);
 }

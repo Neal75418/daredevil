@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/stock_summary.dart';
 import 'package:daredevil/presentation/providers/comparison_provider.dart';
+import 'package:daredevil/presentation/screens/comparison/utils/comparison_calculator.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 
 /// 雷達圖，跨 6 個維度比較股票。
@@ -212,23 +213,9 @@ class RadarComparisonChart extends StatelessWidget {
     return ((yoy + 50) / 100 * 100).clamp(0, 100);
   }
 
-  /// 法人：5 日淨買超金額對應。
-  /// 正值 = 偏多，負值 = 偏空。
-  double _institutionalValue(String symbol) {
-    final instList = state.institutionalMap[symbol];
-    if (instList == null || instList.isEmpty) return 50;
-
-    // 加總 5 日外資淨買超
-    final recent = instList.take(5);
-    double totalNet = 0;
-    for (final entry in recent) {
-      totalNet += entry.foreignNet ?? 0;
-    }
-
-    // 正規化：±5000 萬為滿分範圍
-    final normalized = (totalNet / 50000000) * 50 + 50;
-    return normalized.clamp(0, 100);
-  }
+  /// 法人：最近 5 個交易日外資淨買超。正值 = 偏多，負值 = 偏空。
+  double _institutionalValue(String symbol) =>
+      ComparisonCalculator.foreignNetRadarScore(state.institutionalMap[symbol]);
 
   /// 情緒：極度看多=95、看多=75、中性=50、看空=25、極度看空=5。
   double _sentimentValue(String symbol) {

@@ -325,7 +325,7 @@ class _IndustryEpsScreenState extends ConsumerState<IndustryEpsScreen> {
             Expanded(
               flex: 2,
               child: Text(
-                LocalizedNumberFormat.compact(item.netIncome / 1000), // 千元→百萬
+                LocalizedNumberFormat.compactFromThousands(item.netIncome),
                 textAlign: TextAlign.end,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.w500,
