@@ -66,13 +66,14 @@ class ChipScoringParams {
   /// 融資/融券判定回溯天數（最多比對最近 5 個 pair）
   static const int marginLookbackPairs = 5;
 
-  /// 融資/融券連增判定天數（連續 >= 此值觸發加/扣分）
+  /// 融資/融券增加天數門檻：最近 [marginLookbackPairs] 個 pair 中增加的次數
+  /// >= 此值即觸發加/扣分（計數，不要求連續）
   static const int marginStreakDays = 4;
 
-  /// 融資連增 >= [marginStreakDays] 扣分 (散戶追高)
+  /// 融資增加天數 >= [marginStreakDays] 扣分 (散戶追高)
   static const int marginIncreasePenalty = -12;
 
-  /// 融券連增 >= [marginStreakDays] 加分 (軋空潛力)
+  /// 融券增加天數 >= [marginStreakDays] 加分 (軋空潛力)
   static const int shortIncreaseBonus = 8;
 
   /// 券資比高於此值視為軋空潛力大 (%)
@@ -81,7 +82,7 @@ class ChipScoringParams {
   /// 券資比低於此值視為新空單建立 (%)
   static const double lowShortMarginRatio = 10.0;
 
-  /// 低券資比下融券連增的扣分
+  /// 低券資比下融券增加天數達門檻的扣分
   static const int shortIncreaseLowRatioPenalty = -3;
 
   // ==================================================

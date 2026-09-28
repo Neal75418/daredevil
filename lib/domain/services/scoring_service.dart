@@ -54,8 +54,8 @@ class ScoringService {
     final instMap =
         batchData.institutionalMap ?? <String, List<DailyInstitutionalEntry>>{};
 
-    // Dual-horizon: 從 registry 抓 calibrated context。
-    // Pre-launch placeholder JSON 為空 → 兩 horizon 都走 fallback。
+    // Dual-horizon: 從 registry 抓兩 horizon 的 calibrated 快照（查不到才
+    // fallback 到 hardcoded 分數）。
     final calibratedScores = CalibratedScoresRegistry.instance
         .snapshotForIsolate();
 
@@ -568,8 +568,6 @@ class ScoringService {
             '（有候選股未被分類，請檢查 scoring_isolate 是否新增未計數分支）',
       );
     }
-    // 反序列化失敗在 M8 fix 後直接 throw FormatException，scoring 整批 abort，
-    // 不再 silent skip — 改在 try/catch 處 surface 給 UI / Sentry。
   }
 
   // ==================================================
@@ -630,7 +628,8 @@ class ScoringService {
 
 /// 已計算分數的股票
 ///
-/// Dual-horizon: 每支股票同時攜帶短線與長線分數，供 3-mode tab 的雙 score 顯示。
+/// Dual-horizon: 每支股票同時攜帶短線與長線分數。呼叫端目前只用於計數
+/// （三模式分頁讀的是 daily_reason 的加總，不讀這個結果）。
 /// （pre-2026-06-21：曾由已退役的 daily_recommendation 產生流程依 horizon 各取 Top N。）
 class ScoredStock {
   const ScoredStock({

@@ -1,7 +1,7 @@
 // 單檔評分 pipeline 的共用核心。
 //
 // `scoring_service.scoreStocks`（主執行緒 fallback）與
-// `scoring_isolate._evaluateStocksIsolated`（isolate）過去各自複製這段
+// `scoring_isolate.evaluateStocksIsolated`（isolate）過去各自複製這段
 // 邏輯、靠註解「與另一路徑對齊」人肉同步——歷史上已 drift 過（M8/H-1）。
 // 兩條路徑改為共用此檔的純函式：改評分邏輯只改一處。
 //
@@ -102,8 +102,7 @@ CandidateSkipReason? classifyCandidate(
 /// 3. 持久化門檻 = observationScoreThreshold（8）：任一 horizon ≥ 8 即保留，
 ///    掃描頁再分層（≥12 成立訊號 / 8–11 觀察區）。門檻兩 horizon 共用、
 ///    不做 per-horizon 拆分（設計 §9，YAGNI）
-/// 4. UI 顯示用 hardcoded 分數另做一次 mutex（保持「design intent 強度」
-///    可讀性）再取 topReasons——與 scoring 路徑的 mutex 互不影響
+/// 4. 落庫的 topReasons 取 short 的 mutex 結果（與 scoreShort 同一份）
 ///
 /// 回傳 null 表示兩 horizon 都低於觀察門檻、應過濾。
 ({

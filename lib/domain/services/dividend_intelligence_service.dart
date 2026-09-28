@@ -42,7 +42,7 @@ class DividendIntelligenceService {
       totalCostBasis += costBasis;
       totalMarketValue += marketValue;
 
-      // 預估年度股利（使用最近一年或平均）
+      // 預估年度股利（今年已宣告用今年，否則用近年平均）
       final estimatedDividend = _estimateAnnualDividend(history);
       final expectedYearlyAmount = estimatedDividend * pos.quantity;
       totalExpectedDividend += expectedYearlyAmount;
@@ -88,10 +88,11 @@ class DividendIntelligenceService {
 
   /// 預估年度股利（每股）
   ///
-  /// 策略：
-  /// 1. 如果有當年度資料，使用當年度
-  /// 2. 否則使用最近 3 年平均
-  /// 3. 若資料不足，使用最近一年
+  /// 策略（只算現金股利）：
+  /// 1. 今年已宣告 → 用今年
+  /// 2. 否則用窗口內有配息年度的平均；窗口是 `year >= 今年 - N`
+  ///    （N = [AnalysisParams.dividendLookbackYears]，含今年共 N+1 個年度）
+  /// 3. 窗口內都沒有 → 0
   double _estimateAnnualDividend(List<DividendHistoryEntry> history) {
     if (history.isEmpty) return 0;
 

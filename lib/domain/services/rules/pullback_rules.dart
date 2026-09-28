@@ -371,11 +371,12 @@ class HammerAtSupportRule extends StockRule {
     // ---- Step 6: 收盤站穩支撐 (close >= supportLevel * 0.985) ----
     if (close < supportLevel * PullbackParams.hammerCloseHoldRatio) return null;
 
-    // ---- Step 7: close 在 MA20 附近（≤ MA20 * 1.06）— 與 HangingMan 互斥位置 ----
+    // ---- Step 7: close 在 MA20 附近（≤ MA20 * 1.06）----
     //
     // **2026-06-20 早期體檢修正**：原 ≤ MA20*1.03 配合 ±4% touch 放寬同步放寬到
-    // 1.06，避免「low 觸支撐但 close 已彈回」的強股回檔被擋。仍保留上界讓真正高
-    // 檔（HangingMan 區）交給 HangingManRule 處理。
+    // 1.06，避免「low 觸支撐但 close 已彈回」的強股回檔被擋。上界排除明顯高檔；
+    // HangingManRule 沒有 MA20 位置條件（只要求上升趨勢），兩者仍可能同時觸發
+    // （它在 neutral，不影響 Mode C）。
     if (close > ma20 * PullbackParams.hammerCloseMaxMa20Ratio) return null;
 
     // ---- Step 8: 非跌停 ----

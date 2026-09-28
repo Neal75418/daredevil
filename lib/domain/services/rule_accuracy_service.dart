@@ -360,7 +360,7 @@ class RuleAccuracyService {
     }
 
     // 一次性 log bias counter 供 reviewer 與 ELK / debug 頁面消費。
-    // Survivorship inflated hit_rate 的程度可用 skippedNoExitPrice 比例反推；
+    // Survivorship inflated hit_rate 的程度可用 skippedStaleSymbol 比例反推；
     // co_occurrence_index > 1 意味同事件多 rule entanglement，calibration
     // 報告應降權看待單一規則的 hit_rate。
     final coOccurrenceIndex = uniqueEntries.isEmpty
@@ -495,8 +495,8 @@ class RuleAccuracyService {
     // 且 `daily_reason` 僅 8 天時任何基準設計都算不出可信數字。待資料深度
     // 足夠（≥ `minDistinctDates` 個觸發日）再回頭處理。
     //
-    // 兩個常數本身**不得刪**：`tool/recalibrate.dart:635-636` 的 absolute
-    // 路徑仍以它們為 H0。
+    // 兩個常數本身**不得刪**：`tool/recalibrate.dart` 的 `_processHorizon`
+    // 在 absolute 路徑仍以它們為 H0。
     final hitRateStr = stats.hitRate.roundToDouble().toStringAsFixed(0);
     final returnStr = AppNumberFormat.signedPercent(
       stats.avgReturn,
@@ -608,8 +608,9 @@ class _BiasCounters {
 
   /// 出場日 close 缺資料、**或為 0/負值**的 (reason × period) 數
   ///
-  /// **Survivorship bias 主要來源**：下市 / 長停股票後續沒價格 → 永遠被
-  /// drop，winner 永遠有 exit price。這個計數揭露被靜默剔除的程度。`<= 0`
+  /// 來源包含：尚未到出場日的 immature 樣本、出場日停牌（未達 stale 門檻，
+  /// 含近期才下市者）、close ≤ 0 的異常列。長期無價的股票已由 staleSymbols
+  /// 整股排除（計入 skippedStaleSymbol）。`<= 0`
   /// 分支見 review finding（2026-07-18）：停牌/異常列 close=0.0 若不擋會被
   /// 算成 -100% 假最大虧損。
   int skippedNoExitPrice = 0;

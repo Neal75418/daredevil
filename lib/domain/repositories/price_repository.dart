@@ -29,7 +29,7 @@ abstract class IPriceRepository {
   // 同步作業
   // ==================================================
 
-  /// 使用 TWSE 歷史 API 同步單一股票價格
+  /// 同步單一股票價格（依市場分流：上市逐月打 TWSE、上櫃整段 1 次打 FinMind）
   Future<int> syncStockPrices(
     String symbol, {
     required DateTime startDate,

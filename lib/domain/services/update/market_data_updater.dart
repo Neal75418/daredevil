@@ -15,9 +15,6 @@ import 'package:daredevil/data/repositories/shareholding_repository.dart';
 import 'package:daredevil/data/repositories/trading_repository.dart';
 import 'package:daredevil/data/repositories/warning_repository.dart';
 
-/// 市場籌碼資料更新器
-///
-/// 負責同步當沖、融資融券、外資持股、警示、董監持股等資料
 /// 選出本輪要同步外資持股的上櫃候選 —— **最舊優先**。
 ///
 /// 兩個規則：
@@ -58,6 +55,9 @@ List<String> selectOtcShareholdingTargets({
   return stale.length > limit ? stale.sublist(0, limit) : stale;
 }
 
+/// 市場籌碼資料更新器
+///
+/// 負責同步當沖、融資融券、外資持股、警示、董監持股等資料
 class MarketDataUpdater {
   MarketDataUpdater({
     required AppDatabase database,
@@ -189,9 +189,8 @@ class MarketDataUpdater {
 
     // 上櫃當沖缺口偵測（純 DB 查詢、零 API 額度）
     //
-    // 回補後仍缺的日子計入摘要——上市有 40 天窗、上櫃走上面的 per-day
-    // 官方端點回補（皆要求該日價格覆蓋達門檻），此處只回報跨過回補後
-    // 仍未補到的天數。
+    // 回補後仍缺的日子計入摘要——兩市場都在上面的 40 天窗內回補（皆要求
+    // 該日價格覆蓋達門檻），此處只回報回補後上櫃仍未補到的天數。
     try {
       final gaps = await _db.findDayTradingGapDates(
         market: MarketCode.tpex,
@@ -230,7 +229,7 @@ class MarketDataUpdater {
   /// 近 30 交易日當沖缺 12 天、融資缺 10 天；法人因有回補迴圈而 0 缺漏）。
   ///
   /// 掃 `[date - lookback, date - 1]` 內的交易日（[TaiwanCalendar]，新→舊），
-  /// 以**三個獨立來源**（當沖、上市融資、上櫃融資）分別判斷缺漏與進度：
+  /// 以**四個獨立來源**（上市當沖、上櫃當沖、上市融資、上櫃融資）分別判斷缺漏與進度：
   /// - **當沖**（兩市場，各自要求價格覆蓋達門檻）上市走
   ///   [TradingRepository.syncAllDayTradingFromTwse]、上櫃走
   ///   [TradingRepository.syncAllDayTradingFromTpex]（皆 force 略過新鮮度檢查）。
@@ -272,7 +271,7 @@ class MarketDataUpdater {
     final twseThreshold = (twseStocks * ratio).ceil();
     final tpexThreshold = (tpexStocks * ratio).ceil();
 
-    // 三個獨立來源的連續失敗計數；達門檻即在本次 run 標記 dead
+    // 四個獨立來源的連續失敗計數；達門檻即在本次 run 標記 dead
     const srcDayTrading = 'dayTrading';
     const srcTpexDayTrading = 'tpexDayTrading';
     final failures = <String, int>{};

@@ -11,7 +11,6 @@ enum SentimentLevel {
   extremeGreed, // 80-100
 }
 
-/// 市場情緒計算結果
 /// 情緒分數的子指標權重。
 ///
 /// **有效權重正規化**：缺席的子指標不算進分母——這讓「25% 法人分量憑空
@@ -26,6 +25,7 @@ const Map<String, double> subScoreWeights = {
   'industryBreadth': 0.10,
 };
 
+/// 市場情緒計算結果
 class MarketSentiment {
   const MarketSentiment({
     required this.score,
@@ -134,7 +134,7 @@ class MarketSentimentService {
       final avg = histDays.fold<double>(0, (s, v) => s + v) / histDays.length;
       if (avg > 0) {
         final volumeRatio = today / avg;
-        // 0.5→0, 1.0→50, 2.0→100
+        // 0.5→0, 1.0→33, 1.25→50, 2.0→100
         subScores['volumeMomentum'] = _linearMap(volumeRatio, 0.5, 2.0);
       }
     }

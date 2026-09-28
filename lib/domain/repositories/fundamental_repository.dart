@@ -1,6 +1,6 @@
 /// 基本面資料儲存庫介面
 ///
-/// 提供營收、估值、股利、財報的同步功能。
+/// 提供營收、估值、財報的同步功能（股利由 DividendSyncer 直接呼叫 client）。
 /// 支援測試時的 Mock 及不同實作。
 abstract class IFundamentalRepository {
   /// 同步單檔股票月營收

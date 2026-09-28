@@ -65,7 +65,7 @@ class ChipAnalysisService {
     final measuredDomains = [
       institutionalHistory.length >= ChipScoringParams.instStreakSmallDays,
       _shareholdingMeasurable(sortedShareholding), // 頭尾才有 diff,端點 null=沒量到
-      // 連增判定需 marginStreakDays 個連續 pair → 至少 streak+1 列
+      // 增加天數判定需至少 marginStreakDays 個 pair → 至少 streak+1 列
       marginHistory.length >= ChipScoringParams.marginStreakDays + 1,
       dayTradingHistory.isNotEmpty,
       // 集中度另有完整性前提(大戶列存在且無缺值)——雙向計分後,把
@@ -173,7 +173,7 @@ class ChipAnalysisService {
   int _marginAdjustment(List<MarginTradingEntry> history) {
     if (history.length < 2) return 0;
 
-    // 融資餘額趨勢（持續增加 = 散戶追漲 = 偏空訊號）
+    // 融資餘額趨勢（近期多數日增加 = 散戶追漲 = 偏空訊號）
     int marginIncreasingDays = 0;
     int shortIncreasingDays = 0;
 
@@ -193,7 +193,8 @@ class ChipAnalysisService {
     }
 
     int adj = 0;
-    // 融資餘額連續增加 = 散戶追漲 = 偏空訊號
+    // 融資餘額近期多數日增加（最近 marginLookbackPairs 個 pair 中至少
+    // marginStreakDays 個，不要求連續）= 散戶追漲 = 偏空訊號
     if (marginIncreasingDays >= ChipScoringParams.marginStreakDays) {
       adj += ChipScoringParams.marginIncreasePenalty;
     }
@@ -206,7 +207,7 @@ class ChipAnalysisService {
       final shortMarginRatio = margin > 0 ? (short / margin * 100) : 0.0;
 
       if (shortMarginRatio > ChipScoringParams.highShortMarginRatio) {
-        // 券資比高：融券高且持續增加 → 軋空潛力大
+        // 券資比高：融券高且近期多數日增加 → 軋空潛力大
         adj += ChipScoringParams.shortIncreaseBonus;
       } else if (shortMarginRatio < ChipScoringParams.lowShortMarginRatio) {
         // 券資比低：新空單建立居多 → 偏空

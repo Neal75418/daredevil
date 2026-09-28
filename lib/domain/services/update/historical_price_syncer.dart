@@ -19,7 +19,8 @@ import 'package:daredevil/domain/services/update/history_coverage.dart';
 ///   交易日，逐日以 1 次 API 呼叫回補該市場全部股票（TWSE MI_INDEX /
 ///   TPEx afterTrading/dailyQuotes 歷史端點）。非自選股不再受 per-symbol 早退門檻
 ///   （180 天）餓死——52 週規則需要 250 天。
-/// - **Phase 1 per-symbol 回補**：FinMind 逐檔逐月，處理個股殘缺
+/// - **Phase 1 per-symbol 回補**：上市逐月打 TWSE、上櫃整段 1 次打 FinMind，
+///   處理個股殘缺
 ///   （新上市、恢復交易等 phase 0 覆蓋不到的情境）。
 class HistoricalPriceSyncer {
   const HistoricalPriceSyncer({
@@ -195,8 +196,8 @@ class HistoricalPriceSyncer {
   /// - 單次上限 [ApiConfig.historicalMarketDayMaxCallsPerRun]
   /// - 連續零筆 [ApiConfig.historicalMarketDayMaxConsecutiveZeroDays]
   ///   中止（端點失效 / 日曆未知休市）
-  /// - RateLimit / Network 中止 phase 0 但不外拋——phase 1 走 FinMind，
-  ///   不同 API 來源不受牽連
+  /// - RateLimit / Network 中止 phase 0 但不外拋，phase 1 照跑——但上市的
+  ///   phase 1 與 phase 0 同樣打 TWSE，限流時不見得躲得過
   /// - 股票主檔為空（fresh DB 首次更新，尚未同步股票清單）→ 跳過
   ///
   /// 回傳實際寫入的價格列數。
@@ -305,14 +306,8 @@ class HistoricalPriceSyncer {
     return totalRows;
   }
 
-  /// 判斷哪些 symbol 需要補歷史資料
-  ///
-  /// [priorityLocked] 為自選 + 熱門股 union — 它們不適用 [nearThreshold]
-  /// lenient 早退（180 天），必須追到 [minRequiredDays]（250 天）才算夠。
-  /// 與下游 52w high/low rule 的硬性需求對齊；non-priority 股維持 180
-  /// 早退避免無效追打。
-  /// 讀退避表(壞 JSON 一律當空表,fail-open——退避只是省配額,不是正確性)
-  /// 讀退避表。null=讀取失敗(與「表不存在」的 {} 區分:失敗那輪
+  /// 讀退避表(壞 JSON 一律當空表,fail-open——退避只是省配額,不是正確性)。
+  /// null=讀取失敗(與「表不存在」的 {} 區分:失敗那輪
   /// 不得寫回,否則整表被空表覆寫、既有標記全滅)
   Future<Map<String, DateTime>?> _loadBackoff() async {
     // 整段防禦(含 getSetting 本身):退避是配額優化不是正確性,任何
@@ -399,6 +394,12 @@ class HistoricalPriceSyncer {
     }
   }
 
+  /// 判斷哪些 symbol 需要補歷史資料
+  ///
+  /// [priorityLocked] 為自選 + 熱門股 union — 它們不適用 [nearThreshold]
+  /// lenient 早退（180 天），必須追到 [minRequiredDays]（250 天）才算夠。
+  /// 與下游 52w high/low rule 的硬性需求對齊；non-priority 股維持 180
+  /// 早退避免無效追打。
   List<String> _findSymbolsNeedingData(
     List<String> symbols,
     Map<String, PriceCoverage> coverageBatch,

@@ -52,7 +52,7 @@ abstract final class PullbackParams {
   /// 收盤站穩支撐：close ≥ supportLevel × 0.985。
   static const double hammerCloseHoldRatio = 0.985;
 
-  /// close 上界：≤ MA20 × 1.06（與 HangingMan 高檔區互斥）。
+  /// close 上界：≤ MA20 × 1.06（排除明顯高檔；與 HangingMan 仍可能同時觸發）。
   static const double hammerCloseMaxMa20Ratio = 1.06;
 
   /// 跳空下跌認定：(prevClose − open) / prevClose > 1%。

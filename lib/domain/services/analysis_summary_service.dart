@@ -267,7 +267,8 @@ class AnalysisSummaryService {
       if (closeVal != null && closeVal > 0) {
         // **帶號**：負值代表關卡已被跨越。曾用 `.abs()` 剝掉方向，於是
         // 「已跌破的支撐」被講成「離支撐還有 X% 緩衝」——方向相反，且偏向
-        // 誘導續抱。這與 :196 那條（priceChange 被 .abs() 吃掉方向）是同一個
+        // 誘導續抱。這與 [_buildOverallAssessment] 的收盤漲跌（priceChange 被
+        // .abs() 吃掉方向）是同一個
         // bug class，2026-07-26 只修了那一處、沒掃到這裡。
         //
         // 關卡被跨越不是資料髒，是設計中的一級狀態：analysis_coordinator_service
@@ -548,12 +549,12 @@ class AnalysisSummaryService {
     }
 
     if (revenueHistory.isNotEmpty) {
-      // **`.last` 才是最新月**：revenue_dao.dart:22 是
+      // **`.last` 才是最新月**：`getMonthlyRevenueHistory` 是
       // `OrderingTerm.asc(t.date)`（升冪），而取數窗是兩年
-      // （data/loaders/stock_fundamentals_loader.dart:45），所以 `.first` 取到的是**兩年前**。
+      // （`StockFundamentalsLoader.loadAll`），所以 `.first` 取到的是**兩年前**。
       // 實機 2425 承啟：同卡並列「營收年增率達 375.6%」（規則 evidence，
       // 2026/6）與「營收年增率為 -40.1%」（此處誤取 2024/7）。
-      // 同檔 :444 的法人那段早有註解點出這個升冪陷阱，此處漏了。
+      // 本函式上方的法人那段早有註解點出這個升冪陷阱，此處漏了。
       final latest = revenueHistory.last;
       final yoy = latest.yoyGrowth;
       if (yoy != null &&

@@ -373,16 +373,16 @@ class UpdateService {
       // 順序反過來的話閘門每輪都看到 0 筆、整批跳過，上櫃當沖等於永久關閉，
       // 而症狀與「端點掛掉」一模一樣。
       //
-      // 步驟 10+: 三個後處理。**必須在 _finishUpdate 之前**——後者依
+      // 步驟 10+: 下列 fail-safe 後處理。**必須在 _finishUpdate 之前**——後者依
       // `result.errors` 決定 update_run 狀態並設 `result.success = true`，
-      // 跑在它之後等於這三步的失敗永遠反映不到狀態上（finding #23）。
+      // 跑在它之後等於這些步驟的失敗永遠反映不到狀態上（finding #23）。
       //
       // 維持 await：docstring 曾自承「非阻塞」，但 background WorkManager
       // 路徑若不 await，isolate 可能在跑完前被 OS 殺掉；foreground 從 user
       // 角度本來就是等整個 update 跑完才看到結果。
       //
-      // fail-safe 的語意是「不中斷流程」，不是「不留下痕跡」——三者皆
-      // 捕捉例外後 recordError，不 rethrow。
+      // fail-safe 的語意是「不中斷流程」，不是「不留下痕跡」——除歸零觀測
+      // 只記 warning 外，其餘皆捕捉例外後 recordError，不 rethrow。
       await _updateRuleAccuracyStatsFailSafe(ctx);
       await _snapshotNewsMentionsFailSafe(ctx);
       await _checkPinnedThesesFailSafe(ctx);
@@ -1263,8 +1263,8 @@ class UpdateService {
     await _fetchAlertPrices(ctx, result);
   }
 
-  /// 重算規則準確度統計（`rule_accuracy`）。**失敗不會拋例外**（fail-safe），
-  /// 失敗只 log，不影響 update result.success。
+  /// 重算規則準確度統計（`rule_accuracy`）。**失敗不會拋例外**（fail-safe）：
+  /// 捕捉後 recordError（該輪記為 PARTIAL），不改 `result.success`。
   ///
   /// 命名重點：「fail-safe」≠「非阻塞」。caller 仍會 await 等統計更新跑完才
   /// return（避免 background isolate 被 WorkManager kill）。
@@ -1281,8 +1281,8 @@ class UpdateService {
     }
   }
 
-  /// 新聞提及數快照（新聞熱度發現層）。**fail-safe**：失敗只 log、
-  /// 不影響 update result（與 [_updateRuleAccuracyStatsFailSafe] 同模式）。
+  /// 新聞提及數快照（新聞熱度發現層）。**fail-safe**：失敗捕捉後
+  /// recordError、不中斷流程（與 [_updateRuleAccuracyStatsFailSafe] 同模式）。
   Future<void> _snapshotNewsMentionsFailSafe(_UpdateContext ctx) async {
     final service = _newsMentionSnapshotService;
     if (service == null) return;
@@ -1298,8 +1298,8 @@ class UpdateService {
     }
   }
 
-  /// 釘選論點失效檢查（出場層 Phase 2）。**fail-safe**：失敗只 log、
-  /// 不影響 update result（與 [_updateRuleAccuracyStatsFailSafe] 同模式）。
+  /// 釘選論點失效檢查（出場層 Phase 2）。**fail-safe**：失敗捕捉後
+  /// recordError、不中斷流程（與 [_updateRuleAccuracyStatsFailSafe] 同模式）。
   Future<void> _checkPinnedThesesFailSafe(_UpdateContext ctx) async {
     final service = _thesisMonitorService;
     if (service == null) return;
@@ -1313,7 +1313,7 @@ class UpdateService {
     }
   }
 
-  /// 均線階梯提醒重算。**fail-safe**：失敗只 log、不影響 update result
+  /// 均線階梯提醒重算。**fail-safe**：失敗捕捉後 recordError、不中斷流程
   /// （與 [_updateRuleAccuracyStatsFailSafe] 同模式）。
   ///
   /// 為什麼掛在每日更新而不是做成按鈕：提醒價位是死的、均線是活的，靠人

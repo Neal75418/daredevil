@@ -46,14 +46,17 @@ class RuleEngine {
   /// - **bearish_reversal_candle**：頂部反轉 K 線族群（對稱版本），避免空方
   ///   訊號集中扣分讓篩選失準
   ///
-  /// ## 刻意排除（不進 mutex）
+  /// ## 刻意不與反轉 K 線族群同組
   ///
   /// - **patternDoji / patternDojiBearish**：indecision 形態，與「明確反轉」
-  ///   語意不同，可與反轉 K 線正當共存（出現後 1-2 日才常見反轉）
+  ///   語意不同，可與反轉 K 線正當共存（出現後 1-2 日才常見反轉）。patternDoji
+  ///   另與 RSI 超賣同組（oversold_indecision）：它的多方分支條件等同 RSI ≤ 30
+  ///   （RSI 恰為 70 的邊界除外）
   /// - **patternGapUp / patternGapDown**：跳空缺口主要傳達「open vs prev close」
   ///   的隔日斷層資訊，與單日 K 棒形狀（Hammer / Engulfing）描述的是不同
   ///   訊號層，可共存
   /// - **techBreakout / techBreakdown**：突破/跌破支撐壓力，與 K 線形狀獨立
+  ///   （techBreakout 屬 momentum_breakout 組）
   /// - **kdGoldenCross / maAlignmentBullish 等指標訊號**：不同訊號家族（oscillator
   ///   / 趨勢），與 K 線無語意重疊
   static const Map<String, Set<ReasonType>> _mutexGroups = {
@@ -77,7 +80,8 @@ class RuleEngine {
     },
     // 2026-08-15 數值稽核新增(DB 實證共現率 100% / 23%):
     // - oversold_indecision:DojiRule 的多方分支本身要求 rsi ≤ 30
-    //   (rsiExtremeOversold 的觸發條件),兩者是子集關係、必然同時觸發。
+    //   (rsiExtremeOversold 的觸發條件),兩者是子集關係、實務上同時觸發
+    //   (RSI 恰為 70 的邊界除外)。
     //   兩條 short 分數皆 +10 → 「RSI≤30 加一根小實體 K」這**一個**條件
     //   曾貢獻 Mode A +20 分,超過 12 分的成立門檻、直接佔用 Top-30 席位。
     // - pullback_at_support:HammerAtSupport 的位置上界(close ≤ ma20×1.06)
@@ -203,7 +207,7 @@ class RuleEngine {
     return result;
   }
 
-  /// 計算最終分數，含冷卻懲罰與上限
+  /// 計算最終分數（校準查找 × 遞減係數後加總，再夾上限；[floorAtZero] 時也夾下限）
   ///
   /// ## Dual-horizon
   ///
@@ -296,7 +300,6 @@ class RuleEngine {
   /// 取得觸發原因（去重複）供資料庫儲存與篩選
   ///
   /// 依 description 去重複（每條規則產生唯一描述），保留所有不同規則的觸發結果。
-  /// 例如同為 institutionalBuy 類型的「外資連續買超」和「法人由賣轉買」都會被保留。
   /// UI 層自行使用 .take(2) 或 .take(3) 控制顯示數量。
   List<TriggeredReason> getTopReasons(List<TriggeredReason> reasons) {
     if (reasons.isEmpty) return [];

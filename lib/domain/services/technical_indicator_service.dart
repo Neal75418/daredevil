@@ -76,10 +76,11 @@ class MarketStageResult {
   ///
   /// 分割邏輯(與 [TechnicalIndicatorService.calculateMarketStage] 的
   /// 排列判定互補,合起來覆蓋所有 close/MA20/MA60 排列):
-  /// - 收盤 ≥ 雙均線 → [NeutralStageDetail.reclaimAwaitCross]
-  /// - 收盤 ≤ 雙均線 → [NeutralStageDetail.breakdownWeakening]
-  /// - 夾層且 20MA<60MA → [NeutralStageDetail.aboveShortBelowLong]
-  /// - 夾層且 20MA≥60MA → [NeutralStageDetail.belowShortAboveLong]
+  /// - 收盤 ≥ 雙均線且 20MA<60MA → [NeutralStageDetail.reclaimAwaitCross]
+  /// - 收盤 ≤ 雙均線且 20MA>60MA → [NeutralStageDetail.breakdownWeakening]
+  /// - 20MA=60MA（正在交叉點上）→ null
+  /// - 其餘 20MA<60MA → [NeutralStageDetail.aboveShortBelowLong]；
+  ///   20MA>60MA → [NeutralStageDetail.belowShortAboveLong]
   NeutralStageDetail? get neutralDetail {
     if (stage != MarketStage.neutral) return null;
     final c = latestClose, s = ma20, l = ma60;
@@ -662,8 +663,9 @@ class TechnicalIndicatorService {
   ///
   /// 停牌/無成交列的 volume 為 0.0（非 null），計算均量時會排除（而非計為
   /// 0 的有效觀測值稀釋均量），且要求窗口內至少 [RuleParams.volMaMinValidDayRatio]
-  /// 比例的有效交易日，否則回傳 null——口徑與 volume_rules.dart 的
-  /// VolumeSpikeRule/PriceSpikeRule 均量計算一致（同一份缺口語意的共用邏輯）。
+  /// 比例的有效交易日，否則回傳 null——停牌排除與有效日比例的做法與
+  /// volume_rules.dart 的 VolumeSpikeRule/PriceSpikeRule 一致；但本均量**含今日**，
+  /// VolumeSpike/PriceSpike 的均量排除今日（`skipLast: true`）。
   static ({double? volumeMA, double? todayVolume}) latestVolumeMA(
     List<DailyPriceEntry> prices,
     int period,

@@ -164,7 +164,6 @@ class PortfolioAnalyticsService {
     final monthReturn = daysSinceStart >= 30 ? dailyReturn * 30 : totalReturn;
 
     // 年報酬（年化）
-    // 持有期間過短時直接用總報酬，避免 math.pow 產生極端值
     // < 30 天：用線性外推（日報酬 × 365），避免短期複利公式產生極端數字
     final double yearReturn;
     if (daysSinceStart < 30) {
@@ -215,7 +214,7 @@ class PortfolioAnalyticsService {
       totalCost += pos.avgCost * pos.quantity;
     }
 
-    // 簡化：假設峰值為成本的某個倍數
+    // 簡化：以 max(成本, 市值) 當峰值，等於未實現虧損佔成本的比例
     peak = math.max(totalCost, currentValue);
 
     if (peak > 0 && currentValue < peak) {

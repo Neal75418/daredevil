@@ -430,7 +430,7 @@ class EPSYoYSurgeRule extends StockRule with FundamentalTechnicalFilter {
 
 /// 規則：EPS 連續成長
 ///
-/// 連續 ≥ 2 季 EPS 季增 ≥ 10%，搭配站上月線(MA20)
+/// 連續 ≥ 2 季 EPS 年增（比去年同季）≥ 10%，搭配站上月線(MA20)
 class EPSConsecutiveGrowthRule extends StockRule
     with FundamentalTechnicalFilter {
   const EPSConsecutiveGrowthRule();
@@ -557,7 +557,7 @@ class EPSTurnaroundRule extends StockRule {
 
 /// 規則：EPS 衰退警示（扣分）
 ///
-/// 連續 2 季 EPS 季減 ≥ 20%
+/// 連續 2 季 EPS 年減（比去年同季）≥ 20%；去年同季 ≤ 0 時只要持續惡化即計數
 class EPSDeclineWarningRule extends StockRule {
   const EPSDeclineWarningRule();
 

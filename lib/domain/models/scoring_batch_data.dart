@@ -39,7 +39,7 @@ class ShareholdingData {
 class ScoringBatchData {
   /// 原始建構子 — 接受個別 Map 參數，內部組裝為語意群組。
   ///
-  /// 所有現有呼叫站點（測試、BatchDataLoader）無需修改即可繼續運作。
+  /// 目前只有測試使用；生產路徑（BatchDataLoader）走 [ScoringBatchData.grouped]。
   /// 注意：因內部需組裝群組物件，此建構子無法標記為 `const`。
   ScoringBatchData({
     required this.pricesMap,

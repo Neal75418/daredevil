@@ -502,11 +502,6 @@ class FundamentalSyncer {
     }
   }
 
-  /// 同步指定股票清單的資產負債表資料
-  ///
-  /// 每批 10 檔並行，批間延遲 500ms 避免超過 FinMind 配額。
-  /// 需要 MarketDataRepository 才能使用。
-  /// ETF（代碼以 00 開頭）無財報資料，自動過濾以避免無效 API 呼叫。
   /// 全市場資產負債表(免費官方端點,2026-08-16)
   ///
   /// **必須在 [syncBalanceSheets] 之前呼叫**:寫入最新一季之後,後者的
@@ -518,6 +513,11 @@ class FundamentalSyncer {
     return repo.syncMarketWideBalanceSheets();
   }
 
+  /// 同步指定股票清單的資產負債表資料
+  ///
+  /// 每批 10 檔並行，批間延遲 500ms 避免超過 FinMind 配額。
+  /// 需要 MarketDataRepository 才能使用。
+  /// ETF（代碼以 00 開頭）無財報資料，自動過濾以避免無效 API 呼叫。
   Future<int?> syncBalanceSheets({required List<String> symbols}) async {
     final marketDataRepo = _marketDataRepo;
     // 過濾 ETF：00 開頭的代碼（0050、00636、006205 等）沒有資產負債表資料
