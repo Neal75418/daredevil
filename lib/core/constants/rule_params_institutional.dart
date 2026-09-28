@@ -1,6 +1,4 @@
 /// 法人動向 / 籌碼面 / 延伸市場資料參數
-///
-/// Used by: institutional_rules.dart, extended_market_rules.dart
 abstract final class InstitutionalParams {
   // ==================================================
   // 法人連續買賣超規則

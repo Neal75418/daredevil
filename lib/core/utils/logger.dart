@@ -50,12 +50,12 @@ abstract final class AppLogger {
   /// Sentry capture delegate — 由 main.dart 注入；CLI 不注入時為 null
   static SentryCaptureFn? _sentryCapture;
 
-  /// 由 Flutter app 在 startup 呼叫一次，注入 Sentry bridging closures。
-  /// CLI 環境不需呼叫；所有 Sentry 段自動 no-op。
   /// CLI 強制輸出開關。app 不得設定(release 應維持靜默);
   /// `tool/` 下的 CLI 在 main 開頭設 true,讓錯誤進得了 launchd 日誌。
   static bool forceOutput = false;
 
+  /// 由 Flutter app 在 startup 呼叫一次，注入 Sentry bridging closures。
+  /// CLI 環境不需呼叫；所有 Sentry 段自動 no-op。
   static void setSentryDelegates({
     SentryBreadcrumbFn? breadcrumb,
     SentryCaptureFn? capture,

@@ -1,6 +1,4 @@
 /// 基本面分析參數（營收 / EPS / ROE / 估值 / 董監持股 / 警示）
-///
-/// Used by: fundamental_scan_rules.dart, insider_rules.dart, warning_rules.dart
 abstract final class FundamentalParams {
   // ==================================================
   // 營收

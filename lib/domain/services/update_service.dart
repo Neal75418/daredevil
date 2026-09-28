@@ -1,7 +1,7 @@
 import 'dart:async';
 // meta 而非 flutter/foundation:本檔在 tool/daily_update.dart 的 launchd
 // 純 Dart 鏈上,flutter/foundation 經 binding.dart 依賴 dart:ui,dart run
-// 之下編譯直接炸(守門:test/tool/daily_update_pure_dart_test.dart)。
+// 之下編譯直接炸(守門:test/tool/tool_chain_pure_dart_test.dart)。
 import 'package:meta/meta.dart' show visibleForTesting;
 
 import 'package:daredevil/core/constants/api_config.dart';

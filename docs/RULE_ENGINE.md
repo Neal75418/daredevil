@@ -59,7 +59,7 @@ flowchart LR
 | 項目 | 說明                    |
 |:---|:----------------------|
 | 目的 | 異常提示（Attention Alert） |
-| 產出 | 互斥收斂後的理由（6 組各留最高分，輸家直接丟棄），落庫上限 64 條；卡片顯示 2 條（compact 1 條）、詳情頁 3 條 |
+| 產出 | 互斥收斂後的理由（5 組各留最高分，輸家直接丟棄），落庫上限 64 條；卡片顯示 2 條（compact 1 條）、詳情頁 3 條 |
 | 分數 | 落庫分數 0 ~ 80（負分歸零、上限 80）；三模式排行用的是 `daily_reason` 聚合，無地板無上限 |
 | 輸出 | 三模式選股（起漲 / 強勢 / 回檔）   |
 
@@ -258,7 +258,7 @@ flowchart LR
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 flowchart LR
-    Fire["規則觸發"] --> Mutex["互斥收斂<br/>6 組各留最高分"]
+    Fire["規則觸發"] --> Mutex["互斥收斂<br/>5 組各留最高分"]
     Mutex --> Lookup["校準查找<br/>三態"]
     Lookup --> Decay["基本面遞減<br/>1.0 / 0.5 / 0.25"]
     Decay --> Sum["加總 + 夾住<br/>上限 80"]
@@ -283,7 +283,7 @@ flowchart LR
 
 | 階段 | 邏輯 |
 |:---|:---|
-| 互斥收斂 | `RuleEngine._mutexGroups` 6 組，每組只留分數最高的一條，其餘**直接丟棄**（不是去重） |
+| 互斥收斂 | `RuleEngine._mutexGroups` 5 組，每組只留分數最高的一條，其餘**直接丟棄**（不是去重） |
 | 校準查找 | `(calibrated ?? reason.score)`——三態：active 校準值／負證據歸零回 0／null 才用基準分 |
 | 基本面遞減 | 同群組內第 1／2／3+ 條分別乘 1.0／0.5／0.25（`fundamental_decay_groups.dart`） |
 | 加總 + 夾住 | `calculateScore` 是純算術：加總後夾上限 80。**沒有「加成」階段** |

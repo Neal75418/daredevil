@@ -7,8 +7,8 @@
 /// - Mode C：回檔觀察 — 之前強、剛開始拉回的股票，找回檔進場時機（v2 重定義）
 ///
 /// 跟 [Horizon] 是**正交**的兩個維度：mode 是用戶的觀察類型、horizon 是
-/// 評估的時間軸。同一檔股票可同時出現在多個 mode、每個 mode 內各有 5D
-/// 跟 60D 兩個 score。
+/// 評估的時間軸。同一檔股票在每個 mode 內各有 5D 跟 60D 兩個 score，但今日
+/// 分頁只會把它分派到一個 mode（多個合格時依 [routingPriority] 取高者）。
 enum ScoringMode {
   /// 起漲候選 — 上升趨勢中的順勢初升進場點
   ///
@@ -25,15 +25,14 @@ enum ScoringMode {
   /// 強勢觀察 — 已漲、等回檔
   ///
   /// 用於「我想追蹤強勢股、等回檔機會進場」。
-  /// 包含：大漲、跳空、52 週高、法人連買、外資加碼、KD 黃金、爆量、新聞
-  /// 帶量、RSI 超買（警示中夾雜進場資訊）。
+  /// 收已漲、趨勢確立、籌碼面強等訊號；成員以 `ReasonType.scoringMode` 為準。
   strengthObserve,
 
   /// 回檔觀察 — 強股剛開始回檔、找進場時機（identifier 沿用 weaknessObserve
   /// 避免 DB migration；tab name 已改「回檔觀察」）
   ///
   /// **2026-06-19 v2 重定義**：原為「弱勢警示」tab、現為「強股回檔進場」。
-  /// 只含 3 條正分主訊號（回檔到 MA20 / MA10、支撐錘子、KD 高檔回落）。
+  /// 只含 4 條正分主訊號（回檔到 MA20、回檔到 MA10、支撐錘子、KD 高檔回落）。
   /// 舊弱勢警訊（空頭排列 / 注意股 / 處置股 / 質押 / 超買…）已全移 [neutral]，
   /// 改由 Today 卡片的 RiskBadgeCluster 風險徽章呈現（見 RiskWarnings）。
   weaknessObserve,
@@ -108,8 +107,9 @@ enum ScoringMode {
 /// - 1907 永豐餘 5D +9.73% 還在「起漲」（已漲一波）
 /// - 4551 智伸科 漲停 +9.93% 還在「弱勢」（RSI 超買 + 吊人線 fires 但今天漲）
 ///
-/// 跟 mode-aware sort（[ScoringMode.weaknessObserve] 用 sum ASC）配套：先按
-/// score 排再 anti-filter、被踢的不算 quota；filter 後不足 30 也照舊。
+/// 與 mode_recommendation_provider 的流程配套：先依本類門檻逐模式篩（不合格的
+/// 模式不參與分派、不佔該模式名額，股票可改落其他模式），再依各模式的排序鍵
+/// 排序、取前 [modeRecommendationCap] 檔；篩後不足也照舊。
 abstract final class ModeFilters {
   /// Mode A（起漲候選）MA20 正乖離率上限（+15%）— **2026-06-20 Wave 2a**
   ///
@@ -176,7 +176,7 @@ abstract final class ModeFilters {
   /// 4 條主訊號 rule 提供「回檔進場時機」確認、舊負分 warning rule 單獨 fire 不
   /// 足以入 Mode C（避免「純警示無進場點」雜訊）。
   ///
-  /// 這 3 條 rule 識別子用字串避免循環 import（ReasonType import scoring_mode、
+  /// 這 4 條 rule 識別子用字串避免循環 import（ReasonType import scoring_mode、
   /// 反方向會 cycle）— 從 ReasonType.code 比對。
   ///
   /// **2026-06-20 早期體檢修正**：移除 PATTERN_HAMMER。HammerRule 要 trendState

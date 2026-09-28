@@ -1,6 +1,4 @@
 /// K 線型態參數
-///
-/// Used by: candlestick_rules.dart (Doji, Engulfing, Hammer, Gap, Star, ThreeLine)
 abstract final class PatternParams {
   /// 錘子線實體最小比例（5%）
   ///

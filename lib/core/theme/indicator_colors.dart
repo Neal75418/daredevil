@@ -38,13 +38,13 @@ abstract final class IndicatorColors {
     return [for (final i in maPaletteIndices) palette[i]];
   }
 
-  /// 主要指標線（K, DIF, MA5, MACD）— Sky Blue
+  /// 主要指標線（K, DIF, WR）— Sky Blue
   static const chartPrimary = Color(0xFF60A5FA);
 
-  /// 次要指標線（D, DEA, MA10, RSI）— Yellow
+  /// 次要指標線（D, DEA, RSI）— Yellow
   static const chartSecondary = Color(0xFFFACC15);
 
-  /// 第三指標線（J, MA30）— Purple
+  /// 第三指標線（J、CCI；MACD 副圖標頭的 MACD 數值文字）— Purple
   static const chartTertiary = Color(0xFFA78BFA);
 
   // ==================================================

@@ -1,8 +1,5 @@
 /// 強股回檔進場參數（Mode C v2）
 ///
-/// Used by: pullback_rules.dart
-/// (PullbackToMa20 / PullbackToMa10 / HammerAtSupport / KdHighPullback)
-///
 /// **已校準（2026-07-09，2 年回放）**：5D 無孤立 edge、60D 方向正
 /// （詳見 pullback_rules.dart 檔頭與 docs/CALIBRATION.md）。閾值維持
 /// 直覺值。集中於此供日後一處調參。

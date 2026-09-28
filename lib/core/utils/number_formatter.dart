@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 /// domain 消費者在 tool/daily_update.dart 的 launchd 鏈上，混入 dart:ui
 /// 依賴會讓自動更新編譯失敗且靜默斷更（2026-07-18 事故，斷 13 天）。
 /// 需要 `.tr()` 本地化單位的 [LocalizedNumberFormat.compact] 已拆至
-/// presentation 專用檔。守門測試：test/tool/daily_update_pure_dart_test.dart。
+/// presentation 專用檔。守門測試：test/tool/tool_chain_pure_dart_test.dart。
 class AppNumberFormat {
   AppNumberFormat._();
 

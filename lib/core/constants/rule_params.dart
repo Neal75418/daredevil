@@ -194,7 +194,7 @@ abstract final class RuleParams {
   ///
   /// **上限怎麼算的**（2026-08-23 修正推導）：舊註解寫「64 條規則 → 上限 64」，
   /// 但現在有 72 種 `ReasonType`。真正的上限是 **72 扣掉互斥收斂**——
-  /// `RuleEngine._mutexGroups` 6 組涵蓋 16 條、每組只留 1 條，省下 11 條，
+  /// `RuleEngine._mutexGroups` 5 組涵蓋 16 條、每組只留 1 條，省下 11 條，
   /// 所以單股理論最大 61 條，64 仍有餘裕。
   ///
   /// ⚠️ 這個餘裕會隨規則集變動。新增規則後若 `ReasonType.values.length` 減去

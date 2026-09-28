@@ -1,7 +1,4 @@
 /// 趨勢 / 反轉 / 支撐壓力 / 價量背離參數
-///
-/// Used by: volume_rules.dart, technical_rules.dart, divergence_rules.dart,
-/// trend_detection_service.dart, fundamental_technical_filter.dart
 abstract final class TrendParams {
   // ==================================================
   // 價格 / 成交量異動

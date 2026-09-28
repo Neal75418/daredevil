@@ -1,6 +1,4 @@
 /// 警示系統參數（Alert System）
-///
-/// Used by: user_dao.dart (Alert checking methods)
 abstract final class AlertParams {
   // --------------------------------------------------
   // 警示類型字串常數

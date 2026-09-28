@@ -37,7 +37,6 @@ abstract final class ApiEndpoints {
   /// 當沖交易標的
   static const String twseDayTrading = '/exchangeReport/TWTB4U';
 
-  /// 估值資料（本益比、殖利率、股價淨值比）- Open Data
   /// TWSE 上市公司每日重大訊息（openapi t187ap04_L）
   static const String twseMaterialInfo =
       'https://openapi.twse.com.tw/v1/opendata/t187ap04_L';
@@ -50,6 +49,7 @@ abstract final class ApiEndpoints {
   static const String twseShortSuspension =
       'https://openapi.twse.com.tw/v1/exchangeReport/BFI84U';
 
+  /// 估值資料（本益比、殖利率、股價淨值比）- Open Data
   static const String twseValuation =
       '$twseOpenDataBaseUrl/v1/exchangeReport/BWIBBU_ALL';
 

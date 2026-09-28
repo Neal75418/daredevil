@@ -6,7 +6,7 @@ import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
 ///
 /// 封裝兩個 horizon 的 `rule_id → calibrated score` 查找表，
 /// 由主 isolate 從 [CalibratedScoresRegistry.snapshotForIsolate] 抽取後
-/// 透過 [ScoringIsolateInput] 序列化傳入 scoring isolate。
+/// 隨 [ScoringIsolateInput] 以 typed 物件直接傳入 scoring isolate。
 ///
 /// ## 為什麼需要此 DTO
 ///
@@ -95,17 +95,16 @@ class CalibratedScoreContext {
       (lookup(Horizon.short, ruleId) ?? 0) != 0 ||
       (lookup(Horizon.long, ruleId) ?? 0) != 0;
 
-  /// 序列化為 `Map<String, dynamic>` 供 isolate 邊界傳輸
+  /// 序列化為 `Map<String, dynamic>`
   ///
-  /// 因為內部只有 `Map<String, int>`（primitive-only），序列化不需要
-  /// 額外的 nested encoding。
+  /// 內部是 `Map<String, int>` 與 `Set<String>`，序列化只需把 Set 轉成 List。
   Map<String, dynamic> toMap() => {
     'shortScores': shortScores,
     'longScores': longScores,
     'zeroedShortRules': zeroedShortRules.toList(),
   };
 
-  /// 從 isolate 邊界反序列化 Map
+  /// 從 [toMap] 的輸出還原
   ///
   /// 容錯處理：null 或缺失欄位會 fall back 到空 map，呼叫端的查詢
   /// 會回 null 進而 fallback 到 hardcoded。不會 throw。

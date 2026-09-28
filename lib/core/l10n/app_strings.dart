@@ -100,7 +100,7 @@ class S {
   // ==================================================
   // 趨勢
   // ==================================================
-  // 由 [getTrendLabel] 裸名消費(傳遞性存活,同評分區說明)
+  // 由下方 [getTrendLabel] 使用
   static String get trendUp => 'trend.up'.tr();
   static String get trendDown => 'trend.down'.tr();
   static String get trendSideways => 'trend.sideways'.tr();

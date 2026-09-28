@@ -1,6 +1,4 @@
 /// RSI / KD / 均線 / 52 週高低點參數
-///
-/// Used by: indicator_rules.dart (RSI*, KD*, MAAlignment*, Week52*)
 abstract final class IndicatorParams {
   // ==================================================
   // RSI

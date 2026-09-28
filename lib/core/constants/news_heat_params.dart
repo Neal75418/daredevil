@@ -1,8 +1,5 @@
 // lib/core/constants/news_heat_params.dart
 /// 新聞熱度發現層參數（名稱白名單／題材字典／熱度門檻）
-///
-/// Used by: stock_name_matcher.dart, theme_matcher.dart, heat_calculator.dart,
-/// news_mention_snapshot_service.dart
 abstract final class NewsHeatParams {
   /// 字典版本：白名單或題材字典**語意性異動**時遞增。
   /// 寫進 news_mention_daily 快照，供未來回測取同版本區段
@@ -61,6 +58,23 @@ abstract final class NewsHeatParams {
   /// 的空窗期，此閘門讓爆量徽章自動待命而非全亮誤導。
   static const int surgeBaselineMinCoverageDays = 14;
 
+  /// 媒體通用簡稱 → 現行代碼的別名覆蓋（2026-08-01 熱度分析實機稽核）。
+  ///
+  /// 適用「更名/併購後,通用簡稱與現行官方名稱不同字串」的情形:
+  /// 日月光(2018 併入投控下市,殭屍代碼 2311 仍在 FinMind 清單)——媒體
+  /// 一律寫「日月光」,本尊 3711 官方名「日月光投控」極少全名出現。
+  /// 無別名時:殭屍在冊期間標題匹配全被 2311 吸走(焦點股顯示死代碼、
+  /// 無漲跌幅);殭屍清理後裸名又誰都配不到,ASE 從熱度直接消失。
+  ///
+  /// 神達(2315→3706)/永信(1716→3705)**不需**別名:FinMind 給本尊的
+  /// 名稱就是同一個短名,殭屍除名後自然接手。新增別名前先查 DB 確認
+  /// 本尊官方名稱與簡稱確實不同字串,並比照 Task 2 語料稽核精神驗證
+  /// 無歧義(如「永信」同時是永信建設 5508,屬歧義、不得加)。
+  ///
+  /// 別名目標在 matcher 宇宙內時蓋過同名自然入口;目標缺席時回退
+  /// 自然名(見 [StockNameMatcher.fromStocks])。
+  static const Map<String, String> nameAliasToSymbol = {'日月光': '3711'};
+
   /// 2 字公司簡稱白名單（Task 2 語料稽核定稿——已對 production DB 6203 篇新聞
   /// 標題全量重放 [StockNameMatcher]，逐名核對樣本標題後移除誤配名）
   ///
@@ -93,23 +107,6 @@ abstract final class NewsHeatParams {
   /// （國巨*／台達電／光寶科／金像電），已由 3 字規則涵蓋，故 2 字白名單
   /// 中的同名候選目前恆為 0 命中（inert，非誤配）；英韌 目前無對應個股。
   /// 保留供官方名稱格式未來變動時沿用，稽核時未發現風險故不移除。
-  /// 媒體通用簡稱 → 現行代碼的別名覆蓋（2026-08-01 熱度分析實機稽核）。
-  ///
-  /// 適用「更名/併購後,通用簡稱與現行官方名稱不同字串」的情形:
-  /// 日月光(2018 併入投控下市,殭屍代碼 2311 仍在 FinMind 清單)——媒體
-  /// 一律寫「日月光」,本尊 3711 官方名「日月光投控」極少全名出現。
-  /// 無別名時:殭屍在冊期間標題匹配全被 2311 吸走(焦點股顯示死代碼、
-  /// 無漲跌幅);殭屍清理後裸名又誰都配不到,ASE 從熱度直接消失。
-  ///
-  /// 神達(2315→3706)/永信(1716→3705)**不需**別名:FinMind 給本尊的
-  /// 名稱就是同一個短名,殭屍除名後自然接手。新增別名前先查 DB 確認
-  /// 本尊官方名稱與簡稱確實不同字串,並比照 Task 2 語料稽核精神驗證
-  /// 無歧義(如「永信」同時是永信建設 5508,屬歧義、不得加)。
-  ///
-  /// 別名目標在 matcher 宇宙內時蓋過同名自然入口;目標缺席時回退
-  /// 自然名(見 [StockNameMatcher.fromStocks])。
-  static const Map<String, String> nameAliasToSymbol = {'日月光': '3711'};
-
   static const Set<String> twoCharNameWhitelist = {
     '鴻海',
     '聯電',

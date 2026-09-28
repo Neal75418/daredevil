@@ -224,11 +224,14 @@ class CalibratedScoresRegistry {
       (lookup(Horizon.short, ruleId) ?? 0) != 0 ||
       (lookup(Horizon.long, ruleId) ?? 0) != 0;
 
+  /// 主 isolate 供觀測統計用:目前生效的 short 負證據歸零集
+  Set<String> zeroedShortSnapshot() => _short?.zeroedSnapshot() ?? const {};
+
   /// 打包兩個 horizon 的 calibrated score maps 為 isolate-safe DTO
   ///
   /// 主 isolate 在呼叫 scoring isolate 前呼叫此 method，把回傳的
   /// [CalibratedScoreContext] 塞進 `ScoringIsolateInput.calibratedScores`
-  /// 欄位。Isolate 邊界序列化透過 [CalibratedScoreContext.toMap] 處理。
+  /// 欄位，隨 input 以 typed 物件直接跨 isolate。
   ///
   /// 若某個 horizon 的 table 未載入（`_short` 或 `_long` 為 null），
   /// 對應欄位會是空 map — scoring isolate 內的查詢會回 null，進而
@@ -236,9 +239,6 @@ class CalibratedScoresRegistry {
   ///
   /// **僅供主 isolate 呼叫**。scoring isolate 內已有 `CalibratedScoreContext`，
   /// 不需要再次存取 registry。
-  /// 主 isolate 供觀測統計用:目前生效的 short 負證據歸零集
-  Set<String> zeroedShortSnapshot() => _short?.zeroedSnapshot() ?? const {};
-
   CalibratedScoreContext snapshotForIsolate() {
     return CalibratedScoreContext(
       shortScores: _short?.scoresSnapshot() ?? const {},

@@ -1,7 +1,5 @@
 /// 產業領導（sector rotation）選股參數
 ///
-/// Used by: mode_recommendation_provider（排序 rank-blend）、SectorStrengthService
-///
 /// 設計：docs/plans/2026-06-28-sector-leadership-and-rs-design.md
 abstract final class SectorParams {
   /// 產業領導 tilt 權重（rank-blend：finalScore = (1−W)·baseRank + W·sectorRank）。

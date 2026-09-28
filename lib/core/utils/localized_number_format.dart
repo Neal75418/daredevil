@@ -8,7 +8,7 @@ import 'package:daredevil/core/utils/number_formatter.dart';
 /// (依賴 dart:ui),而 AppNumberFormat 有 domain 消費者位於
 /// tool/daily_update.dart 的 launchd 純 Dart 鏈上——2026-07-18 兩者同檔
 /// 時,自動更新編譯失敗靜默斷了 13 天。守門:
-/// test/tool/daily_update_pure_dart_test.dart。
+/// test/tool/tool_chain_pure_dart_test.dart。
 class LocalizedNumberFormat {
   LocalizedNumberFormat._();
 

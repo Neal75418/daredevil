@@ -252,7 +252,7 @@ final router = GoRouter(
       builder: (context, state) => const EventCalendarScreen(),
     ),
 
-    // 融券賣出排行（全螢幕，Shell 外）
+    // 排行與總覽頁：法人排行、月營收、季報、融券賣出（全螢幕，Shell 外）
     GoRoute(
       path: AppRoutes.institutionalRanking,
       name: 'institutionalRanking',

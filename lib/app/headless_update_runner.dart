@@ -17,36 +17,6 @@ import 'package:daredevil/domain/services/update_service_factory.dart';
 
 const _tag = 'HeadlessUpdateRunner';
 
-/// Headless 跑一次每日更新，給 background isolate（WorkManager）+ macOS
-/// launchd CLI（[tool/daily_update.dart]）共用。
-///
-/// 自管所有資源生命週期（DB、API clients、Registry seed）。可從任何
-/// 沒有 Riverpod container / Flutter binding 的環境呼叫。
-///
-/// **非交易日 short-circuit**：建完整服務圖之前就 skip，回傳
-/// `skipped=true` 的 [UpdateResult]。
-///
-/// **Token 來源**：透過 [SettingsRepository] 走預設 fallback chain
-/// （SecureStorage → `FINMIND_TOKEN` env var → in-memory）。launchd
-/// 跑 CLI 時要靠 env var 路徑（launchd 不讀 shell rc）。
-///
-/// **[database] 參數（C 方案 refactor 2026-06-19）**：caller 注入已建好的
-/// [AppDatabase] 控制連線方式：
-/// - WorkManager isolate / Flutter app：`AppDatabase(openDriftFlutterConnection())`
-/// - macOS launchd CLI：`AppDatabase.forToolFile(sandboxDbPath)`
-///
-/// caller 也要負責**之前**設好 [CalibratedScoresRegistry.assetLoaderOverride]
-/// （rootBundle 或 File-based loader）。
-///
-/// runner 自己管 DB 生命週期，**會在 finally 呼叫 `db.close()`**。
-///
-/// [finMindToken] 顯式注入 — 取代以前 [SettingsRepository.getFinMindToken]
-/// 的 fallback chain（依賴 flutter_secure_storage 是 Flutter-only plugin）。
-/// caller 規則：
-/// - WorkManager isolate：caller 自己用 SettingsRepository 取 token 再傳進來
-/// - macOS launchd CLI：直接讀 `FINMIND_TOKEN` env var 傳進來
-/// - null 或空字串 → finMind client 沒 token，免費資料能跑、需 token 的
-///   syncer 會在內部 skip
 /// 測試 seam：runner 的價值在裝配與生命週期管理，測試需要攔截「建好的
 /// 服務」同時保留 runner 對 clients／budget／DB 的真實管理。
 typedef HeadlessServiceBuilder =
@@ -67,6 +37,32 @@ typedef HeadlessServiceBuilder =
 // ignore: unused_element
 const HeadlessServiceBuilder _seamMatchesFactory = UpdateServiceFactory.build;
 
+/// Headless 跑一次每日更新，給 background isolate（WorkManager）+ macOS
+/// launchd CLI（[tool/daily_update.dart]）共用。
+///
+/// 自管所有資源生命週期（DB、API clients、Registry seed）。可從任何
+/// 沒有 Riverpod container / Flutter binding 的環境呼叫。
+///
+/// **非交易日 short-circuit**：建完整服務圖之前就 skip，回傳
+/// `skipped=true` 的 [UpdateResult]。
+///
+/// **[database] 參數（C 方案 refactor 2026-06-19）**：caller 注入已建好的
+/// [AppDatabase] 控制連線方式：
+/// - WorkManager isolate / Flutter app：`AppDatabase(openDriftFlutterConnection())`
+/// - macOS launchd CLI：`AppDatabase.forToolFile(sandboxDbPath)`
+///
+/// caller 也要負責**之前**設好 [CalibratedScoresRegistry.assetLoaderOverride]
+/// （rootBundle 或 File-based loader）。
+///
+/// runner 自己管 DB 生命週期，**會在 finally 呼叫 `db.close()`**。
+///
+/// [finMindToken] 顯式注入 — 取代以前 [SettingsRepository.getFinMindToken]
+/// 的 fallback chain（依賴 flutter_secure_storage 是 Flutter-only plugin）。
+/// caller 規則：
+/// - WorkManager isolate：caller 自己用 SettingsRepository 取 token 再傳進來
+/// - macOS launchd CLI：直接讀 `FINMIND_TOKEN` env var 傳進來
+/// - null 或空字串 → finMind client 沒 token，免費資料能跑、需 token 的
+///   syncer 會在內部 skip
 Future<UpdateResult> runHeadlessUpdate({
   required AppDatabase database,
   required ApiBudgetStore budgetStore,

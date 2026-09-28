@@ -12,7 +12,7 @@ import 'package:daredevil/core/theme/design_tokens.dart';
 /// 使用範例：
 /// ```dart
 /// // 判斷設備類型
-/// if (context.isMobile) { ... }
+/// if (context.deviceType == DeviceType.mobile) { ... }
 /// if (context.isDesktop) { ... }
 ///
 /// // 根據設備類型返回不同值

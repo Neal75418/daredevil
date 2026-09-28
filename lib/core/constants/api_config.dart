@@ -43,16 +43,6 @@ abstract final class ApiConfig {
   /// Syncer 批次操作間延遲（毫秒），避免觸發 API rate limit
   static const int syncerBatchDelayMs = 500;
 
-  /// t187ap03_L 官方名單的完整性下限（實際 ~1093 家）。低於此值視為
-  /// 部分回應——殭屍清理（官方名單缺席→標下市）當輪跳過，避免 API
-  /// 截斷造成大規模誤殺；per-symbol 的產業別覆蓋不受此限（部分名單
-  /// 內的資料仍是對的）。
-  /// 2026-08-05 複審調升 800→1000:實際名冊 ~1,093 家,800 留下 293 檔
-  /// 的部分回應盲區(floor 過了但名單仍缺漏 → 缺席者被誤判下市)。1000
-  /// 縮盲區至 ~93 檔;誤殺者若有成交,同輪價格步(STOCK_DAY_ALL feed 的
-  /// isActive=true)分鐘級救回——此救援依賴為顯式設計,見
-  /// stock_repository 的三態註解。若未來上市家數縮水逼近 floor,
-  /// syncStockList 會記警報(見該處),屆時再行下調。
   /// 外資持股「當日資料算完整」的覆蓋率門檻(相對於上市股數)
   ///
   /// 2026-08-16 實機:正式 DB 的 8/13 只有 213 筆——FinMind 逐檔留下的
@@ -71,6 +61,16 @@ abstract final class ApiConfig {
   /// 5 = 對齊 `_findEquityAboutOneYearBefore` 需要的「一年前那季」。
   static const int financialHistoryMinQuarters = 5;
 
+  /// t187ap03_L 官方名單的完整性下限（實際 ~1093 家）。低於此值視為
+  /// 部分回應——殭屍清理（官方名單缺席→標下市）當輪跳過，避免 API
+  /// 截斷造成大規模誤殺；per-symbol 的產業別覆蓋不受此限（部分名單
+  /// 內的資料仍是對的）。
+  /// 2026-08-05 複審調升 800→1000:實際名冊 ~1,093 家,800 留下 293 檔
+  /// 的部分回應盲區(floor 過了但名單仍缺漏 → 缺席者被誤判下市)。1000
+  /// 縮盲區至 ~93 檔;誤殺者若有成交,同輪價格步(STOCK_DAY_ALL feed 的
+  /// isActive=true)分鐘級救回——此救援依賴為顯式設計,見
+  /// stock_repository 的三態註解。若未來上市家數縮水逼近 floor,
+  /// syncStockList 會記警報(見該處),屆時再行下調。
   static const int twseOfficialListSanityFloor = 1000;
 
   /// 名冊縮水警報門檻:本輪家數低於「DB 既有存活家數 × 此比例」即警告

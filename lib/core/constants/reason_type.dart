@@ -205,12 +205,13 @@ extension ReasonTypeScoringMode on ReasonType {
   /// 該 rule 屬於哪個 mode
   ///
   /// **Rule 分類原則**（依使用者「找股目的」而非「rule 類型」）：
-  /// - momentumEntry: 反轉 / 突破 / 底部訊號 — 上升趨勢中順勢初升的進場點
-  ///   （60D>0 gate 篩掉底部抄底；非「還沒漲」）
-  /// - strengthObserve: 大漲 / 籌碼集中度高 / 法人連買 — 你想追蹤強勢股、等回檔
-  /// - weaknessObserve: 警示 / 看空 K 線 / 估值過高 — 你想避開或反向操作
-  /// - neutral: 觸發頻繁但無 alpha 的 noise filter rule、value rule 跟 momentum
-  ///   無關 — 仍寫進 daily_reason 顯示 evidence chip，但不影響任何 mode 排名
+  /// - momentumEntry: 反轉 / 突破 / 底部訊號，以及部分基本面與估值訊號 — 上升
+  ///   趨勢中順勢初升的進場點（名冊與 60D>0 gate 的張力見 [ScoringMode.momentumEntry]）
+  /// - strengthObserve: 大漲 / 帶量突破 / 法人連買 / 多頭排列 — 你想追蹤強勢股、等回檔
+  /// - weaknessObserve: 強股回檔到均線 / 支撐錘子 / KD 高檔回落 — 找回檔進場點
+  /// - neutral: 看空 K 線、監管與籌碼警示、待校準的訊號、觸發頻繁但無 alpha 的
+  ///   訊號 — 仍寫進 daily_reason（掃描、詳情頁可見；今日分頁不顯示成理由，警示
+  ///   類改為風險徽章），但不影響任何 mode 排名
   ScoringMode get scoringMode => switch (this) {
     // ============ Mode A: 起漲候選（15 條 — 含 patternHammer 2026-06-20 回歸）============
     // 反轉 / 突破 / 底部 / 逆勢買進訊號 — user mental model「趨勢中順勢初升進場」。
@@ -260,7 +261,7 @@ extension ReasonTypeScoringMode on ReasonType {
     ReasonType.highVolumeBreakout => ScoringMode.strengthObserve, // 已突破
     ReasonType.maAlignmentBullish =>
       ScoringMode.strengthObserve, // 多頭排列 = 趨勢確立 Stage 2
-    // ============ Mode C: 回檔觀察（v2.1 — 強股回檔進場、純 3 條正分主訊號）============
+    // ============ Mode C: 回檔觀察（v2.1 — 強股回檔進場、4 條正分主訊號）============
     // **2026-06-19 v2 audit 重定義**：user 真實意圖是「**強股剛開始回檔、找進場時機**」。
     // identifier `weaknessObserve` 保留避免 DB migration、tab name i18n 改「回檔觀察」。
     //
@@ -281,7 +282,7 @@ extension ReasonTypeScoringMode on ReasonType {
       ScoringMode.weaknessObserve, // 主 +12 淺回檔（2026-06-20 B2 加）
     ReasonType.hammerAtSupport => ScoringMode.weaknessObserve, // 主 +18
     ReasonType.kdHighPullback => ScoringMode.weaknessObserve, // 主 +12
-    // ============ Neutral（37 條 — v2.1 再 +7 warning）============
+    // ============ Neutral（不參與三模式選股）============
     // **2026-06-20 修正 A 移入 7 條**（原 Mode C warning context、會壓分 bug）：
     ReasonType.patternHangingMan => ScoringMode.neutral, // 高檔吊人線
     ReasonType.patternDojiBearish => ScoringMode.neutral, // 高檔十字
@@ -311,7 +312,7 @@ extension ReasonTypeScoringMode on ReasonType {
     // **2026-06-20 階段重設計移入**：dayTradingHigh（高當沖比例）= 投機過熱 /
     // 散戶接刀換手率、非趨勢強度；跟 dayTradingExtreme 同 namespace 對齊入 neutral。
     ReasonType.dayTradingHigh => ScoringMode.neutral,
-    // MA 穿越 4 條(2026-07-31):零歷史紀錄,neutral 起步收 rule_accuracy,
+    // MA 穿越 4 條與均線下方蓄勢 2 條(2026-07-31):零歷史紀錄,neutral 起步收 rule_accuracy,
     // 一季後由校準實證判決升格進 mode 或歸零
     ReasonType.reclaimMa20 => ScoringMode.neutral,
     ReasonType.reclaimMa60 => ScoringMode.neutral,

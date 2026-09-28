@@ -6,12 +6,6 @@ import 'package:daredevil/core/utils/date_context.dart';
 /// 提供 TWSE 與 TPEX API 回應中常見的日期與數字格式解析。
 /// 統一由 [TwseClient] 和 [TpexClient] 使用，避免重複邏輯。
 abstract final class TwParseUtils {
-  /// 解析含逗號的數字字串（例如 "1,234,567"）
-  ///
-  /// 支援 TWSE/TPEX 回傳的各種格式：
-  /// - "1,234,567" → 1234567.0
-  /// - "--" / "X" / "---" → null
-  /// - null / 空字串 → null
   /// [parseFormattedDouble] 的整數版——千分位、哨兵(`--`/`X`/`---`)、
   /// 前後空白一併處理。
   ///
@@ -24,6 +18,12 @@ abstract final class TwParseUtils {
     return int.tryParse(str);
   }
 
+  /// 解析含逗號的數字字串（例如 "1,234,567"）
+  ///
+  /// 支援 TWSE/TPEX 回傳的各種格式：
+  /// - "1,234,567" → 1234567.0
+  /// - "--" / "X" / "---" → null
+  /// - null / 空字串 → null
   static double? parseFormattedDouble(dynamic value) {
     if (value == null) return null;
     final str = value.toString().replaceAll(',', '').trim();
