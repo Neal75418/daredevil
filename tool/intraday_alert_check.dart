@@ -7,9 +7,10 @@
 // launchd 這種 OS 層排程器,可在 app 完全關閉時定時喚醒——與盤後
 // `daily_update.dart` 同一套機制、同一個維護心智。
 //
-// 執行方式(launchd `StartInterval=300`,每 5 分鐘喚醒一次):
-//   dart run tool/intraday_alert_check.dart
-// 盤前/盤後/假日由 IntradayPollSchedule 自行 no-op,不必在 plist 排時段。
+// 執行方式:launchd `StartCalendarInterval`(週一到五 09:00–13:30 每 5 分鐘,
+// 共 275 條 entry)執行 `bin/intraday_alert_check.dart` 編出的 AOT 產物(見
+// ops/launchd/install.sh)。手動測試可用 `dart run tool/intraday_alert_check.dart`。
+// 假日與時段邊界由 IntradayPollSchedule 自行 no-op。
 //
 // **純 Dart 鐵律**:本檔 import 閉包不得含 flutter/easy_localization/
 // flutter plugins(守門:test/tool/tool_chain_pure_dart_test.dart)。
@@ -259,8 +260,7 @@ Future<void> main(List<String> args) async {
     await database.close();
     exit(notified == fired.length && unres == 0 ? 0 : 1);
   } catch (e, s) {
-    // AppLogger 在 `dart run` 下是 no-op(輸出包在 assert 內、asserts
-    // 未啟用)——堆疊必須自己印,否則故障現場只剩一行訊息
+    // 堆疊直接寫進 stderr,與 beat 同一個日誌檔,故障現場可直接 grep
     beat('FAILED');
     stderr.writeln('[intraday_alert] FAILED: $e');
     stderr.writeln(s);

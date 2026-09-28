@@ -24,8 +24,8 @@
 // ## 環境變數
 //
 //   FINMIND_TOKEN  必填（沒設只能跑免費 TWSE 資料、新聞 / EPS / 月營收
-//                  / 股利等會 skip）。launchd 不讀 ~/.zshrc — plist 用
-//                  zsh -lc wrapper source rc 拿 token。
+//                  / 股利等會 skip）。launchd 不讀 ~/.zshrc — plist 以
+//                  `zsh -c 'source ~/.zshrc; …'` 顯式載入 rc 拿 token。
 //
 // ## DB 路徑
 //
@@ -53,7 +53,8 @@ import 'tool_db.dart';
 
 Future<void> main(List<String> args) async {
   AppLogger.forceOutput = true; // CLI:繞過 assert gate,否則日誌全滅
-  // stderr 也要輪替:故障訊息落在那裡,而它曾長到 153 MB(見 intraday 註解)
+  // stderr 也要輪替:故障訊息落在那裡,它曾長到 153 MB(7 月自動更新靜默斷
+  // 13 天時的編譯錯誤洪流)
   for (final name in [
     'daredevil-daily-update.stdout.log',
     'daredevil-daily-update.stderr.log',
@@ -94,7 +95,7 @@ Future<void> main(List<String> args) async {
   print('[daily_update] DB: $dbPath (exists=${File(dbPath).existsSync()})');
 
   // FinMind token：直接讀 env var（與 SettingsRepository 的 fallback chain
-  // priority 2 一致）。launchd plist 用 `zsh -lc` source ~/.zshrc 拿到。
+  // priority 2 一致）。launchd plist 以 `zsh -c` 顯式 source ~/.zshrc 拿到。
   final finMindToken = Platform.environment['FINMIND_TOKEN'];
   print(
     '[daily_update] FINMIND_TOKEN '

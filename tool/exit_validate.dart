@@ -439,7 +439,8 @@ String buildReport(ExitValidationResult result) {
 // CLI entry（經 flutter test wrapper 執行，見 test/tool/run_exit_validate.dart）
 // ============================================================================
 
-/// 不呼叫 exit() 的入口。exit codes：0 = 成功、2 = DB 不存在。
+/// 不呼叫 exit() 的入口。exit codes：0 = 成功、2 = DB 不存在、5 = 零樣本（不覆寫
+/// 上一份報告）、6 = DB schema fingerprint 不符。
 Future<int> runExitValidateCli(List<String> args) async {
   var dbPath = 'tool/calibration.db';
   for (var i = 0; i < args.length; i++) {

@@ -160,10 +160,10 @@ class BackfillConfig {
   /// 明確指定 backfill 結束日（覆寫 `DateTime.now()`）。null = now。
   final DateTime? endDateOverride;
 
-  /// 價格回補改走 FinMind per-symbol（而非 TWSE STOCK_DAY_ALL batch）。
+  /// 價格回補改走 FinMind per-symbol（而非 per-day batch）。
   ///
-  /// 2026-06 起 TWSE STOCK_DAY_ALL 已不支援歷史 date 參數（一律回最新日），
-  /// 故歷史回補（2021-2023 等）必須走 FinMind。預設 false 維持原 batch 行為。
+  /// batch 路徑上市走 MI_INDEX、上櫃走 afterTrading/dailyQuotes，皆支援歷史
+  /// 日期；這個選項留給 TWSE 不可用時改道。預設 false 走 batch。
   final bool pricesViaFinMind;
 
   /// 跳過 3 個基本面 phase（revenue / financial / valuation）。
@@ -251,7 +251,7 @@ class BackfillDeps {
   /// 不讓既有 caller 因為新增 phase 而爆掉。
   final ITradingRepository? tradingRepo;
 
-  /// FinMind client — 僅 `pricesViaFinMind` 模式需要（歷史價格 per-symbol 回補）。
+  /// FinMind client — 僅 `pricesViaFinMind` 模式需要（per-symbol 價格回補）。
   final FinMindClient? finMind;
 }
 
@@ -350,16 +350,16 @@ class Backfiller {
 
     // Phase 1: prices — TWSE 上市 / TPEx 上櫃皆走 per-day batch
     //
-    // TWSE 上市股票走 STOCK_DAY_ALL?date=...（一次回該日全部上市股票）。
-    // TPEx 上櫃股票走 TPEx OpenAPI（一次回該日全部上櫃股票）。
+    // TWSE 上市股票走 MI_INDEX?date=...（一次回該日全部上市股票）。
+    // TPEx 上櫃股票走 afterTrading/dailyQuotes（一次回該日全部上櫃股票）。
     // 避開的問題：
     //   - 舊 TWSE 月度 per-symbol path 撐 5 分鐘就觸發 TWSE IP-based
     //     rate limit "Redirect loop detected"（1400 symbols × 24 months
     //     ≈ 33,000 calls 太集中）
-    //   - 舊 FinMind per-symbol path 吃 600/day 免費額度
+    //   - 舊 FinMind per-symbol path 吃 600/hr 額度
     // batch path 後兩個市場各約 500 calls / 2 年，永久脫離兩種 rate limit。
     if (config.pricesViaFinMind) {
-      // 歷史回補：STOCK_DAY_ALL batch 已不支援歷史日期 → 走 FinMind per-symbol
+      // TWSE 不可用時的替代路徑：FinMind per-symbol
       phases.add(
         await _backfillPricesViaFinMind(
           symbols: symbols,
@@ -392,7 +392,7 @@ class Backfiller {
     //
     // 與 prices:tpex 同 pattern：per-day 一次拿全市場兩個 source（TWSE
     // /rwd/zh/fund/T86 + TPEx OpenAPI），按 targetSymbols 過濾後寫入。
-    // 取代舊的 per-symbol FinMind 路徑（吃 600/day 免費額度）。
+    // 取代舊的 per-symbol FinMind 路徑（吃 600/hr 額度）。
     phases.add(
       await _backfillInstitutionalBatch(
         targetSymbols: symbols,
@@ -704,7 +704,7 @@ class Backfiller {
   /// 2020-04-17 / 2023-04-17）：TWTB4U **仍支援歷史 date 參數**，回應
   /// `date` 欄位與請求一致、rows 901~1213，深度可回到 2017-05-11——正好
   /// 涵蓋 `calibration.db` 價格起點。這點與 STOCK_DAY_ALL 不同（後者
-  /// 2026-06 起忽略 date、一律回最新日，見 [BackfillConfig.pricesViaFinMind]）。
+  /// 2026-06 起忽略 date、一律回最新日；上市價格回補因此改走 MI_INDEX）。
   ///
   /// 設計對齊 [_backfillInstitutionalBatch]（per-day batch + resume guard +
   /// 限流 rethrow）與 `MarketIndexSyncer.backfillDeepHistory`（由新至舊、
@@ -850,7 +850,7 @@ class Backfiller {
   /// TWSE 上市股票價格 batch backfill
   ///
   /// 對日期範圍內每個交易日呼叫 [IPriceRepository.backfillTwsePricesByDate]，
-  /// 每天 1 次 TWSE STOCK_DAY_ALL?date=... 拿全市場上市股票價格，過濾後
+  /// 每天 1 次 TWSE MI_INDEX?date=... 拿全市場上市股票價格，過濾後
   /// 寫入 DB。Pattern 與 [_backfillTpexPricesBatch] 對稱。
   Future<PhaseResult> _backfillTwsePricesBatch({
     required List<String> twseSymbols,
@@ -1100,10 +1100,9 @@ class Backfiller {
 
   /// 用 FinMind TaiwanStockPrice 逐檔回補歷史價格（上市 + 上櫃皆可）。
   ///
-  /// 動機：TWSE STOCK_DAY_ALL batch 端點 2026-06 起不再支援歷史 date 參數
-  /// （一律回最新交易日），舊的 TWSE per-symbol 月度端點則 rate-limit 嚴重。
-  /// FinMind getDailyPrices 一個 call 帶整段 date range、per-symbol，是歷史
-  /// 回補唯一可行來源。
+  /// 動機：per-day batch（MI_INDEX／dailyQuotes）不可用時的替代路徑；舊的
+  /// TWSE per-symbol 月度端點 rate-limit 嚴重，不適合當替代。FinMind
+  /// getDailyPrices 一個 call 帶整段 date range、per-symbol。
   ///
   /// rate limit / network 政策同 [_runPhase]：立即 abort；其他例外記 failed
   /// 後續行。每檔之間沿用 [BackfillConfig.interDayDelayMs] delay 控 FinMind
@@ -1504,7 +1503,7 @@ BackfillConfig? _parseArgs(List<String> args) {
         }
         dayTradingMaxDaysPerRun = parsed;
       case '--prices-via-finmind':
-        // 歷史回補必用：STOCK_DAY_ALL batch 已不支援歷史日期
+        // TWSE 不可用時改走 FinMind（batch 路徑已支援歷史日期）
         pricesViaFinMind = true;
       case '--skip-fundamentals':
         skipFundamentals = true;

@@ -44,12 +44,12 @@
 #
 # 2. **Test runner 包覆 exit code**：calibrate.sh 內部跑 `flutter test`，
 #    test runner 把 backfill 工具的 exit 4（rate limit）統一包成 exit 1
-#    （test failed）。即使 calibrate.sh 內 docstring 寫「exit 4 = rate
-#    limit」，wrapper 之外看到的是 1，無法靠 exit code 區分 rate limit
+#    （test failed）。即使 tool/backfill.dart 的 runBackfillCli 回 4（rate
+#    limit），wrapper 之外看到的是 1，無法靠 exit code 區分 rate limit
 #    vs 其他失敗。改用 log content grep "API rate limit exceeded" 判斷。
 #
-# 同時記錄 calibrate 跑之前的 log 行數，retry 判斷只看新增的行，避免
-# 上一輪殘留的 "rate limit" 字串誤觸發。
+# 每輪輸出以 tee 接進暫存檔，retry 判斷只對本輪內容 grep，避免上一輪
+# 殘留的 "rate limit" 字串誤觸發。
 
 set -uo pipefail
 # 不用 `set -e` — 我們需要自己判斷 calibrate.sh 失敗原因

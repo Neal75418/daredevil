@@ -1,12 +1,12 @@
-// tool/ 共用的 DB 開啟入口——**唯一**允許呼叫 AppDatabase.forToolFile
-// 的地方(guard 測試把關)。
+// tool/ 共用的 DB 開啟入口——tool/ 內**唯一**允許呼叫 AppDatabase.forToolFile
+// 的地方(guard 測試掃 tool/)。
 //
 // 為什麼要有這個檔案(2026-08-29 稽核):AppDatabase 的 schema fingerprint
 // 不符時會 DROP 所有非 user-input 表。對 app DB 那是可接受的(derived
 // data,隔天重抓);對 `tool/calibration.db` 是**九年歷史當場歸零**。
 // 守衛原本只寫在 backfill.dart 一支裡,而 9 個 tool 會開這個檔案——
-// 稽核實測其餘 8 支全裸奔,且只要有人照 CLAUDE.md 的 DB 變更流程 bump
-// 一次 fingerprint 就會引爆(2026-07-18 已經真的燒過一次 1.2 GB)。
+// 稽核實測其餘 8 支全裸奔,且只要有人 bump 一次 `appSchemaFingerprint`
+// (lib/data/database/app_database.dart)就會引爆(2026-07-18 已經真的燒過一次 1.2 GB)。
 import 'package:sqlite3/sqlite3.dart';
 
 import 'package:daredevil/data/database/app_database.dart';

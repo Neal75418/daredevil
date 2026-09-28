@@ -5,7 +5,7 @@
 # 無文件——repo 搬家、路徑改變或換機都會讓排程靜默失效,而這個專案
 # 已經有過「自動更新靜默斷 13 天」的前科。
 #
-# 用法:ops/launchd/install.sh   (從任何位置皆可)
+# 用法:在 repo root 執行 ops/launchd/install.sh(建置步驟用相對路徑)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 
@@ -128,8 +128,8 @@ for job in daily intraday; do
   src="$REPO/ops/launchd/com.neo.daredevil.$job.plist"
   dst="$HOME/Library/LaunchAgents/com.neo.daredevil.$job.plist"
   tmp="$(mktemp)"
-  # 三類硬編碼路徑都要換:repo、dart、以及 $HOME 底下的日誌路徑
-  # (只換前兩者的話,換機/換使用者時日誌會寫到別人的家目錄)
+  # 要換的是 __CLI__ 佔位符與 $HOME 底下的日誌路徑(不換後者,換機/換使用者
+  # 時日誌會寫到別人的家目錄)。repo 與 dart 兩條規則對現行 plist 已無命中
   sed -e "s|/Users/nealchen/IdeaProjects/daredevil|$REPO|g" \
       -e "s|__CLI__|$CLI_DIR|g" \
       -e "s|/opt/homebrew/bin/dart|$DART|g" \

@@ -347,7 +347,7 @@ void _writeCandidate(Map<String, int> scores, String horizon) {
     'rules': rules,
   };
   const encoder = JsonEncoder.withIndent('  ');
-  // 原子寫入(同 recalibrate:1051):中途被 kill 會留下截斷的 JSON,
+  // 原子寫入(同 recalibrate.dart 的 _processHorizon):中途被 kill 會留下截斷的 JSON,
   // 而 parseJson 對壞檔是整份拒收 → 全部規則 fallback 到 hardcoded,
   // 同樣無聲。
   final target = regimeCandidatePath(horizon);

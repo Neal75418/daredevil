@@ -20,14 +20,15 @@
 // 輸出：
 //   assets/rule_scores_calibrated_short_candidate.json
 //   assets/rule_scores_calibrated_long_candidate.json
+//   assets/calibration_manifest_candidate.json
 //
 // Review workflow：
-//   1. 跑完這個工具 → 產出 `*_candidate.json`
-//   2. `git diff assets/rule_scores_calibrated_*.json` 看分數變動
-//   3. 決定 approve → 手動 rename：
-//      mv assets/rule_scores_calibrated_short_candidate.json \
-//         assets/rule_scores_calibrated_short.json
-//   4. Commit + push
+//   1. 跑完這個工具（兩個 horizon 都跑、非 dry-run）→ 產出三個 `*_candidate.json`
+//      （在 .gitignore 內，git diff 看不到）；只跑單一 horizon 時不產 manifest
+//   2. 看工具印出的「Promote 影響」區塊判斷分數變動是否合理
+//   3. 決定 approve → 三個檔一起手動 rename（工具結尾會印出提示；漏 manifest 會讓
+//      OTA hash mismatch 靜默跳過）
+//   4. Commit + push（同一個 commit 推 manifest 與兩支 JSON）
 //
 // 詳細設計與現行公式見 docs/CALIBRATION.md（Stage 2 LEAN 原設計已被
 // 2026-06 的實證 baseline 與 2026-07 的 clustered 超額路徑取代）

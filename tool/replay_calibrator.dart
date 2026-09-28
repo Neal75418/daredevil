@@ -1525,6 +1525,7 @@ Future<void> main(List<String> args) async {
 ///   1 — 無效 CLI 參數
 ///   2 — DB 檔案不存在（未 backfill）
 ///   3 — 沒有任何 rule firing（資料太少）
+///   6 — DB schema fingerprint 不符（未開 DB）
 Future<int> runReplayCalibratorCli(List<String> args) async {
   final config = _parseArgs(args);
   if (config == null) {

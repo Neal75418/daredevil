@@ -47,9 +47,10 @@
 // ## 退出碼
 //
 //   0  完成（含個別股票失敗，會列在最後統計）
-//   1  全數失敗
+//   1  全數失敗，或 DB 寫入失敗就地停止
 //   2  參數/環境問題（token 未設、DB 不存在）
 //   4  觸及 FinMind 額度上限——**就地停止**，等一小時後重跑
+//   6  DB schema fingerprint 不符（未開 DB）
 //
 // ## Resume
 //
@@ -89,8 +90,8 @@ Future<void> main(List<String> args) async {
   exit(await runTpexDayTradingCli(args));
 }
 
-/// CLI 本體。回傳 exit code(0 成功 / 1 全數失敗 / 2 前置條件缺 /
-/// 4 限流中止)。
+/// CLI 本體。回傳 exit code(0 成功 / 1 全數失敗或寫入失敗 / 2 前置條件缺 /
+/// 4 限流中止 / 6 schema fingerprint 不符)。
 Future<int> runTpexDayTradingCli(List<String> args) async {
   final dryRun = args.contains('--dry-run');
   final all = args.contains('--all');

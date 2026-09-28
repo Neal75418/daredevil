@@ -2,26 +2,25 @@
 #
 # scripts/calibrate.sh — Stage 3+4 one-shot calibration pipeline
 #
-# 一次跑完 backfill → replay → recalibrate 三階段，產出 candidate JSON 供人工 review。
+# 一次跑完 backfill → replay → recalibrate → walk-forward gate 四階段，產出 candidate
+# JSON 供人工 review。
 #
-# ## 為什麼不用 dart run
+# ## 為什麼用 flutter test wrapper
 #
-# tool/backfill.dart 跟 tool/replay_calibrator.dart 透過 AppDatabase 間接 import
-# 了 drift_flutter → dart:ui → Flutter framework 整個 compilation chain。純 Dart
-# VM（`dart run`）沒有 dart:ui，compile time 就爆。
-#
-# 解法：用 `flutter test` 載入 Flutter runtime（有 dart:ui），test wrapper
-# 在 `test/tool/run_backfill.dart` + `test/tool/run_replay.dart` 呼叫每個 tool
-# 的 runXxxCli(args) 函式。`tool/recalibrate.dart` 原本就是純 sqlite3 不用 Flutter，
-# 直接 `dart run` 就行。
+# 歷史原因：當初 AppDatabase 經 drift_flutter 拉進 dart:ui，純 Dart VM
+# （`dart run`）編不過，所以 backfill／replay 改由 `test/tool/run_backfill.dart`、
+# `test/tool/run_replay.dart` 以 `flutter test` 呼叫各 tool 的 runXxxCli(args)。
+# drift_flutter 已拆離（2026-07-23 實測 `dart run` 可用），兩種方式都能跑，
+# 本腳本沿用 wrapper。`tool/recalibrate.dart` 是純 sqlite3，直接 `dart run`。
 #
 # ## 使用方式
 #
 #     export FINMIND_TOKEN=eyJ...          # FinMind API token，必填
 #     ./scripts/calibrate.sh                # 用預設值跑完整 pipeline
 #
-#     # 可選環境變數 —— 全部由 test/tool/run_backfill.dart 與 run_replay.dart
-#     # 直接讀取，此處未列出的等同不存在（守門：scripts_env_documented_test）
+#     # 可選環境變數 —— 由 run_backfill／run_replay wrapper 與 tool/backfill、
+#     # walkforward_validate 讀取，SKIP_WALKFORWARD 由本腳本讀；
+#     # 此處未列出的等同不存在（守門：scripts_env_documented_test）
 #
 #     # 範圍
 #     export CALIBRATION_DB=tool/calibration.db  # DB 路徑，預設 tool/calibration.db
@@ -55,9 +54,8 @@
 #
 # 基本面三個 phase 需 symbols×3 次 FinMind 呼叫、額度 600/hr → 單次跑不完
 # （約 12 小時），而撞限流會 **abort 整個 backfill**，連帶讓下一輪只打 1 次
-# 的 stock_list 也被鎖在門外。若這次目的是重跑校準而非補基本面，設為 1。
-#
-#     ./scripts/calibrate.sh
+# 的 stock_list 也被鎖在門外。所以預設為 1（跳過）；要補基本面時明確設
+# `BACKFILL_SKIP_FUNDAMENTALS=0`，並建議走 calibrate-retry.sh。
 #
 # ## Pipeline 失敗怎麼辦
 #
@@ -72,14 +70,17 @@
 # 產出：
 #   assets/rule_scores_calibrated_short_candidate.json
 #   assets/rule_scores_calibrated_long_candidate.json
+#   assets/calibration_manifest_candidate.json
 #
-# Review 這兩個檔案，通過後手動 rename：
+# Review 後三個檔一起手動 rename（漏 manifest 會讓 OTA hash mismatch 靜默跳過）：
 #   mv assets/rule_scores_calibrated_short_candidate.json \
 #      assets/rule_scores_calibrated_short.json
 #   mv assets/rule_scores_calibrated_long_candidate.json \
 #      assets/rule_scores_calibrated_long.json
+#   mv assets/calibration_manifest_candidate.json \
+#      assets/calibration_manifest.json
 #
-# 然後 `flutter run` 驗證 Today 畫面短/長線切換有實際差異，git commit + push。
+# 然後 `flutter run` 驗證分數變動在畫面上合理，git commit + push。
 
 set -euo pipefail
 
