@@ -1,16 +1,16 @@
 // 營收年增率取到「兩年前那個月」——升冪清單卻用 .first
 //
-// analysis_summary_service.dart 兩處：
-//   :524 final latest = revenueHistory.first;   ← 變數叫 latest，取到的是最舊
-//   :572 final yoy = revenueHistory.first.yoyGrowth;
+// 修正前，analysis_summary_service.dart 兩處：
+//   final latest = revenueHistory.first;   ← 變數叫 latest，取到的是最舊
+//   final yoy = revenueHistory.first.yoyGrowth;
 //
-// 而同一個檔案往上 80 行的法人那段寫著：
-//   :443 // DAO 回傳 ascending order，.last 才是最新一天
-//   :444 final latest = institutionalHistory.last;
+// 而同一個檔案的法人那段寫著：
+//   // DAO 回傳 ascending order，.last 才是最新一天
+//   final latest = institutionalHistory.last;
 // 同一個檔案、同一個陷阱，一個踩了一個沒踩。
 //
-// 來源確認：revenue_dao.dart:22 `query.orderBy([(t) => OrderingTerm.asc(t.date)])`
-// —— 升冪，最舊在前。取數窗是 data/loaders/stock_fundamentals_loader.dart:45
+// 來源確認：getMonthlyRevenueHistory `query.orderBy([(t) => OrderingTerm.asc(t.date)])`
+// —— 升冪，最舊在前。取數窗是 StockFundamentalsLoader.loadAll
 // `DateTime(today.year - 2, today.month, 1)`，也就是 **.first 取到的是兩年前**。
 //
 // 實機 2026-07-27（資料日 07-24）2425 承啟，同一張卡：
@@ -22,7 +22,7 @@
 //   1,330 檔有營收資料 → **692 檔會顯示**，全部顯示的是兩年前的數字；
 //   其中 5 檔正負號相反（像承啟這樣一眼看得出矛盾）、9 檔差 50pp 以上。
 //
-// **:572 那處更嚴重**：它不只是顯示，而是進 `fundamentalBias`，直接影響
+// **第二處（`final yoy = revenueHistory.first.yoyGrowth`）更嚴重**：它不只是顯示，而是進 `fundamentalBias`，直接影響
 // 情緒判定（偏多／中性／偏空標籤）。兩年前的營收在替今天的多空傾向加減分。
 import 'package:flutter_test/flutter_test.dart';
 

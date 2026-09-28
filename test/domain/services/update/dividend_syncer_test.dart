@@ -60,7 +60,8 @@ void main() {
 
   group('DividendSyncer 股東會破壞性寫入守衛', () {
     test('TWSE 失敗、TPEX 成功時不得全市場刪除股東會事件（保留 TWSE 既有資料）', () async {
-      // TWSE 已宣告股利（含股東會）取得失敗（網路瞬斷 → 被 catch，非 rethrow 型）
+      // TWSE 已宣告股利（含股東會）取得失敗（一般例外 → 被 catch；限流與網路錯誤
+      // 則會 rethrow）
       when(
         () => twse.getDeclaredDividends(),
       ).thenThrow(Exception('twse transient boom'));

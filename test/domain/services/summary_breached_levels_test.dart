@@ -1,6 +1,6 @@
 // 支撐/壓力距離被 .abs() 剝掉方向 —— 已跌破的支撐講成「還有緩衝」
 //
-// analysis_summary_service.dart:260-261
+// 修正前 AnalysisSummaryService 的支撐／壓力距離：
 //   final supportDist = ((closeVal - support) / closeVal * 100).abs();
 //   final resistanceDist = ((resistance - closeVal) / closeVal * 100).abs();
 //
@@ -11,7 +11,7 @@
 //   讀起來是「上方還有 3.4% 壓力空間」，實際上壓力早就在下方了。
 //
 // 這**不是資料髒**，是設計中的一級狀態：
-// analysis/analysis_coordinator_service.dart:50-57 刻意把當日排除在支撐壓力
+// AnalysisCoordinatorService 刻意把當日排除在支撐壓力
 // 計算之外（`priceHistory.sublist(0, length - 1)`），註解明寫「若計算支撐/
 // 壓力時包含『今日』，則『今日』永遠無法突破，因為『今日』會成為新的高點」。
 // 也就是說「今日突破昨日算出的壓力」正是這個設計要捕捉的事件，摘要層卻沒處理。
@@ -20,11 +20,11 @@
 //   正常（支撐下、壓力上）578／壓力已突破 133／支撐已跌破 43／兩者皆異常 0
 // 四種組合只有三種存在，所以只需要兩個新文案。
 //
-// **這是 sibling sweep 的漏網**：同一個檔案 :196 的註解是 2026-07-26 修
-// priceChange 時寫下的——「曾用 .abs() 剝掉符號，再由句子的用詞表達方向」
-// ——同一個 bug class、同一個檔案、往下 64 行沒掃到。
+// **這是 sibling sweep 的漏網**：同一個檔案 _buildOverallAssessment 的註解是
+// 2026-07-26 修 priceChange 時寫下的——「曾用 .abs() 剝掉符號，再由句子的
+// 用詞表達方向」——同一個 bug class、同一個方法，當時沒掃到這裡。
 //
-// 不動風險報酬比那段（:274 `if (downside > 0 && upside > 0)`）：它的方向守衛
+// 不動風險報酬比那段（`if (downside > 0 && upside > 0)`）：它的方向守衛
 // 本來就正確，關卡被突破時 RR 會正確地不輸出。那個守衛也反證了「支撐在下、
 // 壓力在上」才是這段的語意前提。
 //

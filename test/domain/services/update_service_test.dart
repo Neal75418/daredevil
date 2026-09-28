@@ -956,8 +956,10 @@ void main() {
 
   // 步驟 3.5：歷史價格撞限流時，止血旗標與錯誤分類雙雙失效
   //
-  // syncer 內部捕捉 RateLimitException 後只設區域旗標中止迴圈、不 rethrow
-  // （這是對的——已抓到的歷史資料要保留），但沒把「為什麼中止」帶出去：
+  // 修正前，syncer 內部捕捉 RateLimitException 後只設區域旗標中止迴圈、不
+  // rethrow（這是對的——已抓到的歷史資料要保留），但沒把「為什麼中止」帶出去
+  // （現已由 HistoricalPriceSyncResult.rateLimitError 帶出，詳見
+  // historical_price_syncer_test 的「撞 FinMind 限流時，coordinator 無從得知」段落）：
   //   - update_service.dart 的 `on RateLimitException` 接不到 → rateLimitedAbort 恆 false
   //   - 失敗只走 `ctx.result.errors.add(...)`（不是 recordError）
   //     → UpdateResult.hasRateLimitError 恆 false
@@ -1078,9 +1080,9 @@ void main() {
 
   // 步驟 4.7 的 rate limit 止血旗標翻不起來 —— record `.wait` 包掉例外型別
   //
-  // update_service.dart:756-759 用 Dart record 的 `.wait` 平行跑損益表與資產
-  // 負債表。record `.wait` 在任一支失敗時拋的是 **ParallelWaitError**，不是
-  // 底層例外，於是 :767 的 `on RateLimitException` 永遠不會觸發。
+  // 修正前 update_service.dart 用 Dart record 的 `.wait` 平行跑損益表與資產
+  // 負債表（現已改 `Future.wait<int?>`）。record `.wait` 在任一支失敗時拋的是
+  // **ParallelWaitError**，不是底層例外，於是 `on RateLimitException` 永遠不會觸發。
   //
   // 2026-07-27 實跑驗證（非推理）：
   //   A record.wait  → 落 generic，型別 ParallelWaitError<(int?, int?), ...>
@@ -1089,8 +1091,8 @@ void main() {
   //   D             → Future.wait 仍等所有 future 結束，不留 unhandled error
   //
   // 影響：`UpdateResult.recordError` 的 `if (exception is RateLimitException)`
-  // （update_service.dart:1140）判不到 → `hasRateLimitError` 恆為 false →
-  // today_screen.dart:820 的限流專屬提示永遠不亮，使用者只看到一般警告數。
+  // 判不到 → `hasRateLimitError` 恆為 false → 今日頁的限流專屬提示永遠不亮，
+  // 使用者只看到一般警告數。
   //
   // 步驟 4.7 是全流程 FinMind 用量最大的一步（2026-07-27 實測 338/384 = 88%），
   // 止血旗標偏偏死在這裡。
@@ -1101,11 +1103,11 @@ void main() {
   //   finmind_client 的 checkBudget 在發網路請求前就擋下。
   //   真正的損害只有錯誤分類與 UI 提示。
   //
-  // 掃過全部 16 處 record `.wait`：只有 update_service.dart:759 落在有
-  // `on RateLimitException` 的 try 裡。:287 那處包的四個 helper 各自有內部
-  // try/catch 並自行設 rateLimitedAbort，例外不會逸出——**不是同型，別順手改**。
+  // 當時掃過全部 16 處 record `.wait`：只有財報那處落在有 `on RateLimitException`
+  // 的 try 裡。步驟 4 平行組那處包的四個 helper 各自有內部 try/catch 並自行設
+  // rateLimitedAbort，例外不會逸出——**不是同型，別順手改**。
   // 2026-08-01 實機(run #123 force):額度 600/600 時 getStockList 拋
-  // RateLimitException,syncer 按慣例 rethrow,但 _syncStockList 是唯一
+  // RateLimitException,syncer 按慣例 rethrow,但當時 _syncStockList 是唯一
   // **完全沒有** try/catch 的 pipeline 步驟——整輪「未捕捉例外」硬摔,
   // 而非優雅 rateLimitedAbort。週一首輪額度總是新鮮,此路徑潛伏至
   // force+額度耗盡的組合才引爆。

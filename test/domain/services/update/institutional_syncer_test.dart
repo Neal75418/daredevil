@@ -154,7 +154,7 @@ void main() {
       expect(result.syncedDays, 2); // 當日 + 7/9
     });
 
-    test('日常更新（!force）當日已定案才跳過（同晚二次更新、隔天重跑 0 抓取）', () async {
+    test('日常更新（!force）當日已定案才跳過（隔天重跑 0 抓取）', () async {
       when(() => mockRepo.isDayComplete(any())).thenAnswer((_) async => true);
       when(() => mockRepo.isDayFinal(any())).thenAnswer((_) async => true);
 
@@ -348,7 +348,7 @@ void main() {
 
       await syncer.syncInstitutionalData(date: date, backfillDays: 4);
 
-      // 淺窗 4 曆天只預檢 ~2 個交易日;深窗 62 曆天 >30 個。
+      // 淺窗 4 曆天只預檢 ~2 個交易日;深窗 90 曆天(約 60 個交易日)。
       // 已完整的天不睡不打,深窗在穩態下零 API 成本。
       final preChecks = verify(() => mockRepo.isDayComplete(any())).callCount;
       expect(

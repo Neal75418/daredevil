@@ -18,7 +18,7 @@ void main() {
   group('RuleEngine Strategy', () {
     test('evaluateStock should run all rules and return reasons', () {
       // 產生有成交量爆增的價格資料
-      // 注意：突破規則現在需要 MA20 過濾和成交量確認 (2x 均量)
+      // 注意：突破規則需要 MA20 過濾和成交量確認（TrendParams.reversalVolumeConfirm 倍均量）
       final prices = generatePricesWithVolumeSpike(
         days: 30,
         normalVolume: 1000,
@@ -38,7 +38,7 @@ void main() {
       // 驗證成交量爆增規則有觸發
       expect(reasons, isNotEmpty);
       expect(reasons.any((r) => r.type == ReasonType.volumeSpike), isTrue);
-      // 注意：突破規則現在需要 MA20 和 2x 成交量確認，收盤 103 剛好等於 breakoutLevel (100 * 1.03)
+      // 注意：突破規則需要 MA20 與成交量確認，收盤 103 剛好等於 breakoutLevel (100 * 1.03)
       // 需要 close > breakoutLevel 才會觸發，所以這裡不再驗證
 
       final score = ruleEngine.calculateScore(reasons, horizon: Horizon.short);
@@ -49,7 +49,7 @@ void main() {
       final customEngine = RuleEngine(customRules: [const BreakoutRule()]);
 
       // 產生有成交量的上升趨勢價格
-      // 突破規則需要: 1) close > breakoutLevel  2) close > MA20  3) todayVolume >= 2x avgVolume
+      // 突破規則需要: 1) close > breakoutLevel  2) close > MA20  3) todayVolume >= 1.5x avgVolume
       final prices = generatePricesWithBreakout(
         days: 30,
         basePrice: 100.0,

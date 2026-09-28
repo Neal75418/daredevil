@@ -1,7 +1,7 @@
 // 零訊號的股票不得顯示「佐證中等」
 //
-// `AnalysisSummaryService.generate` 在 analysis == null && reasons.isEmpty 時
-// early-return 一個只帶 overallParts 與 sentiment 的 SummaryData：
+// 修正前，`AnalysisSummaryService.generate` 在 analysis == null && reasons.isEmpty
+// 時 early-return 一個只帶 overallParts 與 sentiment 的 SummaryData：
 //
 //   return const SummaryData(
 //     overallParts: [LocalizableString('summary.noSignals')],

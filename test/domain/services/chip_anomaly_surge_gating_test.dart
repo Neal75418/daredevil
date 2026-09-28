@@ -279,11 +279,11 @@ void main() {
 
   // ETF 過濾發生在「取前 N 之後」——席位空轉不遞補
   //
-  // b66b6de 為流動性閘門立下的規則就寫在 chip_anomaly_service.dart:439-442：
+  // b66b6de 為流動性閘門立下的規則就寫在 ChipAnomalyService 的註解裡：
   // 「必須在取前 N 之前過濾……若先取前 N 再過濾，名單只會變短、真訊號永遠
   // 遞補不上來」。但同一個檔案裡還有**更晚的一層**：ETF 排除在彙總處
-  // （:93 `if (etfSymbols.contains(anomaly.symbol)) continue;`）執行，而各
-  // detector 早已各自 `LIMIT 5`（:163/:219/:262/:342）或 `.take(5)`（:459）。
+  // （`if (etfSymbols.contains(anomaly.symbol)) continue;`）執行，而修正前各
+  // detector 早已各自 `LIMIT 5` 或 `.take(5)`。
   // 被丟掉的席位不會由第 6 名遞補。
   //
   // 實測（正式 DB 2026-07-17）：融券暴增 top-5 是
@@ -292,7 +292,7 @@ void main() {
   // 4 檔，而排第 6 的個股永遠補不進來。使用者看不見：類別徽章顯示的是過濾
   // 後的數量，縮水完全靜默。
   //
-  // 修法不是把 ETF 條件推進各 detector 的 SQL —— :65-69 的 docstring 明說
+  // 修法不是把 ETF 條件推進各 detector 的 SQL —— detectAnomaliesByMarket 的 docstring 明說
   // 刻意在彙總處單點過濾（宇宙定義 DRY，與 mode_recommendation_provider 的
   // droppedEtf 同一理由）。正解是**把「取前 N」也移到彙總處、排在所有過濾
   // 之後**：SQL 依序回傳全部 → detector 內流動性過濾 → 彙總處 ETF 過濾 →
@@ -377,7 +377,8 @@ void main() {
   // 之後，被 LIMIT 5 截掉而完全不出現。
   //
   // 區塊副標是「董監事或大股東申報轉讓股票」——公司層級語意，SUM 才對得上；
-  // docstring（:205）也只寫「有申報轉讓記錄」，沒有任何一處承諾 per-filer。
+  // 當時該 detector 的 docstring 也只寫「有申報轉讓記錄」，沒有任何一處承諾
+  // per-filer（現已補上「股數為窗內所有內部人合計」）。
   // 5 個既有測試全部只插一列，沒有任何測試把 MAX 釘為預期行為。
   //
   // 「三位經理人同日集體申報」與「一人申報」是不同強度的訊號，所以合計後

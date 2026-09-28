@@ -184,7 +184,7 @@ void main() {
   });
 
   group('CoilingBelowMa20/Ma60(蓄勢區:貼線下 0~3% + 60D>10%)', () {
-    // 60D 報酬由 prices 計算:count=65 根,closes[60] 為 60 交易日前。
+    // 60D 報酬由 prices 計算:count=65 根,closes[4](倒數第 61 根)為 60 交易日前。
     // pricesEndingWith 的 baseline=100,把最舊一段改低製造 60D 正報酬。
     List<DailyPriceEntry> coilingPrices({
       required double close,

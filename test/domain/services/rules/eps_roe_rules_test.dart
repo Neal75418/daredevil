@@ -223,9 +223,10 @@ void main() {
       expect(result.score, equals(RuleScores.epsConsecutiveGrowth));
     });
 
-    test('does not trigger when growth is below threshold', () {
+    test('does not trigger without a year-ago base quarter (growth)', () {
       final prices = _generatePricesAboveMA(maPeriod: 20);
-      // EPS: 1.05, 1.02, 1.0 (very small growth < 10%)
+      // EPS: 1.05, 1.025, 1.0。規則比的是去年同季（YoY），3 季沒有年比基期，
+      // 回 null 的原因是缺基期、不是成長幅度不足
       final epsHistory = generateEpsHistory(
         quarters: 3,
         baseEps: 1.0,
@@ -444,9 +445,10 @@ void main() {
       expect(result.evidence!['declineQuarters'], equals(2));
     });
 
-    test('does not trigger when decline is less than 20%', () {
+    test('does not trigger without a year-ago base quarter (decline)', () {
       final now = DateTime(2025, 6, 1);
-      // Decline: (1.0-0.9)/1.0 = 10% < 20%
+      // 規則比的是去年同季（YoY）；這組 fixture 沒有年比基期，回 null 的原因
+      // 是缺基期、不是衰退幅度未達 20%
       final epsHistory = [
         createTestFinancialData(
           date: DateTime(now.year, now.month, 1),

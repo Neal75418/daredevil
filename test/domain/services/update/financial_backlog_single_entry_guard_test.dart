@@ -31,7 +31,7 @@ void main() {
       final callSites = <String>[];
       for (final f in libFiles) {
         final src = f.readAsStringSync();
-        // 排除定義本身（fundamental_syncer 裡的 `Future<int?> syncFinancialStatements({`）
+        // 排除定義本身（fundamental_syncer 裡的 `Future<int> syncFinancialStatements({`）
         for (final m in RegExp(
           r'\.syncFinancialStatements\(\s*symbols:',
         ).allMatches(src)) {

@@ -31,9 +31,9 @@ void main() {
   final engine = RuleEngine();
 
   test('🚨 落庫的 reason 必須是實際貢獻分數的那份(calibrated 選的贏家)', () {
-    // momentum_breakout group:volumeSpike(hardcoded 22)與
-    // techBreakout(hardcoded 20)。calibration 把 volumeSpike 歸零 →
-    // short 的贏家應是 techBreakout,而非 hardcoded 分數較高的 volumeSpike。
+    // momentum_breakout group:volumeSpike(本測試餵 22)與 techBreakout(本測試
+    // 餵 20,正式 RuleScores 是 25)。calibration 把 volumeSpike 歸零 →
+    // short 的贏家應是 techBreakout,而非餵入分數較高的 volumeSpike。
     const calibrated = CalibratedScoreContext(
       shortScores: {},
       longScores: {},

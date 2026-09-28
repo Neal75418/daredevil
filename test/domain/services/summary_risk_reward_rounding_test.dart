@@ -1,6 +1,6 @@
 // 風險報酬比：顯示四捨五入、判讀用原值，邊界上互相矛盾
 //
-// analysis_summary_service.dart:294-305
+// 修正前 AnalysisSummaryService 的風險報酬比：
 //   final rr = upside / downside;
 //   ... 'ratio': rr.toStringAsFixed(1)          ← 四捨五入
 //   if (rr >= riskRewardFavorableThreshold) ... ← 用原值

@@ -149,7 +149,7 @@ void main() {
             score: score.toDouble(),
           ),
           reasons: [
-            // 多空由 ruleScore 正負決定（非 reasonType），見 _weightedSentiment
+            // 多空由 ruleScore 正負決定（非 reasonType），見 _determineSentiment
             createTestReason(
               reasonType: bullish ? 'TECH_BREAKOUT' : 'TECH_BREAKDOWN',
               ruleScore: bullish ? 20 : -20,

@@ -82,11 +82,12 @@ void main() {
 
     test('🚨 合乎漲跌幅上限的移動不得被當成水位位移', () {
       // 停牌後 +10% 是合法的;把它當斷點會讓正常股票平白失去長窗指標。
-      // 注意 fixture 帶 ±1 的震盪:實際比較的是 99 → 107 = +8.1%
+      // 注意 fixture 帶 ±1 的震盪:實際比較的是 99 → 109 = +10.1%,仍低於
+      // RuleParams.priceDiscontinuityRatio(12%)的斷點門檻
       final ind = coordinator.calculateTechnicalIndicators(
         withShift(preCount: 200, preClose: 100, postCount: 51, postClose: 108),
       );
-      expect(ind!.ma60, isNotNull, reason: '+8.1% 在 ±10% 上限的容許帶內');
+      expect(ind!.ma60, isNotNull, reason: '+10.1% 低於 12% 的斷點門檻');
     });
 
     test('🚨 斷點後不足 RSI 窗時整組回 null——這是已知限制,不是漏測', () {

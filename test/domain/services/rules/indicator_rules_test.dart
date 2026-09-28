@@ -388,7 +388,7 @@ void main() {
   group('RSIExtremeOverboughtRule', () {
     const rule = RSIExtremeOverboughtRule();
 
-    test('triggers when RSI >= 80', () {
+    test('triggers when RSI >= rsiExtremeOverbought (85)', () {
       final prices = _generateUptrendWithVolume(
         days: 16,
         startPrice: 100.0,

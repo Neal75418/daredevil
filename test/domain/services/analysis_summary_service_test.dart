@@ -1246,7 +1246,7 @@ void main() {
   //
   // 實機（1810 和成）：「本益比僅 7.6 倍，估值偏低。」在關鍵訊號與輔助
   // 數據各出現一次，一字不差——同一個 i18n key（summary.peUndervalued）
-  // 被 `_buildSupportingData:451` 與規則映射 `:891` 各用一次。
+  // 被 `_buildSupportingData` 與規則對照表 `_fundamentalSignals` 各用一次。
   //
   // 與先前修的「連續買超」不同：那是兩個**不同的 key** 講同一件事、且
   // 數字互相矛盾；這裡是**同一個 key** 出現兩次。前者靠 streakStatedByRule

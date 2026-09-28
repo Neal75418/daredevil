@@ -141,9 +141,9 @@ void main() {
   });
 
   group('ScoringService Liquidity Filters', () {
-    test('skip stocks with low volume', () async {
+    test('skip stocks with low turnover (small volume)', () async {
       // Arrange
-      // Volume = 100K shares (Fail < 200K min)
+      // Volume = 100K shares × price 100 = turnover 10M（Fail < 30M min）
       final prices = [
         ...generatePricesWithVolumeSpike(
           endDate: _scoringDate,
@@ -158,7 +158,7 @@ void main() {
           high: 105,
           low: 95,
           close: 100,
-          volume: 100000, // 100K shares < 200K min
+          volume: 100000, // turnover 100 × 100K = 10M < 30M
         ),
       ];
 
@@ -180,9 +180,9 @@ void main() {
 
     test('skip stocks with low turnover', () async {
       // Arrange
-      // Volume = 500K shares (OK > 200K)
+      // Volume = 500K shares
       // Price = 5
-      // Turnover = 2.5M (Fail < 20M)
+      // Turnover = 2.5M (Fail < 30M)
       final prices = [
         ...generatePricesWithVolumeSpike(
           endDate: _scoringDate,
@@ -197,7 +197,7 @@ void main() {
           high: 6,
           low: 4,
           close: 5,
-          volume: 500000, // 500K shares, turnover = 5*500K = 2.5M < 20M
+          volume: 500000, // 500K shares, turnover = 5*500K = 2.5M < 30M
         ),
       ];
 
@@ -217,9 +217,9 @@ void main() {
 
     test('process stocks with high volume and turnover', () async {
       // Arrange
-      // Volume = 3M shares (OK > 200K)
+      // Volume = 3M shares
       // Price = 150
-      // Turnover = 450M (OK > 20M)
+      // Turnover = 450M (OK > 30M)
       final prices = [
         ...generatePricesWithVolumeSpike(
           endDate: _scoringDate,
@@ -327,8 +327,7 @@ void main() {
           ...generatePricesWithVolumeSpike(
             endDate: _scoringDate,
             days: 30,
-            normalVolume:
-                2000000, // Increase to pass turnover filter (2M * 100 = 200M > 20M)
+            normalVolume: 2000000, // 流動性只看最後一根（spike 那天），這個量不影響過濾
             spikeVolume: 5000000,
           ),
         ],

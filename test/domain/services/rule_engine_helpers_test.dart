@@ -579,11 +579,11 @@ void main() {
     test(
       '_reasonToGroup builds without throwing (current groups are disjoint)',
       () {
-        // 觸發 lazy 初始化 — 若任何 ReasonType 出現在 >1 group 會 StateError
+        // 本意：觸發 lazy 初始化——若任何 ReasonType 出現在 >1 group 會 StateError
         expect(
           () {
-            // 構造 engine 並做一次 mutex 過濾，會 trigger _reasonToGroup
-            // static field 的 lazy init。
+            // 注意：applyMutexGroups 對空清單會在存取 _reasonToGroup 之前就
+            // 返回，單獨執行時不會觸發 lazy init——這條目前驗不到 disjointness。
             final engine = RuleEngine(customRules: const []);
             engine.applyMutexGroups(const [], (r) => r.score);
           },

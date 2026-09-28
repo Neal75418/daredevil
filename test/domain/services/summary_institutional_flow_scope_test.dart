@@ -1,6 +1,6 @@
 // 「近期法人動向」顯示的是單日，不是一段期間
 //
-// analysis_summary_service.dart:443-449
+// AnalysisSummaryService._buildSupportingData 的法人段：
 //   // DAO 回傳 ascending order，.last 才是最新一天
 //   final latest = institutionalHistory.last;
 //   final foreign = _formatNetLocalizable(latest.foreignNet);

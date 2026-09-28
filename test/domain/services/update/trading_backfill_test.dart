@@ -76,7 +76,7 @@ void main() {
   }
 
   /// 市場規模：上市 1000 檔、上櫃 800 檔 → 覆蓋門檻各 500 / 400
-  /// （`historicalMarketDayMinCoverageRatio` = 0.5）
+  /// （`tradingBackfillMinCoverageRatio` = 0.5）
   const twseStocks = 1000;
   const tpexStocks = 800;
   const twseThreshold = 500;

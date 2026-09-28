@@ -119,7 +119,7 @@ void main() {
   // ATR 動態半徑的上界（2026-08-29 稽核 H3）
   // ==========================================
   //
-  // `maxDistance = atrDistance ?? maxSupportResistanceDistance` —— ATR 版
+  // 修正前 `maxDistance = atrDistance ?? maxSupportResistanceDistance` —— ATR 版
   // **完全沒有上界**，而它取代的那個常數（0.08）文件寫著「超過此距離的
   // 壓力/支撐將被忽略，8% 可偵測近期水位並過濾無關水位」。
   //
@@ -203,7 +203,7 @@ void main() {
     });
 
     test('未達上界時不受影響(對照組)', () {
-      // atrPad=4 → 未夾半徑恰 24%,遠谷剛好在界上、近谷勝出;夾與不夾同值
+      // atrPad=4 → 未夾半徑恰 24%,等於上界,夾與不夾同值;遠谷(−40%)在界外、近谷勝出
       final prices = twoZones(atrPad: 4);
       final (support, _) = service.findSupportResistance(prices);
       expect(support, closeTo(82.0, 0.01));

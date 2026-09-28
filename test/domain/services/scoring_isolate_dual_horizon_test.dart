@@ -1,7 +1,7 @@
 // Stage 5b Commit 3 — dual-horizon isolate DTO tests
 //
-// 驗證 [ScoringIsolateInput] / [ScoringIsolateOutput] / [IsolateReasonOutput]
-// 在新增 dual-horizon 欄位後的序列化正確性。
+// 驗證 [ScoringIsolateInput] / [ScoringIsolateOutput] 的 dual-horizon 欄位行為契約
+// （預設值、兩 horizon 各自的分數；Map 序列化層已移除，見下方說明）。
 import 'package:daredevil/core/constants/calibrated_scores/calibrated_score_context.dart';
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
 import 'package:daredevil/domain/services/scoring_isolate.dart';

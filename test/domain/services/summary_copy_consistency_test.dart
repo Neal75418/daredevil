@@ -19,8 +19,8 @@
 // TPK-KY：
 //   內文     「……估值偏低但趨勢轉弱，需留意價值陷阱。」
 //   風險提示 「估值偏低但趨勢轉弱，需留意價值陷阱。」
-// `confluenceOverall` 的 {confluence} 參數用 `summaryKeys.first`（:225），
-// 而 `_buildKeySignals`(:349) 與 `_buildRiskFactors`(:394) 又把整個
+// `confluenceOverall` 的 {confluence} 參數用 `summaryKeys.first`，
+// 而 `_buildKeySignals` 與 `_buildRiskFactors` 又把整個
 // summaryKeys 加進清單 —— 有匯流時必定重複。
 //
 // 先前那次跨區去重（1810 和成的本益比）只涵蓋 supporting 對
@@ -35,11 +35,14 @@
 //
 // 兩個方向都不划算：
 //   清單去重 → 3673 這種「頭條就是價值陷阱」的股票風險欄整區消失，
-//              比重複更糟；且打破 analysis_summary_service_test.dart:472
-//              與 :499（明文要求匯流 key 在清單、且排第一）。
-//   刪 confluenceOverall → 拿掉一個刻意建立、由 :710 鎖住的功能，
+//              比重複更糟；且打破 analysis_summary_service_test.dart 的
+//              「confluence keys should appear first in keySignals」與
+//              「bearish confluence keys should appear in riskFactors」
+//              （明文要求匯流 key 在清單、且排第一）。
+//   刪 confluenceOverall → 拿掉一個刻意建立、由「use confluenceOverall key
+//              when confluence exists」鎖住的功能，
 //              7 檔開場白全部變平淡，只為消除 7 張卡的冗餘。
-//   「清單還有其他項目時才去重」→ :472 的情境正好是清單 2 項，仍會破；
+//   「清單還有其他項目時才去重」→ 第一條測試的情境正好是清單 2 項，仍會破；
 //              要繞就得寫成「≥2 個其他項目才去重」，那是為閃測試而設判準。
 //
 // 且此重複**不誤導**：兩處一字不差，不像本檔前兩條或

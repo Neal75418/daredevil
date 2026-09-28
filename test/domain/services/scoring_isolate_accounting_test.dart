@@ -70,7 +70,7 @@ void main() {
       // 把 `skippedNoReasons++` 整行刪掉測試仍全綠。
       //
       // 本案例造出「資格通過但無訊號」：完全平盤 30 日（長度 ≥ swingWindow=20、
-      // 量 200 萬股 ≥ 100 萬、成交額 1 億 ≥ 3000 萬），走勢平淡不觸發任何規則。
+      // 成交額 1 億 ≥ 3000 萬），走勢平淡不觸發任何規則。
       final flat = List.generate(
         30,
         (i) => DailyPriceEntry(

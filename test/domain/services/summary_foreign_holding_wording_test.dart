@@ -1,8 +1,9 @@
 // 「外資持股比例持續增加」——實際是兩點比較，三分之一情況最新一天在減少
 //
-// 規則（extended_market_rules.dart:56-60）判的是
-//   change = 今日持股比 − N 日前持股比（batch_data_builder.dart:142），
-//   |change| >= foreignShareholdingIncreaseThreshold(0.5) 即觸發。
+// 規則（ForeignShareholdingIncreasingRule）判的是
+//   change = 今日持股比 − N 日前持股比（BatchDataBuilder.buildShareholdingMap），
+//   change >= foreignShareholdingIncreaseThreshold(0.5) 即觸發（減持規則對稱：
+//   change <= -0.5，但 ≤ -2.0 改由 ForeignExodusRule 代表）。
 // 那是**淨變化的門檻測試**，不是連續性檢查。
 //
 // 實機 2026-07-27（資料日 07-24）3006 晶豪科：卡片寫「外資持股比例持續
@@ -52,7 +53,7 @@ void main() {
 
     for (final locale in monotonicWords.keys) {
       // 同型掃描：reasonTip 區塊有一份**一字不差**的複本，經
-      // ReasonType.i18nTooltipKey 餵給規則標籤的 tooltip（reason_tags.dart:104）。
+      // ReasonType.i18nTooltipKey 餵給規則標籤的 tooltip（ReasonTags）。
       // 只修 summary 會留下同一句錯的話在另一個消費點。
       // 該處走 `key.tr()` 無 namedArgs，故只去除連續性宣稱、不帶入數值。
       test('🚨 $locale：外資持股文案不得說「持續增加／減少」（含 reasonTip 複本）', () {

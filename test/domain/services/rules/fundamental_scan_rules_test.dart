@@ -387,7 +387,7 @@ void main() {
   group('PEOvervaluedRule', () {
     const rule = PEOvervaluedRule();
 
-    test('triggers when PE >= 100 and RSI is overbought', () {
+    test('triggers when PE >= 60 and RSI is overbought', () {
       // Need 14+ days for RSI calculation + RSI > 75
       // Build continuous uptrend to push RSI high
       final now = DateTime.now();
@@ -399,7 +399,7 @@ void main() {
         );
       });
       final valuation = createTestValuation(
-        per: 120.0, // >= 100
+        per: 120.0, // >= 60
         date: DateTime(2025, 5, 30),
       );
       final data = createTestStockData(
@@ -529,13 +529,13 @@ void main() {
       () {
         final prices = _generatePricesAboveMA(maPeriod: 20);
         final revenue = createTestMonthlyRevenue(
-          revenue: 1500000, // current: 150 億
+          revenue: 1500000, // current: 15 億（單位千元）
           revenueMonth: 3,
         );
         final data = createTestStockData(
           prices: prices,
           latestRevenue: revenue,
-          maxHistoricalRevenue: 1200000, // historical max: 120 億
+          maxHistoricalRevenue: 1200000, // historical max: 12 億
         );
         final context = AnalysisContext(
           evaluationTime: DateTime(2025, 6, 1),

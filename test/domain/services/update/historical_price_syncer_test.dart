@@ -550,7 +550,7 @@ void main() {
         () async {
           // 200 檔每檔在 3 個非連續月各放 3 天 = 9 天總量 + 9 個月缺資料。
           //
-          // 視窗 = testDate - historyRequiredDays = 約 250 天 (~12 個月)。
+          // 視窗 = testDate - historyRequiredDays = 約 400 曆天 (~14 個月)。
           // 9 天遠 < nearThreshold(180) → _findSymbolsNeedingData 不會早退。
           // firstTradeDate 在約 12 個月前 → _hasEnoughDataForAge 期望 ~85 天
           // (300×0.71×0.5)，9 天遠不足 → 進佇列。
@@ -961,11 +961,11 @@ void main() {
 
   // 上櫃股被當成上市股計價，動態上限被高估壓低
   //
-  // `PriceRepository.syncStockPrices`（price_repository.dart:172-183）依市場
+  // `PriceRepository.syncStockPrices` 依市場
   // 分流：
   //   上櫃 → `_tpexSource.fetchSingleStockPrices(startDate, endDate)` 整段 **1 次**
   //   上市 → `_twseSource.fetchMonthlyPrices(months: monthsToFetch)` **逐月**
-  // 但 `_estimateAvgMonthsNeeded` 完全不分市場，一律以「需要幾個月＝幾次呼叫」
+  // 但修正前 `_estimateAvgMonthsNeeded` 完全不分市場，一律以「需要幾個月＝幾次呼叫」
   // 計價，再用 `maxSyncCount = historicalPriceMaxMonthlyApiCalls / avgMonths`
   // 壓低每輪可同步檔數。
   //
@@ -1086,12 +1086,12 @@ void main() {
 
   // 撞 FinMind 限流時，coordinator 無從得知 —— 止血旗標翻不起來
   //
-  // phase 1 的 per-symbol 迴圈在 historical_price_syncer.dart:636-643 捕捉
-  // RateLimitException，設**區域變數** `rateLimited`（:602）中止迴圈，
-  // 但既不 rethrow、也不放進 [HistoricalPriceSyncResult]。
+  // 修正前，phase 1 的 per-symbol 迴圈捕捉 RateLimitException，設**區域變數**
+  // `rateLimited` 中止迴圈，但既不 rethrow、也不放進 [HistoricalPriceSyncResult]
+  // （現已由 `HistoricalPriceSyncResult.rateLimitError` 帶出）。
   //
-  // 於是 update_service.dart 的 `_syncHistoricalData`：
-  //   - :549 的 `on RateLimitException` 永遠不觸發 → ctx.rateLimitedAbort 恆 false
+  // 於是當時 update_service.dart 的 `_syncHistoricalData`：
+  //   - `on RateLimitException` 永遠不觸發 → ctx.rateLimitedAbort 恆 false
   //   - 失敗只走 `ctx.result.errors.add(...)`（**不是 recordError**）
   //     → UpdateResult.hasRateLimitError 也恆 false
   // 兩者都是「限流被降級成一般失敗」，與 1bf5040 修掉的 ParallelWaitError

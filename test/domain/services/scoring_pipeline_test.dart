@@ -25,7 +25,7 @@ void main() {
     // ==================================================================
     // 陳舊 bar 檢查（P1-8 L1）
     //
-    // 病灶：本函式只驗 null/empty、length、liquidity，**從不比對
+    // 病灶（修正前）：本函式只驗 null/empty、length、liquidity，**從不比對
     // prices.last.date 與評分日**。而 batch_data_loader 的價格窗以
     // endDate = 評分日 收斂，DB 沒有當日 bar 時 prices.last 會自動退化成
     // 前一交易日 —— 這就是「昨日 K 棒掛今日日期寫進 daily_analysis」

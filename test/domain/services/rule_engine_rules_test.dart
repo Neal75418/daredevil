@@ -93,7 +93,7 @@ void main() {
       const rule = BreakoutRule();
 
       test('trigger when close exceeds resistance with volume', () {
-        // 突破規則需要: close > breakoutLevel, close > MA20, volume >= 2x avg
+        // 突破規則需要: close > breakoutLevel, close > MA20, volume >= 1.5x avg
         // breakoutLevel = 100 * 1.03 = 103, 所以需要 close > 103
         final prices = generatePricesWithBreakout(
           days: 25,
@@ -138,12 +138,12 @@ void main() {
       const rule = BreakdownRule();
 
       test('trigger when close falls below support with volume', () {
-        // 跌破規則需要: close < breakdownLevel, close < MA20, volume >= 2x avg
+        // 跌破規則需要: close < breakdownLevel, volume >= 1.5x avg（沒有 MA20 條件）
         // breakdownLevel = 100 * (1 - 0.03) = 97, 所以需要 close < 97
         final prices = generatePricesWithBreakdown(
           days: 25,
           basePrice: 100.0,
-          breakdownPrice: 90.0, // < 97 (breakdownLevel) 且 < 100 (MA20)
+          breakdownPrice: 90.0, // < 97 (breakdownLevel)
           normalVolume: 1000,
           breakdownVolume: 3000, // 3x 均量
         );
@@ -377,13 +377,13 @@ void main() {
       const rule = InstitutionalShiftRule();
 
       test('trigger when foreign investors switch to buy', () {
-        // Rule Case 5 (Significant Buy) requires:
-        // 1. todayVolume >= 1,000,000 shares (1000 sheets * 1000)
-        // 2. todayNet > 2,500,000 (2500 sheets * 1000)
-        // 3. todayNet.abs() / todayVolume >= 0.25 (25% ratio)
-        //
-        // Using: todayDirection = 3,000,000, volume = 10,000,000
-        // ratio = 3M / 10M = 0.3 > 0.25 ✓
+        // 走情境 1（反轉：賣轉買），條件與本 fixture 的值：
+        // 1. 前期平均 < -institutionalSmallShares(10 萬股)：-20 萬（fixture 餵
+        //    -60 萬，helper 會 ÷3 後放進 foreignNet）
+        // 2. todayNet > institutionalReversalShares(50 萬股)：400 萬
+        // 3. 漲幅 > minPriceChangeForVolume(1.5%)：2/102 ≈ +1.96%
+        // 4. todayNet / todayVolume > institutionalSignificantRatio(0.35)：
+        //    400 萬 / 1000 萬 = 0.4
         final history = generateInstitutionalHistory(
           days: 15,
           prevDirection: -600000,

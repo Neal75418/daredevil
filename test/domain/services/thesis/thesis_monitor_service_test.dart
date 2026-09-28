@@ -50,7 +50,7 @@ void main() {
     await db.close();
   });
 
-  /// 從釘選日起 seed [days] 天收盤（工作日連續、值由 [closeAt] 決定）
+  /// 從釘選日起 seed [days] 天收盤（日曆日連續、含週末；值由 [closeAt] 決定）
   Future<void> seedCloses(int days, double Function(int i) closeAt) async {
     await db.insertPrices([
       for (var i = 0; i < days; i++)
