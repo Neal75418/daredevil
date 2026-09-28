@@ -51,7 +51,6 @@ class RuleEngine {
   /// - **patternDoji / patternDojiBearish**：indecision 形態，與「明確反轉」
   ///   語意不同，可與反轉 K 線正當共存（出現後 1-2 日才常見反轉）。patternDoji
   ///   另與 RSI 超賣同組（oversold_indecision）：它的多方分支條件等同 RSI ≤ 30
-  ///   （RSI 恰為 70 的邊界除外）
   /// - **patternGapUp / patternGapDown**：跳空缺口主要傳達「open vs prev close」
   ///   的隔日斷層資訊，與單日 K 棒形狀（Hammer / Engulfing）描述的是不同
   ///   訊號層，可共存
@@ -80,8 +79,7 @@ class RuleEngine {
     },
     // 2026-08-15 數值稽核新增(DB 實證共現率 100% / 23%):
     // - oversold_indecision:DojiRule 的多方分支本身要求 rsi ≤ 30
-    //   (rsiExtremeOversold 的觸發條件),兩者是子集關係、實務上同時觸發
-    //   (RSI 恰為 70 的邊界除外)。
+    //   (rsiExtremeOversold 的觸發條件),兩者是子集關係、實務上同時觸發。
     //   兩條 short 分數皆 +10 → 「RSI≤30 加一根小實體 K」這**一個**條件
     //   曾貢獻 Mode A +20 分,超過 12 分的成立門檻、直接佔用 Top-30 席位。
     // - pullback_at_support:HammerAtSupport 的位置上界(close ≤ ma20×1.06)

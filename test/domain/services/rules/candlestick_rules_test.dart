@@ -85,6 +85,44 @@ void main() {
 
       expect(rule.evaluate(context, data), isNull);
     });
+
+    // 門檻值本身屬極端區（與 RSI 超買／超賣規則的 >=、<= 一致）
+    group('RSI 邊界', () {
+      ReasonType? typeAt(double rsi) {
+        final context = AnalysisContext(
+          evaluationTime: DateTime(2025, 6, 1),
+          trendState: TrendState.range,
+          indicators: TechnicalIndicators(rsi: rsi),
+        );
+        final doji = createDojiCandle(
+          date: DateTime(2025, 6, 1),
+          price: 100.0,
+          range: 10.0,
+        );
+        return rule
+            .evaluate(context, StockData(symbol: 'TEST', prices: [doji]))
+            ?.type;
+      }
+
+      test('RSI 恰為高檔門檻 → 高檔十字線（偏空）', () {
+        expect(
+          typeAt(IndicatorParams.rsiNeutralHigh),
+          ReasonType.patternDojiBearish,
+        );
+      });
+
+      test('RSI 恰為低檔門檻 → 低檔十字線（偏多）', () {
+        expect(
+          typeAt(IndicatorParams.rsiExtremeOversold),
+          ReasonType.patternDoji,
+        );
+      });
+
+      test('門檻內側一點點屬中性區，不觸發', () {
+        expect(typeAt(IndicatorParams.rsiNeutralHigh - 0.01), isNull);
+        expect(typeAt(IndicatorParams.rsiExtremeOversold + 0.01), isNull);
+      });
+    });
   });
 
   // ==========================================

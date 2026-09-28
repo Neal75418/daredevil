@@ -69,14 +69,14 @@ class DojiRule extends StockRule {
       // 需要 RSI 判定位置：無 RSI 時無法區分高低檔，跳過
       final rsi = context.indicators?.rsi;
       if (rsi == null) return null;
-      // 過濾條件：RSI 必須在極端區域
-      if (rsi > IndicatorParams.rsiExtremeOversold &&
-          rsi < IndicatorParams.rsiNeutralHigh) {
-        return null;
-      }
+      // 只在極端區觸發；門檻值本身屬極端區（與 RSI 超買／超賣規則的
+      // >=、<= 一致）。高低檔各判斷一次，過濾與分類共用，邊界不會分歧
+      final isHigh = rsi >= IndicatorParams.rsiNeutralHigh;
+      final isLow = rsi <= IndicatorParams.rsiExtremeOversold;
+      if (!isHigh && !isLow) return null;
 
       // 根據位置給不同分數：高檔十字線偏空，低檔十字線偏多
-      final isBearish = rsi > IndicatorParams.rsiNeutralHigh;
+      final isBearish = isHigh;
       final score = isBearish
           ? RuleScores.patternDojiBearish
           : RuleScores.patternDoji;

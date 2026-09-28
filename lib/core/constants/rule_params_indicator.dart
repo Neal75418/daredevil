@@ -25,8 +25,8 @@ abstract final class IndicatorParams {
 
   /// RSI 中性區上界（K 線型態過濾用）
   ///
-  /// RSI 在 rsiExtremeOversold ~ rsiNeutralHigh 之間視為中性，
-  /// 十字線等型態需 RSI 處於極端區域才有意義。
+  /// RSI 嚴格介於 rsiExtremeOversold 與 rsiNeutralHigh 之間視為中性；
+  /// 兩個門檻值本身屬極端區。十字線等型態需 RSI 處於極端區域才有意義。
   static const double rsiNeutralHigh = 70.0;
 
   // ==================================================
