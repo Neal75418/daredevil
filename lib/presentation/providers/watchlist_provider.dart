@@ -30,8 +30,8 @@ export 'package:daredevil/presentation/providers/watchlist_types.dart';
 
 /// 自選股頁面狀態
 ///
-/// 使用快取策略：[filteredItems]、[groupedByStatus]、[groupedByTrend]
-/// 僅在建構時計算一次，避免每次 build 時重複計算。
+/// 使用快取策略：[filteredItems] 在建構時計算一次；[groupedByStatus]、
+/// [groupedByTrend]、[groupedByCategory] 延遲初始化，每個 state 實例只算一次。
 class WatchlistState {
   WatchlistState({
     this.items = const [],

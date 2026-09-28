@@ -286,7 +286,8 @@ class _QuarterlyReportOverviewScreenState
             ),
             const SizedBox(width: DesignTokens.spacing12),
             // EPS 年增差值(元):排序鍵直接顯示(帶號,紅=優於去年、
-            // 綠=遜於去年,同股價語意);背景條=相對可見清單最大差值
+            // 綠=遜於去年,同股價語意);背景條=相對可見清單的 p95
+            // (見 GrowthBarCell.barScale)
             GrowthBarCell(
               width: _cellWidth,
               text: row.epsYoyDelta == null
@@ -374,10 +375,11 @@ class _QuarterlyReportOverviewScreenState
     );
   }
 
-  // 62(2026-08-13 終審 Critical 1):加淨利率欄後 76×4+間距+padding=384
-  // >375pt 手機寬直接溢出、股名歸零——與月營收頁同一筆帳(62×4+48+32=328,
-  // 375 下股名剩 47px)。加欄前先重算;375 守門測試在 quarterly_overview_
-  // screen_test。
+  // 62(2026-08-13 終審 Critical 1):每列 4 格 + 3 個 12pt 間距 + 左右 padding
+  // 32。加淨利率欄後若用 76,固定寬 76×4+36+32=372,375pt 手機寬下股名只剩
+  // 約 3px;62 時為 62×4+36+32=316,股名約 59px。月營收頁是另一筆帳
+  // (88+62×3+36+32=342)。加欄前先重算;本頁沒有 375 寬度的守門測試
+  // (月營收頁有)。
   static const double _cellWidth = 62;
 
   Widget _numCell(

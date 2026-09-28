@@ -85,8 +85,8 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
     ref.onDispose(() => timer.cancel());
 
     // M6 follow-up：runUpdate 完成後 bump dataUpdateEpoch；同股票頁面
-    // 停留時若背景觸發更新，自動 reload 拿到最新分析。loadData() 內部
-    // 帶 isLoading guard，重複呼叫不會 race。
+    // 停留時若背景觸發更新，自動 reload 拿到最新分析。loadData() 沒有
+    // 去重，重複觸發時可能同時有兩輪在跑；`_active` 只擋 dispose 後寫入。
     ref.listen(dataUpdateEpochProvider, (_, _) {
       if (!_active) return;
       if (state.price.analysis == null && state.reasons.isEmpty) return;

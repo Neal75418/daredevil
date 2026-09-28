@@ -77,7 +77,6 @@ class AlertQuickSet extends StatelessWidget {
     AlertKind.stopGate,
   ];
 
-  /// 條件是否已成立(向上型:現價已在目標之上;向下型:已在其下)
   /// 已有同價位的提醒?浮點比較用 0.005 容差(顯示精度是兩位小數)
   bool _alreadySet(AlertTarget t) => existingTargets.any(
     (e) => e.$1 == t.alertTypeValue && (e.$2 - t.price).abs() < 0.005,
@@ -88,6 +87,7 @@ class AlertQuickSet extends StatelessWidget {
   bool get _isMarketHours =>
       IntradayPollSchedule.isMarketHours(now ?? TaiwanTime.now());
 
+  /// 條件是否已成立(向上型:現價已在目標之上;向下型:已在其下)
   bool _isAlreadyMet(AlertTarget t) {
     final p = currentPrice;
     if (p == null) return false;

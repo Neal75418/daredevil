@@ -613,7 +613,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
   /// 自訂分組清單（key 為分組名稱，含末端「未分組」桶）
   ///
   /// 與 [_buildGroupedList] 的差異：分組桶 key 為使用者命名的 String，
-  /// 不是 enum。沿用相同的 header（folder emoji）+ sticky 結構，只渲染
+  /// 不是 enum。沿用相同的 header（folder emoji）結構，只渲染
   /// 有成員的桶。Map 已由 provider 依 sortOrder 保序，未分組在最後。
   Widget _buildCategoryGroupedList(
     Map<String, List<WatchlistItemData>> grouped,

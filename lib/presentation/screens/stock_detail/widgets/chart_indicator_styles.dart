@@ -44,7 +44,8 @@ abstract final class ChartIndicatorStyles {
   static CCIStyle cciFor(Brightness brightness) =>
       const CCIStyle(cciColor: IndicatorColors.chartTertiary);
 
-  /// 守門測試用:列舉全部「線色」(不含 MACD 柱——柱色有自己的語意斷言)
+  /// 守門測試用:列舉本出口管轄的指標色(MA 與五個副圖)——線色,加上 MACD
+  /// 副圖標頭的數值文字色(macdColor);不含 MACD 柱(柱色有自己的語意斷言)
   @visibleForTesting
   static List<Color> lineColorsFor(Brightness b) {
     final macd = macdFor(b);

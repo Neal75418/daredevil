@@ -134,7 +134,7 @@ class PinnedThesisNotifier extends AsyncNotifier<PinnedThesisState> {
     await _reload();
   }
 
-  /// 更新完成後由畫面呼叫重載（monitor 可能剛標了失效）
+  /// 手動重載入口（目前畫面不呼叫；更新後的自動重載走 dataUpdateEpoch）
   Future<void> refresh() => _reload();
 
   /// 封存紀錄（歷史複盤 sheet 用；on-demand、不進常駐 state）

@@ -9,7 +9,7 @@ import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 「訊號卡怎麼看」說明（今日訊號標題旁的 ⓘ 進入）。
 ///
-/// 門檻與天數由程式常數帶入，常數改了說明跟著改；附三個級距的實際徽章
+/// 門檻與天數由程式常數帶入，常數改了說明跟著改；附四個級距的實際徽章
 /// 樣式（強／中／弱／觀察），看到的就是卡片上的樣子。
 class SignalCardGuideSheet extends StatelessWidget {
   const SignalCardGuideSheet({super.key});

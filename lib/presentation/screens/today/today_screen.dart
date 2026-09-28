@@ -331,7 +331,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
   }
 
-  /// 建立推薦卡片([browsingContext] = 詳情頁左右滑的清單,預設同渲染清單)
   /// MA 階段警示條(跌破/站回共用)
   ///
   /// 兩條刻意走同一個 builder:2026-07-31 只做了跌破,站回那半漏了一個月才
@@ -394,6 +393,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
   }
 
+  /// 建立推薦卡片([browsingContext] = 詳情頁左右滑的清單,預設同渲染清單)
   Widget _buildRecommendationCard(
     BuildContext context,
     List<ModeRecommendation> recommendations,
@@ -642,7 +642,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         //
         // 2026-06-19：最後更新時間整段 tappable，彈出 UpdateHistorySheet
         // 顯示最近 30 筆 update_run，含失敗 / partial 狀態與 message。
-        // 上次 run 不是 SUCCESS 時 timestamp 旁有橘 / 紅 dot 提示。
+        // 上次 run 不是 SUCCESS 時 timestamp 旁有警示圖示（partial 橘、failed 紅）。
         Consumer(
           builder: (context, ref, _) {
             final lastUpdate = ref.watch(
@@ -693,8 +693,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: () => UpdateHistorySheet.show(context),
-                    // Vertical padding spacing12 = 12 + 14 (text) + 12 = 38pt
-                    // 還差最少 6pt 到 iOS 44pt，所以再加 spacing4 = 44pt 整。
+                    // 垂直 padding 每側 spacing12 + spacing4/2 = 14pt，內容列約
+                    // 16pt（bodySmall 行高、chevron 16），單列時合計約 44pt，達 iOS
+                    // 建議的觸控高度（換行或字級放大只會更高）。
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: DesignTokens.spacing8,
@@ -818,7 +819,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         ),
 
         // 自選 MA 階段警示條:跌破(紅,2026-07-31 四階段風控)與站回
-        // (綠,2026-08-21)。開 app 第一屏直接撞見——風控不能靠記得去掃描頁
+        // (品牌藍,2026-08-21)。開 app 第一屏直接撞見——風控不能靠記得去掃描頁
         // 看,機會也一樣。兩條各自獨立渲染,同日都發生時並存不互相吃掉。
         //
         // 站回這半補得晚:RECLAIM_MA20/60 訊號一直有算、有落庫、有分數,
@@ -921,12 +922,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         // 2026-06-19：3-tab Mode UI 取代 dual-horizon SegmentedButton
         //
         // 動機：短線/長線兩 tab 在現階段 calibration 不夠成熟、95%+ 內容相同、
-        // user 看不出真實差異；改成 mode-based 3 tab（起漲/強勢/弱勢）對應
-        // user 真實的 3 種觀察心智。5D 跟 60D 雙 score 改在 StockCard 內並排
-        // 顯示，user 一眼看到兩個 timeframe 強弱對比。
+        // user 看不出真實差異；改成 mode-based 3 tab（起漲/強勢/回檔）對應
+        // user 真實的 3 種觀察心智。卡片分數見 ScoreTierBadge.dual（顯示 5D、
+        // 60D 較高者）。
         //
         // horizon 選擇器/provider 已於 2026-06 移除：scan 定死 60D、stock
-        // detail / comparison 定死 5D。Today 內 sort 預設按 5D abs(score) DESC。
+        // detail / comparison 定死 5D。各分頁排序見 mode_recommendation_provider。
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1059,7 +1060,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         // 族群排行空資料／載入中自動收起，不佔版面。
         const SliverToBoxAdapter(child: IndustryRankingSection()),
 
-        // 月營收公布中入口(僅每月上旬顯示;窗口外/無資料自動收起)
+        // 月營收／季報入口(常駐:窗口內顯示公布進度、窗口外顯示總表;無資料才收起)
         const SliverToBoxAdapter(child: RevenueFilingEntrySection()),
         const SliverToBoxAdapter(child: QuarterlyFilingEntrySection()),
 

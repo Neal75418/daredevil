@@ -153,7 +153,7 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
         ],
       ),
       // 響應式：≥ tablet 斷點雙欄（月曆左、未來14天＋當日事件右），
-      // 空間用起來、不再是置中浮島；窄視窗維持單欄。兩者皆置中限寬。
+      // 空間用起來、不再是置中浮島；窄視窗維持單欄。窄版置中限寬，寬版雙欄吃滿。
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= Breakpoints.tablet;
@@ -385,8 +385,8 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
 
   /// 月曆＋分隔線＋類型篩選 chips（單欄／雙欄共用）
   ///
-  /// [isWide] 桌面雙欄時格高加高（52→68）、dot 放大——165dp 寬的格子配
-  /// 手機格高會扁成表格列。
+  /// [isWide] 桌面雙欄時星期列加高、dot 放大、chips 不留 FAB 尾距；格高由
+  /// [rowHeight] 決定，呼叫端依可用高度動態計算。
   Widget _buildCalendarSection(
     ThemeData theme,
     EventCalendarState state, {
@@ -618,7 +618,7 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
               onSelected: (_) {
                 ref.read(eventCalendarProvider.notifier).toggleEventType(type);
               },
-              // 兩態皆中性、類型色只留 8px 色點：預設五類全選時，著色
+              // 兩態皆中性、類型色只留 8px 色點：預設全類型全選時，著色
               // label/avatar 會讓整排恆常呈彩虹（2026-07-24 使用者回饋）。
               // 選中與否由底色＋勾勾表達。
               selectedColor: theme.colorScheme.surfaceContainerHighest,

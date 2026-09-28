@@ -128,12 +128,8 @@ enum AlertType {
   ///
   /// 僅已實作的類型可供使用者在 UI 中建立。
   /// 回傳 true 的警示類型在 user_dao.dart 中有觸發邏輯。
-  // 已實作的 AlertType:
-  // - above, below, changePct (基本價格)
-  // - volumeSpike, volumeAbove (成交量)
-  // - week52High, week52Low (52 週)
-  // - rsiOverbought, rsiOversold, kdGoldenCross, kdDeathCross (技術指標)
-  // - crossAboveMa, crossBelowMa, tradingWarning, tradingDisposal (均線/警示)
+  // 目前全部類型都已實作（下方 switch 全回 true）；保留此 getter 供日後
+  // 新類型分段上線。
   bool get isImplemented => switch (this) {
     AlertType.above ||
     AlertType.below ||

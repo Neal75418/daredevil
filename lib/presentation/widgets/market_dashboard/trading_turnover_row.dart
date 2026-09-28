@@ -142,7 +142,7 @@ class TradingTurnoverRow extends StatelessWidget {
   /// 格式化成交額顯示
   ///
   /// 將元轉換為億元顯示
-  /// 例如：642195569620 → "6,421.96 億元"
+  /// 例如：642195569620 → "6,422.0 億元"（≥ 1000 億一位小數，其餘兩位）
   String _formatTurnover(double turnover) {
     if (turnover == 0) return '0 ${'marketOverview.unitBillion'.tr()}';
 

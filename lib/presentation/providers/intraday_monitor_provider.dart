@@ -60,8 +60,8 @@ class IntradayMonitorNotifier extends Notifier<DateTime?> {
     if (!IntradayPollSchedule.isMarketHours(now)) return;
 
     // 🚨 armed 必須查 DB,不能讀 UI 快取(2026-08-08 code review):
-    // priceAlertProvider.alerts 在 loadAlerts() 跑過之前是空的,而全 repo
-    // 只有提醒頁會呼叫它——使用者開在「今日」分頁就 armed=0,5 分鐘節奏
+    // priceAlertProvider.alerts 在 loadAlerts() 跑過之前是空的,而畫面上
+    // 只有提醒頁與個股警示分頁會呼叫它——使用者開在「今日」分頁就 armed=0,5 分鐘節奏
     // 靜默退化成一天四次,通知遲到最多兩小時。
     final int armed;
     try {

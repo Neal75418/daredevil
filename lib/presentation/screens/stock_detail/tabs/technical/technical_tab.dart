@@ -174,7 +174,7 @@ class _TechnicalTabState extends ConsumerState<TechnicalTab> {
           ),
           const SizedBox(height: DesignTokens.spacing12),
 
-          // 主圖指標選擇（MA、BOLL）
+          // 主圖指標選擇（MA、BOLL、SAR）
           MainIndicatorSelector(
             selectedIndicators: _mainIndicators,
             onToggle: _toggleMainIndicator,

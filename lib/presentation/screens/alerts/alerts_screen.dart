@@ -255,8 +255,9 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
           // 這裡刻意沒有 entrance 動畫：ListView.builder 的 item 是捲進畫面
           // 才建構的，把 `.animate().fadeIn(delay: 50ms * index)` 寫在
           // itemBuilder 裡等於**每次捲動都重播一次淡入**，而且越後面延遲越長
-          // （第 36 筆 1750ms）——實機回報「下捲很不順暢」。自選股清單沒有
-          // 這個寫法，所以只有警示頁卡。守門：alerts_screen_test 的
+          // （第 36 筆 1750ms）——實機回報「下捲很不順暢」。自選股與掃描頁
+          // 只對前段做（清單前 10 筆、上限 450ms；Grid 前 20 筆、上限
+          // 570ms）；本頁筆數多，整個拿掉。守門：alerts_screen_test 的
           // 「清單項目不得有 entrance 動畫」。
         },
       ),
@@ -516,7 +517,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
       AlertType.highDividendYield ||
       AlertType.peUndervalued ||
       AlertType.insiderBuying => AppTheme.upColor,
-      // Killer Features：警示顏色（紅色系）
+      // 注意／處置／內部人賣出／高質押：偏空事件，走跌色（綠）
       AlertType.tradingWarning ||
       AlertType.tradingDisposal ||
       AlertType.insiderSelling ||

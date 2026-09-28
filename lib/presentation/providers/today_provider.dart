@@ -374,7 +374,7 @@ class TodayNotifier extends Notifier<TodayState> {
         ]);
         if (winner == null) {
           // 逾時只放棄等待,底層 runDailyUpdate 不可取消、仍在跑
-          // (2026-07-30 審查):它日後成功時必須補跑快取失效 + epoch
+          // (2026-07-30 審查):它日後回傳時必須補跑快取失效 + epoch
           // bump,否則各 provider 永遠不知道 DB 已有新一輪資料、UI 停在
           // 逾時錯誤。失敗則靜默(比照 market_overview 的背景收尾模式)。
           unawaited(() async {

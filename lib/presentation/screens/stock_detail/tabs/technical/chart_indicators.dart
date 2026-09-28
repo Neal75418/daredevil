@@ -6,8 +6,9 @@
 /// 走 identity 比較——原本 `Set<MainState>` 的選取狀態模型無法平移。
 ///
 /// 在 app 端保留自己的 enum,好處不只是能平移:選擇器 UI 與其測試從此
-/// 不綁套件型別,下次套件再改 API 時,受影響面止於
-/// `k_line_chart_widget.dart` 一個檔案。
+/// 不綁套件型別,下次套件再改 API 時,受影響面止於 stock_detail/widgets 下
+/// 直接 import 套件的三個圖表檔(k_line_chart_widget、chart_indicator_styles、
+/// k_chart_detail_popup)。
 library;
 
 /// K 線圖的均線天數(單一宣告點)。

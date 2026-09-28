@@ -19,7 +19,7 @@ import 'package:daredevil/presentation/screens/portfolio/widgets/position_card.d
 import 'package:daredevil/presentation/screens/portfolio/widgets/add_transaction_sheet.dart';
 import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
-/// 投資組合 Tab（嵌入 Watchlist 頁面）
+/// 投資組合頁內容（router 的 /portfolio 全螢幕路由；從自選頁選單進入）
 class PortfolioTab extends ConsumerStatefulWidget {
   const PortfolioTab({super.key});
 
