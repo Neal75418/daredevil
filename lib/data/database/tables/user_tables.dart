@@ -69,7 +69,8 @@ class UpdateRun extends Table {
   /// 完成時間（執行中則為空）
   DateTimeColumn get finishedAt => dateTime().nullable()();
 
-  /// 狀態：SUCCESS、FAILED、PARTIAL
+  /// 狀態：SUCCESS、FAILED、PARTIAL、RUNNING（進行中；app 中途被殺會遺留，見
+  /// `UpdateStatus.running`）
   TextColumn get status => text()();
 
   /// 訊息（錯誤詳情等）

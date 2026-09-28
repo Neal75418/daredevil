@@ -5,7 +5,6 @@ import 'package:daredevil/data/database/tables/market_data_tables.drift.dart';
 
 /// 財務報表操作
 mixin FinancialDataDaoMixin on $AppDatabase {
-  /// 批次新增財務資料
   /// 某檔在指定財報類型下已有幾個「季別」(distinct date)
   ///
   /// 給 `_syncFinancialStatement` 的新鮮度檢查用。**只看最新一季會漏掉歷史**:
@@ -26,6 +25,7 @@ mixin FinancialDataDaoMixin on $AppDatabase {
     return (await query.getSingle()).read(expr) ?? 0;
   }
 
+  /// 批次新增財務資料
   Future<void> insertFinancialData(List<FinancialDataCompanion> entries) async {
     await batch((b) {
       for (final entry in entries) {
@@ -154,13 +154,13 @@ mixin FinancialDataDaoMixin on $AppDatabase {
   /// 批次計算 ROE 歷史（評分管線用）
   ///
   /// 從 INCOME.IncomeAfterTaxes + BALANCE.Equity 按 symbol+date join 計算
-  /// ROE = IncomeAfterTaxes × 4 / Equity × 100（年化）
-  /// 回傳虛擬 FinancialDataEntry (dataType='ROE')
+  /// ROE = 近四季淨利合計 ÷ 平均權益 × 100；平均權益取本季期末與去年同季期末的
+  /// 平均，缺去年同季時用本季期末。回傳虛擬 FinancialDataEntry (dataType='ROE')
   ///
   /// **2026-06-20 修正**：原查 `'NetIncome'` 但 DB financial_data 0 筆 'NetIncome'
   /// （幻影字串）→ roeHistory 永遠空 → ROE_EXCELLENT / ROE_IMPROVING / ROE_DECLINING
   /// 三條 rule 全史 0 fire（死碼）。正確欄位 'IncomeAfterTaxes'（稅後淨利、單季、
-  /// 4585 筆）。已驗 IncomeAfterTaxes 是單季非累計 → ×4 年化正確。
+  /// 4585 筆）。IncomeAfterTaxes 是單季非累計，四季相加即近四季合計。
   Future<Map<String, List<FinancialDataEntry>>> getROEHistoryBatch(
     List<String> symbols,
   ) async {

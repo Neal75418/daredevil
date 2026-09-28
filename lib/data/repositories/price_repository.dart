@@ -360,9 +360,8 @@ class PriceRepository implements IPriceRepository {
       }
 
       // 平行取得上市與上櫃價格資料（錯誤隔離，允許部分成功）
-      // TWSE 端點自動回傳最新交易日資料（不接受日期參數）
-      // TPEX 端點需要明確傳入日期，否則 fallback 到 DateTime.now()
-      // 在非交易日（週末/假日）會導致 TPEX 回傳空資料
+      // 兩市場的每日端點都忽略日期參數、回最新交易日；落庫日期取自回應本身
+      // （歷史日期走各自的 historical 端點）
       // safeAwaitPair(2026-07-30):雙來源同時 rethrow 型失敗(斷網/同時
       // 限流)在舊「先啟動再逐一 await」寫法下,第二個 future 的 rejection
       // 無人監聽 → zone unhandled;pair 版啟動當下就掛好兩邊 listener

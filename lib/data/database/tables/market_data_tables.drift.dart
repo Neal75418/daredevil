@@ -8932,19 +8932,19 @@ class MarginTradingEntry extends i0.DataClass
   /// 交易日期
   final DateTime date;
 
-  /// 融資買進（張）——已備料未消費
+  /// 融資買進（張）
   final double? marginBuy;
 
-  /// 融資賣出（張）——已備料未消費
+  /// 融資賣出（張）
   final double? marginSell;
 
   /// 融資餘額（張）
   final double? marginBalance;
 
-  /// 融券買進/回補（張）——已備料未消費
+  /// 融券買進/回補（張）
   final double? shortBuy;
 
-  /// 融券賣出（張）——已備料未消費
+  /// 融券賣出（張）
   final double? shortSell;
 
   /// 融券餘額（張）

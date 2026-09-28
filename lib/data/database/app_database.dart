@@ -105,7 +105,6 @@ import 'package:daredevil/data/database/dao/valuation_dao.dart';
     InsiderHolding,
     // 內部人股權轉讓（Feature 4）
     InsiderTransfer,
-    // 自訂選股策略（Phase 2.2）
     // 投資組合（Phase 4.4）
     PortfolioPosition,
     PortfolioTransaction,
@@ -462,16 +461,6 @@ class AppDatabase extends $AppDatabase
     // 索引隨表消失;見 _ensureRetiredSchemaDropped)
   ];
 
-  /// Pre-launch idempotent 加欄：在「不」bump schema fingerprint（不 wipe 既有
-  /// derived 資料）的前提下，為既有 DB 補上 `daily_institutional.dealer_self_net`。
-  ///
-  /// - 全新安裝：`createAll` 已依表定義建出此欄，這裡 PRAGMA 查到便 no-op。
-  /// - 既有 DB：fingerprint 未變→不 wipe，這裡偵測缺欄並 `ALTER TABLE ADD COLUMN`，
-  ///   既有 47 天法人資料與其餘 derived 表全部保留。
-  /// - 未來若有人 bump fingerprint 觸發 wipe：createAll 重建已含此欄，這裡 no-op。
-  ///
-  /// SQLite 的 `ALTER TABLE ADD COLUMN` 不支援 `IF NOT EXISTS`，故先以
-  /// `PRAGMA table_info` 判斷欄位是否存在，確保 idempotent（每次開啟可安全重跑）。
   /// Pre-launch idempotent 加欄：為既有 DB 補上 `rule_accuracy.distinct_dates`。
   ///
   /// **不走 [appSchemaFingerprint] bump**：指紋機制會 drop 全部非 whitelist
@@ -545,6 +534,16 @@ class AppDatabase extends $AppDatabase
     }
   }
 
+  /// Pre-launch idempotent 加欄：在「不」bump schema fingerprint（不 wipe 既有
+  /// derived 資料）的前提下，為既有 DB 補上 `daily_institutional.dealer_self_net`。
+  ///
+  /// - 全新安裝：`createAll` 已依表定義建出此欄，這裡 PRAGMA 查到便 no-op。
+  /// - 既有 DB：fingerprint 未變→不 wipe，這裡偵測缺欄並 `ALTER TABLE ADD COLUMN`，
+  ///   既有 47 天法人資料與其餘 derived 表全部保留。
+  /// - 未來若有人 bump fingerprint 觸發 wipe：createAll 重建已含此欄，這裡 no-op。
+  ///
+  /// SQLite 的 `ALTER TABLE ADD COLUMN` 不支援 `IF NOT EXISTS`，故先以
+  /// `PRAGMA table_info` 判斷欄位是否存在，確保 idempotent（每次開啟可安全重跑）。
   Future<void> _ensureDealerSelfNetColumn() async {
     final columns = await customSelect(
       "PRAGMA table_info('daily_institutional')",
@@ -684,8 +683,8 @@ class AppDatabase extends $AppDatabase
   /// ## 使用者輸入表 whitelist（不會被 wipe）
   ///
   /// [_userInputTableNames] 內列出的表在 reset 時被跳過，避免使用者**手動
-  /// 輸入**的資料（自選股、價格警示、自訂篩選、portfolio、自訂事件、app 偏好）
-  /// 被洗掉。
+  /// 輸入**的資料（自選股與群組、價格警示、釘選論點、portfolio、自訂事件、
+  /// app 偏好），以及無法重抓的新聞與熱度快照被洗掉。
   ///
   /// ## ⚠️ Whitelist 的已知限制
   ///
@@ -809,9 +808,9 @@ class AppDatabase extends $AppDatabase
 /// Format: `<stage>-<feature>-<YYYY-MM-DD>`. Any string change triggers a
 /// reset — the value itself is opaque.
 ///
-/// Public（而非 private）是因為 `tool/backfill.dart` 要在**開啟 DB 之前**
-/// 比對它：對 app 而言 reset 只是重抓 derived data，對 `tool/calibration.db`
-/// 卻是九年歷史當場歸零。見該檔的 `_checkSchemaFingerprint`。
+/// Public（而非 private）是因為 tool 端要在**開啟 DB 之前**比對它：對 app 而言
+/// reset 只是重抓 derived data，對 `tool/calibration.db` 卻是九年歷史當場歸零。
+/// 見 `tool/tool_db.dart` 的 `checkSchemaFingerprint`。
 const String appSchemaFingerprint = 'stage5b-news-mention-daily-2026-07-15';
 
 // 原 `QueryExecutor _openConnection()` 已搬到 `app_database_flutter.dart`

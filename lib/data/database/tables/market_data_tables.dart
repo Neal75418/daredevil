@@ -270,30 +270,26 @@ class MarginTrading extends Table {
   /// 交易日期
   DateTimeColumn get date => dateTime()();
 
-  // ── 已備料未消費(2026-08-15 健檢盤點)────────────────────────────
-  // 下列四欄(marginBuy/marginSell/shortBuy/shortSell)每日全市場寫入但
-  // 目前無讀取端——消費端只用 marginBalance/shortBalance 兩個「存量」。
-  //
-  // **刻意保留不停抓**:它們與餘額欄同在一列 API 回應內(twse_client
-  // `row[2]`/`row[3]`、tpex_client 同),解析它們不需額外請求 → API 成本
-  // 為零,只多約 21 MB/年儲存;而一旦停寫,未來要做「當日買賣超流量」
-  // 分析時歷史補不回來(TWSE 明細不保證回溯)。備料成本 << 斷層代價。
-  //
-  // 要開消費請從這裡找:融資買賣超 = 散戶當日進出強度(餘額只看得到淨變化)。
+  // ── 當日流量欄 ────────────────────────────────────────────────────
+  // 下列四欄(marginBuy/marginSell/shortBuy/shortSell)與餘額欄同在一列 API
+  // 回應內(兩市場的融資券列解析),解析不需額外請求。
+  // 消費端:大盤總覽融資／融券列的當日增減顯示,以及籌碼槓桿判讀
+  // (`MarketReadingService.interpretMarginLeverage`)。市場情緒分數的融資
+  // 子項用的是餘額歷史,不讀這四欄。
 
-  /// 融資買進（張）——已備料未消費
+  /// 融資買進（張）
   RealColumn get marginBuy => real().nullable()();
 
-  /// 融資賣出（張）——已備料未消費
+  /// 融資賣出（張）
   RealColumn get marginSell => real().nullable()();
 
   /// 融資餘額（張）
   RealColumn get marginBalance => real().nullable()();
 
-  /// 融券買進/回補（張）——已備料未消費
+  /// 融券買進/回補（張）
   RealColumn get shortBuy => real().nullable()();
 
-  /// 融券賣出（張）——已備料未消費
+  /// 融券賣出（張）
   RealColumn get shortSell => real().nullable()();
 
   /// 融券餘額（張）
@@ -379,7 +375,7 @@ class InsiderHolding extends Table {
 /// 內部人股權轉讓申報 Table
 ///
 /// 儲存董監事、經理人、大股東的股權轉讓申報記錄。
-/// 資料來源：TPEX ap12_O API。
+/// 資料來源：上市 TWSE t187ap12_L、上櫃 TPEx mopsfin_t187ap12_O。
 @DataClassName('InsiderTransferEntry')
 @TableIndex(name: 'idx_insider_transfer_date', columns: {#reportDate})
 class InsiderTransfer extends Table {

@@ -134,7 +134,6 @@ mixin ShareholdingDaoMixin on $AppDatabase {
     return map;
   }
 
-  /// 批次新增持股資料
   /// 指定日期的外資持股列數(全市場同步的新鮮度檢查用)
   Future<int> countShareholdingForDate(DateTime date) async {
     final total = shareholding.symbol.count();
@@ -144,6 +143,7 @@ mixin ShareholdingDaoMixin on $AppDatabase {
     return (await query.getSingle()).read(total) ?? 0;
   }
 
+  /// 批次新增持股資料
   Future<void> insertShareholdingData(
     List<ShareholdingCompanion> entries,
   ) async {

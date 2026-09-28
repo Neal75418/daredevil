@@ -2963,7 +2963,8 @@ class UpdateRunEntry extends i0.DataClass
   /// 完成時間（執行中則為空）
   final DateTime? finishedAt;
 
-  /// 狀態：SUCCESS、FAILED、PARTIAL
+  /// 狀態：SUCCESS、FAILED、PARTIAL、RUNNING（進行中；app 中途被殺會遺留，見
+  /// `UpdateStatus.running`）
   final String status;
 
   /// 訊息（錯誤詳情等）

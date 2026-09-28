@@ -604,7 +604,7 @@ class DailyInstitutionalEntry extends i0.DataClass
   /// 自營商買賣超（股）— 自行買賣 + 避險合計（對外口徑，媒體/TWSE 報的就是此值）
   final double? dealerNet;
 
-  /// 自營商「自行買賣」買賣超（張，不含避險）
+  /// 自營商「自行買賣」買賣超（股，不含避險）
   ///
   /// FinMind 的 Dealer_self。自營避險部位結構性偏買，會使合計 [dealerNet]
   /// 連續買超天數失真（恆正）；此欄供「自行買賣」streak 等需要真實自營主動

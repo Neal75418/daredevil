@@ -75,8 +75,6 @@ abstract final class MarketClientMixin {
     return decoded;
   }
 
-  /// 統一的 API 請求錯誤處理（含自動重試）。
-  ///
   /// 六業別 openapi 端點的逐一取用 + per-variant 隔離。
   ///
   /// TWSE/TPEx 的季報與資產負債表都是「同一份資料切成 6 個業別 endpoint」，
@@ -228,11 +226,6 @@ abstract final class MarketClientMixin {
         '${e.error}'.contains('Redirect loop');
   }
 
-  /// 判斷 [DioException] 是否可重試。
-  ///
-  /// 連線逾時、發送逾時、連線錯誤、5xx、SocketException、HttpException 可重試。
-  /// receiveTimeout 不重試：伺服器已接受連線但不回應，通常是限流，重試無意義。
-  /// 4xx 等客戶端錯誤不重試。
   /// 錯誤標籤:具體型別直接用,`unknown` 補上底層原因。
   ///
   /// `DioExceptionType.unknown` 涵蓋所有「不是 timeout、不是 4xx/5xx」的
@@ -249,6 +242,11 @@ abstract final class MarketClientMixin {
     return cause == null ? e.type.name : '${e.type.name}: $cause';
   }
 
+  /// 判斷 [DioException] 是否可重試。
+  ///
+  /// 連線逾時、發送逾時、連線錯誤、5xx、SocketException、HttpException 可重試。
+  /// receiveTimeout 不重試：伺服器已接受連線但不回應，通常是限流，重試無意義。
+  /// 4xx 等客戶端錯誤不重試。
   static bool _isRetryable(DioException e) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:

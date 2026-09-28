@@ -109,16 +109,6 @@ class TwseClient {
     });
   }
 
-  /// MI_INDEX（每日收盤行情全部）→ [TwseDailyPrice] 列表。
-  ///
-  /// **歷史回補替代端點**：STOCK_DAY_ALL 自 2026-06 CSV 化後忽略 date
-  /// 參數；MI_INDEX?date=yyyyMMdd&type=ALLBUT0999 經 2026-07-12 活體驗證
-  /// 支援歷史日期。回應為多表結構，收盤行情表以 fields 首欄「證券代號」
-  /// 辨識（不依賴表序）。
-  ///
-  /// row 佈局：[代號, 名稱, 成交股數, 成交筆數, 成交金額, 開, 高, 低, 收,
-  /// 漲跌(+/-)(html), 漲跌價差, ...]。漲跌號從 html 取正負、乘上價差。
-  /// 回應日期 ≠ [requestedDate] → 回空（端點失效防護）。public 供測試。
   /// 解析 BWIBBU 估值列。public 供測試(主方法自建 Dio、不可注入)。
   ///
   /// 日期取每列的 `Date`（民國 YYYMMDD）。15:30／21:30 時這個端點仍是前一
@@ -165,6 +155,16 @@ class TwseClient {
     return result;
   }
 
+  /// MI_INDEX（每日收盤行情全部）→ [TwseDailyPrice] 列表。
+  ///
+  /// **歷史回補替代端點**：STOCK_DAY_ALL 自 2026-06 CSV 化後忽略 date
+  /// 參數；MI_INDEX?date=yyyyMMdd&type=ALLBUT0999 經 2026-07-12 活體驗證
+  /// 支援歷史日期。回應為多表結構，收盤行情表以 fields 首欄「證券代號」
+  /// 辨識（不依賴表序）。
+  ///
+  /// row 佈局：[代號, 名稱, 成交股數, 成交筆數, 成交金額, 開, 高, 低, 收,
+  /// 漲跌(+/-)(html), 漲跌價差, ...]。漲跌號從 html 取正負、乘上價差。
+  /// 回應日期 ≠ [requestedDate] → 回空（端點失效防護）。public 供測試。
   static List<TwseDailyPrice> parseMiIndexDailyPrices(
     Map<dynamic, dynamic> json,
     DateTime requestedDate,
@@ -338,7 +338,7 @@ class TwseClient {
   /// 取得所有股票的法人買賣超資料
   ///
   /// 端點: /rwd/zh/fund/T86（三大法人買賣超日報）
-  /// 注意：TWSE API 回傳的是「股數」，存入資料庫時需除以 1000 轉換為「張」
+  /// 注意：TWSE API 回傳的是「股數」，直接以股落庫、不轉張
   Future<List<TwseInstitutional>> getAllInstitutionalData({DateTime? date}) {
     return MarketClientMixin.executeRequest(_tag, '法人資料', () async {
       final cacheKey = date != null

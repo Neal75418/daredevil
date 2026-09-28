@@ -279,7 +279,7 @@ class TpexClient {
   /// [20-22] 自營商(合計) 買/賣/淨
   /// [23] 三大法人買賣超股數合計
   ///
-  /// 注意：TPEX API 回傳的是「股數」，存入資料庫時需除以 1000 轉換為「張」
+  /// 注意：TPEX API 回傳的是「股數」，直接以股落庫、不轉張
   TpexInstitutional? _parseInstitutionalRow(List<dynamic> row, DateTime date) {
     return MarketClientMixin.safeParseRow(
       row: row,
@@ -662,12 +662,6 @@ class TpexClient {
     }
   }
 
-  /// 取得上櫃處置股票清單
-  ///
-  /// 使用 TPEX OpenAPI，免費無限制。
-  /// 端點: /openapi/v1/tpex_disposal_information
-  ///
-  /// 回傳交易受限制的股票清單。
   /// 上櫃除權除息預告表（tpex_exright_prepost,免額度)——帶確定交易日
   ///
   /// 與 TWSE TWT48U_ALL 同構,為行事曆除權息事件的上櫃資料源。
@@ -698,6 +692,12 @@ class TpexClient {
     });
   }
 
+  /// 取得上櫃處置股票清單
+  ///
+  /// 使用 TPEX OpenAPI，免費無限制。
+  /// 端點: /openapi/v1/tpex_disposal_information
+  ///
+  /// 回傳交易受限制的股票清單。
   Future<List<TpexTradingWarning>> getDisposalInfo() {
     return MarketClientMixin.executeRequest(_tag, '處置股票', () async {
       final response = await _dio.get(
@@ -1078,8 +1078,6 @@ class TpexClient {
     });
   }
 
-  /// 取得上櫃最新一季綜合損益表(mopsfin_t187ap06_O_*,六業別合併)。
-  ///
   /// 上櫃全市場資產負債表(mopsfin_t187ap07_O_*,六業別合併)
   ///
   /// 與 [TwseClient.getAllBalanceSheets] 同構。2026-08-16 接入,取代
@@ -1104,6 +1102,8 @@ class TpexClient {
     });
   }
 
+  /// 取得上櫃最新一季綜合損益表(mopsfin_t187ap06_O_*,六業別合併)。
+  ///
   /// 語意與 [TwseClient.getQuarterlyReports] 完全同構(欄名差異由
   /// QuarterlyReportEntry 的雙 key fallback 吸收);per-variant 隔離
   /// 同款:單業別失敗照收其餘、全滅才拋、RateLimit 直接 rethrow。

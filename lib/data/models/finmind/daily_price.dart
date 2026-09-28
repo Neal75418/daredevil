@@ -45,10 +45,10 @@ class FinMindDailyPrice {
     );
   }
 
-  /// 嘗試從 JSON 解析，失敗時回傳 null 並記錄日誌
   /// 價格欄 0 → null(無成交 sentinel,同 close 的處理)
   static double? _priceOrNull(double? v) => (v == null || v == 0) ? null : v;
 
+  /// 嘗試從 JSON 解析，失敗時回傳 null 並記錄日誌
   static FinMindDailyPrice? tryFromJson(Map<String, dynamic> json) =>
       JsonParsers.tryParse(
         json,

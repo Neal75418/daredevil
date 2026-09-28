@@ -72,7 +72,8 @@ class TpexPriceSource {
 
   /// 取得全市場上櫃股票價格
   ///
-  /// [date] 指定交易日期，避免非交易日取到空資料。
+  /// 端點忽略 [date]、永遠回最新交易日；[date] 仍會送出，實際只影響 client
+  /// 的快取鍵。
   Future<List<TpexDailyPrice>> fetchAllDailyPrices({DateTime? date}) {
     return _client.getAllDailyPrices(date: date);
   }

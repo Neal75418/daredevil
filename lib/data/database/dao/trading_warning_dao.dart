@@ -105,7 +105,7 @@ mixin TradingWarningDaoMixin on $AppDatabase {
   ///
   /// ⚠️ [currentSymbols] **為空時一律 no-op**。TWSE/TPEx client 在
   /// `decodeResponseData` 回 null 或 `stat != 'OK'` 時是 **return \[\] 而非拋
-  /// 例外**（見 twse_client.dart:1297-1300），因此「今日真的沒有注意股」與
+  /// 例外**（見 `TwseClient.getTradingWarnings`），因此「今日真的沒有注意股」與
   /// 「抓取/解析失敗」在此處**無法區分**——兩者都是空清單。若把空清單當權威
   /// 名單做 full-refresh，一次來源退化就會清空整個市場的注意股旗標，方向正是
   /// 本次修復要消滅的 fail-open（-15 分整批消失、風險徽章不亮、run 仍是綠燈）。
@@ -172,7 +172,7 @@ mixin TradingWarningDaoMixin on $AppDatabase {
   /// 2. `disposal_end_date IS NULL` 且該列已超過
   ///    [FundamentalParams.disposalNullEndDateMaxDays] 天 — **同型 bug 掃除**。
   ///    endDate 為 `DateTime?`，TWSE 改分隔符號、欄位位移或民國日期解析失敗
-  ///    都會讓它變 null（twse_client.dart:1396-1405）。而 SQL 三值邏輯下
+  ///    都會讓它變 null（見 `TwseClient._parseDisposalRow`）。而 SQL 三值邏輯下
   ///    `NULL < ?` 恆不成立，這類列會與注意股同病：**永久 is_active=1**，
   ///    造成 -50 分 + 三模式硬排除永久生效，該股再也不會出現在任何推薦榜。
   ///    保守保留一段時間（可能真的還在處置中）後強制失效，避免永久幽靈。

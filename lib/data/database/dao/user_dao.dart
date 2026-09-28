@@ -385,7 +385,6 @@ mixin UserDaoMixin on $AppDatabase {
     return (update(priceAlert)..where((t) => t.id.equals(id))).write(entry);
   }
 
-  /// 停用股價提醒（標記為已觸發）
   /// 原子式「認領」觸發(2026-08-08 code review)。
   ///
   /// app 內輪詢與 launchd CLI 跑在**兩個 process、同一個 SQLite**;原本的
@@ -414,10 +413,6 @@ mixin UserDaoMixin on $AppDatabase {
     return affected > 0;
   }
 
-  /// 通知**確實送出後**才消費這筆提醒(一次性提醒就此停用)。
-  ///
-  /// 與 [claimAlertTrigger] 分開的理由見該處:認領只是取得通知權,
-  /// 「用掉」是另一件事,必須等真的送出去才發生。
   /// 回收逾期未結案的認領(2026-08-08 五次審查 I-1)。
   ///
   /// 認領之後、消費或釋放之前 process 被殺/斷電,該筆會卡在
@@ -443,6 +438,11 @@ mixin UserDaoMixin on $AppDatabase {
         .write(const PriceAlertCompanion(triggeredAt: Value(null)));
   }
 
+  /// 通知**確實送出後**才消費這筆提醒(一次性提醒就此停用)。
+  ///
+  /// 與 [claimAlertTrigger] 分開的理由見該處:認領只是取得通知權,
+  /// 「用掉」是另一件事,必須等真的送出去才發生。
+  ///
   /// 🔑 **必須帶 [stamp]**(2026-08-08 五次審查 C-1):否則會覆蓋使用者
   /// 在「認領到送出」之間手動重新啟用的動作。交錯:CLI 認領(T1)→
   /// 使用者在 osascript 往返期間(N 筆就是 N 次 Process.run,數秒等級)
@@ -617,7 +617,7 @@ mixin UserDaoMixin on $AppDatabase {
   // 警示檢查輔助方法 - Batch 1: 成交量警示
   // ==================================================
 
-  /// 批次查詢成交量資料（最近 20 天）
+  /// 批次查詢成交量資料（最近 [AlertParams.volumeDataLookbackDays] 天）
   Future<Map<String, List<DailyPriceEntry>>> _fetchVolumeDataForAlerts(
     List<String> symbols,
     DateTime endDate,
@@ -663,7 +663,8 @@ mixin UserDaoMixin on $AppDatabase {
     return BatchQueryHelper.groupBySymbol(results, (entry) => entry.symbol);
   }
 
-  /// 批次查詢技術指標資料（最近 30 天，用於計算 RSI 和 KD）
+  /// 批次查詢技術指標資料（最近 [AlertParams.indicatorDataLookbackDays] 天，用於
+  /// 計算 RSI 和 KD）
   Future<Map<String, List<DailyPriceEntry>>> _fetchIndicatorDataForAlerts(
     List<String> symbols,
     DateTime endDate,

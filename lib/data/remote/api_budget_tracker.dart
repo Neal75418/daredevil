@@ -9,7 +9,9 @@ import 'package:daredevil/core/utils/logger.dart';
 /// API 供應商列舉（per-vendor budget）。
 enum ApiVendor { finMind, twse, tpex, tdcc }
 
-/// [ApiBudgetTracker] 的持久層抽象（實作見 `SharedPreferencesApiBudgetStore`）。
+/// [ApiBudgetTracker] 的持久層抽象（實作：GUI 與 WorkManager 背景 isolate 用
+/// `SharedPrefsApiBudgetStore`、launchd CLI 用 `FileApiBudgetStore`，兩者各存
+/// 一份、不互通）。
 ///
 /// 存在的理由：tracker 原本是純 process-local，**app 重啟即歸零**，但
 /// FinMind 伺服器端的 hourly 額度不會忘記。2026-07-27 19:20 實測，重啟後
@@ -22,7 +24,8 @@ abstract class ApiBudgetStore {
   Future<void> save(String json);
 }
 
-/// 跨 syncer 共享的 API 配額追蹤器，process-local + sliding 1hr 視窗。
+/// 跨 syncer 共享的 API 配額追蹤器，sliding 1hr 視窗，狀態經 [ApiBudgetStore]
+/// 跨重啟保存。
 ///
 /// ## 動機
 ///
@@ -34,9 +37,9 @@ abstract class ApiBudgetStore {
 /// ## 設計選項（user 拍板）
 ///
 /// - **per-vendor** 而非 per-endpoint：簡單，避免每個 method 都要查表
-/// - **process-local** 而非寫 DB：重啟即歸零；對 ad-hoc 開 app 跑 update
-///   足夠（背景跑 WorkManager 觸發新 isolate 也是新 tracker，等於 reset；
-///   行為跟 backend rate-limit 跨重啟「不會繼承使用量」的常識一致）
+/// - **跨重啟保存**而非寫 DB：最初是 process-local、重啟即歸零，2026-07-27
+///   實測重啟後伺服器仍記得前一小時的用量（見 [ApiBudgetStore]），改為經
+///   store 保存
 /// - **sliding 1hr** 視窗：FinMind free tier 是 rolling 600/hr，固定時段
 ///   reset 會撞 thundering herd。Sliding 比較準。
 ///

@@ -179,8 +179,7 @@ class FundamentalRepository implements IFundamentalRepository {
 
       if (data.isEmpty) return 0;
 
-      // 轉換為 Database 資料
-      // 過濾無效資料（通常 PE > 0，殖利率 >= 0）
+      // 轉換為 Database 資料（缺值已由 client 解析為 null，這裡不再過濾）
       final entries = data.map(_toValuationCompanion).toList();
 
       await _db.insertValuationData(entries);
