@@ -109,7 +109,10 @@ class OhlcvCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  _formatVolumeOrDash(latestPrice?.volume),
+                  _formatVolumeOrDash(
+                    latestPrice?.volume,
+                    Localizations.localeOf(context),
+                  ),
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -207,18 +210,18 @@ class OhlcvCard extends StatelessWidget {
   }
 
   /// 格式化成交量（處理 null）
-  String _formatVolumeOrDash(double? volume) {
+  String _formatVolumeOrDash(double? volume, Locale locale) {
     if (volume == null) return '-';
-    return _formatVolume(volume);
+    return _formatVolume(volume, locale);
   }
 
   /// 格式化成交量為台灣習慣的「張」單位
   ///
   /// API 回傳單位為「股」，台灣股市習慣用「張」（1張 = 1000股）
-  String _formatVolume(double volume) {
+  String _formatVolume(double volume, Locale locale) {
     final lots = volume / 1000;
     if (lots < 1) return volume.toStringAsFixed(0);
-    return formatLots(lots);
+    return formatLots(lots, locale);
   }
 }
 

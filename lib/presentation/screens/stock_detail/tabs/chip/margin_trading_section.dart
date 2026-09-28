@@ -88,7 +88,7 @@ class MarginTradingSection extends StatelessWidget {
                 ),
                 const SizedBox(height: DesignTokens.spacing6),
                 Text(
-                  formatBalance(marginBal),
+                  formatBalance(marginBal, Localizations.localeOf(context)),
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -274,7 +274,10 @@ class MarginTradingSection extends StatelessWidget {
                     Expanded(
                       flex: 2,
                       child: Text(
-                        formatBalance(marginBal),
+                        formatBalance(
+                          marginBal,
+                          Localizations.localeOf(context),
+                        ),
                         textAlign: TextAlign.end,
                         style: theme.textTheme.bodySmall,
                       ),
@@ -282,7 +285,10 @@ class MarginTradingSection extends StatelessWidget {
                     Expanded(
                       flex: 2,
                       child: Text(
-                        formatBalance(shortBal),
+                        formatBalance(
+                          shortBal,
+                          Localizations.localeOf(context),
+                        ),
                         textAlign: TextAlign.end,
                         style: theme.textTheme.bodySmall,
                       ),

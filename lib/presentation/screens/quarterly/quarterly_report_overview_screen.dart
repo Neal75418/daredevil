@@ -303,7 +303,10 @@ class _QuarterlyReportOverviewScreenState
               // 負值（虧損）照實顯示
               row.netIncome == null
                   ? '--'
-                  : LocalizedNumberFormat.compactFromThousands(row.netIncome!),
+                  : LocalizedNumberFormat.compactFromThousands(
+                      row.netIncome!,
+                      Localizations.localeOf(context),
+                    ),
               color: theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: DesignTokens.spacing12),

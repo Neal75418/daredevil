@@ -11,6 +11,26 @@ void main() {
     await setupTestLocalization();
   });
 
+  group('融資融券張數格式（依語系分級）', () {
+    const zh = Locale('zh', 'TW');
+    const en = Locale('en');
+    // 測試未載翻譯，`.tr()` 回傳 key，張/lots 以 key 呈現
+    const lots = 'stockDetail.unitShares';
+
+    test('中文：萬張／億張／張', () {
+      expect(formatMarginSheets(15_000, zh), '+1.5 萬張');
+      expect(formatMarginSheets(-800, zh), '-800 張');
+      expect(formatMarginBalance(250_000_000, zh), '2.5 億張');
+      expect(formatMarginBalance(15_000, zh), '1.5 萬張');
+    });
+
+    test('英文不得出現中文單位，走 K/M/B', () {
+      expect(formatMarginSheets(15_000, en), '+15.0K$lots');
+      expect(formatMarginSheets(-800, en), '-800$lots');
+      expect(formatMarginBalance(250_000_000, en), '250.0M$lots');
+    });
+  });
+
   group('MarginCompactRow', () {
     testWidgets('returns empty when both changes are 0', (tester) async {
       await tester.pumpWidget(
@@ -29,6 +49,22 @@ void main() {
       // Up arrow for positive change
       expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
     });
+
+    for (final (locale, expected) in [
+      (const Locale('zh', 'TW'), '+1.5 萬張'),
+      (const Locale('en', 'US'), '+15.0K'),
+    ]) {
+      testWidgets('張數依 context 語系格式化：$locale → $expected', (tester) async {
+        const data = MarginTradingTotals(
+          marginChange: 15000,
+          marginBalance: 50000,
+        );
+        await tester.pumpWidget(
+          buildTestApp(const MarginCompactRow(data: data), locale: locale),
+        );
+        expect(find.textContaining(expected), findsOneWidget);
+      });
+    }
 
     testWidgets('shows down arrow for negative change', (tester) async {
       const data = MarginTradingTotals(

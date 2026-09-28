@@ -36,34 +36,16 @@ void main() {
       expect(find.byType(TradingTurnoverRow), findsOneWidget);
     });
 
-    testWidgets('formats small turnover (< 1000 億) with 2 decimals', (
-      tester,
-    ) async {
+    testWidgets('成交額以 context 語系格式化(測試 MaterialApp 預設 en_US)', (tester) async {
       tester.view.physicalSize = const Size(3000, 2400);
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      // 500 億元 = 5e10 → 500.00
-      const data = TradingTurnover(totalTurnover: 5e10);
+      const data = TradingTurnover(totalTurnover: 642195569620);
       await tester.pumpWidget(
         buildTestApp(const TradingTurnoverRow(data: data)),
       );
 
-      expect(find.textContaining('500.00'), findsOneWidget);
-    });
-
-    testWidgets('formats large turnover (>= 10000 億) with 2 decimals', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(3000, 2400);
-      addTearDown(() => tester.view.resetPhysicalSize());
-
-      // 12000 億元 = 1.2e12 → 12,000.00
-      const data = TradingTurnover(totalTurnover: 1.2e12);
-      await tester.pumpWidget(
-        buildTestApp(const TradingTurnoverRow(data: data)),
-      );
-
-      expect(find.textContaining('12,000.00'), findsOneWidget);
+      expect(find.textContaining('NT\$642.2B'), findsOneWidget);
     });
 
     testWidgets('5日均微幅正變動（+0.4%）0 位捨入為 0：不顯示 +0%、中性色', (tester) async {
@@ -188,15 +170,35 @@ void main() {
                 ),
               ),
             ),
+            // 中文字串（「16,494.00 億元」）比英文（「NT$1.6T」）長，驗較寬者
+            locale: const Locale('zh', 'TW'),
           ),
         );
 
         // 等動畫穩定，allow FittedBox 完成 scaleDown 量測
         await tester.pumpAndSettle();
 
+        expect(find.textContaining('16,494.00 億元'), findsOneWidget);
         // 沒 RenderFlex overflow assertion 才算通過
         expect(tester.takeException(), isNull);
       },
     );
+  });
+
+  group('formatTurnover', () {
+    const zh = Locale('zh', 'TW');
+    const en = Locale('en');
+
+    test('中文固定以億元:< 1000 億兩位、≥ 1000 億一位、≥ 10000 億兩位', () {
+      expect(formatTurnover(5e10, zh), '500.00 億元');
+      expect(formatTurnover(642195569620, zh), '6,422.0 億元');
+      expect(formatTurnover(1.2e12, zh), '12,000.00 億元');
+    });
+
+    test('英文走 K/M/B/T:6,422 億 = 642.2 billion,不是 6,422 billion', () {
+      expect(formatTurnover(5e10, en), 'NT\$50.0B');
+      expect(formatTurnover(642195569620, en), 'NT\$642.2B');
+      expect(formatTurnover(1.2e12, en), 'NT\$1.2T');
+    });
   });
 }

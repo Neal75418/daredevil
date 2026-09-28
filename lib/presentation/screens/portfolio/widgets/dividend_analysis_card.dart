@@ -71,7 +71,7 @@ class DividendAnalysisCard extends StatelessWidget {
                 child: _SummaryItem(
                   label: 'portfolio.expectedDividend'.tr(),
                   value:
-                      'NT\$${LocalizedNumberFormat.compact(analysis.totalExpectedDividend)}',
+                      'NT\$${LocalizedNumberFormat.compact(analysis.totalExpectedDividend, Localizations.localeOf(context))}',
                   subValue: 'portfolio.yearly'.tr(),
                   theme: theme,
                 ),
@@ -243,7 +243,7 @@ class _StockDividendRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  'NT\$${LocalizedNumberFormat.compact(info.expectedYearlyAmount)}',
+                  'NT\$${LocalizedNumberFormat.compact(info.expectedYearlyAmount, Localizations.localeOf(context))}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: AppTheme.upColor,

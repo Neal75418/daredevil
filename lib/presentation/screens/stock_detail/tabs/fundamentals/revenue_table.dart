@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/core/utils/localized_number_format.dart';
 import 'package:daredevil/core/utils/taiwan_date_formatter.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/domain/services/revenue_stats.dart';
@@ -107,7 +108,10 @@ class RevenueTable extends StatelessWidget {
                 Expanded(
                   flex: 3,
                   child: Text(
-                    _formatRevenue(rev.revenue),
+                    formatRevenueThousands(
+                      rev.revenue,
+                      Localizations.localeOf(context),
+                    ),
                     textAlign: TextAlign.end,
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w500,
@@ -129,19 +133,25 @@ class RevenueTable extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// [revenue] 單位為**千元**（見 `FinMindRevenue.revenue` 的欄位慣例）。
-  ///
-  /// 千元 → 億元 要 ÷100,000；千元 → 萬元 要 **÷10**（曾誤寫成 ÷10,000，
-  /// 使該區間的數字小 1000 倍：99,976 千元（約 1 億）顯示成「10.0萬」。
-  /// 破綻是交界處——R 從 99,999 走到 100,000，畫面從「10.0萬」跳成「1.0億」。
-  /// 實測 1,976 檔中有 465 檔的最新月營收落在該區間）。
-  String _formatRevenue(double revenue) {
-    if (revenue >= 100000) {
-      return '${(revenue / 100000).toStringAsFixed(1)}${'stockDetail.unitBillion'.tr()}';
-    } else if (revenue >= 10000) {
-      return '${(revenue / 10).toStringAsFixed(1)}${'stockDetail.unitTenThousand'.tr()}';
-    }
-    return '${revenue.toStringAsFixed(0)}${'stockDetail.unitThousand'.tr()}';
+/// [revenue] 單位為**千元**（見 `FinMindRevenue.revenue` 的欄位慣例）。
+///
+/// 千元 → 億元 要 ÷100,000；千元 → 萬元 要 **÷10**（曾誤寫成 ÷10,000，
+/// 使該區間的數字小 1000 倍：99,976 千元（約 1 億）顯示成「10.0萬」。
+/// 破綻是交界處——R 從 99,999 走到 100,000，畫面從「10.0萬」跳成「1.0億」。
+/// 實測 1,976 檔中有 465 檔的最新月營收落在該區間）。
+///
+/// 中文維持 億/萬/千 三級；其他語系走 [LocalizedNumberFormat.compactFromThousands]。
+@visibleForTesting
+String formatRevenueThousands(double revenue, Locale locale) {
+  if (!LocalizedNumberFormat.usesChineseUnits(locale)) {
+    return LocalizedNumberFormat.compactFromThousands(revenue, locale);
   }
+  if (revenue >= 100000) {
+    return '${(revenue / 100000).toStringAsFixed(1)}億';
+  } else if (revenue >= 10000) {
+    return '${(revenue / 10).toStringAsFixed(1)}萬';
+  }
+  return '${revenue.toStringAsFixed(0)}千';
 }

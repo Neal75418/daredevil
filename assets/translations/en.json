@@ -27,12 +27,6 @@
     "format": "Data format error. Please try again later.",
     "unknown": "An unexpected error occurred. Please try again later."
   },
-  "unit": {
-    "billion": "B",
-    "tenThousand": "K",
-    "tenMillion": "10M",
-    "million": "M"
-  },
   "nav": {
     "today": "Today",
     "scan": "Scan",
@@ -151,7 +145,6 @@
     "greenEnergy": "Green Energy",
     "highDividend": "High Dividend",
     "tradingTurnover": "Turnover",
-    "unitBillion": "B TWD",
     "advanceDecline": "Advance / Decline",
     "advance": "Up",
     "decline": "Down",
@@ -230,9 +223,9 @@
       },
       "synthesis": {
         "extremeDown": "Down {pct}%, {breadthPct}% of stocks declining — systemic risk day, single-stock signals carry less weight",
-        "extremeDownDivergence": "Down {pct}%, {breadthPct}% of stocks declining — systemic risk day, single-stock signals carry less weight; however institutional net buying of {netAmount}B diverges from the index — treat the extreme-day signal as unconfirmed",
+        "extremeDownDivergence": "Down {pct}%, {breadthPct}% of stocks declining — systemic risk day, single-stock signals carry less weight; however institutional net buying of {netAmount} diverges from the index — treat the extreme-day signal as unconfirmed",
         "extremeUp": "Up {pct}%, {breadthPct}% of stocks advancing — systemic euphoria day, single-stock signals carry less weight",
-        "extremeUpDivergence": "Up {pct}%, {breadthPct}% of stocks advancing — systemic euphoria day, single-stock signals carry less weight; however institutional net selling of {netAmount}B diverges from the index — treat the extreme-day signal as unconfirmed",
+        "extremeUpDivergence": "Up {pct}%, {breadthPct}% of stocks advancing — systemic euphoria day, single-stock signals carry less weight; however institutional net selling of {netAmount} diverges from the index — treat the extreme-day signal as unconfirmed",
         "weightSupport": "Index flat but over half of stocks declining — mega-caps propping up the index, internals weak",
         "weightPressure": "Index flat but over half of stocks advancing — mega-caps capping the index, internals strong",
         "divergenceSell": "Index up but foreign/institutional flows net sell significantly — chips diverging from the index",
@@ -509,8 +502,6 @@
     "noKlineData": "No K-line data",
     "chartSummary": "{days}-day K-line chart, high {high}, low {low}, close {close}, {trend} {change}%",
     "chartHint": "Pinch to zoom and adjust time range",
-    "unitBillion": "B",
-    "unitTenThousand": "0K",
     "unitThousand": "K",
     "unitShares": " lots",
     "technicalIndicators": "Technical Indicators",

@@ -278,7 +278,10 @@ class _ShortSellRankingScreenState
             Expanded(
               flex: 2,
               child: Text(
-                LocalizedNumberFormat.compact(item.currentBalance.toDouble()),
+                LocalizedNumberFormat.compact(
+                  item.currentBalance.toDouble(),
+                  Localizations.localeOf(context),
+                ),
                 textAlign: TextAlign.end,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.w500,
@@ -289,7 +292,7 @@ class _ShortSellRankingScreenState
             Expanded(
               flex: 2,
               child: Text(
-                '${change > 0 ? '+' : ''}${LocalizedNumberFormat.compact(change.toDouble())}',
+                '${change > 0 ? '+' : ''}${LocalizedNumberFormat.compact(change.toDouble(), Localizations.localeOf(context))}',
                 textAlign: TextAlign.end,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.bold,

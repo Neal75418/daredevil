@@ -325,7 +325,10 @@ class _IndustryEpsScreenState extends ConsumerState<IndustryEpsScreen> {
             Expanded(
               flex: 2,
               child: Text(
-                LocalizedNumberFormat.compactFromThousands(item.netIncome),
+                LocalizedNumberFormat.compactFromThousands(
+                  item.netIncome,
+                  Localizations.localeOf(context),
+                ),
                 textAlign: TextAlign.end,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.w500,

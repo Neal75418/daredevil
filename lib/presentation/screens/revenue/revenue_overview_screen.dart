@@ -264,6 +264,7 @@ class _RevenueOverviewScreenState extends ConsumerState<RevenueOverviewScreen> {
     final isWatched = watchlistSymbols.contains(row.symbol);
     final revenueLabel = LocalizedNumberFormat.compactFromThousands(
       row.revenue,
+      Localizations.localeOf(context),
     );
 
     // 低基期(單月年增極端、累計平庸=一次性認列):淡化+標記,列不裁

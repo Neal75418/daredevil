@@ -8,6 +8,7 @@ import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/breakpoints.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
+import 'package:daredevil/core/utils/localized_number_format.dart';
 import 'package:daredevil/data/database/dao/institutional_dao.dart';
 import 'package:daredevil/presentation/providers/institutional_ranking_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
@@ -260,7 +261,10 @@ class _InstitutionalRankingScreenState
             const SizedBox(width: DesignTokens.spacing12),
             _numCell(
               theme,
-              _formatAmount(row.netAmount),
+              formatRankingAmount(
+                row.netAmount,
+                Localizations.localeOf(context),
+              ),
               color: directionColor,
             ),
             const SizedBox(width: DesignTokens.spacing12),
@@ -318,9 +322,14 @@ class _InstitutionalRankingScreenState
     final lots = (netShares.abs() / 1000).round();
     return NumberFormat('#,##0').format(lots);
   }
+}
 
-  /// 金額(億),一位小數
-  String _formatAmount(double netAmount) {
-    return '${(netAmount.abs() / 1e8).toStringAsFixed(1)}${'unit.billion'.tr()}';
+/// 金額絕對值：中文固定以億、一位小數；其他語系走
+/// [LocalizedNumberFormat.compact]。
+@visibleForTesting
+String formatRankingAmount(double netAmount, Locale locale) {
+  if (!LocalizedNumberFormat.usesChineseUnits(locale)) {
+    return LocalizedNumberFormat.compact(netAmount.abs(), locale);
   }
+  return '${(netAmount.abs() / 1e8).toStringAsFixed(1)}億';
 }

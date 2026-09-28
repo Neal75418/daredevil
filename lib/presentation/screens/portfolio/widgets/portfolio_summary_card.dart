@@ -17,6 +17,7 @@ class PortfolioSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final locale = Localizations.localeOf(context);
     // 依顯示精度捨入後判方向：平盤（0）→ 中性色、不帶 +，與下方 _PnlItem 一致。
     final roundedPnl = AppNumberFormat.roundForDisplay(summary.totalPnl, 0);
     final pnlColor = roundedPnl == 0
@@ -42,7 +43,7 @@ class PortfolioSummaryCard extends StatelessWidget {
 
           // 總市值
           Text(
-            'NT\$${_formatNumber(summary.totalMarketValue)}',
+            'NT\$${_formatNumber(summary.totalMarketValue, locale)}',
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),
@@ -60,7 +61,7 @@ class PortfolioSummaryCard extends StatelessWidget {
               ),
               const SizedBox(width: DesignTokens.spacing8),
               Text(
-                '${roundedPnl > 0 ? "+" : ""}NT\$${_formatNumber(summary.totalPnl)}',
+                '${roundedPnl > 0 ? "+" : ""}NT\$${_formatNumber(summary.totalPnl, locale)}',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: pnlColor,
                   fontWeight: FontWeight.w600,
@@ -133,7 +134,8 @@ class PortfolioSummaryCard extends StatelessWidget {
     );
   }
 
-  String _formatNumber(double value) => LocalizedNumberFormat.compact(value);
+  String _formatNumber(double value, Locale locale) =>
+      LocalizedNumberFormat.compact(value, locale);
 }
 
 class _PnlItem extends StatelessWidget {

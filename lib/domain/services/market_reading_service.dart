@@ -15,17 +15,23 @@ enum InterpretationTone { positive, warning, negative, neutral }
 ///
 /// [messageKey] 為 i18n key（`marketOverview.reading.*`），由 UI 以 `.tr()`
 /// 解析；[args] 為帶參數的 namedArgs——綜合判讀(rule 0)等分支會帶
-/// pct/breadthPct/netAmount 等參數,無參數的判讀為 null。
+/// pct/breadthPct 等參數,無參數的判讀為 null。
 class MarketReading {
   const MarketReading({
     required this.messageKey,
     required this.tone,
     this.args,
+    this.amountArgs,
   });
 
   final String messageKey;
   final InterpretationTone tone;
   final Map<String, String>? args;
+
+  /// 金額參數（元，原始值）——由 UI 依語系分級格式化後併入 namedArgs。
+  /// domain 不可先換算成「億」再交給翻譯模板：億的倍數只適用中文，英文
+  /// 接上 "B" 會差 10 倍。
+  final Map<String, double>? amountArgs;
 }
 
 /// 大盤判讀服務（判讀層 / P2）
@@ -310,11 +316,8 @@ class MarketReadingService {
             ? 'marketOverview.reading.synthesis.extremeDownDivergence'
             : 'marketOverview.reading.synthesis.extremeUpDivergence',
         tone: tone,
-        args: {
-          ...args,
-          'netAmount': (institutionalTotalNet.abs() / 100000000)
-              .toStringAsFixed(0),
-        },
+        args: args,
+        amountArgs: {'netAmount': institutionalTotalNet.abs()},
       );
     }
 

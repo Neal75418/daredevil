@@ -5,6 +5,7 @@ import 'package:daredevil/core/theme/semantic_colors.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/core/utils/localized_number_format.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
 import 'package:daredevil/domain/services/market_reading_service.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
@@ -104,7 +105,10 @@ class TradingTurnoverRow extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _formatTurnover(data.totalTurnover),
+                        formatTurnover(
+                          data.totalTurnover,
+                          Localizations.localeOf(context),
+                        ),
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                           fontFeatures: const [FontFeature.tabularFigures()],
@@ -138,35 +142,34 @@ class TradingTurnoverRow extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// 格式化成交額顯示
-  ///
-  /// 將元轉換為億元顯示
-  /// 例如：642195569620 → "6,422.0 億元"（≥ 1000 億一位小數，其餘兩位）
-  String _formatTurnover(double turnover) {
-    if (turnover == 0) return '0 ${'marketOverview.unitBillion'.tr()}';
+/// 格式化成交額顯示
+///
+/// 中文固定以億元顯示，例如 642195569620 → "6,422.0 億元"（≥ 1000 億一位
+/// 小數，其餘兩位）；其他語系走 [LocalizedNumberFormat.compact]，例如
+/// "NT\$642.2B"。
+@visibleForTesting
+String formatTurnover(double turnover, Locale locale) {
+  if (!LocalizedNumberFormat.usesChineseUnits(locale)) {
+    return 'NT\$${LocalizedNumberFormat.compact(turnover, locale)}';
+  }
+  if (turnover == 0) return '0 億元';
 
-    final turnoverInHundredMillion = turnover / 100000000; // 轉換為億元
+  final turnoverInHundredMillion = turnover / 100000000; // 轉換為億元
 
-    if (turnoverInHundredMillion >= 10000) {
-      // >= 10000 億（兆），顯示兩位小數
-      final formatted = NumberFormat(
-        '#,##0.00',
-      ).format(turnoverInHundredMillion);
-      return '$formatted ${'marketOverview.unitBillion'.tr()}';
-    } else if (turnoverInHundredMillion >= 1000) {
-      // >= 1000 億，顯示一位小數
-      final formatted = NumberFormat(
-        '#,##0.0',
-      ).format(turnoverInHundredMillion);
-      return '$formatted ${'marketOverview.unitBillion'.tr()}';
-    } else {
-      // < 1000 億，顯示兩位小數
-      final formatted = NumberFormat(
-        '#,##0.00',
-      ).format(turnoverInHundredMillion);
-      return '$formatted ${'marketOverview.unitBillion'.tr()}';
-    }
+  if (turnoverInHundredMillion >= 10000) {
+    // >= 10000 億（兆），顯示兩位小數
+    final formatted = NumberFormat('#,##0.00').format(turnoverInHundredMillion);
+    return '$formatted 億元';
+  } else if (turnoverInHundredMillion >= 1000) {
+    // >= 1000 億，顯示一位小數
+    final formatted = NumberFormat('#,##0.0').format(turnoverInHundredMillion);
+    return '$formatted 億元';
+  } else {
+    // < 1000 億，顯示兩位小數
+    final formatted = NumberFormat('#,##0.00').format(turnoverInHundredMillion);
+    return '$formatted 億元';
   }
 }
 

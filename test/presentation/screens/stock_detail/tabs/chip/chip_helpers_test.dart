@@ -8,22 +8,46 @@ import 'package:daredevil/presentation/screens/stock_detail/tabs/chip/chip_helpe
 import '../../../../../helpers/widget_test_helpers.dart';
 
 void main() {
+  const zh = Locale('zh', 'TW');
+  const en = Locale('en');
+
   setUpAll(() async {
     await setupTestLocalization();
+  });
+
+  group('formatLots（依語系分級；測試未載翻譯，`.tr()` 回傳 key）', () {
+    const unit = 'stockDetail.unitShares';
+
+    test('中文：萬張／千張／張，一位小數', () {
+      expect(formatLots(15000, zh), '1.5萬$unit');
+      expect(formatLots(1500, zh), '1.5千$unit');
+      expect(formatLots(500, zh), '500$unit');
+    });
+
+    test('英文：1.5 萬張 = 15 thousand lots，不是 1.5 thousand', () {
+      expect(formatLots(15000, en), '15.0K$unit');
+      expect(formatLots(1500, en), '1.5K$unit');
+      expect(formatLots(500, en), '500$unit');
+    });
+
+    test('英文 formatNet 帶正負號', () {
+      expect(formatNet(15_000_000, en), '+15.0K$unit');
+      expect(formatNet(-15_000_000, en), '-15.0K$unit');
+    });
   });
 
   group('formatNet', () {
     test('positive small value stays in raw units', () {
       // value < 1000 → just the raw number with +
-      expect(formatNet(500), '+500');
+      expect(formatNet(500, zh), '+500');
     });
 
     test('negative small value stays in raw units', () {
-      expect(formatNet(-300), '-300');
+      expect(formatNet(-300, zh), '-300');
     });
 
     test('zero returns unsigned 0（平盤不帶 +）', () {
-      expect(formatNet(0), '0');
+      expect(formatNet(0, zh), '0');
     });
   });
 
@@ -66,8 +90,8 @@ void main() {
   group('formatBalance', () {
     test('delegates to formatLots', () {
       // formatBalance(value) == formatLots(value)
-      final result = formatBalance(500);
-      final expected = formatLots(500);
+      final result = formatBalance(500, zh);
+      final expected = formatLots(500, zh);
       expect(result, expected);
     });
   });
@@ -86,6 +110,25 @@ void main() {
       expect(find.text('外資'), findsOneWidget);
       expect(find.byIcon(Icons.trending_up), findsOneWidget);
     });
+
+    for (final (locale, expected) in [
+      (const Locale('zh', 'TW'), '+1.5萬'),
+      (const Locale('en', 'US'), '+15.0K'),
+    ]) {
+      testWidgets('淨額依 context 語系格式化：$locale → $expected', (tester) async {
+        // 15,000,000 股 = 15,000 張
+        await tester.pumpWidget(
+          buildTestApp(
+            Builder(
+              builder: (context) =>
+                  buildSummaryCard(context, '外資', 15000000, Icons.trending_up),
+            ),
+            locale: locale,
+          ),
+        );
+        expect(find.textContaining(expected), findsOneWidget);
+      });
+    }
   });
 
   group('buildColumnHeader', () {

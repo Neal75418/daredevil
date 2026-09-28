@@ -508,6 +508,7 @@ class _InsiderTabState extends ConsumerState<InsiderTab> {
                             args: [
                               LocalizedNumberFormat.compact(
                                 t.transferShares.toDouble(),
+                                Localizations.localeOf(context),
                               ),
                             ],
                           ),

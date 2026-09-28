@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
+import 'package:daredevil/core/utils/localized_number_format.dart';
 import 'package:daredevil/domain/services/market_reading_service.dart';
 
 /// 判讀層（P2）共用顯示元件
@@ -75,9 +76,17 @@ class MarketReadingLine extends StatelessWidget {
       InterpretationTone.neutral => theme.colorScheme.onSurface,
     };
 
-    final text = reading.args == null
+    final amountArgs = reading.amountArgs;
+    final locale = Localizations.localeOf(context);
+    final namedArgs = <String, String>{
+      ...?reading.args,
+      if (amountArgs != null)
+        for (final e in amountArgs.entries)
+          e.key: formatReadingAmount(e.value, locale),
+    };
+    final text = namedArgs.isEmpty
         ? reading.messageKey.tr()
-        : reading.messageKey.tr(namedArgs: reading.args!);
+        : reading.messageKey.tr(namedArgs: namedArgs);
 
     final fontSize = prominent
         ? DesignTokens.fontSizeSm
@@ -130,4 +139,14 @@ class MarketReadingLine extends StatelessWidget {
       child: content,
     );
   }
+}
+
+/// 判讀句的金額參數（元）：中文以億取整數（「35 億」），其他語系走
+/// [LocalizedNumberFormat.compact]。單位由這裡產生，翻譯模板不寫單位。
+@visibleForTesting
+String formatReadingAmount(double yuan, Locale locale) {
+  if (!LocalizedNumberFormat.usesChineseUnits(locale)) {
+    return LocalizedNumberFormat.compact(yuan, locale);
+  }
+  return '${(yuan / 100000000).toStringAsFixed(0)} 億';
 }

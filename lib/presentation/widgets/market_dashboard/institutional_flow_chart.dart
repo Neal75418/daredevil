@@ -8,30 +8,36 @@ import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
+import 'package:daredevil/core/utils/localized_number_format.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/mini_bar_chart.dart';
 
-/// 格式化金額（元 → 億/千萬/百萬）
-String _formatAmount(double value) {
+/// 格式化金額（元）：中文 億/千萬/百萬（億依大小取 0/1/2 位小數），其他
+/// 語系走 [LocalizedNumberFormat.compact]。
+@visibleForTesting
+String formatFlowAmount(double value, Locale locale) {
   final absVal = value.abs();
   final sign = value > 0
       ? '+'
       : value < 0
       ? '-'
       : '';
+  if (!LocalizedNumberFormat.usesChineseUnits(locale)) {
+    return '$sign${LocalizedNumberFormat.compact(absVal, locale)}';
+  }
   final inBillion = absVal / 100000000;
   if (inBillion >= 100) {
-    return '$sign${inBillion.toStringAsFixed(0)} ${'unit.billion'.tr()}';
+    return '$sign${inBillion.toStringAsFixed(0)} 億';
   } else if (inBillion >= 10) {
-    return '$sign${inBillion.toStringAsFixed(1)} ${'unit.billion'.tr()}';
+    return '$sign${inBillion.toStringAsFixed(1)} 億';
   } else if (inBillion >= 1) {
-    return '$sign${inBillion.toStringAsFixed(2)} ${'unit.billion'.tr()}';
+    return '$sign${inBillion.toStringAsFixed(2)} 億';
   }
   final inTenMillion = absVal / 10000000;
   if (inTenMillion >= 1) {
-    return '$sign${inTenMillion.toStringAsFixed(1)} ${'unit.tenMillion'.tr()}';
+    return '$sign${inTenMillion.toStringAsFixed(1)} 千萬';
   }
   final inMillion = absVal / 1000000;
-  return '$sign${inMillion.toStringAsFixed(0)} ${'unit.million'.tr()}';
+  return '$sign${inMillion.toStringAsFixed(0)} 百萬';
 }
 
 /// 法人動向卡片
@@ -166,7 +172,10 @@ class InstitutionalFlowChart extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    _formatAmount(data.totalNet),
+                    formatFlowAmount(
+                      data.totalNet,
+                      Localizations.localeOf(context),
+                    ),
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w800,
                       color: AppTheme.getPriceColor(
@@ -284,7 +293,10 @@ class _FlowCard extends StatelessWidget {
                           ],
                         ),
                         Text(
-                          _formatAmount(item.value),
+                          formatFlowAmount(
+                            item.value,
+                            Localizations.localeOf(context),
+                          ),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: valueColor,
                             fontWeight: FontWeight.w700,

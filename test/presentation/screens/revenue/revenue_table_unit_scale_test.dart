@@ -3,7 +3,7 @@
 // `FinMindRevenue.revenue` 的單位是**千元**——模型自己的註解寫死了這個慣例
 // (「本欄位…一律以『千元』為慣例」,FinMind 來源值會 ÷1000 對齊)。
 //
-// `_formatRevenue` 的三個分支只有中間那個算錯:
+// 修正前的 `_formatRevenue`(現為 formatRevenueThousands)三個分支只有中間那個算錯:
 //   R >= 100000 → R/100000 億   ✓ (千元 → 億元 要 ÷100,000)
 //   R >= 10000  → R/10000  萬   ✗ (千元 → 萬元 應 ÷10,少了 1000 倍)
 //   R <  10000  → R        千   ✓
@@ -54,16 +54,12 @@ void main() {
         .toList();
   }
 
-  // buildTestApp 不載入翻譯,`.tr()` 回傳原始 key——與本 repo 其他 widget
-  // 測試的慣例一致(見 revenue_overview_screen_test)。斷言連 key 一起比,
-  // 才能同時釘住「數值」與「選了哪個單位分支」。
-  const kBillion = 'stockDetail.unitBillion';
-  const kTenThousand = 'stockDetail.unitTenThousand';
-  const kThousand = 'stockDetail.unitThousand';
+  const zh = Locale('zh', 'TW');
+  const en = Locale('en');
 
   test('前提:欄位單位是千元(模型註解的慣例)', () {
     // 這條不是重言式——它釘住本檔所有斷言賴以成立的前提。
-    // 若日後有人把欄位改成「元」,這裡會提醒要一併改 _formatRevenue。
+    // 若日後有人把欄位改成「元」,這裡會提醒要一併改 formatRevenueThousands。
     final r = FinMindRevenue.fromJson({
       'stock_id': '2330',
       'date': '2026-07-01',
@@ -74,36 +70,42 @@ void main() {
     expect(r.revenue, 467580548); // 存成千元
   });
 
-  testWidgets('億 分支正確(對照組——證明不是三個分支都壞)', (tester) async {
+  test('億 分支正確(對照組——證明不是三個分支都壞)', () {
     // 467,580,548 千元 = 4,675.8 億元
-    final texts = await render(tester, 467580548);
-    expect(texts, contains('4675.8$kBillion'));
+    expect(formatRevenueThousands(467580548, zh), '4675.8億');
   });
 
-  testWidgets('🚨 萬 分支不得小 1000 倍', (tester) async {
+  test('🚨 萬 分支不得小 1000 倍', () {
     // 99,976 千元 = 99,976,000 元 = 9,997.6 萬元
-    final texts = await render(tester, 99976);
     expect(
-      texts,
-      contains('9997.6$kTenThousand'),
+      formatRevenueThousands(99976, zh),
+      '9997.6萬',
       reason: '舊碼除以 10000 而非 10,畫面顯示「10.0萬」——把 1 億講成 10 萬',
     );
   });
 
-  testWidgets('🚨 億/萬 交界處不得跳 1000 倍', (tester) async {
+  test('🚨 億/萬 交界處不得跳 1000 倍', () {
     // 交界兩側只差 1 千元,顯示值必須連續:
     //   99,999 千元 = 9,999.9 萬
     //  100,000 千元 =    1.0 億 = 10,000 萬
     // 差 0.1 萬 → 連續。舊碼在此處是「10.0萬 → 1.0億」,跳 1000 倍
     // ——這是不必查任何資料就看得出來的破綻。
-    final justUnder = await render(tester, 99999);
-    final justOver = await render(tester, 100000);
-    expect(justUnder, contains('9999.9$kTenThousand'));
-    expect(justOver, contains('1.0$kBillion'));
+    expect(formatRevenueThousands(99999, zh), '9999.9萬');
+    expect(formatRevenueThousands(100000, zh), '1.0億');
   });
 
-  testWidgets('千 分支照舊(未達 1000 萬者仍以千元表示)', (tester) async {
-    final texts = await render(tester, 9999);
-    expect(texts, contains('9999$kThousand'));
+  test('千 分支照舊(未達 1000 萬者仍以千元表示)', () {
+    expect(formatRevenueThousands(9999, zh), '9999千');
+  });
+
+  test('英文走 K/M/B:4,675.8 億 = 467.6 billion,不是 4,675.8 billion', () {
+    expect(formatRevenueThousands(467580548, en), '467.6B');
+    expect(formatRevenueThousands(99976, en), '100.0M');
+    expect(formatRevenueThousands(9999, en), '10.0M');
+  });
+
+  testWidgets('表格以 context 語系格式化(測試 MaterialApp 預設 en_US)', (tester) async {
+    final texts = await render(tester, 467580548);
+    expect(texts, contains('467.6B'));
   });
 }

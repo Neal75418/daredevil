@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/core/utils/localized_number_format.dart';
 
 export 'package:daredevil/presentation/screens/stock_detail/tabs/fundamentals/fundamentals_helpers.dart'
     show buildEmptyState;
@@ -61,7 +62,7 @@ Widget buildSummaryCard(
         ),
         const SizedBox(height: DesignTokens.spacing6),
         Text(
-          formatNet(value),
+          formatNet(value, Localizations.localeOf(context)),
           style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.bold,
             color: valueColor,
@@ -143,7 +144,7 @@ Widget buildNetValue(BuildContext context, double value) {
   final color = AppTheme.getPriceColor(value, Theme.of(context).brightness);
 
   return Text(
-    formatNet(value),
+    formatNet(value, Localizations.localeOf(context)),
     textAlign: TextAlign.end,
     style: TextStyle(
       fontSize: DesignTokens.fontSizeSm,
@@ -153,29 +154,34 @@ Widget buildNetValue(BuildContext context, double value) {
   );
 }
 
-/// 格式化張數，依量級自動升階（萬張/千張/張）
+/// 格式化張數，依量級自動升階：中文 萬張/千張/張，其他語系走
+/// [LocalizedNumberFormat.compact]（K/M…）。
 ///
 /// 核心輔助函式，供 [formatNet]、[formatBalance] 及成交量格式化使用。
-String formatLots(double lots) {
-  if (lots >= 10000) {
-    return '${(lots / 10000).toStringAsFixed(1)}${'stockDetail.unitTenThousand'.tr()}${'stockDetail.unitShares'.tr()}';
-  } else if (lots >= 1000) {
-    return '${(lots / 1000).toStringAsFixed(1)}${'stockDetail.unitThousand'.tr()}${'stockDetail.unitShares'.tr()}';
+String formatLots(double lots, Locale locale) {
+  final unit = 'stockDetail.unitShares'.tr();
+  if (!LocalizedNumberFormat.usesChineseUnits(locale)) {
+    return '${LocalizedNumberFormat.compact(lots, locale)}$unit';
   }
-  return '${lots.toStringAsFixed(0)}${'stockDetail.unitShares'.tr()}';
+  if (lots >= 10000) {
+    return '${(lots / 10000).toStringAsFixed(1)}萬$unit';
+  } else if (lots >= 1000) {
+    return '${(lots / 1000).toStringAsFixed(1)}千$unit';
+  }
+  return '${lots.toStringAsFixed(0)}$unit';
 }
 
 /// 格式化淨值，自動加正負號並轉換為張數單位。
 /// 平盤（0）不帶符號（顯示「0」而非「+0」）。
-String formatNet(double value) {
+String formatNet(double value, Locale locale) {
   final prefix = value > 0 ? '+' : (value < 0 ? '-' : '');
   final lots = value.abs() / 1000;
   if (lots < 1) return '${value > 0 ? '+' : ''}${value.toStringAsFixed(0)}';
-  return '$prefix${formatLots(lots)}';
+  return '$prefix${formatLots(lots, locale)}';
 }
 
 /// 格式化餘額（已為張數單位）
-String formatBalance(double value) => formatLots(value);
+String formatBalance(double value, Locale locale) => formatLots(value, locale);
 
 /// 格式化持股變動（以千股為單位）。平盤（0）不帶 `+`。
 String formatSharesChange(double value) {

@@ -50,14 +50,17 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: buildTestApp(const IndustryEpsScreen()),
+        child: buildTestApp(
+          const IndustryEpsScreen(),
+          locale: const Locale('zh', 'TW'),
+        ),
       ),
     );
     await tester.pumpAndSettle();
 
     // 前提：這一列確實畫出來了（EPS 欄），否則下面的斷言失敗不代表單位錯
     expect(find.text('3.56'), findsOneWidget);
-    expect(find.text('13.5unit.billion'), findsOneWidget);
+    expect(find.text('13.5億'), findsOneWidget);
 
     // 卸載畫面後才釋放 container（provider 的 keepAlive 計時器隨之取消）
     await tester.pumpWidget(const SizedBox());

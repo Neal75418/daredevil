@@ -79,7 +79,10 @@ class KChartDetailPopup extends StatelessWidget {
           _row(
             theme,
             'stockDetail.volume'.tr(),
-            LocalizedNumberFormat.compact(entity.vol),
+            LocalizedNumberFormat.compact(
+              entity.vol,
+              Localizations.localeOf(context),
+            ),
           ),
         ],
       ),

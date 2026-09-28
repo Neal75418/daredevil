@@ -607,11 +607,8 @@ void main() {
             r.messageKey,
             'marketOverview.reading.synthesis.extremeDownDivergence',
           );
-          expect(r.args, {
-            'pct': '7.02',
-            'breadthPct': '70',
-            'netAmount': '35',
-          });
+          expect(r.args, {'pct': '7.02', 'breadthPct': '70'});
+          expect(r.amountArgs, {'netAmount': 3500000000});
         },
       );
 
@@ -670,7 +667,8 @@ void main() {
           r.messageKey,
           'marketOverview.reading.synthesis.extremeUpDivergence',
         );
-        expect(r.args, {'pct': '5.50', 'breadthPct': '75', 'netAmount': '220'});
+        expect(r.args, {'pct': '5.50', 'breadthPct': '75'});
+        expect(r.amountArgs, {'netAmount': 22000000000});
       });
     },
   );

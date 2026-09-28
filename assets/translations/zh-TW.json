@@ -27,12 +27,6 @@
     "format": "資料格式錯誤，請稍後再試",
     "unknown": "發生未預期的錯誤，請稍後再試"
   },
-  "unit": {
-    "billion": "億",
-    "tenThousand": "萬",
-    "tenMillion": "千萬",
-    "million": "百萬"
-  },
   "nav": {
     "today": "今日",
     "scan": "掃描",
@@ -151,7 +145,6 @@
     "greenEnergy": "綠能",
     "highDividend": "高股息",
     "tradingTurnover": "成交額",
-    "unitBillion": "億元",
     "advanceDecline": "漲跌家數",
     "advance": "上漲",
     "decline": "下跌",
@@ -230,9 +223,9 @@
       },
       "synthesis": {
         "extremeDown": "重挫 {pct}%、{breadthPct}% 個股下跌——系統性風險日，個股多空訊號參考性降低",
-        "extremeDownDivergence": "重挫 {pct}%、{breadthPct}% 個股下跌——系統性風險日，個股多空訊號參考性降低；惟法人合計買超 {netAmount} 億與指數背離，極端日訊號待後續確認",
+        "extremeDownDivergence": "重挫 {pct}%、{breadthPct}% 個股下跌——系統性風險日，個股多空訊號參考性降低；惟法人合計買超 {netAmount}與指數背離，極端日訊號待後續確認",
         "extremeUp": "暴漲 {pct}%、{breadthPct}% 個股上漲——系統性亢奮日，個股多空訊號參考性降低",
-        "extremeUpDivergence": "暴漲 {pct}%、{breadthPct}% 個股上漲——系統性亢奮日，個股多空訊號參考性降低；惟法人合計賣超 {netAmount} 億與指數背離，極端日訊號待後續確認",
+        "extremeUpDivergence": "暴漲 {pct}%、{breadthPct}% 個股上漲——系統性亢奮日，個股多空訊號參考性降低；惟法人合計賣超 {netAmount}與指數背離，極端日訊號待後續確認",
         "weightSupport": "指數平盤但逾半個股下跌——權值撐盤、內部偏弱",
         "weightPressure": "指數平盤但逾半個股上漲——權值壓盤、內部偏強",
         "divergenceSell": "指數上漲但外資/法人合計賣超顯著——籌碼與指數背離",
@@ -509,8 +502,6 @@
     "noKlineData": "暫無K線資料",
     "chartSummary": "近{days}日K線圖，最高{high}元，最低{low}元，收盤{close}元，{trend}{change}%",
     "chartHint": "雙指縮放可調整時間範圍",
-    "unitBillion": "億",
-    "unitTenThousand": "萬",
     "unitThousand": "千",
     "unitShares": "張",
     "technicalIndicators": "技術指標",

@@ -5,6 +5,7 @@ import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/domain/services/market_reading_service.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/core/utils/localized_number_format.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/mini_trend_chart.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_reading_line.dart';
 
@@ -188,7 +189,7 @@ class _MarginItem extends StatelessWidget {
                 ),
                 const SizedBox(height: DesignTokens.spacing2),
                 Text(
-                  _formatSheets(change),
+                  formatMarginSheets(change, Localizations.localeOf(context)),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: color,
                     fontWeight: FontWeight.w700,
@@ -198,7 +199,7 @@ class _MarginItem extends StatelessWidget {
                 if (balance != 0) ...[
                   const SizedBox(height: 1),
                   Text(
-                    '${'marketOverview.balance'.tr()} ${_formatBalance(balance)}',
+                    '${'marketOverview.balance'.tr()} ${formatMarginBalance(balance, Localizations.localeOf(context))}',
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                       fontSize: DesignTokens.fontSizeXs,
@@ -222,30 +223,41 @@ class _MarginItem extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// 格式化增減張數，大數字用「萬張」
-  String _formatSheets(double value) {
-    final absVal = value.abs();
-    final sign = value > 0
-        ? '+'
-        : value < 0
-        ? '-'
-        : '';
-
-    if (absVal >= 10000) {
-      return '$sign${(absVal / 10000).toStringAsFixed(1)} 萬張';
-    }
-    return '$sign${NumberFormat('#,##0').format(absVal)} 張';
+/// 格式化增減張數：中文大數字用「萬張」，其他語系走
+/// [LocalizedNumberFormat.compact]。
+@visibleForTesting
+String formatMarginSheets(double value, Locale locale) {
+  final absVal = value.abs();
+  final sign = value > 0
+      ? '+'
+      : value < 0
+      ? '-'
+      : '';
+  if (!LocalizedNumberFormat.usesChineseUnits(locale)) {
+    return '$sign${LocalizedNumberFormat.compact(absVal, locale)}'
+        '${'stockDetail.unitShares'.tr()}';
   }
 
-  /// 格式化餘額（萬張/億張）
-  String _formatBalance(double value) {
-    final absVal = value.abs();
-    if (absVal >= 1e8) {
-      return '${(absVal / 1e8).toStringAsFixed(1)} 億張';
-    } else if (absVal >= 10000) {
-      return '${(absVal / 10000).toStringAsFixed(1)} 萬張';
-    }
-    return '${NumberFormat('#,##0').format(absVal)} 張';
+  if (absVal >= 10000) {
+    return '$sign${(absVal / 10000).toStringAsFixed(1)} 萬張';
   }
+  return '$sign${NumberFormat('#,##0').format(absVal)} 張';
+}
+
+/// 格式化餘額：中文 萬張/億張，其他語系走 [LocalizedNumberFormat.compact]。
+@visibleForTesting
+String formatMarginBalance(double value, Locale locale) {
+  final absVal = value.abs();
+  if (!LocalizedNumberFormat.usesChineseUnits(locale)) {
+    return '${LocalizedNumberFormat.compact(absVal, locale)}'
+        '${'stockDetail.unitShares'.tr()}';
+  }
+  if (absVal >= 1e8) {
+    return '${(absVal / 1e8).toStringAsFixed(1)} 億張';
+  } else if (absVal >= 10000) {
+    return '${(absVal / 10000).toStringAsFixed(1)} 萬張';
+  }
+  return '${NumberFormat('#,##0').format(absVal)} 張';
 }
