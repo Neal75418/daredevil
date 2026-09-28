@@ -24,6 +24,7 @@ void main() {
 
 **注意事項**：
 - `SectionHeader` 使用 `flutter_animate`，需 `await tester.pump(const Duration(seconds: 1))` 推進動畫
+- `buildTestApp` 預設語系 en_US：依語系分級的數字（`Localizations.localeOf(context)` → `LocalizedNumberFormat`／各畫面格式函式）在 widget 測試走英文路徑（K/M/B）。要驗中文輸出或中文長字串版面（溢位）時傳 `locale: const Locale('zh', 'TW')`
 - `TechnicalIndicatorService` 為 plain class，直接 `new` 使用，不需 mock
 - `FinMindRevenue.date` 型別為 `String`（非 `DateTime`）
 - `PortfolioPositionData.quantity` 型別為 `double`（非 `int`）
