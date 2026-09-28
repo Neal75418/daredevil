@@ -8,6 +8,7 @@ import 'package:daredevil/presentation/screens/watchlist/watchlist_screen.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 
+import '../../../helpers/phone_layout_helpers.dart';
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
 
@@ -17,12 +18,13 @@ import '../../../helpers/widget_test_helpers.dart';
 
 class FakeWatchlistNotifier extends WatchlistNotifier {
   WatchlistState initialState = WatchlistState();
+  int loadDataCalls = 0;
 
   @override
   WatchlistState build() => initialState;
 
   @override
-  Future<void> loadData() async {}
+  Future<void> loadData() async => loadDataCalls++;
 
   @override
   void loadMore() {}
@@ -134,22 +136,26 @@ void main() {
     addTearDown(() => tester.view.resetPhysicalSize());
   }
 
+  FakeWatchlistNotifier? lastWatchlistNotifier;
+
   Widget buildTestWidget({
     WatchlistState? watchlistState,
     PortfolioState? portfolioState,
     SettingsState? settingsState,
     Brightness brightness = Brightness.light,
+    Widget Function(Widget screen)? wrap,
   }) {
     final watchlist = watchlistState ?? WatchlistState();
     final portfolio = portfolioState ?? const PortfolioState();
     final settings = settingsState ?? const SettingsState();
+    const screen = WatchlistScreen();
     return buildProviderTestApp(
-      const WatchlistScreen(),
+      wrap?.call(screen) ?? screen,
       overrides: [
         watchlistProvider.overrideWith(() {
           final n = FakeWatchlistNotifier();
           n.initialState = watchlist;
-          return n;
+          return lastWatchlistNotifier = n;
         }),
         portfolioProvider.overrideWith(() {
           final n = FakePortfolioNotifier();
@@ -303,5 +309,51 @@ void main() {
       // Search icon changes to close
       expect(find.byIcon(Icons.close), findsOneWidget);
     });
+  });
+
+  group('錯誤／空狀態在手機上（含底部導覽列）', () {
+    final states = {
+      '無資料': WatchlistState(),
+      '一般錯誤': WatchlistState(error: 'Database error'),
+      '網路錯誤': WatchlistState(error: 'Network error'),
+    };
+
+    for (final entry in states.entries) {
+      for (final scenario in phoneScenarios) {
+        testWidgets('${entry.key}：$scenario 不溢位、內容不被導覽列蓋住', (tester) async {
+          applyPhoneScenario(tester, scenario);
+          await tester.pumpWidget(
+            buildTestWidget(watchlistState: entry.value, wrap: inPhoneShell),
+          );
+          await tester.pump(const Duration(seconds: 1));
+
+          expect(tester.takeException(), isNull);
+          await expectAboveNavBar(
+            tester,
+            find
+                .descendant(
+                  of: find.byType(EmptyState),
+                  matching: find.byType(Text),
+                )
+                .last,
+          );
+        });
+      }
+
+      testWidgets('${entry.key}：可下拉重新整理', (tester) async {
+        applyPhoneScenario(tester, phoneScenarios.first);
+        await tester.pumpWidget(
+          buildTestWidget(watchlistState: entry.value, wrap: inPhoneShell),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        final before = lastWatchlistNotifier!.loadDataCalls;
+
+        await tester.fling(find.byType(EmptyState), const Offset(0, 400), 1000);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        expect(lastWatchlistNotifier!.loadDataCalls, greaterThan(before));
+      });
+    }
   });
 }

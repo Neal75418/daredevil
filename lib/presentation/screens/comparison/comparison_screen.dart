@@ -14,6 +14,7 @@ import 'package:daredevil/presentation/screens/comparison/widgets/price_overlay_
 import 'package:daredevil/presentation/screens/comparison/widgets/radar_comparison_chart.dart';
 import 'package:daredevil/presentation/screens/comparison/widgets/stock_picker_sheet.dart';
 import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 
 /// 比較畫面 - 並排顯示多檔股票分析
 class ComparisonScreen extends ConsumerStatefulWidget {
@@ -78,16 +79,18 @@ class _ComparisonScreenState extends ConsumerState<ComparisonScreen> {
       body: state.isLoading && state.symbols.isEmpty
           ? const GenericListShimmer(itemCount: 4)
           : state.error != null && state.symbols.isEmpty
-          ? ErrorDisplay.isNetworkError(state.error!)
-                ? EmptyStates.networkError(
-                    onRetry: () =>
-                        ref.read(comparisonProvider.notifier).reload(),
-                  )
-                : EmptyStates.error(
-                    message: state.error!,
-                    onRetry: () =>
-                        ref.read(comparisonProvider.notifier).reload(),
-                  )
+          ? FillRemainingScrollable(
+              child: ErrorDisplay.isNetworkError(state.error!)
+                  ? EmptyStates.networkError(
+                      onRetry: () =>
+                          ref.read(comparisonProvider.notifier).reload(),
+                    )
+                  : EmptyStates.error(
+                      message: state.error!,
+                      onRetry: () =>
+                          ref.read(comparisonProvider.notifier).reload(),
+                    ),
+            )
           : Column(
               children: [
                 // 錯誤橫幅（有股票時仍顯示，但不全頁替換）

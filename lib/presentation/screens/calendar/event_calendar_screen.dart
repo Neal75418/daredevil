@@ -14,6 +14,7 @@ import 'package:daredevil/presentation/screens/calendar/widgets/event_detail_she
 import 'package:daredevil/presentation/screens/calendar/widgets/event_list_tile.dart';
 import 'package:daredevil/presentation/screens/calendar/widgets/upcoming_events_section.dart';
 import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 
 /// 事件行事曆頁面
 class EventCalendarScreen extends ConsumerStatefulWidget {
@@ -208,14 +209,17 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
             // 格高收縮救不回來——整頁轉捲動,日事件區給固定高。
             final minRequired = fixed + rows * 44.0;
             if (cons.maxHeight.isFinite && cons.maxHeight < minRequired) {
+              // 外層已可捲動：錯誤頁以自然高度排入，不放進固定高的捲動小窗
+              final errorView = _buildDayEventsError(state);
               return SingleChildScrollView(
                 child: Column(
                   children: [
                     ...children,
-                    SizedBox(
-                      height: _narrowScrollFallbackDayBodyHeight,
-                      child: _buildDayEventsBody(theme, state),
-                    ),
+                    errorView ??
+                        SizedBox(
+                          height: _narrowScrollFallbackDayBodyHeight,
+                          child: _buildDayEventsBody(theme, state),
+                        ),
                   ],
                 ),
               );
@@ -502,33 +506,29 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
     );
   }
 
+  /// 載入失敗且無事件時的錯誤頁（未包捲動）；否則回 null
+  Widget? _buildDayEventsError(EventCalendarState state) {
+    if (state.error == null || state.events.isNotEmpty) return null;
+    void onRetry() {
+      if (state.focusedMonth != null) {
+        ref
+            .read(eventCalendarProvider.notifier)
+            .loadMonthEvents(state.focusedMonth!);
+      }
+    }
+
+    return ErrorDisplay.isNetworkError(state.error!)
+        ? EmptyStates.networkError(onRetry: onRetry)
+        : EmptyStates.error(message: state.error!, onRetry: onRetry);
+  }
+
   /// 錯誤／載入／空三態 placeholder；有清單資料時回 null
   Widget? _buildDayEventsPlaceholder(
     ThemeData theme,
     EventCalendarState state,
   ) {
-    if (state.error != null && state.events.isEmpty) {
-      return ErrorDisplay.isNetworkError(state.error!)
-          ? EmptyStates.networkError(
-              onRetry: () {
-                if (state.focusedMonth != null) {
-                  ref
-                      .read(eventCalendarProvider.notifier)
-                      .loadMonthEvents(state.focusedMonth!);
-                }
-              },
-            )
-          : EmptyStates.error(
-              message: state.error!,
-              onRetry: () {
-                if (state.focusedMonth != null) {
-                  ref
-                      .read(eventCalendarProvider.notifier)
-                      .loadMonthEvents(state.focusedMonth!);
-                }
-              },
-            );
-    }
+    final error = _buildDayEventsError(state);
+    if (error != null) return FillRemainingScrollable(child: error);
     if (state.isLoading) {
       return const Center(
         child: SizedBox(

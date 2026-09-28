@@ -7,6 +7,7 @@ import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/update_history_provider.dart';
 import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 
 /// Today screen 上 tap 「最後更新時間」會彈出此 sheet
 ///
@@ -62,7 +63,9 @@ class UpdateHistorySheet extends ConsumerWidget {
               child: historyAsync.when(
                 data: (rows) {
                   if (rows.isEmpty) {
-                    return Center(
+                    // 接上 sheet 的 controller，空狀態也能拖動 sheet
+                    return FillRemainingScrollable(
+                      controller: scrollController,
                       child: Text(
                         'updateHistory.empty'.tr(),
                         style: theme.textTheme.bodyMedium?.copyWith(
@@ -82,7 +85,11 @@ class UpdateHistorySheet extends ConsumerWidget {
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => _ErrorView(error: e, ref: ref),
+                error: (e, _) => _ErrorView(
+                  error: e,
+                  ref: ref,
+                  scrollController: scrollController,
+                ),
               ),
             ),
           ],
@@ -94,15 +101,23 @@ class UpdateHistorySheet extends ConsumerWidget {
 
 /// 錯誤 view — 友善訊息 + 重試按鈕（debug build 才印 raw exception）
 class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.error, required this.ref});
+  const _ErrorView({
+    required this.error,
+    required this.ref,
+    required this.scrollController,
+  });
 
   final Object error;
   final WidgetRef ref;
 
+  /// sheet 的 controller：接上才能在錯誤畫面上拖動 sheet
+  final ScrollController scrollController;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
+    return FillRemainingScrollable(
+      controller: scrollController,
       child: Padding(
         padding: const EdgeInsets.all(DesignTokens.spacing24),
         child: Column(

@@ -4,11 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
+import 'package:daredevil/presentation/providers/stock_browsing_context_provider.dart';
 import 'package:daredevil/presentation/providers/stock_detail_provider.dart';
 import 'package:daredevil/presentation/screens/stock_detail/stock_detail_screen.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
+import 'package:daredevil/presentation/widgets/stock_nav_bar.dart';
 
+import '../../../helpers/phone_layout_helpers.dart';
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
 
@@ -119,6 +122,7 @@ void main() {
     PriceAlertState? alertState,
     SettingsState? settingsState,
     Brightness brightness = Brightness.light,
+    List<String> browsingContext = const [],
   }) {
     final stock = stockState ?? const StockDetailState();
     final alert = alertState ?? const PriceAlertState();
@@ -143,6 +147,9 @@ void main() {
         }),
         primaryRuleAccuracySummaryProvider.overrideWith(
           (ref, symbol) async => null,
+        ),
+        stockBrowsingContextProvider.overrideWith(
+          () => _FixedBrowsingContext(browsingContext),
         ),
       ],
       brightness: brightness,
@@ -335,4 +342,34 @@ void main() {
       expect(find.byType(MaterialBanner), findsNothing);
     });
   });
+
+  group('錯誤頁在手機上（從清單進入、有巡檢導覽列）', () {
+    for (final error in ['Database error', 'Network error']) {
+      for (final scenario in phoneScenarios) {
+        testWidgets('$error：$scenario 不溢位', (tester) async {
+          applyPhoneScenario(tester, scenario);
+          await tester.pumpWidget(
+            buildTestWidget(
+              stockState: StockDetailState(error: error),
+              browsingContext: const ['2330', '2317'],
+            ),
+          );
+          await tester.pump(const Duration(seconds: 1));
+
+          expect(find.byType(StockNavBar), findsOneWidget, reason: '前提：導覽列有出現');
+          expect(tester.takeException(), isNull);
+          expect(find.text('common.retry'), findsOneWidget);
+        });
+      }
+    }
+  });
+}
+
+class _FixedBrowsingContext extends StockBrowsingContext {
+  _FixedBrowsingContext(this.symbols);
+
+  final List<String> symbols;
+
+  @override
+  List<String> build() => symbols;
 }

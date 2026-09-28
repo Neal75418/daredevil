@@ -9,6 +9,7 @@ import 'package:daredevil/presentation/screens/scan/scan_screen.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 
+import '../../../helpers/phone_layout_helpers.dart';
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
 
@@ -18,12 +19,13 @@ import '../../../helpers/widget_test_helpers.dart';
 
 class FakeScanNotifier extends ScanNotifier {
   ScanState initialState = const ScanState();
+  int loadDataCalls = 0;
 
   @override
   ScanState build() => initialState;
 
   @override
-  Future<void> loadData() async {}
+  Future<void> loadData() async => loadDataCalls++;
 
   @override
   Future<void> loadMore() async {}
@@ -86,20 +88,24 @@ void main() {
     addTearDown(() => tester.view.resetPhysicalSize());
   }
 
+  FakeScanNotifier? lastScanNotifier;
+
   Widget buildTestWidget({
     ScanState? scanState,
     SettingsState? settingsState,
     Brightness brightness = Brightness.light,
+    Widget Function(Widget screen)? wrap,
   }) {
     final scan = scanState ?? const ScanState();
     final settings = settingsState ?? const SettingsState();
+    const screen = ScanScreen();
     return buildProviderTestApp(
-      const ScanScreen(),
+      wrap?.call(screen) ?? screen,
       overrides: [
         scanProvider.overrideWith(() {
           final n = FakeScanNotifier();
           n.initialState = scan;
-          return n;
+          return lastScanNotifier = n;
         }),
         settingsProvider.overrideWith(() {
           final n = FakeSettingsNotifier();
@@ -331,6 +337,56 @@ void main() {
 
       expect(find.byIcon(Icons.factory_outlined), findsOneWidget);
     });
+  });
+
+  group('錯誤／空狀態在手機上（含底部導覽列）', () {
+    final dataDate = DateTime(2026, 9, 18);
+    final states = {
+      '一般錯誤': const ScanState(error: 'Database error'),
+      '網路錯誤': const ScanState(error: 'Network error'),
+      '首次建置（尚無資料）': const ScanState(),
+      '全部無結果': ScanState(dataDate: dataDate),
+    };
+
+    for (final entry in states.entries) {
+      for (final scenario in phoneScenarios) {
+        testWidgets('${entry.key}：$scenario 不溢位、內容不被導覽列蓋住', (tester) async {
+          applyPhoneScenario(tester, scenario);
+          await tester.pumpWidget(
+            buildTestWidget(scanState: entry.value, wrap: inPhoneShell),
+          );
+          await tester.pump(const Duration(seconds: 1));
+
+          expect(tester.takeException(), isNull);
+          await expectAboveNavBar(
+            tester,
+            find
+                .descendant(
+                  of: find.byType(EmptyState),
+                  matching: find.byType(Text),
+                )
+                .last,
+          );
+        });
+      }
+    }
+
+    for (final entry in states.entries) {
+      testWidgets('${entry.key}：可下拉重新整理', (tester) async {
+        applyPhoneScenario(tester, phoneScenarios.first);
+        await tester.pumpWidget(
+          buildTestWidget(scanState: entry.value, wrap: inPhoneShell),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        final before = lastScanNotifier!.loadDataCalls;
+
+        await tester.fling(find.byType(EmptyState), const Offset(0, 400), 1000);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        expect(lastScanNotifier!.loadDataCalls, greaterThan(before));
+      });
+    }
   });
 }
 

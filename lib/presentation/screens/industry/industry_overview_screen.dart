@@ -11,6 +11,7 @@ import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/scan_provider.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 
 /// 產業概覽狀態
 class _IndustryOverviewState {
@@ -89,20 +90,22 @@ class _IndustryOverviewScreenState
       body: _state.isLoading
           ? const GenericListShimmer(itemCount: 8)
           : _state.error != null
-          ? ErrorDisplay.isNetworkError(_state.error!)
-                ? EmptyStates.networkError(
-                    onRetry: () {
-                      setState(() => _state = const _IndustryOverviewState());
-                      _loadData();
-                    },
-                  )
-                : EmptyStates.error(
-                    message: _state.error!,
-                    onRetry: () {
-                      setState(() => _state = const _IndustryOverviewState());
-                      _loadData();
-                    },
-                  )
+          ? FillRemainingScrollable(
+              child: ErrorDisplay.isNetworkError(_state.error!)
+                  ? EmptyStates.networkError(
+                      onRetry: () {
+                        setState(() => _state = const _IndustryOverviewState());
+                        _loadData();
+                      },
+                    )
+                  : EmptyStates.error(
+                      message: _state.error!,
+                      onRetry: () {
+                        setState(() => _state = const _IndustryOverviewState());
+                        _loadData();
+                      },
+                    ),
+            )
           : _buildIndustryList(theme),
     );
   }

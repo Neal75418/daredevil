@@ -213,6 +213,8 @@ class EmptyStates {
   }
 
   /// 無符合篩選條件的股票 - 附有詳細元資料
+  ///
+  /// 不自帶捲動與置中，呼叫端需包進 `FillRemainingScrollable`。
   static Widget noFilterResultsWithMeta({
     required String filterName,
     required String conditionDescription,
@@ -327,200 +329,217 @@ class _EmptyStateWithMetaState extends State<_EmptyStateWithMeta> {
         widget.dataDate != null ||
         widget.dataRequirements.isNotEmpty;
 
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(DesignTokens.spacing24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // 圖示
-            Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        flatColor.withValues(alpha: isDark ? 0.15 : 0.1),
-                        flatColor.withValues(alpha: isDark ? 0.05 : 0.03),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: flatColor.withValues(alpha: 0.2),
-                      width: 2,
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.filter_alt_off_outlined,
-                    size: 48,
-                    color: flatColor.withValues(alpha: 0.7),
-                  ),
-                )
-                .animate(
-                  onPlay: (controller) => controller.repeat(reverse: true),
-                )
-                .scale(
-                  begin: const Offset(1, 1),
-                  end: const Offset(1.03, 1.03),
-                  duration: AnimDurations.breathe,
-                  curve: AnimCurves.breathe,
-                ),
-
-            const SizedBox(height: DesignTokens.spacing20),
-
-            // 帶有篩選名稱的標題
-            Text(
-              'filterMeta.titleWithFilter'.tr(
-                namedArgs: {'filter': widget.filterName},
-              ),
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface,
-              ),
-              textAlign: TextAlign.center,
-            ).animate().fadeIn(
-              delay: AnimDurations.press,
-              duration: AnimDurations.normal,
-            ),
-
-            const SizedBox(height: DesignTokens.spacing16),
-
-            // 條件說明卡片（核心：條件 + 閾值）
-            Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(DesignTokens.spacing16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withValues(
-                      alpha: 0.5,
-                    ),
-                    borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
-                    border: Border.all(
-                      color: theme.colorScheme.outline.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 條件區塊
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.rule_outlined,
-                            size: 18,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: DesignTokens.spacing8),
-                          Text(
-                            'filterMeta.labelCondition'.tr(),
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: DesignTokens.spacing8),
-                      Text(
-                        widget.conditionDescription,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-
-                      // 閾值資訊（若有）
-                      if (widget.thresholdInfo != null) ...[
-                        const SizedBox(height: DesignTokens.spacing8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: DesignTokens.spacing10,
-                            vertical: DesignTokens.spacing6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer
-                                .withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(
-                              DesignTokens.radiusSm,
-                            ),
-                          ),
-                          child: Text(
-                            widget.thresholdInfo!.tr(),
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: theme.colorScheme.onPrimaryContainer,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        ),
-                      ],
+    // 不自帶捲動與置中：由呼叫端包進 FillRemainingScrollable——自帶的
+    // 捲動元件會搶下 RefreshIndicator 的手勢，且沒有讓出底部導覽列
+    return Padding(
+      padding: const EdgeInsets.all(DesignTokens.spacing24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // 圖示
+          Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      flatColor.withValues(alpha: isDark ? 0.15 : 0.1),
+                      flatColor.withValues(alpha: isDark ? 0.05 : 0.03),
                     ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: flatColor.withValues(alpha: 0.2),
+                    width: 2,
+                  ),
+                ),
+                child: Icon(
+                  Icons.filter_alt_off_outlined,
+                  size: 48,
+                  color: flatColor.withValues(alpha: 0.7),
+                ),
+              )
+              .animate(onPlay: (controller) => controller.repeat(reverse: true))
+              .scale(
+                begin: const Offset(1, 1),
+                end: const Offset(1.03, 1.03),
+                duration: AnimDurations.breathe,
+                curve: AnimCurves.breathe,
+              ),
+
+          const SizedBox(height: DesignTokens.spacing20),
+
+          // 帶有篩選名稱的標題
+          Text(
+            'filterMeta.titleWithFilter'.tr(
+              namedArgs: {'filter': widget.filterName},
+            ),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface,
+            ),
+            textAlign: TextAlign.center,
+          ).animate().fadeIn(
+            delay: AnimDurations.press,
+            duration: AnimDurations.normal,
+          ),
+
+          const SizedBox(height: DesignTokens.spacing16),
+
+          // 條件說明卡片（核心：條件 + 閾值）
+          Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(DesignTokens.spacing16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
+                  border: Border.all(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 條件區塊
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.rule_outlined,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: DesignTokens.spacing8),
+                        Text(
+                          'filterMeta.labelCondition'.tr(),
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: DesignTokens.spacing8),
+                    Text(
+                      widget.conditionDescription,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+
+                    // 閾值資訊（若有）
+                    if (widget.thresholdInfo != null) ...[
+                      const SizedBox(height: DesignTokens.spacing8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: DesignTokens.spacing10,
+                          vertical: DesignTokens.spacing6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer.withValues(
+                            alpha: 0.5,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            DesignTokens.radiusSm,
+                          ),
+                        ),
+                        child: Text(
+                          widget.thresholdInfo!.tr(),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onPrimaryContainer,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              )
+              .animate()
+              .fadeIn(
+                delay: AnimDurations.standard,
+                duration: AnimDurations.normal,
+              )
+              .slideY(begin: 0.1, duration: AnimDurations.normal),
+
+          // 更多詳情展開按鈕
+          if (hasDetails) ...[
+            const SizedBox(height: DesignTokens.spacing8),
+            TextButton.icon(
+              onPressed: () => setState(() => _isExpanded = !_isExpanded),
+              icon: AnimatedRotation(
+                turns: _isExpanded ? 0.5 : 0,
+                duration: AnimDurations.standard,
+                child: const Icon(Icons.expand_more, size: 20),
+              ),
+              label: Text(
+                'filterMeta.moreDetails'.tr(),
+                style: theme.textTheme.labelMedium,
+              ),
+            ),
+          ],
+
+          // 折疊內容：診斷資訊 + 資料需求
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: _buildExpandedDetails(theme),
+            crossFadeState: _isExpanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: AnimDurations.normal,
+          ),
+
+          const SizedBox(height: DesignTokens.spacing8),
+
+          // 提示文字
+          Text(
+            'filterMeta.hintEmpty'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ).animate().fadeIn(
+            delay: AnimDurations.normal,
+            duration: AnimDurations.normal,
+          ),
+
+          // 清除篩選按鈕
+          if (widget.onClearFilter != null) ...[
+            const SizedBox(height: DesignTokens.spacing20),
+            FilledButton.tonal(
+                  onPressed: widget.onClearFilter,
+                  child: Text('filterMeta.labelClear'.tr()),
                 )
                 .animate()
                 .fadeIn(
-                  delay: AnimDurations.standard,
+                  delay: AnimDurations.moderate,
                   duration: AnimDurations.normal,
                 )
                 .slideY(begin: 0.1, duration: AnimDurations.normal),
-
-            // 更多詳情展開按鈕
-            if (hasDetails) ...[
-              const SizedBox(height: DesignTokens.spacing8),
-              TextButton.icon(
-                onPressed: () => setState(() => _isExpanded = !_isExpanded),
-                icon: AnimatedRotation(
-                  turns: _isExpanded ? 0.5 : 0,
-                  duration: AnimDurations.standard,
-                  child: const Icon(Icons.expand_more, size: 20),
-                ),
-                label: Text(
-                  'filterMeta.moreDetails'.tr(),
-                  style: theme.textTheme.labelMedium,
-                ),
-              ),
-            ],
-
-            // 折疊內容：診斷資訊 + 資料需求
-            AnimatedCrossFade(
-              firstChild: const SizedBox.shrink(),
-              secondChild: _buildExpandedDetails(theme),
-              crossFadeState: _isExpanded
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              duration: AnimDurations.normal,
-            ),
-
-            const SizedBox(height: DesignTokens.spacing8),
-
-            // 提示文字
-            Text(
-              'filterMeta.hintEmpty'.tr(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ).animate().fadeIn(
-              delay: AnimDurations.normal,
-              duration: AnimDurations.normal,
-            ),
-
-            // 清除篩選按鈕
-            if (widget.onClearFilter != null) ...[
-              const SizedBox(height: DesignTokens.spacing20),
-              FilledButton.tonal(
-                    onPressed: widget.onClearFilter,
-                    child: Text('filterMeta.labelClear'.tr()),
-                  )
-                  .animate()
-                  .fadeIn(
-                    delay: AnimDurations.moderate,
-                    duration: AnimDurations.normal,
-                  )
-                  .slideY(begin: 0.1, duration: AnimDurations.normal),
-            ],
           ],
-        ),
+        ],
       ),
+    );
+  }
+
+  /// 診斷資訊的一組「圖示＋文字」；文字過長時在組內換行
+  Widget _metaItem(ThemeData theme, IconData icon, String text) {
+    final color = theme.colorScheme.onSurfaceVariant;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: DesignTokens.spacing4),
+        Flexible(
+          child: Text(
+            text,
+            style: theme.textTheme.labelSmall?.copyWith(color: color),
+          ),
+        ),
+      ],
     );
   }
 
@@ -543,44 +562,28 @@ class _EmptyStateWithMetaState extends State<_EmptyStateWithMeta> {
                 color: theme.colorScheme.outline.withValues(alpha: 0.1),
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            // Wrap：放大字級或窄螢幕時兩組各自換行，不水平溢位。兩組以
+            // 間距區隔、不用分隔線——換行後分隔線會孤立在行尾或自成一行
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: DesignTokens.spacing16,
+              runSpacing: DesignTokens.spacing4,
               children: [
-                if (widget.dataDate != null) ...[
-                  Icon(
+                if (widget.dataDate != null)
+                  _metaItem(
+                    theme,
                     Icons.calendar_today_outlined,
-                    size: 14,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: DesignTokens.spacing4),
-                  Text(
                     'filterMeta.labelDate'.tr(
                       namedArgs: {
                         'date': DateFormat('MM/dd').format(widget.dataDate!),
                       },
                     ),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
                   ),
-                  if (widget.totalScanned != null) ...[
-                    const SizedBox(width: DesignTokens.spacing8),
-                    Container(
-                      width: 1,
-                      height: DesignTokens.spacing12,
-                      color: theme.colorScheme.outline.withValues(alpha: 0.3),
-                    ),
-                    const SizedBox(width: DesignTokens.spacing8),
-                  ],
-                ],
-                if (widget.totalScanned != null) ...[
-                  Icon(
+                if (widget.totalScanned != null)
+                  _metaItem(
+                    theme,
                     Icons.analytics_outlined,
-                    size: 14,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: DesignTokens.spacing4),
-                  Text(
                     'filterMeta.labelScanned'.tr(
                       namedArgs: {
                         'count': NumberFormat.decimalPattern().format(
@@ -588,11 +591,7 @@ class _EmptyStateWithMetaState extends State<_EmptyStateWithMeta> {
                         ),
                       },
                     ),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
                   ),
-                ],
               ],
             ),
           ),

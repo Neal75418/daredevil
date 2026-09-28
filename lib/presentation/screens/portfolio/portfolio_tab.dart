@@ -18,6 +18,7 @@ import 'package:daredevil/presentation/screens/portfolio/widgets/portfolio_summa
 import 'package:daredevil/presentation/screens/portfolio/widgets/position_card.dart';
 import 'package:daredevil/presentation/screens/portfolio/widgets/add_transaction_sheet.dart';
 import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 
 /// 投資組合頁內容（router 的 /portfolio 全螢幕路由；從自選頁選單進入）
 class PortfolioTab extends ConsumerStatefulWidget {
@@ -47,9 +48,11 @@ class _PortfolioTabState extends ConsumerState<PortfolioTab> {
 
     if (state.error != null && state.positions.isEmpty) {
       void onRetry() => ref.read(portfolioProvider.notifier).loadPositions();
-      return ErrorDisplay.isNetworkError(state.error!)
-          ? EmptyStates.networkError(onRetry: onRetry)
-          : EmptyStates.error(message: state.error!, onRetry: onRetry);
+      return FillRemainingScrollable(
+        child: ErrorDisplay.isNetworkError(state.error!)
+            ? EmptyStates.networkError(onRetry: onRetry)
+            : EmptyStates.error(message: state.error!, onRetry: onRetry),
+      );
     }
 
     if (state.positions.isEmpty) {

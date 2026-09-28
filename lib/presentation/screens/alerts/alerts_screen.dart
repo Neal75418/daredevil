@@ -17,6 +17,7 @@ import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/price_alert_dialog.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 
 /// 價格警示管理畫面
@@ -95,16 +96,18 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
     return state.isLoading && state.alerts.isEmpty
         ? const GenericListShimmer(itemCount: 5)
         : state.error != null && state.alerts.isEmpty
-        ? ErrorDisplay.isNetworkError(state.error!)
-              ? EmptyStates.networkError(
-                  onRetry: () =>
-                      ref.read(priceAlertProvider.notifier).loadAlerts(),
-                )
-              : EmptyStates.error(
-                  message: state.error!,
-                  onRetry: () =>
-                      ref.read(priceAlertProvider.notifier).loadAlerts(),
-                )
+        ? FillRemainingScrollable(
+            child: ErrorDisplay.isNetworkError(state.error!)
+                ? EmptyStates.networkError(
+                    onRetry: () =>
+                        ref.read(priceAlertProvider.notifier).loadAlerts(),
+                  )
+                : EmptyStates.error(
+                    message: state.error!,
+                    onRetry: () =>
+                        ref.read(priceAlertProvider.notifier).loadAlerts(),
+                  ),
+          )
         : state.alerts.isEmpty
         ? _buildEmptyState()
         : Column(
@@ -139,10 +142,12 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
   }
 
   Widget _buildEmptyState() {
-    return EmptyState(
-      icon: Icons.notifications_off_outlined,
-      title: 'alert.noAlerts'.tr(),
-      subtitle: 'alert.noAlertsHint'.tr(),
+    return FillRemainingScrollable(
+      child: EmptyState(
+        icon: Icons.notifications_off_outlined,
+        title: 'alert.noAlerts'.tr(),
+        subtitle: 'alert.noAlertsHint'.tr(),
+      ),
     );
   }
 

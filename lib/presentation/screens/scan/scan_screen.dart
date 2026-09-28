@@ -22,6 +22,7 @@ import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/screens/scan/widgets/industry_filter_chip.dart';
 import 'package:daredevil/presentation/screens/scan/widgets/scan_filter_bottom_sheet.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/stock_card.dart';
 import 'package:daredevil/presentation/widgets/stock_preview_sheet.dart';
@@ -76,15 +77,19 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     // 還沒有任何資料（全新安裝）：不是篩選的問題，別叫人去調整篩選。
     // 更新由今日頁負責（有進度與錯誤回饋），這裡只說明狀態、不給按鈕。
     if (dataDate == null) {
-      return EmptyStates.firstBuild(
-        isUpdating: ref.watch(todayProvider.select((s) => s.isUpdating)),
+      return FillRemainingScrollable(
+        child: EmptyStates.firstBuild(
+          isUpdating: ref.watch(todayProvider.select((s) => s.isUpdating)),
+        ),
       );
     }
 
     // 對於「全部」篩選，使用簡單的空狀態
     if (filter == ScanFilter.all) {
-      return EmptyStates.noFilterResults(
-        onClearFilter: null, // 已顯示全部時無需清除
+      return FillRemainingScrollable(
+        child: EmptyStates.noFilterResults(
+          onClearFilter: null, // 已顯示全部時無需清除
+        ),
       );
     }
 
@@ -96,16 +101,18 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         .map((req) => req.labelKey.tr())
         .toList();
 
-    return EmptyStates.noFilterResultsWithMeta(
-      filterName: filter.labelKey.tr(),
-      conditionDescription: metadata.conditionKey.tr(),
-      dataRequirements: dataReqLabels,
-      thresholdInfo: metadata.thresholdInfo,
-      totalScanned: totalScanned,
-      dataDate: dataDate,
-      onClearFilter: () {
-        ref.read(scanProvider.notifier).setFilter(ScanFilter.all);
-      },
+    return FillRemainingScrollable(
+      child: EmptyStates.noFilterResultsWithMeta(
+        filterName: filter.labelKey.tr(),
+        conditionDescription: metadata.conditionKey.tr(),
+        dataRequirements: dataReqLabels,
+        thresholdInfo: metadata.thresholdInfo,
+        totalScanned: totalScanned,
+        dataDate: dataDate,
+        onClearFilter: () {
+          ref.read(scanProvider.notifier).setFilter(ScanFilter.all);
+        },
+      ),
     );
   }
 
@@ -371,9 +378,11 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     if (state.error != null && state.stocks.isEmpty) {
       void onRetry() => ref.read(scanProvider.notifier).loadData();
       return Expanded(
-        child: ErrorDisplay.isNetworkError(state.error!)
-            ? EmptyStates.networkError(onRetry: onRetry)
-            : EmptyStates.error(message: state.error!, onRetry: onRetry),
+        child: FillRemainingScrollable(
+          child: ErrorDisplay.isNetworkError(state.error!)
+              ? EmptyStates.networkError(onRetry: onRetry)
+              : EmptyStates.error(message: state.error!, onRetry: onRetry),
+        ),
       );
     }
 

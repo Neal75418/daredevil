@@ -9,6 +9,7 @@ import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/localized_number_format.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/data/models/tpex/tpex_industry_eps.dart';
 import 'package:daredevil/presentation/providers/industry_eps_provider.dart';
@@ -69,16 +70,18 @@ class _IndustryEpsScreenState extends ConsumerState<IndustryEpsScreen> {
       body: state.isLoading && state.allData.isEmpty
           ? const GenericListShimmer(itemCount: 8)
           : state.error != null && state.allData.isEmpty
-          ? ErrorDisplay.isNetworkError(state.error!)
-                ? EmptyStates.networkError(
-                    onRetry: () =>
-                        ref.read(industryEpsProvider.notifier).loadData(),
-                  )
-                : EmptyStates.error(
-                    message: state.error!,
-                    onRetry: () =>
-                        ref.read(industryEpsProvider.notifier).loadData(),
-                  )
+          ? FillRemainingScrollable(
+              child: ErrorDisplay.isNetworkError(state.error!)
+                  ? EmptyStates.networkError(
+                      onRetry: () =>
+                          ref.read(industryEpsProvider.notifier).loadData(),
+                    )
+                  : EmptyStates.error(
+                      message: state.error!,
+                      onRetry: () =>
+                          ref.read(industryEpsProvider.notifier).loadData(),
+                    ),
+            )
           : Column(
               children: [
                 if (state.error != null && state.allData.isNotEmpty)
@@ -113,16 +116,12 @@ class _IndustryEpsScreenState extends ConsumerState<IndustryEpsScreen> {
   }
 
   Widget _buildEmptyState(ThemeData theme) {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: SizedBox(
-        height: 300,
-        child: EmptyState(
-          icon: Icons.analytics_outlined,
-          title: 'industryEps.noData'.tr(),
-          actionLabel: 'common.retry'.tr(),
-          onAction: () => ref.read(industryEpsProvider.notifier).loadData(),
-        ),
+    return FillRemainingScrollable(
+      child: EmptyState(
+        icon: Icons.analytics_outlined,
+        title: 'industryEps.noData'.tr(),
+        actionLabel: 'common.retry'.tr(),
+        onAction: () => ref.read(industryEpsProvider.notifier).loadData(),
       ),
     );
   }

@@ -16,6 +16,7 @@ import 'package:daredevil/presentation/providers/news_heat_provider.dart';
 import 'package:daredevil/presentation/providers/news_provider.dart';
 import 'package:daredevil/presentation/screens/news/heat_analysis_tab.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
@@ -331,26 +332,16 @@ class _AllNewsTabState extends ConsumerState<_AllNewsTab> {
             child: state.isLoading && state.allNews.isEmpty
                 ? const NewsListShimmer(itemCount: 8)
                 : state.error != null && state.allNews.isEmpty
-                ? SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: SizedBox(
-                      height: MediaQuery.of(context).size.height * 0.6,
-                      child: ErrorDisplay.isNetworkError(state.error!)
-                          ? EmptyStates.networkError(onRetry: widget.onRefresh)
-                          : EmptyStates.error(
-                              message: state.error!,
-                              onRetry: widget.onRefresh,
-                            ),
-                    ),
+                ? FillRemainingScrollable(
+                    child: ErrorDisplay.isNetworkError(state.error!)
+                        ? EmptyStates.networkError(onRetry: widget.onRefresh)
+                        : EmptyStates.error(
+                            message: state.error!,
+                            onRetry: widget.onRefresh,
+                          ),
                   )
                 : state.filteredNews.isEmpty
-                ? SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: SizedBox(
-                      height: MediaQuery.of(context).size.height * 0.6,
-                      child: EmptyStates.noNews(),
-                    ),
-                  )
+                ? FillRemainingScrollable(child: EmptyStates.noNews())
                 : _GroupedNewsList(
                     news: state.filteredNews,
                     newsStockMap: state.newsStockMap,

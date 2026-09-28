@@ -21,6 +21,7 @@ import 'package:daredevil/presentation/screens/stock_detail/widgets/stock_detail
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/frosted_bar.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 
 /// 個股詳情畫面 - 以分頁顯示完整股票資訊
 class StockDetailScreen extends ConsumerStatefulWidget {
@@ -165,18 +166,20 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
             ? const SafeArea(child: StockDetailShimmer())
             : error != null && !hasContent
             ? SafeArea(
-                child: ErrorDisplay.isNetworkError(error)
-                    ? EmptyStates.networkError(
-                        onRetry: () => ref
-                            .read(stockDetailProvider(_symbol).notifier)
-                            .loadData(),
-                      )
-                    : EmptyStates.error(
-                        message: error,
-                        onRetry: () => ref
-                            .read(stockDetailProvider(_symbol).notifier)
-                            .loadData(),
-                      ),
+                child: FillRemainingScrollable(
+                  child: ErrorDisplay.isNetworkError(error)
+                      ? EmptyStates.networkError(
+                          onRetry: () => ref
+                              .read(stockDetailProvider(_symbol).notifier)
+                              .loadData(),
+                        )
+                      : EmptyStates.error(
+                          message: error,
+                          onRetry: () => ref
+                              .read(stockDetailProvider(_symbol).notifier)
+                              .loadData(),
+                        ),
+                ),
               )
             : NestedScrollView(
                 controller: _scrollController,

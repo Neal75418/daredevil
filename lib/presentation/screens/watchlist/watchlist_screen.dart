@@ -22,6 +22,7 @@ import 'package:daredevil/presentation/screens/watchlist/watchlist_group_header.
 import 'package:daredevil/presentation/screens/watchlist/watchlist_group_sheets.dart';
 import 'package:daredevil/presentation/screens/watchlist/watchlist_stock_item.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/stock_preview_sheet.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
@@ -356,12 +357,19 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
       child: state.isLoading && state.items.isEmpty
           ? const StockListShimmer(itemCount: 5)
           : state.error != null && state.items.isEmpty
-          ? ErrorDisplay.isNetworkError(state.error!)
-                ? EmptyStates.networkError(onRetry: _onRefresh)
-                : EmptyStates.error(message: state.error!, onRetry: _onRefresh)
+          ? FillRemainingScrollable(
+              child: ErrorDisplay.isNetworkError(state.error!)
+                  ? EmptyStates.networkError(onRetry: _onRefresh)
+                  : EmptyStates.error(
+                      message: state.error!,
+                      onRetry: _onRefresh,
+                    ),
+            )
           : state.items.isEmpty
-          ? EmptyStates.emptyWatchlist(
-              onAdd: () => showAddStockDialog(context: context, ref: ref),
+          ? FillRemainingScrollable(
+              child: EmptyStates.emptyWatchlist(
+                onAdd: () => showAddStockDialog(context: context, ref: ref),
+              ),
             )
           : Column(
               children: [

@@ -13,6 +13,7 @@ import 'package:daredevil/domain/services/news/heat_calculator.dart';
 import 'package:daredevil/presentation/providers/news_heat_provider.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/warning_badge.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 
 /// 新聞頁「熱度分析」分頁：主流族群 + 焦點股（三模式交叉）
 class HeatAnalysisTab extends ConsumerStatefulWidget {
@@ -33,7 +34,7 @@ class _HeatAnalysisTabState extends ConsumerState<HeatAnalysisTab> {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) {
         final message = ErrorDisplay.message(e);
-        return Center(
+        return FillRemainingScrollable(
           child: ErrorDisplay.isNetworkError(message)
               ? EmptyStates.networkError(
                   onRetry: () => ref.invalidate(newsHeatProvider),

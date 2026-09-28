@@ -34,6 +34,7 @@ import 'package:daredevil/presentation/providers/update_history_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/widgets/api_rate_limit_dialog.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 import 'package:daredevil/presentation/widgets/frosted_bar.dart';
 import 'package:daredevil/presentation/widgets/industry_ranking_section.dart';
 import 'package:daredevil/presentation/widgets/update_history_sheet.dart';
@@ -154,10 +155,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
   Widget _buildError(String error) {
     void onRetry() => ref.read(todayProvider.notifier).loadData();
-    if (ErrorDisplay.isNetworkError(error)) {
-      return EmptyStates.networkError(onRetry: onRetry);
-    }
-    return EmptyStates.error(message: error, onRetry: onRetry);
+    return FillRemainingScrollable(
+      child: ErrorDisplay.isNetworkError(error)
+          ? EmptyStates.networkError(onRetry: onRetry)
+          : EmptyStates.error(message: error, onRetry: onRetry),
+    );
   }
 
   /// 響應式推薦清單：手機使用 SliverList，平板/桌面使用 SliverGrid

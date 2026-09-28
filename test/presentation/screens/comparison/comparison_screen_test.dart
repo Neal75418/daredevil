@@ -7,6 +7,8 @@ import 'package:daredevil/presentation/screens/comparison/comparison_screen.dart
 
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
+import '../../../helpers/phone_layout_helpers.dart';
+import 'package:daredevil/presentation/widgets/empty_state.dart';
 
 // ==========================================
 // Fake Notifier
@@ -196,5 +198,22 @@ void main() {
       // canAddMore is false → screen still renders
       expect(find.byType(ComparisonScreen), findsOneWidget);
     });
+  });
+
+  group('錯誤頁在手機上（小螢幕、放大字級）', () {
+    for (final error in ['Database error', 'Network error']) {
+      for (final scenario in phoneScenarios) {
+        testWidgets('$error：$scenario 不溢位', (tester) async {
+          applyPhoneScenario(tester, scenario);
+          await tester.pumpWidget(
+            buildTestWidget(comparisonState: ComparisonState(error: error)),
+          );
+          await tester.pump(const Duration(seconds: 1));
+
+          expect(tester.takeException(), isNull);
+          expect(find.byType(EmptyState), findsOneWidget);
+        });
+      }
+    }
   });
 }

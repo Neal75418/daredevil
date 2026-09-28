@@ -7,6 +7,7 @@ import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
@@ -58,16 +59,20 @@ class _ShortSellRankingScreenState
       body: state.isLoading && state.rankings.isEmpty
           ? const GenericListShimmer(itemCount: 8)
           : state.error != null && state.rankings.isEmpty
-          ? ErrorDisplay.isNetworkError(state.error!)
-                ? EmptyStates.networkError(
-                    onRetry: () =>
-                        ref.read(shortSellRankingProvider.notifier).loadData(),
-                  )
-                : EmptyStates.error(
-                    message: state.error!,
-                    onRetry: () =>
-                        ref.read(shortSellRankingProvider.notifier).loadData(),
-                  )
+          ? FillRemainingScrollable(
+              child: ErrorDisplay.isNetworkError(state.error!)
+                  ? EmptyStates.networkError(
+                      onRetry: () => ref
+                          .read(shortSellRankingProvider.notifier)
+                          .loadData(),
+                    )
+                  : EmptyStates.error(
+                      message: state.error!,
+                      onRetry: () => ref
+                          .read(shortSellRankingProvider.notifier)
+                          .loadData(),
+                    ),
+            )
           : Column(
               children: [
                 if (state.error != null && state.rankings.isNotEmpty)
@@ -104,15 +109,8 @@ class _ShortSellRankingScreenState
   }
 
   Widget _buildEmptyState(ThemeData theme) {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: SizedBox(
-        height: 400,
-        child: EmptyState(
-          icon: Icons.show_chart,
-          title: 'shortSell.noData'.tr(),
-        ),
-      ),
+    return FillRemainingScrollable(
+      child: EmptyState(icon: Icons.show_chart, title: 'shortSell.noData'.tr()),
     );
   }
 

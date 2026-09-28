@@ -15,6 +15,7 @@ import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
+import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
 
 /// 法人買賣超排行——外資/投信 × 買超/賣超 四視角,各 Top 50。
 ///
@@ -75,13 +76,15 @@ class _InstitutionalRankingScreenState
               // 重試都不可達。比照 revenue_overview_screen 的 error 分支,
               // 另補重試入口。
               : state.error != null && ranking == null
-              ? EmptyState(
-                  icon: Icons.error_outline,
-                  title: state.error!,
-                  actionLabel: 'common.retry'.tr(),
-                  onAction: () => ref
-                      .read(institutionalRankingProvider.notifier)
-                      .loadData(),
+              ? FillRemainingScrollable(
+                  child: EmptyState(
+                    icon: Icons.error_outline,
+                    title: state.error!,
+                    actionLabel: 'common.retry'.tr(),
+                    onAction: () => ref
+                        .read(institutionalRankingProvider.notifier)
+                        .loadData(),
+                  ),
                 )
               : ranking == null
               ? EmptyState(

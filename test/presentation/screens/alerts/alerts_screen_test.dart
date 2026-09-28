@@ -13,6 +13,7 @@ import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
+import '../../../helpers/phone_layout_helpers.dart';
 
 // ==========================================
 // Fake Notifier
@@ -564,5 +565,35 @@ void main() {
       // Inactive non-triggered alert has a switch
       expect(find.byType(Switch), findsOneWidget);
     });
+  });
+
+  group('錯誤頁與空狀態在手機上（小螢幕、放大字級）', () {
+    for (final error in ['Database error', 'Network error']) {
+      for (final scenario in phoneScenarios) {
+        testWidgets('$error：$scenario 不溢位', (tester) async {
+          applyPhoneScenario(tester, scenario);
+          await tester.pumpWidget(
+            buildTestWidget(alertState: PriceAlertState(error: error)),
+          );
+          await tester.pump(const Duration(seconds: 1));
+
+          expect(tester.takeException(), isNull);
+          expect(find.byType(EmptyState), findsOneWidget);
+          // 空狀態分支沒有按鈕：有重試才證明走到錯誤分支
+          expect(find.text('common.retry'), findsOneWidget);
+        });
+      }
+    }
+
+    for (final scenario in phoneScenarios) {
+      testWidgets('無提醒：$scenario 不溢位', (tester) async {
+        applyPhoneScenario(tester, scenario);
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pump(const Duration(seconds: 1));
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(EmptyState), findsOneWidget);
+      });
+    }
   });
 }

@@ -11,6 +11,8 @@ import 'package:daredevil/presentation/providers/institutional_ranking_provider.
 import 'package:daredevil/presentation/screens/institutional/institutional_ranking_screen.dart';
 
 import '../../../helpers/widget_test_helpers.dart';
+import '../../../helpers/phone_layout_helpers.dart';
+import 'package:daredevil/presentation/widgets/empty_state.dart';
 
 class _FakeNotifier extends InstitutionalRankingNotifier {
   _FakeNotifier(this.initial);
@@ -68,5 +70,33 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('instRanking.empty'), findsOneWidget);
+  });
+
+  group('錯誤頁在手機上（小螢幕、放大字級）', () {
+    for (final error in ['Database error', 'Network error']) {
+      for (final scenario in phoneScenarios) {
+        testWidgets('$error：$scenario 不溢位', (tester) async {
+          applyPhoneScenario(tester, scenario);
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                institutionalRankingProvider.overrideWith(
+                  () => _FakeNotifier(
+                    InstitutionalRankingState(error: error, ranking: null),
+                  ),
+                ),
+              ],
+              child: buildTestApp(const InstitutionalRankingScreen()),
+            ),
+          );
+          await tester.pump(const Duration(seconds: 1));
+
+          expect(tester.takeException(), isNull);
+          expect(find.byType(EmptyState), findsOneWidget);
+          // 空狀態分支沒有按鈕：有重試才證明走到錯誤分支
+          expect(find.text('common.retry'), findsOneWidget);
+        });
+      }
+    }
   });
 }

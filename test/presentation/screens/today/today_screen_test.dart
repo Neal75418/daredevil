@@ -44,6 +44,7 @@ import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/update_progress_banner.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
 
+import '../../../helpers/phone_layout_helpers.dart';
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
 
@@ -200,13 +201,15 @@ void main() {
     Future<HistoryCoverage> Function(Ref)? coverageFn,
     GoRouter? router,
     List<Override> extraOverrides = const [],
+    Widget Function(Widget screen)? wrap,
   }) {
     final today = todayState ?? const TodayState();
     final watchlist = watchlistState ?? WatchlistState();
     final market = marketState ?? const MarketOverviewState();
     final settings = settingsState ?? const SettingsState();
+    const screen = TodayScreen();
     return buildProviderTestApp(
-      const TodayScreen(),
+      wrap?.call(screen) ?? screen,
       overrides: [
         ...extraOverrides,
         todayProvider.overrideWith(() {
@@ -1551,5 +1554,54 @@ void main() {
       // trending_up icon from SectionHeader
       expect(find.byIcon(Icons.trending_up), findsAtLeastNWidgets(1));
     });
+  });
+
+  group('頂層錯誤在手機上（含底部導覽列）', () {
+    final states = {
+      '一般錯誤': const TodayState(error: 'Database error'),
+      '網路錯誤': const TodayState(error: 'Network error'),
+    };
+
+    for (final entry in states.entries) {
+      for (final scenario in phoneScenarios) {
+        testWidgets('${entry.key}：$scenario 不溢位、內容不被導覽列蓋住', (tester) async {
+          applyPhoneScenario(tester, scenario);
+          await tester.pumpWidget(
+            buildTestWidget(todayState: entry.value, wrap: inPhoneShell),
+          );
+          await tester.pump(const Duration(seconds: 1));
+
+          expect(tester.takeException(), isNull);
+          await expectAboveNavBar(
+            tester,
+            find
+                .descendant(
+                  of: find.byType(EmptyState),
+                  matching: find.byType(Text),
+                )
+                .last,
+          );
+        });
+      }
+
+      testWidgets('${entry.key}：可下拉重新整理', (tester) async {
+        applyPhoneScenario(tester, phoneScenarios.first);
+        final notifier = FakeTodayNotifier();
+        await tester.pumpWidget(
+          buildTestWidget(
+            todayState: entry.value,
+            todayNotifier: notifier,
+            wrap: inPhoneShell,
+          ),
+        );
+        await tester.pump(const Duration(seconds: 1));
+
+        await tester.fling(find.byType(EmptyState), const Offset(0, 400), 1000);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        expect(notifier.reloadCalls, greaterThan(0));
+      });
+    }
   });
 }

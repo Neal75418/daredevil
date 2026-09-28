@@ -7,9 +7,11 @@ import 'package:daredevil/domain/services/news/heat_calculator.dart';
 import 'package:daredevil/presentation/providers/news_heat_provider.dart';
 import 'package:daredevil/presentation/screens/news/heat_analysis_tab.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
+import 'package:daredevil/core/exceptions/app_exception.dart';
 
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
+import '../../../helpers/phone_layout_helpers.dart';
 
 // 註：本專案 widget 測試慣例（見 test/helpers/widget_test_helpers.dart 的
 // buildTestApp／setupTestLocalization）在
@@ -467,5 +469,48 @@ void main() {
     final afterA = tester.getTopLeft(find.text('甲公司')).dy;
     final afterB = tester.getTopLeft(find.text('乙公司')).dy;
     expect(afterB, lessThan(afterA));
+  });
+
+  group('錯誤頁在手機上（比照新聞頁的 AppBar + TabBar）', () {
+    Widget inNewsTabs(Object error) => buildProviderTestApp(
+      DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('news'),
+            bottom: const TabBar(
+              tabs: [
+                Tab(text: 'a'),
+                Tab(text: 'b'),
+              ],
+            ),
+          ),
+          body: const HeatAnalysisTab(),
+        ),
+      ),
+      overrides: [
+        newsHeatProvider.overrideWith(
+          (ref) => Future<NewsHeatAnalysis>.error(error),
+        ),
+      ],
+    );
+
+    final errors = <String, Object>{
+      'Database error': const DatabaseException('Database error'),
+      'Network error': const NetworkException('Network error'),
+    };
+    for (final entry in errors.entries) {
+      for (final scenario in phoneScenarios) {
+        testWidgets('${entry.key}：$scenario 不溢位', (tester) async {
+          applyPhoneScenario(tester, scenario);
+          await tester.pumpWidget(inNewsTabs(entry.value));
+          await tester.pump();
+          await tester.pump(const Duration(seconds: 1));
+
+          expect(tester.takeException(), isNull);
+          expect(find.text('common.retry'), findsOneWidget);
+        });
+      }
+    }
   });
 }
