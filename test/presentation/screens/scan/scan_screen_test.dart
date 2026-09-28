@@ -193,7 +193,7 @@ void main() {
     testWidgets('深色主題選中的「全部」標籤文字色維持 onSecondaryContainer', (tester) async {
       // 深色主題 chipTheme 沒覆寫 selectedColor，落回 M3 預設實心
       // secondaryContainer，onSecondaryContainer 對它本來就合格
-      // （6.51:1），不應被本次修復意外改動。
+      // （6.97:1），不應被本次修復意外改動。
       widenViewport(tester);
       await tester.pumpWidget(buildTestWidget(brightness: Brightness.dark));
       await tester.pump(const Duration(seconds: 1));

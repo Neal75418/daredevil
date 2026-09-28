@@ -1,8 +1,8 @@
 import 'package:daredevil/data/database/app_database.dart';
 
-/// 測試資料生成工具 - Warning & Insider
+/// 測試資料生成工具 - Warning
 ///
-/// 提供共用的警示與董監持股測試資料產生器。
+/// 提供共用的警示測試資料產生器。
 
 // ==========================================
 // 日期計算工具

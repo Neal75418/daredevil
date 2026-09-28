@@ -1,7 +1,7 @@
 // A3 walk-forward 驗證的 flutter test wrapper（同 run_backfill / run_replay 設計）。
 //
-// 因 walkforward_validate.dart 透過 AppDatabase 間接 import drift_flutter→dart:ui，
-// 純 `dart run` compile fail，故包在 flutter test 內跑。
+// 沿用 run_backfill 的 flutter test 載體（該設計源於 drift_flutter 拆離前）；
+// `dart run` 亦可。
 //
 // env：CALIBRATION_DB（預設 tool/calibration.db）、WF_FOLD_YEARS（CSV）。
 // 由 scripts 在 backfill + replay 後呼叫。NOT a unit test — 是 CLI 執行載體。

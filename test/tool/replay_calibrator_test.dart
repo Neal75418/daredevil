@@ -168,17 +168,16 @@ void main() {
       expect(stats!.short.triggerCount, 120);
       expect(stats.long.triggerCount, 120);
 
-      // Linear growth: entry=100+i*1, exit_5d=100+(i+5)*1, return=5/(100+i)
-      // For i=20, return ≈ 5/120 = 4.17%; for i=139, return ≈ 5/239 = 2.09%
-      // avg short return should be in that range
+      // Linear growth: open=close=100+i; entry = next-day open = 101+i,
+      // exit_5d = 105+i → return = 4/(101+i)
+      // For i=20, 4/121 ≈ 3.31%; for i=139, 4/240 ≈ 1.67%
       expect(stats.short.avgReturn, inInclusiveRange(2.0, 4.5));
-      // Long return: 60/(100+i) ≈ 60/120..60/239 = 25%..25%
-      // Wait: for i=20, 60/120=50%; for i=139, 60/239≈25%
+      // Long return: 59/(101+i) — i=20 ≈ 48.8%, i=139 ≈ 24.6%
       expect(stats.long.avgReturn, inInclusiveRange(24.0, 51.0));
 
-      // Short threshold 3% — high hit rate in the first half, low in the second
+      // Short threshold 1.5% — ALL samples hit (min short return ≈ 1.67%)
       expect(stats.short.hitRate, inInclusiveRange(0.3, 1.0));
-      // Long threshold 12% — ALL samples hit (min long return ≈ 25%)
+      // Long threshold 8% — ALL samples hit (min long return ≈ 24.6%)
       expect(stats.long.hitRate, 1.0);
     });
 
@@ -186,10 +185,11 @@ void main() {
       'successCount uses canonical thresholds from CalibrationThresholds',
       () async {
         // 用快速成長價格序列確保 5D / 60D return 都明顯**超過**canonical
-        // 門檻（5D=3.0%, 60D=12.0%），驗 replay_calibrator 確實讀到 canonical
-        // 常數做 isSuccess 判定。growthPerDay=5：
-        //   5D return = 25/(100 + 5i) > 3% when 100+5i < 833 (i < 146) ✓ 所有 day
-        //   60D return = 300/(100+5i) > 12% when 100+5i < 2500 (i < 480) ✓ 所有 day
+        // 門檻（5D=1.5%, 60D=8.0%），驗 replay_calibrator 確實讀到 canonical
+        // 常數做 isSuccess 判定。growthPerDay=5、150 天，entry 為隔日 open
+        // （105+5i），i 最大 89：
+        //   5D return = 20/(105+5i) ≥ 20/550 ≈ 3.6% > 1.5% ✓ 所有 day
+        //   60D return = 295/(105+5i) ≥ 295/550 ≈ 54% > 8% ✓ 所有 day
         await seedStock('FAST', priceDays: 150, growthPerDay: 5.0);
         when(
           () => mockRuleEngine.evaluateStock(any(), any()),
@@ -316,7 +316,7 @@ void main() {
     // Exit 端同型 bug：`_replaySymbol` 的 exit guard 舊版只查
     // `shortExit == null || longExit == null`，一個停牌/異常列 close=0.0
     // （非缺值 null）會被當成合法出場價，算出 (0/entry-1)*100 = -100%，把
-    // 資料缺陷誤記為真實最大虧損。entry 端（line ~465）已在 lookahead bias
+    // 資料缺陷誤記為真實最大虧損。entry 端（進場價檢查）已在 lookahead bias
     // fix 時一併補上 `<= 0`，此處補上 exit 端讓兩者一致。
     test('exit close of exactly 0.0 (halted/bad row) excludes the observation, '
         'not recorded as a -100% loss', () async {

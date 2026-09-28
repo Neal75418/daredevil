@@ -1,6 +1,6 @@
 // Stage 3 Commit C1 — tool/backfill.dart unit tests
 //
-// 用 mocktail mock 四個 repository interface 驗證 Backfiller 的行為：
+// 用 mocktail mock 各 repository interface 與 AppDatabase 驗證 Backfiller 的行為：
 // - Phase 順序正確
 // - 單 symbol 失敗被記入 failedSymbols 但不中斷迴圈
 // - RateLimitException / NetworkException 立即 rethrow
@@ -65,7 +65,7 @@ void main() {
 
     logs = [];
 
-    // Defaults — 所有 sync method 預設回傳 0（no-op success）
+    // Defaults — 各 sync method 回傳固定列數，供測試手算預期值
     when(() => stockRepo.syncStockList()).thenAnswer((_) async => 1300);
     when(
       () => priceRepo.syncStockPrices(
@@ -171,7 +171,7 @@ void main() {
       onlyDayTrading: onlyDayTrading,
       dayTradingMaxDaysPerRun: dayTradingMaxDaysPerRun,
       skipStockListSync: true, // 避免 unit test 呼叫 stock master sync
-      // 跳過 inter-day delay：500 trading days × 1.5s 預設會讓單測 timeout
+      // 跳過 inter-day delay：500 trading days × 預設 5s 會讓單測 timeout
       interDayDelayMs: 0,
     );
   }

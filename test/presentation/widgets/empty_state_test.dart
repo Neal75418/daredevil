@@ -324,7 +324,7 @@ void main() {
       tester,
     ) async {
       // 底色是 secondaryContainer 疊 60% alpha，非實心；onSecondaryContainer
-      // 對這個合成色只有 3.09:1，不合格，故改用 onSurface（5.52:1）。
+      // 對這個合成色只有 2.90:1，不合格，故改用 onSurface（5.88:1）。
       await tester.pumpWidget(
         buildTestApp(
           EmptyStates.noFilterResultsWithMeta(

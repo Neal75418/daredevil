@@ -5,10 +5,8 @@
 // 都直接讀 `CalibrationThresholds` — 這支 test 鎖住 canonical 值，任何人
 // 想偷改某一處會被擋下。
 //
-// tool/recalibrate.dart 與 tool/replay_calibrator.dart 的依賴透過
-// `import + 直接讀` 保證；無法在 unit test 內 import 它們做 runtime
-// 驗證（main() entry-point 非 library），但 flutter analyze 會抓
-// 重新定義 const 造成的 unused field warning。
+// tool/recalibrate.dart 以 `static const x = CalibrationThresholds.x`
+// 轉引用這些常數，本測試鎖住值。
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/calibration_thresholds.dart';
@@ -33,7 +31,7 @@ void main() {
     });
 
     test('cut thresholds match scoring overhaul plan', () {
-      // Plan：hit_rate < 55% 砍 / |t-stat| < 1.5 砍 / samples < 30 砍
+      // Plan：hit_rate < 55% 砍 / t-stat（帶號）< 1.5 砍 / samples < 30 砍
       expect(CalibrationThresholds.hitRateCutThreshold, equals(0.55));
       expect(CalibrationThresholds.tStatCutThreshold, equals(1.5));
       expect(CalibrationThresholds.sampleSizeCutThreshold, equals(30));

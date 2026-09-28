@@ -6,8 +6,9 @@
 // 真的燒過一次 1.2 GB。
 //
 // 守衛原本只寫在 backfill.dart 一支裡,而 9 支 tool 會開這個檔案;稽核
-// 實測其餘 8 支全裸奔,且只要有人照 CLAUDE.md 的 DB 變更流程 bump 一次
-// fingerprint 就會引爆。現在守衛住在 tool_db.dart 的單一入口,本測試
+// 實測其餘 8 支全裸奔,且只要有人 bump 一次 appSchemaFingerprint(何時
+// bump 見 app_database.dart `_ensureSchemaFingerprint` 上方的「何時 bump
+// fingerprint」段)就會引爆。現在守衛住在 tool_db.dart 的單一入口,本測試
 // 確保第 10 支工具繞不過去。
 import 'dart:io';
 

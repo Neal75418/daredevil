@@ -10,7 +10,7 @@ import 'package:daredevil/data/database/app_database.dart';
 
 /// 建立十字線（Doji）
 ///
-/// 特徵：小實體、大振幅。body / range <= dojiBodyMaxRatio (0.05)
+/// 特徵：小實體、大振幅。body / range <= PatternParams.dojiBodyMaxRatio
 DailyPriceEntry createDojiCandle({
   required DateTime date,
   required double price,

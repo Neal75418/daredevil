@@ -3,8 +3,9 @@
 //
 // 測的是 runner 的**自有職責**——短路判斷、registry seed、token 注入、
 // 配額 restore/flush、DB 生命週期——不是 UpdateService 的內容(由
-// buildService seam 換成 stub;真裝配路徑由 UpdateServiceFactory 自己的
-// 測試與 tool_chain_pure_dart_test 把關)。
+// buildService seam 換成 stub;真裝配路徑沒有專屬測試——seam 與
+// UpdateServiceFactory 的簽名一致性由 runner 檔內 `_seamMatchesFactory`
+// 在編譯期守住,tool_chain_pure_dart_test 只守 import 閉包)。
 import 'dart:convert';
 import 'dart:io';
 

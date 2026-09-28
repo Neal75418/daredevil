@@ -9,9 +9,9 @@
 // 這個檔案補上：寫一份 OTA JSON 進 DB，cold-start 路徑走完後 lookup 應
 // 回 OTA 值，而不是 hardcoded fallback。
 //
-// 也順帶覆蓋兩個 fallback 邊界：
-//   - DB cache 半成品（only short）→ loadWithOverride 走 asset 路徑（empty）
-//   - DB cache 完整但是空 table → loadWithOverride 走 asset 路徑（empty）
+// 也順帶覆蓋一個 fallback 邊界：
+//   - DB cache 半成品（only short）→ loadWithOverride 走 asset 路徑（本測試
+//     把 asset 讀取換成會拋錯的替身，所以是 empty）
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';

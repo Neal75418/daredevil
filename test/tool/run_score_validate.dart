@@ -1,4 +1,4 @@
-// score_validate 的 flutter test wrapper（drift→dart:ui）。
+// score_validate 的 flutter test wrapper（同 run_backfill 設計；`dart run` 亦可）。
 // env：CALIBRATION_DB、SCORE_SAMPLE_SIZE。
 import 'package:flutter_test/flutter_test.dart';
 

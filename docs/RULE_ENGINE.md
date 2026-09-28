@@ -6,7 +6,7 @@ Daredevil 推薦規則引擎 — **70 條異常偵測規則**（產生 72 種 re
 
 > 權威數字：`RuleRegistry.defaultRules.length` 與 `ReasonType` enum。
 >
-> **守門範圍**：`doc_rule_count_consistency_test.dart` 只守四份文件標題那一處總數；
+> **守門範圍**：`doc_rule_count_consistency_test.dart` 只守該測試列出的各文件標題那一處總數；
 > `rule_engine_doc_test.dart` 額外守本檔的**規則集合**與**基準分欄**。觸發條件那一欄是
 > 散文，兩者都守不住——改規則時請一併更新（post-commit 會提醒）。
 

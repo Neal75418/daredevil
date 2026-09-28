@@ -88,8 +88,8 @@ void main() {
         violations,
         isEmpty,
         reason:
-            'tool 依賴鏈染上需要 dart:ui 的 import,launchd 的 dart run 會'
-            '編譯失敗且靜默斷更新:\n${violations.join('\n')}',
+            'tool 依賴鏈染上需要 dart:ui 的 import,CLI 重編(dart build cli)會'
+            '編譯失敗,launchd 繼續跑舊產物:\n${violations.join('\n')}',
       );
       // sanity:確實走到了深層(防 regex/路徑解析壞掉造成假綠)。
       // 錨點各自不同——daily_update 走 update chain、intraday 走 alert chain。

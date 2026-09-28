@@ -118,7 +118,7 @@ void main() {
       // - empty_state 的資料需求標籤是 secondaryContainer 疊 60% alpha
       // onSecondaryContainer 是為「文字疊在實心 secondaryContainer 之上」
       // 校準的（見上面「淺色主題 onSecondary／onTertiary」測試），對這兩個
-      // 疊色合成背景分別只有 1.14:1／3.09:1，故 scan_screen.dart／
+      // 疊色合成背景分別只有 1.14:1／2.90:1，故 scan_screen.dart／
       // news_screen.dart 的 FilterChip 選中標籤與 empty_state.dart 的
       // 資料需求標籤改用 onSurface。深色主題不受影響（chipTheme 未覆寫
       // selectedColor，落回實心 secondaryContainer；empty_state 的

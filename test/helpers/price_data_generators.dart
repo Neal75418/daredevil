@@ -209,7 +209,7 @@ List<DailyPriceEntry> generatePricesWithVolumeSpike({
 /// 用於測試 BreakoutRule：
 /// - 前 N-1 天在 basePrice 附近盤整（建立 MA20）
 /// - 最後一天突破至 breakoutPrice
-/// - 最後一天成交量為 breakoutVolume（需 >= 2x 均量）
+/// - 最後一天成交量為 breakoutVolume（需 >= TrendParams.reversalVolumeConfirm 倍均量）
 List<DailyPriceEntry> generatePricesWithBreakout({
   required int days,
   required double basePrice,
@@ -239,7 +239,7 @@ List<DailyPriceEntry> generatePricesWithBreakout({
 /// 用於測試 BreakdownRule：
 /// - 前 N-1 天在 basePrice 附近盤整（建立 MA20）
 /// - 最後一天跌破至 breakdownPrice
-/// - 最後一天成交量為 breakdownVolume（需 >= 2x 均量）
+/// - 最後一天成交量為 breakdownVolume（需 >= TrendParams.reversalVolumeConfirm 倍均量）
 List<DailyPriceEntry> generatePricesWithBreakdown({
   required int days,
   required double basePrice,

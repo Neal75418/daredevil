@@ -52,7 +52,7 @@ void main() {
           reason:
               '${entry.key} 寫的規則數與程式碼不符。'
               'RuleRegistry.defaultRules 實際 $actual 條，文件寫 $hits。'
-              '新增/移除規則時四份文件要一起更新。',
+              '新增/移除規則時 docs map 內每份文件要一起更新。',
         );
       });
     }

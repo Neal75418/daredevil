@@ -51,7 +51,8 @@ abstract final class AppLogger {
   static SentryCaptureFn? _sentryCapture;
 
   /// CLI 強制輸出開關。app 不得設定(release 應維持靜默);
-  /// `tool/` 下的 CLI 在 main 開頭設 true,讓錯誤進得了 launchd 日誌。
+  /// launchd 跑的兩支 CLI(daily_update、intraday_alert_check)在 main 開頭
+  /// 設 true,讓錯誤進得了 launchd 日誌。
   static bool forceOutput = false;
 
   /// 由 Flutter app 在 startup 呼叫一次，注入 Sentry bridging closures。
@@ -130,9 +131,10 @@ abstract final class AppLogger {
       isDebug = true;
       return true;
     }());
-    // [forceOutput] 讓 CLI 繞過 assert gate——實測 `dart run`(launchd 兩支
-    // CLI 的執行方式)下 assert **未啟用**,否則這 600+ 個呼叫點在生產環境
-    // 輸出零位元組(2026-08-15 稽核;本專案有靜默斷 13 天的前科)。
+    // [forceOutput] 讓 CLI 繞過 assert gate——launchd 兩支 CLI 跑的 AOT 產物與
+    // `dart run` 下 assert 都**未啟用**;沒有 forceOutput 的話,這 600+ 個
+    // 呼叫點在生產環境輸出零位元組(2026-08-15 稽核;本專案有靜默斷 13 天
+    // 的前科)。
     if (!isDebug && !forceOutput) return;
 
     final prefix = switch (level) {

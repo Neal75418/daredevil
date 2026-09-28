@@ -1,6 +1,6 @@
 // Integration test: 資料庫完整流程驗證
 //
-// 驗證從股票主檔寫入 → 價格寫入 → 分析寫入 → 推薦寫入 → 查詢推薦
+// 驗證從股票主檔寫入 → 價格寫入 → 分析寫入 → 理由寫入 → 查詢
 // 的完整資料流程。使用真實 in-memory SQLite 資料庫。
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
@@ -20,7 +20,7 @@ void main() {
 
   group('Database Flow Integration', () {
     test(
-      'full pipeline: stocks → prices → analysis → recommendations → query',
+      'full pipeline: stocks → prices → analysis → reasons → query',
       () async {
         // Step 1: 寫入股票主檔
         await db.upsertStocks([

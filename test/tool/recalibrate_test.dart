@@ -196,10 +196,10 @@ void main() {
 
     test('cut: hit_rate at 0.49 caught by t_stat (negative z when < 0.50)', () {
       // hit_rate 0.49 @ n=500 → z-stat negative → t_stat_below_threshold.
-      // With hitRateCutThreshold = 0.50, any hit_rate < 0.50 has negative
-      // t-stat, so t_stat check always fires first. hit_rate_below_threshold
-      // is a defensive fallback that only triggers if t_stat threshold is 0
-      // or negative (which we never do in practice).
+      // t_stat 先於 hit_rate 檢查。hitRateCutThreshold = 0.55：t-stat 過關但
+      // hit_rate 仍低於 0.55 時（例如 n=500、hit_rate 0.54，t ≈ 1.79），
+      // hit_rate_below_threshold 會觸發；本例 0.49 則 t-stat 為負、先被 t 砍。
+      // （本測試未傳 baseline，走預設 0.5。）
       final result = Calibrator.calibrate(
         stats(hitRate: 0.49, avgReturn: 2.0, triggerCount: 500),
         minRaw: minRaw,
@@ -274,8 +274,8 @@ void main() {
     test(
       'mixed active + cut: normalization uses survivors only, cut rules reported',
       () {
-        // cut_hitrate uses hit_rate 0.54 @ n=500 so z-test passes (~1.79)
-        // but hit_rate < 0.50 gives negative t-stat → t_stat_below_threshold.
+        // cut_hitrate uses hit_rate 0.49 @ n=500 → negative t-stat →
+        // t_stat_below_threshold.
         // avg_return is intentionally huge (50) to verify the survivor-only
         // normalization ignores this rule's raw weight even though it would
         // otherwise dominate the max.

@@ -1,7 +1,8 @@
 // Stage 3 operational runner — wraps tool/backfill.dart main logic in a
-// flutter_test `test()` block so it can execute with Flutter runtime (where
-// `dart:ui` + `drift_flutter` are available), since `dart run tool/backfill.dart`
-// fails at compile time due to transitive `dart:ui` imports through logger.dart.
+// flutter_test `test()` block. Originally required because logger and
+// drift_flutter pulled dart:ui into the import closure, so
+// `dart run tool/backfill.dart` failed to compile. Both were decoupled on
+// 2026-06-19 and `dart run` works now; the wrapper is kept as-is.
 //
 // This is NOT a unit test. It's a CLI invocation wrapper intended to be run
 // by `scripts/calibrate.sh`. The `test()` block is purely a vehicle for the
@@ -56,7 +57,7 @@ void main() {
       args.add('--dry-run');
     }
 
-    // 歷史回補必用：STOCK_DAY_ALL batch 不支援歷史日期 → 走 FinMind per-symbol
+    // TWSE 不可用時的備援：改走 FinMind per-symbol（batch 路徑已支援歷史日期）
     if (Platform.environment['BACKFILL_PRICES_VIA_FINMIND'] == '1') {
       args.add('--prices-via-finmind');
     }

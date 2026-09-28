@@ -159,7 +159,7 @@ void main() {
     });
 
     // ==================================================
-    // Structural errors (5 cases, scenarios 1-2d)
+    // Structural errors (6 cases, scenarios 1-2d)
     // ==================================================
 
     test('7. malformed_json_returns_empty', () {
@@ -346,7 +346,7 @@ void main() {
     });
 
     // ==================================================
-    // Per-rule content errors (7 cases, scenarios 5a-6b + 7)
+    // Per-rule content errors (9 cases, scenarios 5a-6b + 7)
     // ==================================================
 
     test('12. rule_entry_not_object_skipped', () {
@@ -762,16 +762,15 @@ void main() {
     // ==================================================
 
     test('23. loadFromAssets_short_bundled_metadata_aligned', () async {
-      // Bundled `rule_scores_calibrated_short.json` metadata
-      // success_threshold_pct=1.5 matches canonical
-      // `CalibrationThresholds.successThresholds[Horizon.short.tradingDays]`，
-      // drift guard 放行。Hermetic drift-reject coverage 在 11c/11d/11e
+      // Bundled `rule_scores_calibrated_short.json` 現為 excess 模式
+      // （return_mode: excess、success_threshold_pct 0.0），drift guard 對照
+      // excess 的 canonical 放行。Hermetic excess 路徑 coverage 在 11f/11g
       // (inline fixtures)。
       //
-      // **2026-06-19 contract change**：lookup 對 calibrated 0 回 null（fallback）；
-      // 短線 JSON 40 條 rule 裡 39 條 score=0、唯一 +22 的 TECH_BREAKDOWN 是
-      // sign-flip 也被 skip。所以 lookup REVERSAL_W2S 預期 null（fallback 到
-      // hardcoded +35）。Smoke test 改驗「load 沒爆」+「至少寫入 1 entry」。
+      // **2026-06-19 contract change**：lookup 對 calibrated 0 回 null（fallback；
+      // 短線負證據歸零的規則除外，回 0）。現行短線資產（2026-09 時為 44 條、
+      // 2 條非零）中 REVERSAL_W2S 被 cut 且 avg_return 為正、無負證據，lookup
+      // 預期 null（fallback 到 hardcoded +35）。
       await CalibratedScoresRegistry.instance.loadFromAssets();
 
       // load 成功 → registry 內部已有 table（rule entries 包含 0 entry 仍計入）。
@@ -779,7 +778,7 @@ void main() {
         Horizon.short,
         'REVERSAL_W2S',
       );
-      expect(result, isNull, reason: 'short JSON 整批 calibrated 0 → fallback');
+      expect(result, isNull, reason: 'REVERSAL_W2S 被 cut 且無負證據 → fallback');
     });
 
     test('24. loadFromAssets_long_bundled_metadata_aligned', () async {
@@ -926,10 +925,8 @@ void main() {
       );
 
       // Override 都 null → fallback 路徑走到 loadFromAssets 載入 bundled JSON。
-      // **2026-06-19 contract change**：lookup 對 calibrated 0 回 null（fallback
-      // signal）。短線 JSON 39/40 條 score=0、唯一 +22 的 TECH_BREAKDOWN 是
-      // sign-flip 被 skip → REVERSAL_W2S 預期 null。改用長線 active rule
-      // (EPS_CONSECUTIVE_GROWTH +22) 驗證 fallback 成功。
+      // 用長線唯一 active rule（EPS_CONSECUTIVE_GROWTH +22）驗證 fallback
+      // 成功載入 bundled asset。
       final activeLong = CalibratedScoresRegistry.instance.lookup(
         Horizon.long,
         'EPS_CONSECUTIVE_GROWTH',
@@ -959,8 +956,8 @@ void main() {
           longJsonOverride: null,
         );
 
-        // Because long override was missing, fallback path used assets
-        // (which have empty rules). So X should NOT be found.
+        // Because long override was missing, fallback path used assets,
+        // which have no rule X. So X should NOT be found.
         expect(
           CalibratedScoresRegistry.instance.lookup(Horizon.short, 'X'),
           isNull,
@@ -996,9 +993,8 @@ void main() {
         longJsonOverride: emptyJson,
       );
 
-      // Empty override → fall through to bundled asset。**2026-06-19**：
-      // 短線 bundled 整批 calibrated 0 → 用長線 EPS_CONSECUTIVE_GROWTH +22
-      // 驗證 fallback 成功（短線 REVERSAL_W2S 在新 contract 下回 null）。
+      // Empty override → fall through to bundled asset。用長線唯一 active
+      // rule（EPS_CONSECUTIVE_GROWTH +22）驗證 fallback 成功。
       expect(
         CalibratedScoresRegistry.instance.lookup(
           Horizon.long,

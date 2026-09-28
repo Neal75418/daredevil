@@ -1,5 +1,5 @@
-// 出場條件 gate 的 flutter test wrapper（同 run_replay.dart 設計：
-// drift→dart:ui 使純 dart run compile fail，包在 flutter test 內跑）。
+// 出場條件 gate 的 flutter test wrapper（同 run_replay.dart 設計，該設計源於
+// drift_flutter 拆離前；`dart run` 亦可）。
 //
 // env：CALIBRATION_DB（預設 tool/calibration.db）。NOT a unit test。
 import 'dart:io';

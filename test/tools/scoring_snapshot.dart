@@ -138,7 +138,9 @@ void main() {
     // 載入真實校準值——**必要**:CalibratedScoreContext.empty 會讓
     // calibrated == hardcoded,兩條 mutex 路徑選出同一個贏家,落庫不一致
     // 的 bug 就測不出來(2026-08-15 建工具時踩到的第二個坑)。
-    // 走 production 自己的 registry + snapshotForIsolate(),零近似。
+    // 走 production 的 calibrated JSON + snapshotForIsolate();但這裡的 parseJson
+    // 沒帶 structuralExemptions(短線 Mode C 規則的歸零豁免),與 production
+    // registry 在短線仍有差異。
     final hardcoded = {for (final r in ReasonType.values) r.code: r.score};
     final knownIds = ReasonType.values.map((r) => r.code).toSet();
     final registry = CalibratedScoresRegistry.instance;
