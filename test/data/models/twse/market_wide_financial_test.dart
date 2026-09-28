@@ -17,12 +17,11 @@
 //      EPS 更不能單純相減——它用加權平均股數計算。
 //   故損益表維持 FinMind,本 model 只處理 BALANCE。
 //
-// **只寫有消費者的兩個欄位**(2026-08-16 grep 實證):
-//   Equity(2 處,ROE 的分母)、TotalAssets(1 處)
+// **只寫兩個欄位**:Equity(ROE 的分母)與 TotalAssets(目前沒有讀取者,
+// 當初一併寫入,無特定保留理由)。
 // 其餘欄位(CashAndCashEquivalents / Liabilities / OrdinaryShare /
-// TotalLiabilitiesEquity 等十餘個)全是 0 處消費者。它們與 margin 那組
-// 「已備料未消費」不同——**這是新增**,而且免費端點隨時可再抓,不寫沒有
-// 不可逆的損失,寫了只是讓已有 99 萬列的表繼續膨脹。
+// TotalLiabilitiesEquity 等十餘個)全是 0 處消費者,不寫:免費端點隨時可
+// 再抓,不寫沒有不可逆的損失,寫了只是讓已有 99 萬列的表繼續膨脹。
 //
 // **日期**:ROC 年 + 季別 → 季末日,必須與 FinMind 既有資料同格式,
 // 否則 ROE 的近四季合計與 EPS 的去年同季比對會撈不到。
@@ -87,7 +86,7 @@ void main() {
       expect(byType['TotalAssets'], 596016531000.0);
     });
 
-    test('只取有消費者的兩個欄位', () {
+    test('只取 Equity 與 TotalAssets 兩個欄位', () {
       final rows = MarketWideFinancial.parseBalance(balanceRow);
       expect({for (final r in rows) r.dataType}, {'Equity', 'TotalAssets'});
       expect(rows.every((r) => r.statementType == 'BALANCE'), isTrue);

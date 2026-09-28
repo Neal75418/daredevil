@@ -129,10 +129,10 @@ void main() {
       expect(height, lessThanOrEqualTo(190));
     });
 
-    testWidgets('子指標展開（5 項全部命中，最高狀態）：高度遠小於舊值，且不超過分隔線常數', (tester) async {
+    testWidgets('子指標展開（5 項全部命中，最高狀態）：高度遠小於舊值，且不超過 235', (tester) async {
       // 子指標全部 5 項命中展開是目前最高的內容狀態（趨勢 sparkline 移除後
-      // 已無更高狀態），故用此狀態驗證 UiConstants.sentimentDividerHeight
-      // 是否仍涵蓋實際最高內容高度。
+      // 已無更高狀態），故用此狀態驗證實際最高內容高度不超過 235
+      // （原 UiConstants.sentimentDividerHeight 已刪）。
       await measureHeight(tester, createSentiment());
       await tester.tap(find.byIcon(Icons.expand_more));
       await tester.pumpAndSettle();

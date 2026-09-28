@@ -458,7 +458,8 @@ void main() {
     });
 
     testWidgets('🚨 parallel 檢視(寬視口)同樣受閘門保護', (tester) async {
-      // mobile 與 parallel 是兩條獨立的建構路徑(:498 vs :847)——只測
+      // mobile 與 parallel 是兩條獨立的建構路徑(_buildMobileView vs
+      // _buildChipAnomalySection)——只測
       // mobile 時 parallel 閘門的移除 mutation 存活(實測)
       widenViewport(tester);
       final state = MarketOverviewState(

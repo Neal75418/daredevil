@@ -206,11 +206,11 @@ void main() {
         ),
       ]);
 
-      // 插入 52 週歷史價格（最高 600，最低 380）
+      // 插入 52 週歷史價格（最高 580，最低 380）
       final now = DateTime.now();
       final prices = <DailyPriceCompanion>[];
       for (int i = 0; i < 52; i++) {
-        // 模擬波動：380-600 之間
+        // 模擬波動：380-580 之間
         final week = i;
         final high = 400.0 + (week % 10) * 20.0; // 最高 580
         final low = 380.0 + (week % 10) * 20.0; // 最低 380

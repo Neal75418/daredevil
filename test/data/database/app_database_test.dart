@@ -7,7 +7,7 @@ import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
 /// AppDatabase 單元測試
 ///
 /// 測試 Drift SQLite 資料庫的 CRUD 操作，
-/// 涵蓋 StockMaster、DailyPrice、Watchlist、Analysis、Recommendation 等資料表。
+/// 涵蓋 StockMaster、DailyPrice、Watchlist、Analysis、Reason、Settings、Update Run。
 
 void main() {
   late AppDatabase db;

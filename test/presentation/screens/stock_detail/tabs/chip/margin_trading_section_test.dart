@@ -67,7 +67,7 @@ void main() {
       expect(find.byIcon(Icons.percent), findsOneWidget);
     });
 
-    testWidgets('shows high ratio warning when > 10%', (tester) async {
+    testWidgets('displays the short/margin ratio', (tester) async {
       widenViewport(tester);
       await pumpSection(
         tester,
@@ -76,7 +76,7 @@ void main() {
         ),
       );
 
-      // ratio = 2000/10000*100 = 20% > 10%
+      // ratio = 2000/10000*100 = 20%（低於 highShortMarginRatio 30，不觸發警示）
       expect(find.textContaining('20.0%'), findsWidgets);
     });
   });

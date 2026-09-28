@@ -13,7 +13,7 @@
 // 處置股（DISP01→A／DISP_B→B／DISP_C→C），分別確認各自從**自己會贏的那個
 // 榜單**消失。
 //
-// Mock 模式沿用 scan_provider_test.dart / news_heat_provider_test.dart：
+// Mock 模式沿用 scan_provider_test.dart / today_provider_test.dart：
 // MockAppDatabase + MockCachedDatabaseAccessor + MockAnalysisRepository 三件組
 // override databaseProvider / cachedDbProvider / analysisRepositoryProvider；
 // marketDataRepositoryProvider 不 override（其真實實作內部委派給
@@ -215,7 +215,7 @@ void main() {
     final bSymbols = bList.map((r) => r.symbol);
     final cSymbols = cList.map((r) => r.symbol);
 
-    // DISP01 是 A 榜三檔候選裡分數最高的一檔（50 > 40）——若無 Fix 2，會是
+    // DISP01 是 A 榜兩檔候選裡分數較高的一檔（50 > 40）——若無 Fix 2，會是
     // Mode A 起漲候選榜第 1 名。
     expect(aSymbols, isNot(contains('DISP01')));
     // DISP_B / DISP_C 分別是各自 mode 的唯一候選——若無 Fix 2，會直接進榜。

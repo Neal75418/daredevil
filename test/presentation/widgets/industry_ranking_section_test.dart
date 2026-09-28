@@ -100,8 +100,7 @@ void main() {
       expect(find.text('半導體業'), findsNothing);
       expect(find.text('紡織業'), findsNothing, reason: '20日資料不得出現,否則預設仍是 d20');
 
-      // SectionHeader 用 flutter_animate,進場中 IgnorePointer 會吃掉點擊
-      // (CLAUDE.md 慣例:先推進 1s)
+      // SectionHeader 用 flutter_animate(test/CLAUDE.md 慣例:先推進 1s)
       await tester.pump(const Duration(seconds: 1));
       await tester.ensureVisible(find.text('today.industryWindow5d'));
       await tester.tap(find.text('today.industryWindow5d'));

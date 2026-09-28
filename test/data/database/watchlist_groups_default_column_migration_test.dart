@@ -29,8 +29,8 @@ void main() {
   });
 
   test('🚨 舊 DB(無 is_default 欄)開啟後補欄,既有分組與旗標語意保留', () async {
-    // 1. 手工造一個「舊版 schema」的 DB:watchlist_groups 沒有 is_default
-    //    (DDL 抄自加欄前的 generated schema,含一筆使用者分組)
+    // 1. 造一個「舊版 schema」的 DB:watchlist_groups 沒有 is_default
+    //    (先建新 schema 再刪欄模擬,含一筆使用者分組)
     final raw = NativeDatabase(dbFile);
     final db1 = AppDatabase(raw);
     await db1.customSelect('SELECT 1').get(); // 建出完整新 schema

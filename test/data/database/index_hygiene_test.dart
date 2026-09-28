@@ -45,8 +45,8 @@ void main() {
     return rows.map((r) => r.read<String>('name')).toSet();
   }
 
-  /// drop 清單全 27 條的重建 DDL——模擬「舊版 schema 的既有 DB」。
-  /// 對抗審查 mutation 實測:第一版測試只建回 4 條,其餘 23 條的 DROP
+  /// drop 清單全部舊索引的重建 DDL——模擬「舊版 schema 的既有 DB」。
+  /// 對抗審查 mutation 實測:第一版測試只建回 4 條,其餘各條(當時共 27 條)的 DROP
   /// 拿掉任一條都不會紅;此表讓每一條 DROP 都被守住。
   const legacyDdl = <String, String>{
     // 2026-08-29 由 (date) 升級為 (date, symbol) 複合(covering):舊單欄
@@ -105,7 +105,7 @@ void main() {
     await db.close();
   });
 
-  test('既有 DB(含全部 27 條舊索引)重開後:逐條清除、date 索引補上、資料零損失', () async {
+  test('既有 DB(含全部舊索引)重開後:逐條清除、date 索引補上、資料零損失', () async {
     // 1. 初次開啟建 schema,建回全部舊索引,寫入資料
     final db1 = AppDatabase(NativeDatabase(dbFile));
     await db1.customSelect('SELECT 1').get();

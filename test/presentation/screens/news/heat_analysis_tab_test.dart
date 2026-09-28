@@ -11,8 +11,9 @@ import 'package:daredevil/presentation/widgets/empty_state.dart';
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
 
-// 註：本專案 widget 測試慣例（見 price_alert_dialog_test.dart、
-// settings_screen_test.dart）在 buildTestApp/buildProviderTestApp 下不接
+// 註：本專案 widget 測試慣例（見 test/helpers/widget_test_helpers.dart 的
+// buildTestApp／setupTestLocalization）在
+// buildTestApp/buildProviderTestApp 下不接
 // EasyLocalization widget，`.tr()` 因此解析不到真實翻譯、fallback 回傳
 // 原始 key 字串本身。故本檔斷言比對「i18n key 原始字串」而非翻譯後文字，
 // 與專案既有測試慣例一致（非本檔行為變更）。

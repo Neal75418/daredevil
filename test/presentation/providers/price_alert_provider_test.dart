@@ -132,7 +132,7 @@ void main() {
       final copied = state.copyWith();
       expect(copied.alerts, hasLength(1));
       expect(copied.isLoading, isTrue);
-      // Note: error is always set to null when not passed (no sentinel)
+      // 未傳 error 時沿用原值（sentinel）；原 state 本來就沒有 error
       expect(copied.error, isNull);
     });
 

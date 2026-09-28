@@ -175,7 +175,7 @@ void main() {
       expect(find.byIcon(Icons.add), findsOneWidget);
     });
 
-    testWidgets('shows positive PnL with green color', (tester) async {
+    testWidgets('shows positive PnL with + prefix', (tester) async {
       widenViewport(tester);
       final positions = [
         createPosition(

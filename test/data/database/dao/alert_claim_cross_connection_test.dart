@@ -105,6 +105,6 @@ void main() {
   //
   // 現況:`forToolFile` 已設 `busy_timeout = 5000`(該值來自 2026-08-08
   // 的實機重現——GUI 手動更新握住寫鎖時,launchd 那輪整個死在
-  // SqliteException(5))。GUI 側的 executor **沒有**設 busy_timeout,
-  // 那是已知缺口,記在此處以免被遺忘。
+  // SqliteException(5))。GUI 側的 executor 也已設同樣的 busy_timeout
+  // (見 app_database_flutter.dart 的 openDriftFlutterConnection)。
 }

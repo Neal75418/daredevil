@@ -240,8 +240,7 @@ void main() {
 
   // **2026-06-19 v2 audit — Mode C 重定義為「回檔觀察 / 強股回檔進場」**
   // - 從「負分警示」改「正分機會」tab
-  // - 必過 gate：至少 1 條主訊號 rule fire（PULLBACK_TO_MA20 / HAMMER_AT_SUPPORT /
-  //   KD_HIGH_PULLBACK / PATTERN_HAMMER）
+  // - 必過 gate：至少 1 條主訊號 rule fire（見 ModeFilters.modeCRequiredAnyOf）
   // - todayPct in [-4%, 0%]（回檔但非崩跌）
   // - score ≥ +12（最弱主訊號 kdHighPullback 的分數）
   group('isEligibleForMode — Mode C v2 (回檔觀察 pullbackEntry)', () {

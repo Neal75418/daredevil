@@ -198,8 +198,9 @@ void main() {
       tester,
     ) async {
       // chipTheme.selectedColor（淺色主題）是 primaryColor 疊 15% alpha
-      // 於白之上的淡紫色，非實心 secondaryContainer；onSecondaryContainer
-      // 對這個合成色只有 1.14:1，故選中標籤文字必須是 onSurface。
+      // 於白之上的淡色，非實心 secondaryContainer；onSecondaryContainer
+      // 對這個合成色對比不足（見 test/core/theme/app_theme_surfaces_test.dart
+      // 的疊色守門測試），故選中標籤文字必須是 onSurface。
       widenViewport(tester);
       final newsItems = [
         createNewsItem(source: '鉅亨網', publishedAt: DateTime.now()),

@@ -469,7 +469,7 @@ void main() {
         expect(result, equals(2));
       });
 
-      test('filters out invalid stock codes (warrants, TDR)', () async {
+      test('filters out 6-digit warrants (4-digit TDR kept)', () async {
         final stockInfos = [
           const FinMindStockInfo(
             stockId: '2330',
@@ -501,8 +501,8 @@ void main() {
 
         final result = await repository.syncStockList();
 
-        // Only 2330 is valid (4 digits), 233001 is 6 digits (warrant), 9101 has 4 digits but counts
-        expect(result, equals(2)); // 2330 and 9101 are 4 digits
+        // 233001 是 6 碼權證被濾掉；2330 與 4 碼的 TDR 9101 都保留
+        expect(result, equals(2));
       });
 
       test('deactivates stocks not in API response', () async {

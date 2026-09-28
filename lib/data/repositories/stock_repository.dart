@@ -77,7 +77,7 @@ class StockRepository implements IStockRepository {
       }
 
       // 過濾有效股票代碼：4 位數字（一般股票）或 00 開頭（ETF）
-      // 排除 6 位數權證、TDR 等非股票代碼
+      // 排除 6 位數權證等非股票代碼（4 碼的 TDR 會被保留）
       final validStockPattern = RegExp(r'^(\d{4}|00\d{3,4})$');
 
       // FinMind 同一 symbol 可能回多列（細分＋泛用「電子工業」各一），

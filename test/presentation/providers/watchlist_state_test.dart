@@ -254,9 +254,6 @@ void main() {
         final items = [createItem(symbol: '2330')];
         final original = WatchlistState(items: items);
 
-        // Access to trigger lazy init
-        final _ = original.filteredItems;
-
         final updated = original.copyWith(sort: WatchlistSort.nameAsc);
 
         expect(updated.sort, equals(WatchlistSort.nameAsc));

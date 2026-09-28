@@ -104,7 +104,7 @@ void main() {
 
     test('🚨 空名單一律不清（無法與「抓取失敗」區分）', () async {
       // TWSE/TPEx client 在解析失敗或 stat != 'OK' 時是 return [] 而非拋例外
-      // （twse_client.dart:1297-1300）→ 呼叫端收不到例外、誤判為同步成功。
+      // （見 TwseClient.getTradingWarnings）→ 呼叫端收不到例外、誤判為同步成功。
       // 若把空清單當權威名單做 full-refresh，一次來源退化就清空整個市場的
       // 注意股旗標：-15 分整批消失、風險徽章不亮，而 run 仍是綠燈。
       await seedAttention(['3088', '8069'], d1);
@@ -169,7 +169,7 @@ void main() {
 
     test('🚨 DISPOSAL 的 NULL endDate 不得永久生效（同型 bug 掃除）', () async {
       // endDate 是 DateTime?：TWSE 改分隔符號、欄位位移或民國日期解析失敗都會
-      // 讓它變 null（twse_client.dart:1396-1405）。而 updateExpiredWarnings 的
+      // 讓它變 null（見 TwseClient._parseDisposalRow）。而 updateExpiredWarnings 的
       // `disposal_end_date < now` 對 NULL 恆不成立 → -50 分 + 三模式硬排除
       // **永久生效**，該股再也不會出現在任何推薦榜。
       await db.insertWarningData([

@@ -63,7 +63,7 @@ void main() {
 
   group('TpexClient._parseInstitutionalRow (dealerSelfNet added)', () {
     test(
-      'dealerSelfNet=[16]; dealerNet[22]/foreignNet[10]/trustNet[13] unchanged',
+      'dealerSelfNet=[16]; dealerNet[22]/foreignNet[4]/trustNet[13]',
       () async {
         stubInstitutional(row6488());
 
@@ -74,7 +74,7 @@ void main() {
         expect(r.code, '6488');
         // 新欄位：自行買賣淨來自 [16]
         expect(r.dealerSelfNet, 30, reason: 'dealerSelfNet 必須來自 [16] 自營自行淨');
-        // 既有對照（byte-identical）：
+        // 既有對照：
         expect(r.dealerNet, 20, reason: 'dealerNet 仍取 [22] 自營合計淨');
         expect(r.foreignNet, 280, reason: 'foreignNet 取 [4] 不含外資自營（與 TWSE 對齊）');
         expect(r.investmentTrustNet, 120, reason: 'investmentTrustNet 仍取 [13]');

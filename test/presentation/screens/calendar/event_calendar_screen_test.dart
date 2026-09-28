@@ -305,7 +305,7 @@ void main() {
           .toList();
       expect(chips, hasLength(EventType.values.length));
 
-      // 預設五類全選會恆常呈彩虹，故兩態 label 皆不得著類型色、
+      // 預設全部類型全選會恆常呈彩虹，故兩態 label 皆不得著類型色、
       // avatar 一律為小色點（識別靠色點、選取靠底色＋勾勾）
       for (final chip in chips) {
         expect(
@@ -658,7 +658,7 @@ void main() {
   // _jumpToToday/_pickMonth 都設 _pendingFocusTarget 濾掉翻頁動畫的
   // 延遲殘響,但「未來14天」卡片點擊(同樣程式化改 _focusedDay、同樣
   // 觸發套件內部翻頁動畫)漏設——殘響會把剛設好的目標月踩回動畫中途
-  // 的舊月(59-60 行註解描述、已在另兩入口修過的同一個 race)。
+  // 的舊月(見 _pendingFocusTarget 欄位註解;已在另兩入口修過的同一個 race)。
   // 測試直接呼叫 TableCalendar.onPageChanged 模擬殘響,免依賴動畫時序。
   // ====================================================================
   group('未來14天卡片跳月 race', () {

@@ -41,11 +41,11 @@ void main() {
   });
 
   group('主題盲色彩守門（C5）', () {
-    // AppTheme.primaryColor 恆為 #A78BFA（為深色主題挑的 Violet 400）。
-    // RefreshIndicator 的弧線是圖形物件（3.0:1），而它的 backgroundColor
-    // 在淺色主題是 colorScheme.surface（#F8F9FA）——#A78BFA 對其僅 2.58:1。
+    // AppTheme.primaryColor 恆為品牌色（現為 brand #60A5FA，為深色主題挑的
+    // 亮色）。RefreshIndicator 的弧線是圖形物件（需 3.0:1），而它的
+    // backgroundColor 在淺色主題是 colorScheme.surface——亮色對其不足 3:1。
     // 斷言「實際渲染出來的 color 對實際渲染出來的 backgroundColor」的對比，
-    // 而非斷言等於某個常數：常數等式擋不住有人換成另一個同樣過亮的紫。
+    // 而非斷言等於某個常數：常數等式擋不住有人換成另一個同樣過亮的顏色。
     for (final brightness in Brightness.values) {
       testWidgets('旋轉弧線對自身背景達圖形物件門檻 3.0:1（$brightness）', (tester) async {
         await tester.pumpWidget(

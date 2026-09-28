@@ -1,6 +1,7 @@
-// FinMind 真實用量沒有公開讀取點——只有配額用完時才會從例外訊息看到
+// FinMind 真實用量曾經沒有公開讀取點——只有配額用完時才會從例外訊息看到
+// （2026-07-27 起由 FinMindClient.hourlyUsage 提供）
 //
-// update_service.dart:897-901 的註解（2026-07-26 自己留的）：
+// 當時 update_service.dart 的註解（2026-07-26）：
 //   「真實用量在 ApiBudgetTracker（per-vendor、sliding 1hr、只掛
 //     FinMindClient）。但它目前**沒有公開讀取點**，內部算出的 used 只在
 //     配額用完時出現在例外訊息裡——等看到已經來不及；且 tracker 未注入

@@ -522,10 +522,10 @@ void main() {
   group('圖示色主題盲守門（C5）', () {
     // EmptyState 的 56px 圖示以 alpha 0.7 疊在自身 alpha 0.1 漸層底之上，
     // 該底又疊在 scaffold（淺色 #FFFFFF）之上。iconColor 曾寫死
-    // AppTheme.primaryColor（#A78BFA）——實際畫出來的圖示合成色對頁面白底
-    // 只有 2.02:1，比改動前的 #2196F3（2.28:1）更差。改為不傳 iconColor、
-    // 由 build 落回 theme.colorScheme.primary 後，淺色解析為 #6D28D9，
-    // 合成後 4.10:1。
+    // AppTheme.primaryColor（當時為紫色 #A78BFA）——實際畫出來的圖示合成色對
+    // 頁面白底只有 2.02:1，比改動前的 #2196F3（2.28:1）更差。改為不傳 iconColor、
+    // 由 build 落回 theme.colorScheme.primary 後，淺色解析為 brandOnLight
+    // （現為藍 700）。
     //
     // 斷言對象是「Icon 實際拿到的 color」是否等於主題解析值，這條會在
     // 有人把寫死的常數放回 iconColor 時變紅。

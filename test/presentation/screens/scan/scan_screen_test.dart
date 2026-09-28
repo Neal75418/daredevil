@@ -173,8 +173,8 @@ void main() {
       tester,
     ) async {
       // chipTheme.selectedColor（淺色主題）是 primaryColor 疊 15% alpha
-      // 於白之上的淡紫色，非實心 secondaryContainer；onSecondaryContainer
-      // 對這個合成色只有 1.14:1（見 app_theme_surfaces_test.dart 的疊色
+      // 於白之上的淡色，非實心 secondaryContainer；onSecondaryContainer
+      // 對這個合成色對比不足（見 app_theme_surfaces_test.dart 的疊色
       // 守門測試），故選中標籤文字必須是 onSurface，不能退回
       // onSecondaryContainer。
       widenViewport(tester);

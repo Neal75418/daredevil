@@ -1,20 +1,19 @@
 import 'package:daredevil/core/utils/tw_parse_utils.dart';
 
-/// 全市場財報的一列(TWSE t187ap06/t187ap07、TPEx mopsfin_ 對應)
+/// 全市場資產負債表的一列(TWSE t187ap07、TPEx mopsfin_t187ap07_O 對應)
 ///
 /// **為什麼接這個**:財報是 FinMind 額度的唯一瓶頸——逐檔、且損益表與
 /// 資產負債表各一次。129 檔待回填 = 258 次呼叫,佔小時額度 43%,實測
 /// 2026-08-16 因額度保留只跑了 10 檔。免費端點一次拿全市場(上市 975 +
-/// 上櫃 863 筆),而且涵蓋我們**實際消費的全部四個欄位**。
+/// 上櫃 863 筆)。損益表不經本 model 寫進 financial_data(年度累計與 FinMind
+/// 單季語意不同,見下方;季報總覽另走 QuarterlyReport 表)。
 ///
-/// **只寫有消費者的四個 data_type**(2026-08-16 grep 實證):
-/// - INCOME:`EPS`(3 處)、`GrossProfit`(2 處)
-/// - BALANCE:`Equity`(2 處,ROE 的分母)、`TotalAssets`(1 處)
+/// **只寫 BALANCE 的兩個 data_type**:`Equity`(ROE 的分母)與 `TotalAssets`
+/// (目前沒有讀取者,當初一併寫入,無特定保留理由)。
 ///
 /// 其餘十餘個欄位(`CashAndCashEquivalents`、`Liabilities`、`OrdinaryShare`、
-/// `TotalLiabilitiesEquity` …)全是 0 處消費者。與 margin 那組「已備料未
-/// 消費」的差別在於**這是新增**:免費端點隨時可再抓,不寫沒有不可逆的
-/// 損失,寫了只是讓已有 99 萬列的表繼續膨脹。
+/// `TotalLiabilitiesEquity` …)全是 0 處消費者,不寫:免費端點隨時可再抓,
+/// 不寫沒有不可逆的損失,寫了只是讓已有 99 萬列的表繼續膨脹。
 class MarketWideFinancial {
   const MarketWideFinancial({
     required this.symbol,

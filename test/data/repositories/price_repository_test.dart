@@ -458,10 +458,10 @@ void main() {
     });
 
     // ============================================================
-    // backfillTwsePricesByDate — TWSE STOCK_DAY_ALL batch backfill
+    // backfillTwsePricesByDate — TWSE MI_INDEX batch backfill
     //
     // 確保正確性的關鍵測試（pattern mirrors backfillTpexPricesByDate）：
-    // - TWSE STOCK_DAY_ALL endpoint 被呼叫，且傳入正確的 date 參數
+    // - TWSE MI_INDEX（getAllDailyPricesHistorical）被呼叫，且傳入正確的 date 參數
     // - 按 targetSymbols 過濾後只寫匹配的 row
     // - RateLimit / Network exception 必須 rethrow（讓 backfill abort）
     // ============================================================
