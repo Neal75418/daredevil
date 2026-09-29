@@ -533,12 +533,26 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
   /// 日，只保留個股報價數達門檻的完整日。完整日約佔交易日 4-5 成，故回看窗口
   /// 放寬至 days*5 以確保能取到足夠完整日。
   ///
-  /// 回傳 `Map<String, List<({DateTime date, int advance, int decline, int unchanged})>>`
-  /// 日期降序排列（最新在前）
+  /// 同時回傳上漲／下跌股的成交值（close × volume；缺量時乘積為 NULL、
+  /// SUM 自動略過，當日全無則為 NULL → 讀成 0），供情緒
+  /// 儀表的資金流向（上漲量佔比）與漲跌比共用同一組完整日。
+  ///
+  /// 回傳 `Map<String, List<({DateTime date, int advance, int decline,
+  /// int unchanged, double upTurnover, double downTurnover})>>`，日期降序
+  /// 排列（最新在前）
   Future<
     Map<
       String,
-      List<({DateTime date, int advance, int decline, int unchanged})>
+      List<
+        ({
+          DateTime date,
+          int advance,
+          int decline,
+          int unchanged,
+          double upTurnover,
+          double downTurnover,
+        })
+      >
     >
   >
   getRecentAdvanceDeclineByMarket(
@@ -557,7 +571,11 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
     SELECT sm.market, dp.date,
       SUM(CASE WHEN dp.price_change > 0 THEN 1 ELSE 0 END) as advance,
       SUM(CASE WHEN dp.price_change < 0 THEN 1 ELSE 0 END) as decline,
-      SUM(CASE WHEN dp.price_change = 0 THEN 1 ELSE 0 END) as unchanged
+      SUM(CASE WHEN dp.price_change = 0 THEN 1 ELSE 0 END) as unchanged,
+      SUM(CASE WHEN dp.price_change > 0 THEN dp.close * dp.volume END)
+        as up_turnover,
+      SUM(CASE WHEN dp.price_change < 0 THEN dp.close * dp.volume END)
+        as down_turnover
     FROM daily_price dp
     INNER JOIN stock_master sm ON dp.symbol = sm.symbol
     WHERE dp.date > ? AND dp.date < ?
@@ -581,7 +599,16 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
     final byMarket =
         <
           String,
-          List<({DateTime date, int advance, int decline, int unchanged})>
+          List<
+            ({
+              DateTime date,
+              int advance,
+              int decline,
+              int unchanged,
+              double upTurnover,
+              double downTurnover,
+            })
+          >
         >{};
     for (final row in results) {
       final market = row.readNullable<String>('market');
@@ -593,6 +620,8 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
         advance: row.readNullable<int>('advance') ?? 0,
         decline: row.readNullable<int>('decline') ?? 0,
         unchanged: row.readNullable<int>('unchanged') ?? 0,
+        upTurnover: row.readNullable<double>('up_turnover') ?? 0,
+        downTurnover: row.readNullable<double>('down_turnover') ?? 0,
       ));
     }
 

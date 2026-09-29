@@ -139,6 +139,7 @@ class HistoryTrends {
     this.marginBalance = const {},
     this.shortBalance = const {},
     this.advanceRatio = const {},
+    this.upVolumeShare = const {},
   });
 
   /// 法人合計淨額（元）
@@ -155,4 +156,7 @@ class HistoryTrends {
 
   /// 漲跌比 (advance/total, 0~1)
   final Map<String, List<DatedValue>> advanceRatio;
+
+  /// 資金流向：上漲量佔比 (上漲股成交值 / 上漲＋下跌股成交值, 0~1)
+  final Map<String, List<DatedValue>> upVolumeShare;
 }

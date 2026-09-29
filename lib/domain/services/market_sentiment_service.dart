@@ -20,7 +20,7 @@ enum SentimentLevel {
 const Map<String, double> subScoreWeights = {
   'advanceRatio': 0.35,
   'institutional': 0.25,
-  'volumeMomentum': 0.15,
+  'upVolumeShare': 0.15,
   'marginChange': 0.15,
   'industryBreadth': 0.10,
 };
@@ -73,6 +73,26 @@ class MarketSentimentService {
   static const double advanceRatioFloor = 0.15;
   static const double advanceRatioCeil = 0.80;
 
+  /// 資金流向子指標（上漲量佔比）的線性映射下界／上界。
+  ///
+  /// 上漲量佔比 = 上漲股成交值 / (上漲股 + 下跌股成交值)，以 `price_change`
+  /// 判漲跌（與漲跌家數同口徑），0.5 = 資金流向平衡 → 50 分。
+  ///
+  /// **為何不用成交量比**：原子指標「今日成交額 / 5 日均額」與市場方向無關
+  /// （實測 624 個市場日 r = −0.03；量比 ≥ 1.3 的日子大跌、大漲各約 28%），
+  /// 大跌爆量也被讀成貪婪；且 0.5～2.0 的映射讓量比 1.0 只讀 33 分，九成
+  /// 的日子低於中性。
+  ///
+  /// **上下界依實測百分位對稱錨定**（2025-06-12～2026-09-24，634 個完整
+  /// 市場日）：p5 = 0.172、p95 = 0.867，取以 0.5 為中心的 ±0.35，飽和率
+  /// 4.1%／6.5%（與 [advanceRatioFloor] 約 5%/5% 的錨定目標一致）。中位數
+  /// 0.606 讀約 65 分——期間資金確實偏向上漲的權值股，是真實流向而非偏差，
+  /// 故不把中位數校準成 50。重新量測：daily_price JOIN stock_master，依
+  /// market、date 分組，取完整日（≥ kMinSymbolsForCompleteTradingDay 檔）
+  /// 的上漲／下跌成交值比，看 p5／p95。
+  static const double upVolumeShareFloor = 0.15;
+  static const double upVolumeShareCeil = 0.85;
+
   /// 回溯計算歷史情緒分數所需的最少對齊交易日數。
   ///
   /// 等同 Z-score（法人動向子指標）的最小樣本數：少於此日數無法產生有意義的
@@ -85,7 +105,7 @@ class MarketSentimentService {
   static MarketSentiment calculate({
     required AdvanceDecline advanceDecline,
     required List<double> institutionalNetHistory,
-    required List<double> turnoverHistory,
+    double? upVolumeShare,
     required List<double> marginBalanceHistory,
     List<IndustrySummary> industries = const [],
   }) {
@@ -122,21 +142,13 @@ class MarketSentimentService {
       subScores['institutional'] = _zScoreToScore(recent10);
     }
 
-    // 3. 成交量動能 (15%) — 今日量 / 5日均量
-    if (turnoverHistory.length >= 2) {
-      final today = turnoverHistory.last;
-      final histDays = turnoverHistory.length >= 6
-          ? turnoverHistory.sublist(
-              turnoverHistory.length - 6,
-              turnoverHistory.length - 1,
-            )
-          : turnoverHistory.sublist(0, turnoverHistory.length - 1);
-      final avg = histDays.fold<double>(0, (s, v) => s + v) / histDays.length;
-      if (avg > 0) {
-        final volumeRatio = today / avg;
-        // 0.5→0, 1.0→33, 1.25→50, 2.0→100
-        subScores['volumeMomentum'] = _linearMap(volumeRatio, 0.5, 2.0);
-      }
+    // 3. 資金流向 (15%) — 上漲量佔比，見 [upVolumeShareFloor]
+    if (upVolumeShare != null) {
+      subScores['upVolumeShare'] = _linearMap(
+        upVolumeShare,
+        upVolumeShareFloor,
+        upVolumeShareCeil,
+      );
     }
 
     // 4. 融資變化 (15%) — 近5日融資餘額變動方向+幅度
@@ -208,7 +220,7 @@ class MarketSentimentService {
   /// 趨勢形狀仍正確。
   ///
   /// **依日期 inner-join 對齊**：四個輸入序列來自不同 coverage 的來源
-  /// （漲跌比/成交額經完整日 filter；法人/融資餘額為未 filter 的完整每日），
+  /// （漲跌比/上漲量佔比經完整日 filter；法人/融資餘額為未 filter 的完整每日），
   /// 日期集不同。若按 array index 直接拼接，「index i」會把不同交易日的資料
   /// 混在同一筆情緒分數裡。故先取四序列共同日期、依時序排序後再逐日計分，
   /// 確保每筆分數的四項輸入皆來自同一交易日。
@@ -217,14 +229,14 @@ class MarketSentimentService {
   static List<double> calculateHistoricalScores({
     required List<DatedValue> advanceRatioHistory,
     required List<DatedValue> institutionalNetHistory,
-    required List<DatedValue> turnoverHistory,
+    required List<DatedValue> upVolumeShareHistory,
     required List<DatedValue> marginBalanceHistory,
   }) {
     // 依日期 inner-join：僅保留四序列皆存在的日期，並依時序（oldest→newest）排序。
     final aligned = _innerJoinByDate([
       advanceRatioHistory,
       institutionalNetHistory,
-      turnoverHistory,
+      upVolumeShareHistory,
       marginBalanceHistory,
     ]);
 
@@ -233,7 +245,7 @@ class MarketSentimentService {
 
     final advanceRatio = aligned.map((row) => row[0]).toList();
     final institutional = aligned.map((row) => row[1]).toList();
-    final turnover = aligned.map((row) => row[2]).toList();
+    final upVolumeShare = aligned.map((row) => row[2]).toList();
     final marginBalance = aligned.map((row) => row[3]).toList();
 
     final scores = <double>[];
@@ -248,7 +260,7 @@ class MarketSentimentService {
       final result = calculate(
         advanceDecline: syntheticAd,
         institutionalNetHistory: institutional.sublist(0, i + 1),
-        turnoverHistory: turnover.sublist(0, i + 1),
+        upVolumeShare: upVolumeShare[i],
         marginBalanceHistory: marginBalance.sublist(0, i + 1),
       );
 

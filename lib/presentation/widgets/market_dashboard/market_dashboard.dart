@@ -324,12 +324,12 @@ class _MarketDashboardState extends State<MarketDashboard> {
     final trends = widget.state.historyTrends;
     final advRatioHist = trends.advanceRatio[marketKey];
     final instHist = trends.institutionalTotalNet[marketKey];
-    final turnHist = trends.turnover[marketKey];
+    final upShareHist = trends.upVolumeShare[marketKey];
     final marginHist = trends.marginBalance[marketKey];
 
     if (advRatioHist == null ||
         instHist == null ||
-        turnHist == null ||
+        upShareHist == null ||
         marginHist == null) {
       return [];
     }
@@ -337,7 +337,7 @@ class _MarketDashboardState extends State<MarketDashboard> {
     return MarketSentimentService.calculateHistoricalScores(
       advanceRatioHistory: advRatioHist,
       institutionalNetHistory: instHist,
-      turnoverHistory: turnHist,
+      upVolumeShareHistory: upShareHist,
       marginBalanceHistory: marginHist,
     );
   }

@@ -346,7 +346,7 @@ class _SubScoresGrid extends StatelessWidget {
     const indicators = [
       ('advanceRatio', 'marketOverview.sentiment.advanceRatio'),
       ('institutional', 'marketOverview.sentiment.institutional'),
-      ('volumeMomentum', 'marketOverview.sentiment.volumeMomentum'),
+      ('upVolumeShare', 'marketOverview.sentiment.upVolumeShare'),
       ('marginChange', 'marketOverview.sentiment.marginChange'),
       ('industryBreadth', 'marketOverview.sentiment.industryBreadth'),
     ];

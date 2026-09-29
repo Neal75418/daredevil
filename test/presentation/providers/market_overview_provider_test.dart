@@ -152,7 +152,16 @@ void main() {
       (_) async =>
           <
             String,
-            List<({DateTime date, int advance, int decline, int unchanged})>
+            List<
+              ({
+                DateTime date,
+                int advance,
+                int decline,
+                int unchanged,
+                double upTurnover,
+                double downTurnover,
+              })
+            >
           >{},
     );
   }
@@ -624,18 +633,29 @@ void main() {
       ).thenAnswer(
         (_) async => {
           'TWSE': [
-            (date: testDate, advance: 80, decline: 30, unchanged: 0), // +50
+            (
+              date: testDate,
+              advance: 80,
+              decline: 30,
+              unchanged: 0,
+              upTurnover: 0.0,
+              downTurnover: 0.0,
+            ), // +50
             (
               date: testDate.subtract(const Duration(days: 1)),
               advance: 60,
               decline: 30,
               unchanged: 0,
+              upTurnover: 0.0,
+              downTurnover: 0.0,
             ), // +30
             (
               date: testDate.subtract(const Duration(days: 2)),
               advance: 40,
               decline: 60,
               unchanged: 0,
+              upTurnover: 0.0,
+              downTurnover: 0.0,
             ), // -20
           ],
         },
@@ -652,6 +672,47 @@ void main() {
 
       // 累積 AD 線 oldest→newest：[-20, -20+30=10, 10+50=60]
       expect(state.adLineByMarket['TWSE'], [-20.0, 10.0, 60.0]);
+    });
+
+    test('資金流向：上漲與下跌成交值皆為 0 的日子略過（無法判斷流向）', () async {
+      setupEmptyDefaults();
+      when(
+        () => mockDb.getRecentAdvanceDeclineByMarket(
+          any(),
+          days: any(named: 'days'),
+          minCoverage: any(named: 'minCoverage'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'TWSE': [
+            (
+              date: testDate,
+              advance: 60,
+              decline: 40,
+              unchanged: 0,
+              upTurnover: 600.0,
+              downTurnover: 400.0,
+            ),
+            (
+              date: testDate.subtract(const Duration(days: 1)),
+              advance: 50,
+              decline: 50,
+              unchanged: 0,
+              upTurnover: 0.0,
+              downTurnover: 0.0,
+            ),
+          ],
+        },
+      );
+
+      await container.read(marketOverviewProvider.notifier).loadData();
+
+      final trends = container.read(marketOverviewProvider).historyTrends;
+      expect(trends.advanceRatio['TWSE'], hasLength(2), reason: '漲跌比不受影響');
+      final upShare = trends.upVolumeShare['TWSE']!;
+      expect(upShare, hasLength(1));
+      expect(upShare.single.value, closeTo(0.6, 1e-9));
+      expect(upShare.single.value.isFinite, isTrue);
     });
 
     // ── 自營 streak 改用 dealerSelfNet（null-safe）─────────────
@@ -874,7 +935,14 @@ void main() {
         (_) async => {
           'TWSE': [
             for (var back = 0; back < 8; back++)
-              (date: d(back), advance: 60, decline: 40, unchanged: 0),
+              (
+                date: d(back),
+                advance: 60,
+                decline: 40,
+                unchanged: 0,
+                upTurnover: 600.0,
+                downTurnover: 400.0,
+              ),
           ],
         },
       );
@@ -933,6 +1001,12 @@ void main() {
         trends.advanceRatio['TWSE'],
         hasLength(8),
         reason: 'advanceRatio sparkline 應為完整 8 日',
+      );
+      // 資金流向與漲跌比出自同一次查詢、同一組完整日：600 / (600 + 400)
+      expect(trends.upVolumeShare['TWSE'], hasLength(8));
+      expect(
+        trends.upVolumeShare['TWSE']!.map((e) => e.value),
+        everyElement(closeTo(0.6, 1e-9)),
       );
       expect(
         trends.institutionalTotalNet['TWSE'],

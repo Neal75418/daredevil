@@ -244,7 +244,7 @@
       "greedLabel": "Greed",
       "advanceRatio": "Adv/Dec",
       "institutional": "Institutional",
-      "volumeMomentum": "Volume",
+      "upVolumeShare": "Money flow",
       "marginChange": "Margin Chg",
       "industryBreadth": "Breadth",
       "trend": "Trend",

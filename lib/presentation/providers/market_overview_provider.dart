@@ -261,6 +261,12 @@ class MarketOverviewState {
 // 大盤總覽 Notifier
 // ==================================================
 
+/// 漲跌比與資金流向（上漲量佔比）歷史——同一次查詢、同一組完整日
+typedef _BreadthHistory = ({
+  Map<String, List<DatedValue>> advanceRatio,
+  Map<String, List<DatedValue>> upVolumeShare,
+});
+
 /// [MarketOverviewNotifier.loadData] 三組 typed record `.wait` 的結果快照。
 ///
 /// 分組與 loadData 的載入順序一一對應（record wait 上限 9 元素故分三組）；
@@ -290,7 +296,7 @@ typedef _OverviewSnapshot = (
   ),
   (
     Map<String, ({List<DatedValue> margin, List<double> short})>,
-    Map<String, List<DatedValue>>,
+    _BreadthHistory,
     ({Map<String, List<ChipAnomaly>> byMarket, List<String> failedDetectors}),
     Map<String, List<double>>,
     Map<String, ({int newHighs, int newLows})>,
@@ -515,7 +521,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       ),
       (
         marginHistory,
-        advRatioHistory,
+        breadthHistory,
         chipAnomalies,
         rawStageHistory,
         newHighLowByMarket,
@@ -606,7 +612,8 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
         shortBalance: {
           for (final e in marginHistory.entries) e.key: e.value.short,
         },
-        advanceRatio: advRatioHistory,
+        advanceRatio: breadthHistory.advanceRatio,
+        upVolumeShare: breadthHistory.upVolumeShare,
       ),
       chipAnomaliesByMarket: chipAnomalies.byMarket,
       chipAnomalyFailedDetectors: chipAnomalies.failedDetectors,
@@ -1297,7 +1304,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     }
   }
 
-  /// 載入成交額 30 日歷史（供趨勢 bar chart + 情緒對齊）
+  /// 載入成交額 30 日歷史（供成交額趨勢 bar chart）
   ///
   /// 傳入 days: 30 覆蓋預設的 5 天，保留日期並反轉為 oldest→newest。
   Future<Map<String, List<DatedValue>>> _loadTurnoverHistoryByMarket(
@@ -1350,28 +1357,44 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     }
   }
 
-  /// 載入漲跌比 30 日歷史（供趨勢 sparkline + 情緒對齊）
+  /// 載入漲跌比與資金流向（上漲量佔比）30 日歷史（供趨勢 sparkline + 情緒對齊）
   ///
-  /// 計算 advance / (advance + decline + unchanged)，範圍 0~1。
-  /// 保留日期供 [MarketSentimentService.calculateHistoricalScores] 依日期對齊。
-  Future<Map<String, List<DatedValue>>> _loadAdvanceDeclineHistoryByMarket(
+  /// 漲跌比計算 advance / (advance + decline + unchanged)，範圍 0~1；資金流向
+  /// 計算上漲量佔比 upTurnover / (upTurnover + downTurnover)，當日上漲與下跌
+  /// 成交值皆為 0 則略過該日（無法判斷流向）。兩者出自同一次查詢、同一組
+  /// 完整日，保留日期供 [MarketSentimentService.calculateHistoricalScores]
+  /// 依日期對齊。
+  Future<_BreadthHistory> _loadAdvanceDeclineHistoryByMarket(
     DateTime date, {
     required Set<String> failedSections,
   }) async {
     try {
       final raw = await _db.getRecentAdvanceDeclineByMarket(date);
-      final result = <String, List<DatedValue>>{};
+      final advanceRatio = <String, List<DatedValue>>{};
+      final upVolumeShare = <String, List<DatedValue>>{};
       for (final entry in raw.entries) {
-        result[entry.key] = entry.value.reversed.map<DatedValue>((e) {
+        final days = entry.value.reversed;
+        advanceRatio[entry.key] = days.map<DatedValue>((e) {
           final total = e.advance + e.decline + e.unchanged;
           return (date: e.date, value: total > 0 ? e.advance / total : 0.5);
         }).toList();
+        upVolumeShare[entry.key] = [
+          for (final e in days)
+            if (e.upTurnover + e.downTurnover > 0)
+              (
+                date: e.date,
+                value: e.upTurnover / (e.upTurnover + e.downTurnover),
+              ),
+        ];
       }
-      return result;
+      return (advanceRatio: advanceRatio, upVolumeShare: upVolumeShare);
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入漲跌比歷史趨勢失敗', e);
       failedSections.add('advanceRatioHistory');
-      return {};
+      return (
+        advanceRatio: const <String, List<DatedValue>>{},
+        upVolumeShare: const <String, List<DatedValue>>{},
+      );
     }
   }
 

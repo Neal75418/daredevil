@@ -570,6 +570,83 @@ void main() {
         expect(result['TWSE']!.length, 1, reason: '半套日應被濾除');
         expect(result['TWSE']!.first.date, today);
       });
+
+      test('上漲／下跌股成交值（close × volume），平盤與缺量不計', () async {
+        await db.upsertStocks([
+          StockMasterCompanion.insert(
+            symbol: '2454',
+            name: '聯發科',
+            market: 'TWSE',
+          ),
+          StockMasterCompanion.insert(
+            symbol: '2412',
+            name: '中華電',
+            market: 'TWSE',
+          ),
+        ]);
+        await db.insertPrices([
+          DailyPriceCompanion.insert(
+            symbol: '2330',
+            date: today,
+            close: const Value(100.0),
+            volume: const Value(1000),
+            priceChange: const Value(1.0), // 上漲：100,000
+          ),
+          DailyPriceCompanion.insert(
+            symbol: '2317',
+            date: today,
+            close: const Value(50.0),
+            volume: const Value(600),
+            priceChange: const Value(-1.0), // 下跌：30,000
+          ),
+          DailyPriceCompanion.insert(
+            symbol: '2454',
+            date: today,
+            close: const Value(80.0),
+            volume: const Value(500),
+            priceChange: const Value(0.0), // 平盤：不計
+          ),
+          DailyPriceCompanion.insert(
+            symbol: '2412',
+            date: today,
+            close: const Value(120.0),
+            priceChange: const Value(2.0), // 上漲但缺量：不計成交值
+          ),
+        ]);
+
+        final result = await db.getRecentAdvanceDeclineByMarket(
+          today,
+          days: 1,
+          minCoverage: 1,
+        );
+        final row = result['TWSE']!.first;
+
+        expect(row.upTurnover, 100000);
+        expect(row.downTurnover, 30000);
+        expect(row.advance, 2, reason: '家數仍計入缺量的上漲股');
+      });
+
+      test('當日無上漲股時上漲成交值為 0（SQLite 整數 0 仍讀成 double）', () async {
+        await db.insertPrices([
+          DailyPriceCompanion.insert(
+            symbol: '2330',
+            date: today,
+            close: const Value(100.0),
+            volume: const Value(1000),
+            priceChange: const Value(-1.0),
+          ),
+        ]);
+
+        final result = await db.getRecentAdvanceDeclineByMarket(
+          today,
+          days: 1,
+          minCoverage: 1,
+        );
+        final row = result['TWSE']!.first;
+
+        expect(row.upTurnover, 0);
+        expect(row.downTurnover, 100000);
+      });
     });
 
     // ── getNewHighLowCountsByMarket ────────────────────────

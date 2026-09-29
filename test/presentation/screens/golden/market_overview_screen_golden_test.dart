@@ -50,11 +50,8 @@ final _testMarket = MarketOverviewState(
     MarketCode.tpex: AdvanceDecline(advance: 380, decline: 402, unchanged: 88),
   },
   historyTrends: HistoryTrends(
-    turnover: {
-      MarketCode.twse: [
-        (date: DateTime(2026, 3, 9), value: 3500.0),
-        (date: DateTime(2026, 3, 10), value: 3200.0),
-      ],
+    upVolumeShare: {
+      MarketCode.twse: [(date: DateTime(2026, 3, 10), value: 0.4)],
     },
   ),
 );

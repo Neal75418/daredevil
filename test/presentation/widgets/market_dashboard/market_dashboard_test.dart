@@ -40,15 +40,9 @@ void main() {
         'TPEx': const AdvanceDecline(advance: 100, decline: 300),
       },
       historyTrends: HistoryTrends(
-        turnover: {
-          'TWSE': [
-            (date: DateTime(2026, 2, 11), value: 1000.0),
-            (date: DateTime(2026, 2, 12), value: 1200.0),
-          ],
-          'TPEx': [
-            (date: DateTime(2026, 2, 11), value: 100.0),
-            (date: DateTime(2026, 2, 12), value: 90.0),
-          ],
+        upVolumeShare: {
+          'TWSE': [(date: DateTime(2026, 2, 13), value: 0.7)],
+          'TPEx': [(date: DateTime(2026, 2, 13), value: 0.3)],
         },
       ),
       dataDate: DateTime(2026, 2, 13),
@@ -356,11 +350,8 @@ void main() {
           'TPEx': const AdvanceDecline(advance: 100, decline: 300),
         },
         historyTrends: HistoryTrends(
-          turnover: {
-            'TWSE': [
-              (date: DateTime(2026, 2, 11), value: 1000.0),
-              (date: DateTime(2026, 2, 12), value: 1200.0),
-            ],
+          upVolumeShare: {
+            'TWSE': [(date: DateTime(2026, 2, 13), value: 0.7)],
             // 'TPEx' 缺席 → 資料不足，_computeSentiment 應回傳 null
           },
         ),

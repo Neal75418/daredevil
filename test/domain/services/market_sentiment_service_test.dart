@@ -10,14 +10,14 @@ void main() {
     // - advanceRatio: ratio 0.5（分母不含平盤）→
     //   _linearMap(0.5, 0.15, 0.80) = 53.846…
     // - institutional: 常數序列 std=0、last>0 → 75.0
-    // - volumeMomentum: today/avg = 1.0 → _linearMap(1.0, 0.5, 2.0) = 33.333…
+    // - upVolumeShare: 0.5（資金流向平衡）→ _linearMap(0.5, 0.15, 0.85) = 50.0
     // - marginChange: 無變動 changePct=0 → _linearMap(0, -0.05, 0.05) = 50.0
     // - industryBreadth: 2 產業 1 上漲 → 50.0
     MarketSentiment computeFixedInput() {
       return MarketSentimentService.calculate(
         advanceDecline: const AdvanceDecline(advance: 500, decline: 500),
         institutionalNetHistory: const [100, 100, 100, 100, 100],
-        turnoverHistory: const [100, 100, 100, 100, 100, 100],
+        upVolumeShare: 0.5,
         marginBalanceHistory: const [100, 100, 100, 100, 100],
         industries: const [
           IndustrySummary(
@@ -47,7 +47,7 @@ void main() {
         containsAll(<String>[
           'advanceRatio',
           'institutional',
-          'volumeMomentum',
+          'upVolumeShare',
           'marginChange',
           'industryBreadth',
         ]),
@@ -61,24 +61,25 @@ void main() {
 
       // 5 項全到齊 ⇒ totalWeight=1.0 ⇒ 綜合分數 == 加權平均（無正規化放大）。
       // 以已知子分數手算加權平均驗證權重總和為 1.0：
-      // 0.35*(35/65*100) + 0.25*75 + 0.15*(100/3) + 0.15*50 + 0.10*50
+      // 0.35*(35/65*100) + 0.25*75 + 0.15*50 + 0.15*50 + 0.10*50
       const expected =
           0.35 * (35.0 / 65.0 * 100.0) +
           0.25 * 75.0 +
-          0.15 * (100.0 / 3.0) +
+          0.15 * 50.0 +
           0.15 * 50.0 +
           0.10 * 50.0;
 
       expect(result.score, closeTo(expected, 1e-9));
     });
 
-    test('固定輸入回歸：綜合分數 = 55.096…', () {
+    test('固定輸入回歸：綜合分數 = 57.596…', () {
       final result = computeFixedInput();
 
       // 定錨值。歷次變動：權重重分配（advanceRatio 0.25→0.35、移除
       // limitRatio 0.10）→ 53.75；漲跌比分母排除平盤 + 下界 0.20→0.15
-      // （2026-08-29 稽核 H2）→ 55.096…
-      expect(result.score, closeTo(55.09615384615385, 1e-9));
+      // （2026-08-29 稽核 H2）→ 55.096…；量能改為上漲量佔比、0.5 讀 50
+      // （原量比 1.0 讀 33.3）→ 57.596…
+      expect(result.score, closeTo(57.59615384615385, 1e-9));
       expect(result.level, SentimentLevel.neutral);
     });
 
@@ -115,7 +116,6 @@ void main() {
       final score = MarketSentimentService.calculate(
         advanceDecline: withFlats,
         institutionalNetHistory: const [],
-        turnoverHistory: const [],
         marginBalanceHistory: const [],
       ).subScores['advanceRatio']!;
 
@@ -130,7 +130,6 @@ void main() {
           unchanged: unchanged,
         ),
         institutionalNetHistory: const [],
-        turnoverHistory: const [],
         marginBalanceHistory: const [],
       ).subScores['advanceRatio']!;
 
@@ -146,7 +145,6 @@ void main() {
       final score = MarketSentimentService.calculate(
         advanceDecline: const AdvanceDecline(advance: 481, decline: 519),
         institutionalNetHistory: const [],
-        turnoverHistory: const [],
         marginBalanceHistory: const [],
       ).subScores['advanceRatio']!;
 
@@ -164,7 +162,6 @@ void main() {
       final r = MarketSentimentService.calculate(
         advanceDecline: const AdvanceDecline(unchanged: 900),
         institutionalNetHistory: const [100, 100, 100, 100, 100],
-        turnoverHistory: const [],
         marginBalanceHistory: const [],
       );
       expect(r.subScores.containsKey('advanceRatio'), isFalse);
@@ -175,7 +172,6 @@ void main() {
       double scoreOf(int a, int d) => MarketSentimentService.calculate(
         advanceDecline: AdvanceDecline(advance: a, decline: d),
         institutionalNetHistory: const [],
-        turnoverHistory: const [],
         marginBalanceHistory: const [],
       ).subScores['advanceRatio']!;
 
@@ -184,11 +180,10 @@ void main() {
     });
 
     test('子指標缺漏時有效權重自動正規化', () {
-      // 僅提供漲跌比與法人，缺量能/融資/產業
+      // 僅提供漲跌比與法人，缺資金流向/融資/產業
       final result = MarketSentimentService.calculate(
         advanceDecline: const AdvanceDecline(advance: 800, decline: 200),
         institutionalNetHistory: const [100, 100, 100, 100, 100],
-        turnoverHistory: const [],
         marginBalanceHistory: const [],
       );
 
@@ -197,6 +192,43 @@ void main() {
       // (0.35*100 + 0.25*75) / 0.60 = (35 + 18.75) / 0.60 = 89.5833…
       expect(result.subScores.length, 2);
       expect(result.score, closeTo((0.35 * 100 + 0.25 * 75) / 0.60, 1e-9));
+    });
+  });
+
+  // ================================================================
+  // 資金流向（上漲量佔比）
+  //
+  // 取代原「今日成交額 / 5 日均額」：量比與市場方向無關（實測 624 個
+  // 市場日相關係數 r = −0.03；量比 ≥ 1.3 的日子大跌、大漲各約 28%），
+  // 大跌爆量也被讀成貪婪。上漲量佔比 = 上漲股成交值 / (上漲 + 下跌股成交值)，
+  // 量的是資金往哪邊流；0.5 為資金流向平衡。
+  // ================================================================
+  group('MarketSentimentService.calculate — 資金流向（上漲量佔比）', () {
+    double? scoreOf(double? share) => MarketSentimentService.calculate(
+      advanceDecline: const AdvanceDecline(advance: 500, decline: 500),
+      institutionalNetHistory: const [],
+      upVolumeShare: share,
+      marginBalanceHistory: const [],
+    ).subScores['upVolumeShare'];
+
+    test('資金流向平衡（0.5）讀中性 50 分', () {
+      expect(scoreOf(0.5), closeTo(50, 1e-9));
+    });
+
+    test('方向性：資金流向上漲股偏貪婪、流向下跌股偏恐慌', () {
+      expect(scoreOf(0.8), greaterThan(60));
+      expect(scoreOf(0.2), lessThan(40));
+    });
+
+    test('上下界（0.15／0.85）飽和', () {
+      expect(scoreOf(MarketSentimentService.upVolumeShareFloor), 0);
+      expect(scoreOf(MarketSentimentService.upVolumeShareCeil), 100);
+      expect(scoreOf(0.05), 0);
+      expect(scoreOf(0.95), 100);
+    });
+
+    test('未提供時整條缺席，不得算成 0 分', () {
+      expect(scoreOf(null), isNull);
     });
   });
 
@@ -222,15 +254,15 @@ void main() {
       (day: 6, value: 0.70),
       (day: 7, value: 0.75),
     ]);
-    final turnoverCommon = series(const [
-      (day: 0, value: 1000),
-      (day: 1, value: 1100),
-      (day: 2, value: 1200),
-      (day: 3, value: 1300),
-      (day: 4, value: 1250),
-      (day: 5, value: 1400),
-      (day: 6, value: 1500),
-      (day: 7, value: 1600),
+    final upShareCommon = series(const [
+      (day: 0, value: 0.30),
+      (day: 1, value: 0.35),
+      (day: 2, value: 0.45),
+      (day: 3, value: 0.50),
+      (day: 4, value: 0.40),
+      (day: 5, value: 0.60),
+      (day: 6, value: 0.70),
+      (day: 7, value: 0.80),
     ]);
     final institutionalCommon = series(const [
       (day: 0, value: 50),
@@ -257,7 +289,7 @@ void main() {
       final scores = MarketSentimentService.calculateHistoricalScores(
         advanceRatioHistory: advanceRatioCommon,
         institutionalNetHistory: institutionalCommon,
-        turnoverHistory: turnoverCommon,
+        upVolumeShareHistory: upShareCommon,
         marginBalanceHistory: marginCommon,
       );
 
@@ -267,11 +299,11 @@ void main() {
     });
 
     test('日期錯位：法人/融資多出 2 個較舊日，結果只用共同日（排除錯位日）', () {
-      // institutional 與 margin 在前面多 2 個 advanceRatio/turnover 沒有的舊日。
+      // institutional 與 margin 在前面多 2 個 advanceRatio/upVolumeShare 沒有的舊日。
       // 若仍按 array index 拼接，這 2 個舊日會把不同交易日的資料混進同一筆分數。
       final institutionalExtra = series(const [
-        (day: -2, value: 999), // advanceRatio/turnover 無此日
-        (day: -1, value: 888), // advanceRatio/turnover 無此日
+        (day: -2, value: 999), // advanceRatio/upVolumeShare 無此日
+        (day: -1, value: 888), // advanceRatio/upVolumeShare 無此日
         (day: 0, value: 50),
         (day: 1, value: 80),
         (day: 2, value: -20),
@@ -282,8 +314,8 @@ void main() {
         (day: 7, value: 100),
       ]);
       final marginExtra = series(const [
-        (day: -2, value: 1), // advanceRatio/turnover 無此日
-        (day: -1, value: 2), // advanceRatio/turnover 無此日
+        (day: -2, value: 1), // advanceRatio/upVolumeShare 無此日
+        (day: -1, value: 2), // advanceRatio/upVolumeShare 無此日
         (day: 0, value: 10000),
         (day: 1, value: 10100),
         (day: 2, value: 10050),
@@ -297,7 +329,7 @@ void main() {
       final misaligned = MarketSentimentService.calculateHistoricalScores(
         advanceRatioHistory: advanceRatioCommon,
         institutionalNetHistory: institutionalExtra,
-        turnoverHistory: turnoverCommon,
+        upVolumeShareHistory: upShareCommon,
         marginBalanceHistory: marginExtra,
       );
 
@@ -305,7 +337,7 @@ void main() {
       final alignedReference = MarketSentimentService.calculateHistoricalScores(
         advanceRatioHistory: advanceRatioCommon,
         institutionalNetHistory: institutionalCommon,
-        turnoverHistory: turnoverCommon,
+        upVolumeShareHistory: upShareCommon,
         marginBalanceHistory: marginCommon,
       );
 
@@ -319,18 +351,18 @@ void main() {
 
     test('傳入順序被打亂時仍依日期重排（不依賴輸入順序）', () {
       // 將其中一個序列順序反轉（newest→oldest），結果應與正常順序一致。
-      final shuffledTurnover = turnoverCommon.reversed.toList();
+      final shuffledUpShare = upShareCommon.reversed.toList();
 
       final fromShuffled = MarketSentimentService.calculateHistoricalScores(
         advanceRatioHistory: advanceRatioCommon,
         institutionalNetHistory: institutionalCommon,
-        turnoverHistory: shuffledTurnover,
+        upVolumeShareHistory: shuffledUpShare,
         marginBalanceHistory: marginCommon,
       );
       final fromOrdered = MarketSentimentService.calculateHistoricalScores(
         advanceRatioHistory: advanceRatioCommon,
         institutionalNetHistory: institutionalCommon,
-        turnoverHistory: turnoverCommon,
+        upVolumeShareHistory: upShareCommon,
         marginBalanceHistory: marginCommon,
       );
 
@@ -338,6 +370,28 @@ void main() {
       for (var i = 0; i < fromShuffled.length; i++) {
         expect(fromShuffled[i], closeTo(fromOrdered[i], 1e-9));
       }
+    });
+
+    test('資金流向逐日取當天的值：只改最後一天，只有最後一筆分數變', () {
+      List<DatedValue> withLast(double v) => [
+        ...upShareCommon.take(upShareCommon.length - 1),
+        (date: upShareCommon.last.date, value: v),
+      ];
+      List<double> scoresWith(double lastShare) =>
+          MarketSentimentService.calculateHistoricalScores(
+            advanceRatioHistory: advanceRatioCommon,
+            institutionalNetHistory: institutionalCommon,
+            upVolumeShareHistory: withLast(lastShare),
+            marginBalanceHistory: marginCommon,
+          );
+
+      final low = scoresWith(MarketSentimentService.upVolumeShareFloor);
+      final high = scoresWith(MarketSentimentService.upVolumeShareCeil);
+
+      for (var i = 0; i < low.length - 1; i++) {
+        expect(low[i], closeTo(high[i], 1e-9), reason: '第 $i 筆不含最後一天');
+      }
+      expect(high.last, greaterThan(low.last));
     });
 
     test('共同日少於 5 天時回傳空列表（Z-score 樣本不足）', () {
@@ -354,11 +408,11 @@ void main() {
         (day: 2, value: 30),
         (day: 3, value: 25),
       ]);
-      final turnShort = series(const [
-        (day: 0, value: 100),
-        (day: 1, value: 110),
-        (day: 2, value: 120),
-        (day: 3, value: 115),
+      final upShareShort = series(const [
+        (day: 0, value: 0.40),
+        (day: 1, value: 0.45),
+        (day: 2, value: 0.55),
+        (day: 3, value: 0.50),
       ]);
       final marginShort = series(const [
         (day: 0, value: 1000),
@@ -370,7 +424,7 @@ void main() {
       final scores = MarketSentimentService.calculateHistoricalScores(
         advanceRatioHistory: adShort,
         institutionalNetHistory: instShort,
-        turnoverHistory: turnShort,
+        upVolumeShareHistory: upShareShort,
         marginBalanceHistory: marginShort,
       );
 
@@ -387,7 +441,7 @@ void main() {
           (day: 103, value: 4),
           (day: 104, value: 5),
         ]),
-        turnoverHistory: turnoverCommon,
+        upVolumeShareHistory: upShareCommon,
         marginBalanceHistory: marginCommon,
       );
 

@@ -54,23 +54,21 @@ void main() {
       final s = const MarketOverviewState().copyWith(
         advanceDeclineByMarket: {MarketCode.twse: const AdvanceDecline()},
         historyTrends: HistoryTrends(
-          turnover: {
-            MarketCode.twse: _series([1, 2]),
+          upVolumeShare: {
+            MarketCode.twse: _series([0.5, 0.6]),
           },
         ),
       );
       expect(computeMarketSentiment(s, MarketCode.twse), isNull);
     });
-    test('法人 <5 筆且成交額 <2 筆 → null', () {
+    test('法人 <5 筆且無資金流向 → null', () {
       final s = const MarketOverviewState().copyWith(
         advanceDeclineByMarket: {MarketCode.twse: ad},
         historyTrends: HistoryTrends(
           institutionalTotalNet: {
             MarketCode.twse: _series([1, 2, 3, 4]),
           },
-          turnover: {
-            MarketCode.twse: _series([1]),
-          },
+          upVolumeShare: {MarketCode.twse: const []},
         ),
       );
       expect(computeMarketSentiment(s, MarketCode.twse), isNull);
@@ -87,23 +85,104 @@ void main() {
       expect(computeMarketSentiment(s, MarketCode.twse), isNotNull);
     });
 
-    test('無法人、成交額剛好 2 筆 → 算得出（成交額路徑）', () {
+    test('無法人、資金流向 1 筆 → 算得出（資金流向路徑）', () {
       final s = const MarketOverviewState().copyWith(
         advanceDeclineByMarket: {MarketCode.twse: ad},
         historyTrends: HistoryTrends(
-          turnover: {
-            MarketCode.twse: _series([100, 90]),
+          upVolumeShare: {
+            MarketCode.twse: _series([0.6]),
           },
         ),
       );
       expect(computeMarketSentiment(s, MarketCode.twse), isNotNull);
     });
 
+    test('資金流向取資料日當天的值', () {
+      final s = const MarketOverviewState().copyWith(
+        advanceDeclineByMarket: {MarketCode.twse: ad},
+        dataDate: DateTime(2026, 9, 2),
+        historyTrends: HistoryTrends(
+          upVolumeShare: {
+            MarketCode.twse: _series([0.3, 0.8]), // 9/1、9/2
+          },
+        ),
+      );
+      final score = computeMarketSentiment(
+        s,
+        MarketCode.twse,
+      )!.subScores['upVolumeShare'];
+      expect(
+        score,
+        MarketSentimentService.calculate(
+          advanceDecline: ad,
+          institutionalNetHistory: const [],
+          upVolumeShare: 0.8,
+          marginBalanceHistory: const [],
+        ).subScores['upVolumeShare'],
+      );
+    });
+
+    test('漲跌家數回退到前一交易日時，資金流向取同一天', () {
+      final s = const MarketOverviewState().copyWith(
+        advanceDeclineByMarket: {MarketCode.twse: ad},
+        advanceDeclineStaleDates: {MarketCode.twse: DateTime(2026, 9, 2)},
+        dataDate: DateTime(2026, 9, 3),
+        historyTrends: HistoryTrends(
+          upVolumeShare: {
+            MarketCode.twse: _series([0.3, 0.8]), // 9/1、9/2
+          },
+        ),
+      );
+      final sentiment = computeMarketSentiment(s, MarketCode.twse)!;
+      expect(
+        sentiment.subScores['upVolumeShare'],
+        MarketSentimentService.calculate(
+          advanceDecline: ad,
+          institutionalNetHistory: const [],
+          upVolumeShare: 0.8,
+          marginBalanceHistory: const [],
+        ).subScores['upVolumeShare'],
+      );
+    });
+
+    test('法人不足且資金流向對不上日期 → 資料不足（不只靠漲跌比出分）', () {
+      final s = const MarketOverviewState().copyWith(
+        advanceDeclineByMarket: {MarketCode.twse: ad},
+        dataDate: DateTime(2026, 9, 3),
+        historyTrends: HistoryTrends(
+          institutionalTotalNet: {
+            MarketCode.twse: _series([1, 2, 3, 4]),
+          },
+          upVolumeShare: {
+            MarketCode.twse: _series([0.3, 0.8]), // 只到 9/2
+          },
+        ),
+      );
+      expect(computeMarketSentiment(s, MarketCode.twse), isNull);
+    });
+
+    test('資料日當天的資金流向缺漏時整條缺席，不拿前一交易日頂替', () {
+      final s = const MarketOverviewState().copyWith(
+        advanceDeclineByMarket: {MarketCode.twse: ad},
+        dataDate: DateTime(2026, 9, 3),
+        historyTrends: HistoryTrends(
+          institutionalTotalNet: {
+            MarketCode.twse: _series([1, 2, 3, 4, 5]),
+          },
+          upVolumeShare: {
+            MarketCode.twse: _series([0.3, 0.8]), // 只到 9/2
+          },
+        ),
+      );
+      final sentiment = computeMarketSentiment(s, MarketCode.twse)!;
+      expect(sentiment.subScores.containsKey('upVolumeShare'), isFalse);
+    });
+
     // 每條輸入都填不同數值，參數接錯（例如法人傳成融資）或漏傳都會讓
     // 子分數對不上
     test('五條輸入各自送進 calculate 的對應參數', () {
       final inst = [-50.0, 30.0, -20.0, 80.0, -120.0, 60.0];
-      final turnover = [100.0, 120.0, 90.0, 140.0];
+      final upShare = [0.4, 0.55, 0.7];
       final margin = [700.0, 705.0, 698.0, 710.0];
       const industries = [
         IndustrySummary(
@@ -133,14 +212,14 @@ void main() {
         industrySummaryByMarket: {MarketCode.twse: industries},
         historyTrends: HistoryTrends(
           institutionalTotalNet: {MarketCode.twse: _series(inst)},
-          turnover: {MarketCode.twse: _series(turnover)},
+          upVolumeShare: {MarketCode.twse: _series(upShare)},
           marginBalance: {MarketCode.twse: _series(margin)},
         ),
       );
       final expected = MarketSentimentService.calculate(
         advanceDecline: ad,
         institutionalNetHistory: inst,
-        turnoverHistory: turnover,
+        upVolumeShare: upShare.last,
         marginBalanceHistory: margin,
         industries: industries,
       );

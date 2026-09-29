@@ -43,11 +43,8 @@ final _withData = MarketOverviewState(
     MarketCode.twse: AdvanceDecline(advance: 408, decline: 667, unchanged: 149),
   },
   historyTrends: HistoryTrends(
-    turnover: {
-      MarketCode.twse: [
-        (date: DateTime(2026, 9, 23), value: 100.0),
-        (date: DateTime(2026, 9, 24), value: 90.0),
-      ],
+    upVolumeShare: {
+      MarketCode.twse: [(date: DateTime(2026, 9, 24), value: 0.4)],
     },
   ),
 );

@@ -25,7 +25,7 @@ void main() {
       subScores: {
         'advanceRatio': 59.0,
         'institutional': 62.0,
-        'volumeMomentum': 42.0,
+        'upVolumeShare': 42.0,
         'marginChange': 47.0,
         'industryBreadth': 68.0,
       },
@@ -230,7 +230,7 @@ void main() {
         level: SentimentLevel.neutral,
         subScores: {
           'advanceRatio': 59.0,
-          'volumeMomentum': 42.0,
+          'upVolumeShare': 42.0,
           'marginChange': 47.0,
           'industryBreadth': 68.0,
         },
