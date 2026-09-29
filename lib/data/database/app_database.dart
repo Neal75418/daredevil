@@ -98,6 +98,7 @@ import 'package:daredevil/data/database/dao/valuation_dao.dart';
     StockValuation,
     // 股利歷史
     DividendHistory,
+    DividendDistribution,
     // 融資融券資料（Phase 4）
     MarginTrading,
     // 風險控管資料（Killer Features）
@@ -214,6 +215,7 @@ class AppDatabase extends $AppDatabase
       await _ensurePinnedThesisSchema();
       await _ensureQuarterlyReportSchema();
       await _ensureMarketDayFetchSchema();
+      await _ensureDividendDistributionSchema();
       await ensurePriceAlertManagedByColumn();
       await _ensureRetiredSchemaDropped();
       await ensureInsiderTransferPk();
@@ -357,6 +359,15 @@ class AppDatabase extends $AppDatabase
   /// CREATE TABLE IF NOT EXISTS：既有 DB 冪等補建，新裝機由 createAll 先建好。
   Future<void> _ensureMarketDayFetchSchema() async {
     await Migrator(this).createTable(marketDayFetch);
+  }
+
+  /// 股利配發表（2026-09-29，additive）。
+  ///
+  /// 沿 [_ensureMarketDayFetchSchema] 先例：**不 bump fingerprint**。指紋
+  /// bump 會 wipe 全部行情表，為加一張新表付這代價不成比例。createTable＝
+  /// CREATE TABLE IF NOT EXISTS：既有 DB 冪等補建，新裝機由 createAll 先建好。
+  Future<void> _ensureDividendDistributionSchema() async {
+    await Migrator(this).createTable(dividendDistribution);
   }
 
   /// `price_alert` 補 `managed_by` 欄（2026-08-16）。

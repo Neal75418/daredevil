@@ -219,6 +219,33 @@ void main() {
       });
     });
 
+    group('parseRocDateWithUnits（TWT49U「114年03月18日」）', () {
+      test('解析帶年月日單位的民國日期', () {
+        expect(
+          TwParseUtils.parseRocDateWithUnits('114年03月18日'),
+          DateTime(2025, 3, 18),
+        );
+      });
+
+      test('前後空白可容忍', () {
+        expect(
+          TwParseUtils.parseRocDateWithUnits(' 110年01月13日 '),
+          DateTime(2021, 1, 13),
+        );
+      });
+
+      test('月日越界（2/30）回 null，不被 DateTime 正規化成 3/2', () {
+        expect(TwParseUtils.parseRocDateWithUnits('114年02月30日'), isNull);
+      });
+
+      test('其他格式與空值回 null', () {
+        expect(TwParseUtils.parseRocDateWithUnits('114/03/18'), isNull);
+        expect(TwParseUtils.parseRocDateWithUnits('1140318'), isNull);
+        expect(TwParseUtils.parseRocDateWithUnits(''), isNull);
+        expect(TwParseUtils.parseRocDateWithUnits(null), isNull);
+      });
+    });
+
     group('toRocDateString', () {
       test('converts AD to ROC format', () {
         final result = TwParseUtils.toRocDateString(DateTime(2025, 1, 24));

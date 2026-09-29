@@ -45,6 +45,15 @@ abstract final class ApiEndpoints {
   static const String twseExRightPreannouncement =
       'https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL';
 
+  /// TWSE 上市除權除息計算結果表：一次除權息一列、可查歷史區間（2018 年起
+  /// 實測可用）。只給「權值+息值」合計，「權」「權息」列以
+  /// [twseExRightDetail] 拆開。
+  static const String twseExRightResults = '/rwd/zh/exRight/TWT49U';
+
+  /// TWSE 除權除息計算結果明細（單一股票、單一除權息日）：每股現金股利、
+  /// 每千股無償配股、現金增資
+  static const String twseExRightDetail = '/rwd/zh/exRight/TWT49UDetail';
+
   /// TWSE 停資停券預告表（openapi BFI84U）
   static const String twseShortSuspension =
       'https://openapi.twse.com.tw/v1/exchangeReport/BFI84U';
@@ -158,6 +167,10 @@ abstract final class ApiEndpoints {
   /// TPEx 上櫃除權除息預告表——帶確定除權息交易日
   static const String tpexExRightPreannouncement =
       '$tpexOpenApiBaseUrl/v1/tpex_exright_prepost';
+
+  /// TPEx 上櫃除權除息計算結果：一次除權息一列、可查歷史區間，現金股利
+  /// 與每仟股無償配股分欄
+  static const String tpexExRightResults = '/www/zh-tw/bulletin/exDailyQ';
 
   /// 上櫃估值資料（本益比、股價淨值比、殖利率）- OpenAPI
   /// 回傳 JSON 陣列，每筆含 SecuritiesCompanyCode, PriceEarningRatio, PriceBookRatio, YieldRatio

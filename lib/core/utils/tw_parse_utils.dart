@@ -127,6 +127,28 @@ abstract final class TwParseUtils {
     return date;
   }
 
+  /// 解析帶「年月日」單位的民國日期（例如 "114年03月18日"，TWSE 除權除息
+  /// 計算結果表 TWT49U 的資料日期）。
+  ///
+  /// 包含完整日期驗證。無效日期時回傳 null。
+  static DateTime? parseRocDateWithUnits(String? dateStr) {
+    final match = RegExp(
+      r'^(\d{2,3})年(\d{1,2})月(\d{1,2})日$',
+    ).firstMatch(dateStr?.trim() ?? '');
+    if (match == null) return null;
+
+    final rocYear = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    if (rocYear <= 0 || month < 1 || month > 12 || day < 1 || day > 31) {
+      return null;
+    }
+
+    final date = DateTime(rocYear + ApiConfig.rocYearOffset, month, day);
+    if (date.month != month || date.day != day) return null;
+    return date;
+  }
+
   /// 將 DateTime 轉為民國日期字串（格式: "114/01/24"）
   static String toRocDateString(DateTime date) {
     final rocYear = date.year - ApiConfig.rocYearOffset;

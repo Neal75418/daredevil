@@ -11,6 +11,7 @@ import 'package:daredevil/core/utils/lru_cache.dart';
 import 'package:daredevil/core/utils/tw_parse_utils.dart';
 import 'package:daredevil/data/models/tpex/models.dart';
 import 'package:daredevil/data/models/twse/exright_preannouncement.dart';
+import 'package:daredevil/data/models/twse/exright_result.dart';
 import 'package:daredevil/data/models/twse/market_wide_financial.dart';
 import 'package:daredevil/data/models/twse/quarterly_report_entry.dart';
 import 'package:daredevil/data/models/twse/twse_market_index.dart';
@@ -690,6 +691,120 @@ class TpexClient {
       AppLogger.info(_tag, '除權息預告: ${results.length} 筆');
       return results;
     });
+  }
+
+  /// 上櫃除權除息計算結果（exDailyQ）：[startDate]～[endDate] 每次除權息一列
+  ///
+  /// 回應不可信（區間與請求不符、筆數與 totalCount 不符、欄位缺漏）時拋
+  /// [ApiException]，不回空清單。
+  Future<List<ExRightResult>> getExRightResults({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) {
+    return MarketClientMixin.executeRequest(_tag, '除權除息計算結果', () async {
+      final response = await _dio.get(
+        ApiEndpoints.tpexExRightResults,
+        queryParameters: {
+          'startDate': TwParseUtils.formatDateSlash(startDate),
+          'endDate': TwParseUtils.formatDateSlash(endDate),
+          'response': 'json',
+        },
+      );
+      if (response.statusCode != 200) {
+        throw ApiException(
+          '$_tag API error: ${response.statusCode}',
+          response.statusCode,
+        );
+      }
+      final data = MarketClientMixin.decodeResponseData(
+        response.data,
+        _tag,
+        '除權除息計算結果',
+      );
+      final results = data == null
+          ? null
+          : parseExRightResults(data, startDate: startDate, endDate: endDate);
+      final range =
+          '${TwParseUtils.formatDateYmd(startDate)}~'
+          '${TwParseUtils.formatDateYmd(endDate)}';
+      if (results == null) {
+        throw ApiException(
+          '$_tag 除權除息計算結果: 回應不可信 ($range)',
+          response.statusCode,
+        );
+      }
+      AppLogger.info(_tag, '除權除息計算結果: ${results.length} 筆 ($range)');
+      return results;
+    });
+  }
+
+  /// exDailyQ 回應 → 除權除息結果。依欄位名取值，現金股利與每仟股無償配股
+  /// 直接取分欄。
+  ///
+  /// 回傳 `[]`＝區間內沒有除權息；`null`＝回應不可信：stat 異常、頂層
+  /// `date`（`YYYYMMDD~YYYYMMDD`）與請求不符、缺必要欄位、筆數與
+  /// `totalCount` 不符（可能被分頁截斷，部分清單看起來會像完整的），或
+  /// **任何一列**解析不了。不略過單列，理由同 TWSE
+  /// `TwseClient.parseExRightResults`。
+  static List<ExRightResult>? parseExRightResults(
+    Map<dynamic, dynamic> json, {
+    required DateTime startDate,
+    required DateTime endDate,
+  }) {
+    if (json['stat']?.toString().toLowerCase() != 'ok') return null;
+    final expectedRange =
+        '${TwParseUtils.formatDateCompact(startDate)}~'
+        '${TwParseUtils.formatDateCompact(endDate)}';
+    if (json['date']?.toString() != expectedRange) return null;
+
+    final tables = json['tables'];
+    if (tables is! List || tables.isEmpty || tables.first is! Map) return null;
+    final table = tables.first as Map<dynamic, dynamic>;
+    final rawFields = table['fields'];
+    final rows = table['data'];
+    if (rawFields is! List || rows is! List) return null;
+    final fields = rawFields.map((f) => f.toString().trim()).toList();
+    if (int.tryParse(table['totalCount']?.toString() ?? '') != rows.length) {
+      return null;
+    }
+    final dateCol = fields.indexOf('除權息日期');
+    final codeCol = fields.indexOf('代號');
+    final cashCol = fields.indexOf('現金股利');
+    final sharesCol = fields.indexOf('每仟股無償配股');
+    final cols = [dateCol, codeCol, cashCol, sharesCol];
+    if (cols.any((i) => i < 0)) return null;
+    final minLength = cols.reduce((a, b) => a > b ? a : b) + 1;
+
+    ExRightResult? parseRow(List<dynamic> row) {
+      final exDate = TwParseUtils.parseSlashRocDate(
+        row[dateCol]?.toString().trim() ?? '',
+      );
+      final code = row[codeCol]?.toString().trim() ?? '';
+      final cash = TwParseUtils.parseFormattedDouble(row[cashCol]);
+      final shares = TwParseUtils.parseFormattedDouble(row[sharesCol]);
+      if (exDate == null || code.isEmpty || cash == null || shares == null) {
+        return null;
+      }
+      return ExRightResult(
+        symbol: code,
+        exDate: exDate,
+        cashDividend: cash,
+        stockSharesPerThousand: shares,
+      );
+    }
+
+    final results = <ExRightResult>[];
+    for (final row in rows) {
+      final parsed = row is List && row.length >= minLength
+          ? parseRow(row)
+          : null;
+      if (parsed == null) {
+        AppLogger.warning(_tag, '除權除息計算結果: 無法解析的列，整批拒收: $row');
+        return null;
+      }
+      results.add(parsed);
+    }
+    return results;
   }
 
   /// 取得上櫃處置股票清單

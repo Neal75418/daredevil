@@ -998,6 +998,214 @@ class TwseClient {
     });
   }
 
+  /// 除權除息計算結果表（TWT49U）：[startDate]～[endDate] 每次除權息一列
+  ///
+  /// 回應不可信（區間與請求不符、欄位缺漏、stat 異常）時拋 [ApiException]，
+  /// 不回空清單——空清單代表「區間內沒有除權息」，兩者不能混。
+  Future<List<ExRightResult>> getExRightResults({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) {
+    return MarketClientMixin.executeRequest(_tag, '除權除息計算結果', () async {
+      final response = await _dio.get(
+        ApiEndpoints.twseExRightResults,
+        queryParameters: {
+          'startDate': TwParseUtils.formatDateCompact(startDate),
+          'endDate': TwParseUtils.formatDateCompact(endDate),
+          'response': 'json',
+        },
+      );
+      if (response.statusCode != 200) {
+        throw ApiException(
+          '$_tag API error: ${response.statusCode}',
+          response.statusCode,
+        );
+      }
+      final data = MarketClientMixin.decodeResponseData(
+        response.data,
+        _tag,
+        '除權除息計算結果',
+      );
+      final results = data == null
+          ? null
+          : parseExRightResults(data, startDate: startDate, endDate: endDate);
+      final range =
+          '${TwParseUtils.formatDateYmd(startDate)}~'
+          '${TwParseUtils.formatDateYmd(endDate)}';
+      if (results == null) {
+        throw ApiException(
+          '$_tag 除權除息計算結果: 回應不可信 ($range)',
+          response.statusCode,
+        );
+      }
+      AppLogger.info(_tag, '除權除息計算結果: ${results.length} 筆 ($range)');
+      return results;
+    });
+  }
+
+  /// TWT49U 回應 → 除權除息結果。依欄位名取值。
+  ///
+  /// 回傳 `[]`＝區間內沒有除權息；`null`＝回應不可信：stat 異常、回應的
+  /// `strDate`/`endDate` 與請求不符、缺必要欄位，或**任何一列**解析不了
+  /// （日期無效、代號空白、類別不明、「息」列金額缺漏）。不略過單列：這是
+  /// 回補歷史的來源，略過的配發之後不會再被抓到；整批拒收讓格式變動變成
+  /// 看得見的錯誤。
+  ///
+  /// 「權值+息值」是合計：「息」列即每股現金股利；「權」列可能是配股也可能
+  /// 只是現金增資、「權息」列現金與配股混在一起，兩者的金額留 null，交給
+  /// [getExRightDetail] 補齊。
+  static List<ExRightResult>? parseExRightResults(
+    Map<dynamic, dynamic> json, {
+    required DateTime startDate,
+    required DateTime endDate,
+  }) {
+    final stat = json['stat']?.toString() ?? '';
+    if (stat.contains('沒有符合條件')) return const [];
+    if (stat.toUpperCase() != 'OK') return null;
+    if (json['strDate']?.toString() !=
+            TwParseUtils.formatDateCompact(startDate) ||
+        json['endDate']?.toString() !=
+            TwParseUtils.formatDateCompact(endDate)) {
+      return null;
+    }
+
+    final rawFields = json['fields'];
+    final rows = json['data'];
+    if (rawFields is! List || rows is! List) return null;
+    final fields = rawFields.map((f) => f.toString().trim()).toList();
+    final dateCol = fields.indexOf('資料日期');
+    final codeCol = fields.indexOf('股票代號');
+    final valueCol = fields.indexOf('權值+息值');
+    final kindCol = fields.indexOf('權/息');
+    final cols = [dateCol, codeCol, valueCol, kindCol];
+    if (cols.any((i) => i < 0)) return null;
+    final minLength = cols.reduce(max) + 1;
+
+    ExRightResult? parseRow(List<dynamic> row) {
+      final exDate = TwParseUtils.parseRocDateWithUnits(
+        row[dateCol]?.toString(),
+      );
+      final code = row[codeCol]?.toString().trim() ?? '';
+      if (exDate == null || code.isEmpty) return null;
+      switch (row[kindCol]?.toString().trim()) {
+        case '息':
+          final cash = TwParseUtils.parseFormattedDouble(row[valueCol]);
+          if (cash == null) return null;
+          return ExRightResult(
+            symbol: code,
+            exDate: exDate,
+            cashDividend: cash,
+            stockSharesPerThousand: 0,
+          );
+        case '權':
+          return ExRightResult(
+            symbol: code,
+            exDate: exDate,
+            cashDividend: 0,
+            stockSharesPerThousand: null,
+          );
+        case '權息':
+          return ExRightResult(
+            symbol: code,
+            exDate: exDate,
+            cashDividend: null,
+            stockSharesPerThousand: null,
+          );
+        default:
+          return null;
+      }
+    }
+
+    final results = <ExRightResult>[];
+    for (final row in rows) {
+      final parsed = row is List && row.length >= minLength
+          ? parseRow(row)
+          : null;
+      if (parsed == null) {
+        AppLogger.warning(_tag, '除權除息計算結果: 無法解析的列，整批拒收: $row');
+        return null;
+      }
+      results.add(parsed);
+    }
+    return results;
+  }
+
+  /// 除權除息明細（TWT49UDetail）：拆開 [symbol] 在 [exDate] 的現金股利與
+  /// 每千股無償配股
+  ///
+  /// 回應不可信（stat 異常、金額無法解析、回傳的代號與請求不符）時拋
+  /// [ApiException]。
+  Future<ExRightDetail> getExRightDetail(String symbol, DateTime exDate) {
+    return MarketClientMixin.executeRequest(_tag, '除權除息明細', () async {
+      final response = await _dio.get(
+        ApiEndpoints.twseExRightDetail,
+        queryParameters: {
+          'STK_NO': symbol,
+          'T1': TwParseUtils.formatDateCompact(exDate),
+          'response': 'json',
+        },
+      );
+      if (response.statusCode != 200) {
+        throw ApiException(
+          '$_tag API error: ${response.statusCode}',
+          response.statusCode,
+        );
+      }
+      final data = MarketClientMixin.decodeResponseData(
+        response.data,
+        _tag,
+        '除權除息明細',
+      );
+      final detail = data == null ? null : parseExRightDetail(data);
+      if (detail == null || detail.symbol != symbol) {
+        throw ApiException(
+          '$_tag 除權除息明細: 回應不可信 '
+          '($symbol ${TwParseUtils.formatDateYmd(exDate)})',
+          response.statusCode,
+        );
+      }
+      return detail;
+    });
+  }
+
+  /// TWT49UDetail 回應 → 明細。stat 為小寫 `ok`（與列表的 `OK` 不同）。
+  /// 現金股利須為 `0.15 元／股` 格式、配股須為 `45 股` 格式（可含千分位）；
+  /// 格式或單位不符回 null（不當成 0，也不把別的單位當成股數）。
+  static ExRightDetail? parseExRightDetail(Map<dynamic, dynamic> json) {
+    if (json['stat']?.toString().toLowerCase() != 'ok') return null;
+    final rawFields = json['fields'];
+    final rows = json['data'];
+    if (rawFields is! List || rows is! List || rows.isEmpty) return null;
+    final fields = rawFields.map((f) => f.toString()).toList();
+    final row = rows.first;
+    final codeCol = fields.indexWhere((f) => f.contains('股票代號'));
+    final cashCol = fields.indexWhere((f) => f.contains('現金股利'));
+    final sharesCol = fields.indexWhere((f) => f.contains('無償配股'));
+    final cols = [codeCol, cashCol, sharesCol];
+    if (row is! List || cols.any((i) => i < 0 || i >= row.length)) {
+      return null;
+    }
+
+    double? amountWithUnit(dynamic value, String unit) {
+      final match = RegExp(
+        '^([\\d,]+(?:\\.\\d+)?) *$unit\$',
+      ).firstMatch(value?.toString().trim() ?? '');
+      return match == null
+          ? null
+          : double.tryParse(match.group(1)!.replaceAll(',', ''));
+    }
+
+    final code = row[codeCol]?.toString().trim() ?? '';
+    final cash = amountWithUnit(row[cashCol], '元／股');
+    final shares = amountWithUnit(row[sharesCol], '股');
+    if (code.isEmpty || cash == null || shares == null) return null;
+    return ExRightDetail(
+      symbol: code,
+      cashDividend: cash,
+      stockSharesPerThousand: shares,
+    );
+  }
+
   /// 取得上市內部人持股轉讓事前申報(每日,t187ap12_L)。
   ///
   /// 2026-08-05 補接:內部人轉讓面板原本只有上櫃源,上市側永遠空白——

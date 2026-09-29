@@ -191,6 +191,32 @@ class DividendHistory extends Table {
   Set<Column> get primaryKey => {symbol, year};
 }
 
+/// 股利配發 Table：一次除權息一列
+///
+/// 來源為 TWSE 除權除息計算結果表（TWT49U／TWT49UDetail）與 TPEx
+/// exDailyQ，皆可回溯歷史、附除權息交易日。季配、半年配、月配各期分列
+/// （[DividendHistory] 以 (symbol, year) 為 PK，同年多次配息會互相覆蓋）。
+/// 只存有配發的列：只有現金增資的除權不是股利，不寫入。
+@DataClassName('DividendDistributionEntry')
+class DividendDistribution extends Table {
+  /// 股票代碼
+  TextColumn get symbol =>
+      text().references(StockMaster, #symbol, onDelete: KeyAction.cascade)();
+
+  /// 除權息交易日（當地午夜，與 daily_price.date 同樣正規化）
+  DateTimeColumn get exDate => dateTime()();
+
+  /// 每股現金股利（元）。必填、無預設值：來源拆不出的金額不得以 0 寫入。
+  RealColumn get cashDividend => real()();
+
+  /// 每千股無償配股（股）。存股數而非面額元：面額不一定是 10 元，
+  /// 股數才是股東實際配到的量。必填、無預設值（同上）。
+  RealColumn get stockSharesPerThousand => real()();
+
+  @override
+  Set<Column> get primaryKey => {symbol, exDate};
+}
+
 /// 月營收 Table
 ///
 /// 用於基本面分析訊號

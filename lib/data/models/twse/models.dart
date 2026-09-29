@@ -1,5 +1,6 @@
 export '../tpex/insider_aggregation.dart';
 export 'exright_preannouncement.dart';
+export 'exright_result.dart';
 export 'intraday_quote.dart';
 export 'quarterly_report_entry.dart';
 export 'twse_daily_price.dart';

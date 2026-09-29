@@ -24,6 +24,45 @@ mixin DividendDaoMixin on $AppDatabase {
     });
   }
 
+  /// 寫入股利配發（一次除權息一列）。同一除息日重抓以新值覆蓋。
+  Future<void> upsertDividendDistributions(
+    List<DividendDistributionCompanion> entries,
+  ) async {
+    await batch((b) {
+      for (final entry in entries) {
+        b.insert(dividendDistribution, entry, mode: InsertMode.insertOrReplace);
+      }
+    });
+  }
+
+  /// 取得股票的股利配發（依除息日由新到舊）
+  Future<List<DividendDistributionEntry>> getDividendDistributions(
+    String symbol,
+  ) {
+    return (select(dividendDistribution)
+          ..where((t) => t.symbol.equals(symbol))
+          ..orderBy([(t) => OrderingTerm.desc(t.exDate)]))
+        .get();
+  }
+
+  /// 批次取得多檔股票的股利配發（各檔依除息日由新到舊）
+  Future<Map<String, List<DividendDistributionEntry>>>
+  getDividendDistributionsBatch(List<String> symbols) async {
+    if (symbols.isEmpty) return {};
+
+    final result =
+        await (select(dividendDistribution)
+              ..where((t) => t.symbol.isIn(symbols))
+              ..orderBy([(t) => OrderingTerm.desc(t.exDate)]))
+            .get();
+
+    final map = <String, List<DividendDistributionEntry>>{};
+    for (final entry in result) {
+      map.putIfAbsent(entry.symbol, () => []).add(entry);
+    }
+    return map;
+  }
+
   /// 批次取得多檔股票的股利歷史
   Future<Map<String, List<DividendHistoryEntry>>> getDividendHistoryBatch(
     List<String> symbols,
