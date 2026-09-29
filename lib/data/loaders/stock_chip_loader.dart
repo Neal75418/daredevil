@@ -78,6 +78,9 @@ class StockChipLoader {
     final startDate60d = today.subtract(
       const Duration(days: DataFreshness.chipShareholdingLookbackDays),
     );
+    final marginStartDate = today.subtract(
+      const Duration(days: DataFreshness.chipMarginLookbackDays),
+    );
 
     // 使用 Records 平行載入所有資料
     final (
@@ -89,7 +92,7 @@ class StockChipLoader {
     ) = await (
       _db.getDayTradingHistory(symbol, startDate: startDate10d),
       _db.getShareholdingHistory(symbol, startDate: startDate60d),
-      _db.getMarginTradingHistory(symbol, startDate: startDate10d),
+      _db.getMarginTradingHistory(symbol, startDate: marginStartDate),
       _db.getLatestHoldingDistribution(symbol),
       existingInsider.isNotEmpty
           ? Future.value(existingInsider)

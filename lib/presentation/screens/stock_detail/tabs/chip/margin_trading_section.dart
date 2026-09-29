@@ -16,6 +16,10 @@ class MarginTradingSection extends StatelessWidget {
 
   final List<MarginTradingEntry> history;
 
+  /// 走勢圖與表格顯示的列數。loader 為評分會多讀幾天
+  /// （DataFreshness.chipMarginLookbackDays），畫面不跟著拉長。
+  static const _displayRows = 10;
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -157,7 +161,10 @@ class MarginTradingSection extends StatelessWidget {
       ..sort((a, b) => a.date.compareTo(b.date));
     if (sorted.length < 2) return const SizedBox.shrink();
 
-    final data = sorted.map((e) => (e.marginBalance ?? 0).toDouble()).toList();
+    final recent = sorted.length > _displayRows
+        ? sorted.sublist(sorted.length - _displayRows)
+        : sorted;
+    final data = recent.map((e) => (e.marginBalance ?? 0).toDouble()).toList();
     return MiniTrendChart(
       dataPoints: data,
       lineColor: AppTheme.upColor,
@@ -170,7 +177,7 @@ class MarginTradingSection extends StatelessWidget {
 
     final sorted = List<MarginTradingEntry>.from(history)
       ..sort((a, b) => b.date.compareTo(a.date));
-    final displayData = sorted.take(10).toList();
+    final displayData = sorted.take(_displayRows).toList();
 
     return Card(
       child: Padding(

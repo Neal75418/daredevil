@@ -201,6 +201,59 @@ void main() {
       );
     });
 
+    // 天數依據（春節後仍湊得到 6 列）見 DataFreshness.chipMarginLookbackDays
+    test('融資回溯 22 天、當沖維持 15 天', () async {
+      when(
+        () => mockDb.getDayTradingHistory(
+          any(),
+          startDate: any(named: 'startDate'),
+        ),
+      ).thenAnswer((_) async => <DayTradingEntry>[]);
+      when(
+        () => mockDb.getShareholdingHistory(
+          any(),
+          startDate: any(named: 'startDate'),
+        ),
+      ).thenAnswer((_) async => <ShareholdingEntry>[]);
+      when(
+        () => mockDb.getMarginTradingHistory(
+          any(),
+          startDate: any(named: 'startDate'),
+        ),
+      ).thenAnswer((_) async => <MarginTradingEntry>[]);
+      when(
+        () => mockDb.getLatestHoldingDistribution(any()),
+      ).thenAnswer((_) async => <HoldingDistributionEntry>[]);
+
+      await loader.loadAllChipData(
+        '2330',
+        existingInstitutional: [],
+        existingInsider: [
+          InsiderHoldingEntry(symbol: '2330', date: DateTime(2026, 2, 1)),
+        ],
+      );
+
+      final now = DateTime(2026, 2, 15, 14, 0);
+      final marginStart =
+          verify(
+                () => mockDb.getMarginTradingHistory(
+                  '2330',
+                  startDate: captureAny(named: 'startDate'),
+                ),
+              ).captured.single
+              as DateTime;
+      final dayTradingStart =
+          verify(
+                () => mockDb.getDayTradingHistory(
+                  '2330',
+                  startDate: captureAny(named: 'startDate'),
+                ),
+              ).captured.single
+              as DateTime;
+      expect(marginStart, now.subtract(const Duration(days: 22)));
+      expect(dayTradingStart, now.subtract(const Duration(days: 15)));
+    });
+
     test('fetches insider from DB when existingInsider is empty', () async {
       when(
         () => mockDb.getDayTradingHistory(

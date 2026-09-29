@@ -190,8 +190,19 @@ abstract final class DataFreshness {
   /// 籌碼 API 查詢回溯天數（融資融券、法人）
   static const int chipDataLookbackDays = 20;
 
-  /// 籌碼短期資料回溯天數（當沖、融資融券 DB 查詢）
+  /// 籌碼短期資料回溯天數（當沖 DB 查詢）
   static const int chipTradingLookbackDays = 15;
+
+  /// 融資融券 DB 查詢回溯天數。
+  ///
+  /// 融資扣分需完整 5 日增幅（6 列，見 ChipScoringParams.marginIncreasePctThreshold），
+  /// 窗口要跨得過春節長假。以 2025-06～2026-09 交易日、每個日曆日開 App 計，
+  /// 並照 loader 實際切法（起點帶當下時刻、起點當天的列被排除；當日融資晚上
+  /// 才同步、不計入），最少列數：15 天 3 列、21 天 6 列、22 天 7 列（最差都在
+  /// 2026 春節期間到節後）。取 22 天多留 1 列，容許窗內缺一天資料。
+  ///
+  /// 個股頁融資圖表固定顯示最近 10 列，不受此值影響。
+  static const int chipMarginLookbackDays = 22;
 
   /// 籌碼持股比例回溯天數（外資持股 DB 查詢）
   static const int chipShareholdingLookbackDays = 90;

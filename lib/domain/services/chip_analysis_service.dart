@@ -65,8 +65,9 @@ class ChipAnalysisService {
     final measuredDomains = [
       institutionalHistory.length >= ChipScoringParams.instStreakSmallDays,
       _shareholdingMeasurable(sortedShareholding), // 頭尾才有 diff,端點 null=沒量到
-      // 增加天數判定需至少 marginStreakDays 個 pair → 至少 streak+1 列
-      marginHistory.length >= ChipScoringParams.marginStreakDays + 1,
+      // 最早能出分的是融券增加天數：需 shortIncreaseMinDays 個 pair → +1 列
+      // （融資增幅需完整 marginLookbackPairs 日窗，列數更多）
+      marginHistory.length >= ChipScoringParams.shortIncreaseMinDays + 1,
       dayTradingHistory.isNotEmpty,
       // 集中度另有完整性前提(大戶列存在且無缺值)——雙向計分後,把
       // 不完整資料當已量測會捏造「分散」懲罰
@@ -173,10 +174,7 @@ class ChipAnalysisService {
   int _marginAdjustment(List<MarginTradingEntry> history) {
     if (history.length < 2) return 0;
 
-    // 融資餘額趨勢（近期多數日增加 = 散戶追漲 = 偏空訊號）
-    int marginIncreasingDays = 0;
     int shortIncreasingDays = 0;
-
     final pairCount = (history.length - 1).clamp(
       0,
       ChipScoringParams.marginLookbackPairs,
@@ -184,23 +182,29 @@ class ChipAnalysisService {
     for (int i = 0; i < pairCount; i++) {
       final curr = history[history.length - 1 - i];
       final prev = history[history.length - 2 - i];
-      if ((curr.marginBalance ?? 0) > (prev.marginBalance ?? 0)) {
-        marginIncreasingDays++;
-      }
       if ((curr.shortBalance ?? 0) > (prev.shortBalance ?? 0)) {
         shortIncreasingDays++;
       }
     }
 
     int adj = 0;
-    // 融資餘額近期多數日增加（最近 marginLookbackPairs 個 pair 中至少
-    // marginStreakDays 個，不要求連續）= 散戶追漲 = 偏空訊號
-    if (marginIncreasingDays >= ChipScoringParams.marginStreakDays) {
-      adj += ChipScoringParams.marginIncreasePenalty;
+    // 融資餘額 5 日增幅達門檻 = 散戶追漲 = 偏空訊號（看增幅不看增加天數，
+    // 見 [ChipScoringParams.marginIncreasePctThreshold]）；需完整 5 日窗
+    const window = ChipScoringParams.marginLookbackPairs;
+    if (history.length > window) {
+      final base = history[history.length - 1 - window].marginBalance ?? 0;
+      final latestMargin = history.last.marginBalance ?? 0;
+      // 以乘法比較：餘額為整數張數時門檻邊界精確（除法 1100/1000−1 會得
+      // 0.10000000000000009，恰達門檻與略高於門檻分不開）
+      if (base > 0 &&
+          latestMargin * 100 >=
+              base * (100 + ChipScoringParams.marginIncreasePctThreshold)) {
+        adj += ChipScoringParams.marginIncreasePenalty;
+      }
     }
 
     // 融券方向：依券資比判斷多空意涵
-    if (shortIncreasingDays >= ChipScoringParams.marginStreakDays) {
+    if (shortIncreasingDays >= ChipScoringParams.shortIncreaseMinDays) {
       final latest = history.last;
       final margin = latest.marginBalance ?? 0;
       final short = latest.shortBalance ?? 0;

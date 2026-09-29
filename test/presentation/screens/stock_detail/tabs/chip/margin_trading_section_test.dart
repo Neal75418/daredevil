@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/chip/margin_trading_section.dart';
+import 'package:daredevil/presentation/screens/stock_detail/widgets/mini_trend_chart.dart';
 
 import '../../../../../helpers/widget_test_helpers.dart';
 
@@ -78,6 +79,26 @@ void main() {
 
       // ratio = 2000/10000*100 = 20%（低於 highShortMarginRatio 30，不觸發警示）
       expect(find.textContaining('20.0%'), findsWidgets);
+    });
+
+    // loader 為評分多讀的列（融資回溯窗）不應拉長走勢圖：圖與表格同一段期間
+    testWidgets('走勢圖只畫最近 10 列、由舊到新', (tester) async {
+      widenViewport(tester);
+      await pumpSection(
+        tester,
+        MarginTradingSection(
+          history: [
+            for (var i = 14; i >= 1; i--)
+              createEntry(
+                date: DateTime(2026, 3, i),
+                marginBalance: 1000.0 + i,
+              ),
+          ],
+        ),
+      );
+
+      final chart = tester.widget<MiniTrendChart>(find.byType(MiniTrendChart));
+      expect(chart.dataPoints, [for (var i = 5; i <= 14; i++) 1000.0 + i]);
     });
   });
 }

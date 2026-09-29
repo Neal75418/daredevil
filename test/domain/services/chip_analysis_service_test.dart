@@ -55,13 +55,13 @@ void main() {
       expect(result.attitude, InstitutionalAttitude.aggressiveBuy);
     });
 
-    test('Margin increasing streak > 4 days penalizes score', () {
+    test('融資 5 日增幅達門檻扣分', () {
       final history = List<MarginTradingEntry>.generate(
-        5,
+        6,
         (i) => MarginTradingEntry(
           symbol: '2330', // Dummy symbol
           date: DateTime(2023, 1, i + 1),
-          marginBalance: 1000.0 + (i * 100), // Increasing
+          marginBalance: 1000.0 + (i * 100), // 5 日 +50%
           shortBalance: 0,
         ),
       );
@@ -345,7 +345,7 @@ void main() {
       );
     });
 
-    test('各域可計算下限:inst/share 要 2 列,margin 要 streak+1 列', () {
+    test('各域可計算下限:inst/share 要 2 列,margin 要 shortIncreaseMinDays+1 列', () {
       // 下限的定義:資料量足以讓對應 adjustment **可能**吐出非零值。
       // share 的 2 是結構性(頭尾才有 diff),刻意用字面值釘住,不引常數
       expect(run(inst: [instRow(20)]).measuredDomains, 0);
@@ -362,11 +362,12 @@ void main() {
       expect(run(share: [shareRow(20)]).measuredDomains, 0);
       expect(run(share: [shareRow(20), shareRow(21)]).measuredDomains, 1);
 
-      // marginStreakDays 個連續 pair 需要 streak+1 列;少一列即保證 0
+      // 融資融券域最早可能出分的是融券計數（shortIncreaseMinDays 個 pair，
+      // 需 +1 列）；融資增幅要完整 5 日窗，列數更多。少一列即保證 0
       expect(
         run(
           margin: List.generate(
-            ChipScoringParams.marginStreakDays,
+            ChipScoringParams.shortIncreaseMinDays,
             (i) => marginRow(20 + i),
           ),
         ).measuredDomains,
@@ -375,7 +376,7 @@ void main() {
       expect(
         run(
           margin: List.generate(
-            ChipScoringParams.marginStreakDays + 1,
+            ChipScoringParams.shortIncreaseMinDays + 1,
             (i) => marginRow(20 + i),
           ),
         ).measuredDomains,
@@ -545,7 +546,7 @@ void main() {
         institutionalHistory: [inst(20), inst(21)],
         shareholdingHistory: [share(20), share(21)],
         marginHistory: List.generate(
-          ChipScoringParams.marginStreakDays + 1,
+          ChipScoringParams.shortIncreaseMinDays + 1,
           (i) => margin(20 + i),
         ),
         dayTradingHistory: [
@@ -619,6 +620,68 @@ void main() {
       expect(ChipRating.fromScore(40), ChipRating.bearish);
       expect(ChipRating.fromScore(21), ChipRating.bearish);
       expect(ChipRating.fromScore(20), ChipRating.weak);
+    });
+  });
+
+  // 融資扣分以 5 日融資餘額增幅判定（取代「5 個 pair 中增加 ≥ 4 次」的計數），
+  // 依據見 ChipScoringParams.marginIncreasePctThreshold
+  group('融資 5 日增幅', () {
+    int? adjOf(List<double> balances) {
+      final history = [
+        for (var i = 0; i < balances.length; i++)
+          MarginTradingEntry(
+            symbol: '2330',
+            date: DateTime(2026, 9, 1 + i),
+            marginBalance: balances[i],
+            shortBalance: 0,
+          ),
+      ];
+      return service
+              .compute(
+                institutionalHistory: const [],
+                shareholdingHistory: const [],
+                marginHistory: history,
+                dayTradingHistory: const [],
+                holdingDistribution: const [],
+                insiderHistory: const [],
+              )
+              .score -
+          ChipScoringParams.baselineScore;
+    }
+
+    const penalty = ChipScoringParams.marginIncreasePenalty;
+
+    test('增幅恰達門檻（+10%）扣分', () {
+      expect(adjOf([1000, 1000, 1000, 1000, 1000, 1100]), penalty);
+    });
+
+    test('增幅略低於門檻不扣分', () {
+      expect(adjOf([1000, 1000, 1000, 1000, 1000, 1099]), 0);
+    });
+
+    test('天天小增但總幅度不足不扣分（舊計數定義會扣）', () {
+      expect(adjOf([1000, 1005, 1010, 1015, 1020, 1020]), 0);
+    });
+
+    test('單日暴增、其餘持平或減少仍扣分（舊計數定義不會扣）', () {
+      expect(adjOf([1000, 990, 980, 1200, 1190, 1180]), penalty);
+    });
+
+    test('不足完整 5 日窗（5 列）不判定', () {
+      expect(adjOf([1000, 1100, 1200, 1300, 1400]), 0);
+    });
+
+    // loader 回溯窗通常多於 6 列：基準必須是倒數第 6 列，不是最早一列
+    test('超過 6 列時以 5 日前為基準：更早的低點不造成誤扣', () {
+      expect(adjOf([500, 1000, 1000, 1000, 1000, 1000, 1050]), 0);
+    });
+
+    test('超過 6 列時以 5 日前為基準：更早的高點不掩蓋增幅', () {
+      expect(adjOf([2000, 1000, 1000, 1000, 1000, 1000, 1100]), penalty);
+    });
+
+    test('5 日前餘額為 0 不判定（無從計算增幅）', () {
+      expect(adjOf([0, 100, 200, 300, 400, 500]), 0);
     });
   });
 }

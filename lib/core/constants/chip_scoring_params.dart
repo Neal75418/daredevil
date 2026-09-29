@@ -63,17 +63,33 @@ class ChipScoringParams {
   // 3. Margin Trading (信用交易)
   // ==================================================
 
-  /// 融資/融券判定回溯天數（最多比對最近 5 個 pair）
+  /// 融資/融券判定回溯 pair 數：融資增幅需剛好這麼多個 pair（6 列），
+  /// 融券增加天數最多比對這麼多個
   static const int marginLookbackPairs = 5;
 
-  /// 融資/融券增加天數門檻：最近 [marginLookbackPairs] 個 pair 中增加的次數
-  /// >= 此值即觸發加/扣分（計數，不要求連續）
-  static const int marginStreakDays = 4;
+  /// 融資扣分門檻：最近 [marginLookbackPairs] 日融資餘額增幅（%）>= 此值
+  /// 扣分，需完整 [marginLookbackPairs] 個 pair。
+  ///
+  /// **為何看增幅而非增加天數**：舊制「5 個 pair 中增加 ≥ 4 次」只數天數
+  /// ——4 天各增 0.01% 會扣、單日暴增 20% 反而不扣。
+  ///
+  /// 實測（2026-06-05～2026-09-24，78 個交易日、2,009 檔）：前 5 日收盤對
+  /// 收盤漲跌以 ±5%／±10% 分 5 區（控制均值回歸），同區間觸發組減未觸發組
+  /// 的 20 個交易日後報酬（訊號日收盤起算；隔日起算結果相近）。增幅 ≥ 此值
+  /// （期間 p90 = 10.4%）5 區中 4 區偏空（−0.42～−4.68 個百分點）、
+  /// −10%～−5% 區 +0.26；計數定義在 > +10% 區 +1.29（偏多）。期間短且為
+  /// 單一偏弱盤勢，只支持「增幅定義方向較一致」，幅度不可靠。資料滿一年後
+  /// 以同一方法重驗。
+  static const double marginIncreasePctThreshold = 10.0;
 
-  /// 融資增加天數 >= [marginStreakDays] 扣分 (散戶追高)
+  /// 融券增加天數門檻：最近 [marginLookbackPairs] 個 pair 中增加的次數
+  /// >= 此值即依券資比加/扣分（計數，不要求連續）
+  static const int shortIncreaseMinDays = 4;
+
+  /// 融資 5 日增幅 >= [marginIncreasePctThreshold] 扣分 (散戶追高)
   static const int marginIncreasePenalty = -12;
 
-  /// 融券增加天數 >= [marginStreakDays] 加分 (軋空潛力)
+  /// 融券增加天數 >= [shortIncreaseMinDays] 加分 (軋空潛力)
   static const int shortIncreaseBonus = 8;
 
   /// 券資比高於此值視為軋空潛力大 (%)
