@@ -74,6 +74,49 @@ void main() {
     ]);
   });
 
+  test('只有現金增資的除權（金額皆 0）：存著當已處理紀錄，讀取端查詢不回傳', () async {
+    await db.upsertDividendDistributions([
+      row('2330', DateTime(2025, 3, 18), cash: 4.5),
+      row('2330', DateTime(2025, 4, 1)),
+      row('0056', DateTime(2025, 4, 1)),
+    ]);
+
+    expect((await db.getDividendDistributions('2330')).map((r) => r.exDate), [
+      DateTime(2025, 3, 18),
+    ]);
+    final map = await db.getDividendDistributionsBatch(['2330', '0056']);
+    expect(map.keys, ['2330']);
+    expect(map['2330']!.map((r) => r.exDate), [DateTime(2025, 3, 18)]);
+  });
+
+  test('只有配股、沒有現金的除權：是配發，讀取端查詢會回傳', () async {
+    await db.upsertDividendDistributions([
+      row('2330', DateTime(2025, 8, 1), stockPerThousand: 45),
+    ]);
+
+    expect(await db.getDividendDistributions('2330'), hasLength(1));
+  });
+
+  test('已處理 key：區間含頭尾、含金額皆 0 的列、不含區間外', () async {
+    await db.upsertDividendDistributions([
+      row('2330', DateTime(2025, 2, 28), cash: 1),
+      row('2330', DateTime(2025, 3, 1), cash: 4.5),
+      row('0056', DateTime(2025, 3, 15)),
+      row('2330', DateTime(2025, 3, 31), cash: 1),
+      row('2330', DateTime(2025, 4, 1), cash: 1),
+    ]);
+
+    final keys = await db.getDividendDistributionKeys(
+      from: DateTime(2025, 3, 1),
+      to: DateTime(2025, 3, 31),
+    );
+    expect(keys, {
+      ('2330', DateTime(2025, 3, 1)),
+      ('0056', DateTime(2025, 3, 15)),
+      ('2330', DateTime(2025, 3, 31)),
+    });
+  });
+
   test('批次查詢依股票分組、各組由新到舊；空清單回空 map', () async {
     await db.upsertDividendDistributions([
       row('2330', DateTime(2024, 6, 13), cash: 3.5),

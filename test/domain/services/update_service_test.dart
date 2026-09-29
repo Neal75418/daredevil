@@ -711,6 +711,12 @@ void main() {
       when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
       when(() => mockTpex.getDeclaredDividends()).thenAnswer((_) async => []);
       when(() => mockTpex.getShareholderMeetings()).thenAnswer((_) async => []);
+      when(
+        () => mockTpex.getExRightResults(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenAnswer((_) async => []);
       // 內部人轉讓：generic exception
       when(
         () => mockTpex.getInsiderTransfers(),
@@ -735,6 +741,12 @@ void main() {
       ).thenThrow(Exception('payload broken'));
       when(() => mockTpex.getShareholderMeetings()).thenAnswer((_) async => []);
       when(() => mockTpex.getInsiderTransfers()).thenAnswer((_) async => []);
+      when(
+        () => mockTpex.getExRightResults(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenAnswer((_) async => []);
 
       final service = buildService(tpex: mockTpex);
       final result = await service.runDailyUpdate(forDate: tradingDay);
@@ -742,6 +754,134 @@ void main() {
       expect(result.success, isTrue);
       // DividendSyncResult.errors 必須被 caller 讀取並轉發，否則靜默
       expect(result.errors, anyElement(contains('股利')));
+    });
+
+    test('除權除息同步內部收集的錯誤應轉發到 result.errors', () async {
+      final mockTpex = MockTpexClient();
+      when(
+        () => mockTdcc.getAllHoldingDistribution(),
+      ).thenAnswer((_) async => {});
+      when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
+      when(() => mockTpex.getDeclaredDividends()).thenAnswer((_) async => []);
+      when(() => mockTpex.getShareholderMeetings()).thenAnswer((_) async => []);
+      when(() => mockTpex.getInsiderTransfers()).thenAnswer((_) async => []);
+      // 除權除息來源 generic 失敗 → syncDistributions 收進自身 errors（不 throw）
+      when(
+        () => mockTpex.getExRightResults(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenThrow(Exception('exDailyQ payload broken'));
+
+      final service = buildService(tpex: mockTpex);
+      final result = await service.runDailyUpdate(forDate: tradingDay);
+
+      expect(result.success, isTrue);
+      expect(result.errors.where((e) => e.contains('除權除息')), hasLength(1));
+      // 範圍取自 UpdateService 的時鐘（7/6）：7 天前 6/29 早於月初 7/1
+      verify(
+        () => mockTpex.getExRightResults(
+          startDate: DateTime(2026, 6, 29),
+          endDate: DateTime(2026, 7, 6),
+        ),
+      ).called(1);
+    });
+
+    test('除權除息拋網路錯誤：記錯誤、不標記限流，本輪照常完成', () async {
+      final mockTpex = MockTpexClient();
+      when(
+        () => mockTdcc.getAllHoldingDistribution(),
+      ).thenAnswer((_) async => {});
+      when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
+      when(() => mockTpex.getDeclaredDividends()).thenAnswer((_) async => []);
+      when(() => mockTpex.getShareholderMeetings()).thenAnswer((_) async => []);
+      when(() => mockTpex.getInsiderTransfers()).thenAnswer((_) async => []);
+      when(
+        () => mockTpex.getExRightResults(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenThrow(const NetworkException('exDailyQ timeout'));
+
+      final service = buildService(tpex: mockTpex);
+      final result = await service.runDailyUpdate(forDate: tradingDay);
+
+      expect(result.success, isTrue);
+      expect(result.hasRateLimitError, isFalse);
+      expect(result.errors, anyElement(contains('除權除息同步失敗')));
+    });
+
+    test('已宣告股利撞到限流：不再打除權除息', () async {
+      final mockTpex = MockTpexClient();
+      when(
+        () => mockTdcc.getAllHoldingDistribution(),
+      ).thenAnswer((_) async => {});
+      when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
+      when(
+        () => mockTpex.getDeclaredDividends(),
+      ).thenThrow(const RateLimitException('redirect loop'));
+
+      final service = buildService(tpex: mockTpex);
+      await service.runDailyUpdate(forDate: tradingDay);
+
+      verifyNever(
+        () => mockTpex.getExRightResults(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      );
+    });
+
+    test('除權除息撞到限流：本輪標記限流', () async {
+      final mockTpex = MockTpexClient();
+      when(
+        () => mockTdcc.getAllHoldingDistribution(),
+      ).thenAnswer((_) async => {});
+      when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
+      when(() => mockTpex.getDeclaredDividends()).thenAnswer((_) async => []);
+      when(() => mockTpex.getShareholderMeetings()).thenAnswer((_) async => []);
+      when(
+        () => mockTpex.getExRightResults(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenThrow(const RateLimitException('redirect loop'));
+
+      final service = buildService(tpex: mockTpex);
+      final result = await service.runDailyUpdate(forDate: tradingDay);
+
+      expect(result.hasRateLimitError, isTrue);
+      expect(result.errors, anyElement(contains('除權除息同步中止')));
+    });
+
+    test('已宣告股利拋網路錯誤：除權除息仍照常同步（兩者分開 try）', () async {
+      final mockTpex = MockTpexClient();
+      when(
+        () => mockTdcc.getAllHoldingDistribution(),
+      ).thenAnswer((_) async => {});
+      when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
+      // sync() 對 NetworkException rethrow → UpdateService 記錯誤後繼續
+      when(
+        () => mockTpex.getDeclaredDividends(),
+      ).thenThrow(const NetworkException('t187ap45 timeout'));
+      when(() => mockTpex.getInsiderTransfers()).thenAnswer((_) async => []);
+      when(
+        () => mockTpex.getExRightResults(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenAnswer((_) async => []);
+
+      final service = buildService(tpex: mockTpex);
+      final result = await service.runDailyUpdate(forDate: tradingDay);
+
+      expect(result.errors, anyElement(contains('股利/股東會')));
+      verify(
+        () => mockTpex.getExRightResults(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).called(1);
     });
 
     test(
@@ -1475,6 +1615,151 @@ void main() {
         ),
       ).called(1);
     });
+  });
+
+  // 步驟 6.6 除權除息排在 5.5 未定案重抓與 6.5 上櫃候選補充之後、評分之前：
+  // 前兩步抓的是本輪評分要用的資料，不能被除權除息的限流擋掉；5.5 撞到限流
+  // 時 6.6 不再打 TWSE。
+  group('步驟 6.6 的位置', () {
+    void stubDividendDb() {
+      when(
+        () => mockDb.getDividendDistributionKeys(
+          from: any(named: 'from'),
+          to: any(named: 'to'),
+        ),
+      ).thenAnswer((_) async => {});
+      when(
+        () => mockDb.upsertDividendDistributions(any()),
+      ).thenAnswer((_) async {});
+    }
+
+    // 對照組放一列要查明細的上市資料：每輪上限的接線要夠打兩個列表＋查明細
+    // （這條會真的等一次 2 秒明細間隔，UpdateService 層無法注入）
+    for (final refetchLimited in [false, true]) {
+      test('5.5 ${refetchLimited ? '限流' : '正常'}：6.6 除權除息'
+          '${refetchLimited ? '不執行' : '兩市場列表與明細都照常執行'}', () async {
+        final summary = RefetchSummary();
+        if (refetchLimited) {
+          summary.rateLimitError = const RateLimitException('429');
+        }
+        when(
+          () => mockRefetcher.refetchPending(
+            today: any(named: 'today'),
+            ledger: any(named: 'ledger'),
+          ),
+        ).thenAnswer((_) async => summary);
+        // 少這行 syncer 會在打列表前拋錯，verifyNever 空轉成假綠
+        when(() => mockDb.getAllActiveStocks()).thenAnswer(
+          (_) async => [
+            StockMasterEntry(
+              symbol: '2836',
+              name: '高雄銀',
+              market: 'TWSE',
+              isActive: true,
+              updatedAt: DateTime(2026, 7, 1),
+            ),
+          ],
+        );
+        stubDividendDb();
+        final twse = MockTwseClient();
+        final tpex = MockTpexClient();
+        when(
+          () => twse.getExRightResults(
+            startDate: any(named: 'startDate'),
+            endDate: any(named: 'endDate'),
+          ),
+        ).thenAnswer(
+          (_) async => [
+            ExRightResult(
+              symbol: '2836',
+              exDate: DateTime(2026, 7, 3),
+              cashDividend: null,
+              stockSharesPerThousand: null,
+            ),
+          ],
+        );
+        when(() => twse.getExRightDetail('2836', any())).thenAnswer(
+          (_) async => const ExRightDetail(
+            symbol: '2836',
+            cashDividend: 0.15,
+            stockSharesPerThousand: 45,
+          ),
+        );
+        when(
+          () => tpex.getExRightResults(
+            startDate: any(named: 'startDate'),
+            endDate: any(named: 'endDate'),
+          ),
+        ).thenAnswer((_) async => []);
+
+        await buildService(
+          twse: twse,
+          tpex: tpex,
+        ).runDailyUpdate(forDate: tradingDay);
+
+        for (final call in [
+          () => twse.getExRightResults(
+            startDate: any(named: 'startDate'),
+            endDate: any(named: 'endDate'),
+          ),
+          () => tpex.getExRightResults(
+            startDate: any(named: 'startDate'),
+            endDate: any(named: 'endDate'),
+          ),
+          () => twse.getExRightDetail('2836', DateTime(2026, 7, 3)),
+        ]) {
+          if (refetchLimited) {
+            verifyNever(call);
+          } else {
+            verify(call).called(1);
+          }
+        }
+      });
+    }
+
+    for (final dividendLimited in [false, true]) {
+      test('6.6 ${dividendLimited ? '限流' : '正常'}：6.5 上櫃候選補充照常執行', () async {
+        final mockTpex = MockTpexClient();
+        when(
+          () => mockTdcc.getAllHoldingDistribution(),
+        ).thenAnswer((_) async => {});
+        when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
+        stubDividendDb();
+        when(() => mockTpex.getDeclaredDividends()).thenAnswer((_) async => []);
+        when(
+          () => mockTpex.getShareholderMeetings(),
+        ).thenAnswer((_) async => []);
+        when(() => mockTpex.getInsiderTransfers()).thenAnswer((_) async => []);
+        final exRight = when(
+          () => mockTpex.getExRightResults(
+            startDate: any(named: 'startDate'),
+            endDate: any(named: 'endDate'),
+          ),
+        );
+        if (dividendLimited) {
+          exRight.thenThrow(const RateLimitException('redirect loop'));
+        } else {
+          exRight.thenAnswer((_) async => []);
+        }
+        // 讓候選非空，6.5 才會走到回報進度那一步
+        when(
+          () => mockDb.getSymbolsWithSufficientData(
+            minDays: any(named: 'minDays'),
+            startDate: any(named: 'startDate'),
+            endDate: any(named: 'endDate'),
+          ),
+        ).thenAnswer((_) async => ['6488']);
+
+        final messages = <String>[];
+        final result = await buildService(tpex: mockTpex).runDailyUpdate(
+          forDate: tradingDay,
+          onProgress: (_, _, m) => messages.add(m),
+        );
+
+        expect(messages, contains('補充上櫃資料'));
+        expect(result.hasRateLimitError, dividendLimited);
+      });
+    }
   });
 
   group('盤後資料定案接線（2026-09-26）', () {

@@ -188,7 +188,6 @@ void main() {
       expect(r.cashDividend, 4.50002);
       expect(r.stockSharesPerThousand, 0);
       expect(r.needsDetail, isFalse);
-      expect(r.isDistribution, isTrue);
     });
 
     test('「權」列：現金為 0，配股未知（可能只是現金增資），需查明細', () {
@@ -198,7 +197,6 @@ void main() {
       expect(r.cashDividend, 0);
       expect(r.stockSharesPerThousand, isNull);
       expect(r.needsDetail, isTrue);
-      expect(r.isDistribution, isFalse, reason: '明細補齊前不得當成配發');
     });
 
     test('「權息」列：合計值拆不開，現金與配股皆未知，需查明細', () {
@@ -365,22 +363,22 @@ void main() {
       endDate: end,
     )!.single;
 
-    test('權息列補上明細後可判定為配發', () {
+    test('權息列補上明細後金額齊全', () {
       final r = twse('權息').withDetail(
         TwseClient.parseExRightDetail(_detailBody('2836', '0.15 元／股', '45 股'))!,
       );
       expect(r.cashDividend, 0.15);
       expect(r.stockSharesPerThousand, 45);
       expect(r.needsDetail, isFalse);
-      expect(r.isDistribution, isTrue);
     });
 
-    test('只有現金增資的除權：補上明細後不是配發', () {
+    test('權列補上明細：只有現金增資時金額皆 0', () {
       final r = twse('權').withDetail(
         TwseClient.parseExRightDetail(_detailBody('2836', '0 元／股', '0 股'))!,
       );
       expect(r.needsDetail, isFalse);
-      expect(r.isDistribution, isFalse);
+      expect(r.cashDividend, 0);
+      expect(r.stockSharesPerThousand, 0);
     });
   });
 
@@ -401,17 +399,18 @@ void main() {
       expect(r[0].stockSharesPerThousand, 0);
       expect(r[1].cashDividend, 0.3);
       expect(r[1].stockSharesPerThousand, 150.00000327);
-      expect(r.every((e) => !e.needsDetail && e.isDistribution), isTrue);
+      expect(r.every((e) => !e.needsDetail), isTrue);
     });
 
-    test('只有現金增資的除權：不是配發', () {
+    test('只有現金增資的除權：金額皆 0、不需查明細', () {
       final r = parse(
         _tpexBody([
           _tpexRow('114/01/02', '4109', '除權', '0.00000000', '0.00000000'),
         ]),
       )!.single;
       expect(r.needsDetail, isFalse);
-      expect(r.isDistribution, isFalse);
+      expect(r.cashDividend, 0);
+      expect(r.stockSharesPerThousand, 0);
     });
 
     test('區間內沒有除權息：回空清單', () {

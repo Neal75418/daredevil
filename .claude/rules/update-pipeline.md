@@ -43,7 +43,8 @@ flowchart LR
 
 stock list、price、institutional、market data、fundamental、news、market index、
 TDCC holding、dividend、insider transfer、quarterly report。
-以下五個有非顯而易見的行為，其餘照名稱理解即可。
+以下五個有非顯而易見的行為，其餘照名稱理解即可（dividend 的除權除息部分見下方
+「步驟 6.6」）。
 
 **`HistoricalPriceSyncer`** — 三道閘，缺一都會讓「該補的沒補」看起來像正常結束
 
@@ -149,7 +150,7 @@ TDCC holding、dividend、insider transfer、quarterly report。
   3.8–5 的並行同步（`_syncAuxiliaryData`／`_syncInstitutionalData`／
   `_syncMarketAndFundamentalData`／`_syncNews` 的 `.wait`）之後，**步驟 6
   篩選候選（含 6.5 上櫃候選補充同步 `_syncOtcCandidatesData`）與評分之前**
-  ——5.5 之後仍有 6.5 這段額外的上櫃同步。
+  ——5.5 之後仍有 6.5 這段額外的上櫃同步，以及 6.6 除權除息（見下）。
   追蹤起始日（`finality_tracking_since`，第一次執行更新時寫入
   `app_settings`，之後不覆寫）以後、40 個日曆天回補窗
   （`ApiConfig.tradingBackfillLookbackDays`）內、沒有定案狀態列的交易日才
@@ -161,6 +162,23 @@ TDCC holding、dividend、insider transfer、quarterly report。
   errors——它們不會自己消失，進 errors 會讓之後每一輪 launchd 都 exit 1；
   需用修復工具 `tool/refetch_market_days.dart` 手動處理（重用同一套
   `refetchRange` 抓取邏輯，不受每輪上限、回補窗、追蹤起始日限制）
+
+### 步驟 6.6：除權除息（`DividendSyncer.syncDistributions`）
+
+- 寫入 `dividend_distribution`（一次除權息一列；`beforeOpen` 補建、不 bump
+  schema fingerprint）。範圍＝本月初與今天往前 7 天中較早者～今天，先上櫃
+  （exDailyQ）再上市（TWT49U），各 1 次列表
+- TWSE「權」「權息」列拆不開現金與配股，逐列查 TWT49UDetail，每次間隔
+  `ApiConfig.dividendDetailCallDelayMs`（2 秒，保守值）；列表＋明細每輪合計
+  最多 `ApiConfig.dividendSyncMaxCallsPerRun`（30），每筆查到就寫入、沒查完
+  的下一輪接續
+- ⚠️ **只有現金增資的除權也寫入（金額皆 0）**，當作「已處理」紀錄讓明細只
+  查一次；讀取端一律用 DAO 的 `getDividendDistributions*`（只回有配發的列），
+  直接 select 這張表會讀到這些 0 列
+- 依序執行、不放進並行階段：並行階段還有其他同步器在打 TWSE，疊在一起更
+  容易觸發限流、中止整輪。排在 5.5 與 6.5 之後、評分之前：那兩步抓的是本輪
+  評分要用的資料，不能被本步驟的限流擋掉；前面撞到限流時本步驟跳過，每輪都
+  重掃本月，下一輪補回
 
 ### 3 Helpers
 
@@ -189,7 +207,7 @@ TDCC holding、dividend、insider transfer、quarterly report。
 
 > 步驟 5.5 未定案重抓（`MarketDayRefetcher`，見上）發生在步驟 3.8–5 並行同步
 > 之後、步驟 6／6.5 篩選候選與上櫃補充同步之前，更在 Post-Update 之前——讓
-> 回補到的歷史進得了本輪評分。
+> 回補到的歷史進得了本輪評分。6.6 除權除息排在 6.5 之後，是為了不擋前兩步。
 
 ### Post-Update（5 個 fail-safe service）
 

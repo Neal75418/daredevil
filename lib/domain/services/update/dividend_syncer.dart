@@ -1,32 +1,43 @@
 import 'package:drift/drift.dart';
 import 'package:intl/intl.dart';
 
+import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
+import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 
-/// 已宣告股利 + 股東會同步器
+/// 已宣告股利 + 股東會 + 除權除息同步器
 ///
-/// 從 TWSE/TPEX OpenAPI 取得已宣告股利資料和股東會日程：
-/// 1. 將股利資料 upsert 至 DividendHistory（更新 exDividendDate/exRightsDate）
-/// 2. 將股東會日程寫入 StockEvent（eventType = SHAREHOLDER_MEETING）
+/// 從 TWSE/TPEX 取得：
+/// 1. 已宣告股利 upsert 至 DividendHistory（更新 exDividendDate/exRightsDate）
+/// 2. 股東會日程寫入 StockEvent（eventType = SHAREHOLDER_MEETING）
+/// 3. 除權除息計算結果寫入 DividendDistribution（[syncDistributions]）
 ///
-/// 此同步器在 UpdateService._syncAuxiliaryData() 中呼叫，
-/// 與 MarketIndexSyncer、TdccHoldingSyncer 同級。
+/// 1、2（[sync]）在 UpdateService._syncAuxiliaryData()（並行階段）呼叫，與
+/// MarketIndexSyncer、TdccHoldingSyncer 同級；3 在更新步驟 6.6（上櫃候選補充
+/// 之後、評分之前）依序執行。
 class DividendSyncer {
   DividendSyncer({
     required AppDatabase database,
     TwseClient? twseClient,
     TpexClient? tpexClient,
+    Duration detailCallDelay = const Duration(
+      milliseconds: ApiConfig.dividendDetailCallDelayMs,
+    ),
   }) : _db = database,
        _twse = twseClient,
-       _tpex = tpexClient;
+       _tpex = tpexClient,
+       _detailCallDelay = detailCallDelay;
 
   final AppDatabase _db;
   final TwseClient? _twse;
   final TpexClient? _tpex;
+
+  /// TWT49UDetail 呼叫間隔（測試傳 [Duration.zero]）
+  final Duration _detailCallDelay;
 
   static final _dateFormat = DateFormat('yyyy-MM-dd');
 
@@ -217,6 +228,146 @@ class DividendSyncer {
     );
   }
 
+  /// 同步本月的除權除息至股利配發表（dividend_distribution）
+  ///
+  /// 範圍＝本月初與今天往前 [ApiConfig.dividendSyncOverlapDays] 天中較早者，
+  /// 至今天。先上櫃（1 次列表、不需明細），再上市（1 次列表）：「息」列
+  /// 直接寫入；「權」「權息」列拆不開現金與配股，逐列查 TWT49UDetail——
+  /// DB 已有該列（含只有現金增資、金額皆 0 的已處理列）就不再查。不在
+  /// 股票主檔的代號在查明細之前略過（外鍵會讓整批寫入失敗）。
+  ///
+  /// 列表與明細合計最多 [maxCalls] 次，沒查到的明細留待下一輪
+  /// （[DividendDistributionSyncResult.pendingDetails]）。每筆明細查到就
+  /// 立刻寫入：中途被限流或斷線打斷，已查的不會丟。每次查明細前等
+  /// [_detailCallDelay]。
+  ///
+  /// 一般失敗（列表不可信、單列明細不可信）記進 errors 後繼續；
+  /// [RateLimitException]／[NetworkException] 往上拋——前者由 UpdateService
+  /// 中止本輪，後者記錯誤後續跑。
+  Future<DividendDistributionSyncResult> syncDistributions({
+    required DateTime today,
+    required int maxCalls,
+  }) async {
+    final end = DateContext.normalize(today);
+    final monthStart = DateTime(end.year, end.month);
+    final overlapStart = end.subtract(
+      const Duration(days: ApiConfig.dividendSyncOverlapDays),
+    );
+    final start = overlapStart.isBefore(monthStart) ? overlapStart : monthStart;
+
+    final knownSymbols = (await _db.getAllActiveStocks())
+        .map((s) => s.symbol)
+        .toSet();
+    final errors = <String>[];
+    var written = 0;
+    var calls = 0;
+    var pendingDetails = 0;
+
+    if (_tpex != null && calls < maxCalls) {
+      try {
+        calls++;
+        final rows = await _tpex.getExRightResults(
+          startDate: start,
+          endDate: end,
+        );
+        written += await _writeDistributions([
+          for (final row in rows)
+            if (knownSymbols.contains(row.symbol)) row,
+        ]);
+      } on RateLimitException {
+        rethrow;
+      } on NetworkException {
+        rethrow;
+      } catch (e) {
+        AppLogger.warning('DividendSyncer', 'TPEX 除權除息同步失敗', e);
+        errors.add('TPEX 除權除息: $e');
+      }
+    }
+
+    if (_twse != null && calls < maxCalls) {
+      try {
+        calls++;
+        final rows = await _twse.getExRightResults(
+          startDate: start,
+          endDate: end,
+        );
+        final known = [
+          for (final row in rows)
+            if (knownSymbols.contains(row.symbol)) row,
+        ];
+        written += await _writeDistributions([
+          for (final row in known)
+            if (!row.needsDetail) row,
+        ]);
+
+        final processed = await _db.getDividendDistributionKeys(
+          from: start,
+          to: end,
+        );
+        final pending = [
+          for (final row in known)
+            if (row.needsDetail &&
+                !processed.contains((row.symbol, row.exDate)))
+              row,
+        ];
+        for (final row in pending) {
+          if (calls >= maxCalls) {
+            pendingDetails++;
+            continue;
+          }
+          await Future<void>.delayed(_detailCallDelay);
+          calls++;
+          try {
+            final detail = await _twse.getExRightDetail(row.symbol, row.exDate);
+            written += await _writeDistributions([row.withDetail(detail)]);
+          } on RateLimitException {
+            rethrow;
+          } on NetworkException {
+            rethrow;
+          } catch (e) {
+            AppLogger.warning(
+              'DividendSyncer',
+              'TWSE 除權除息明細失敗: ${row.symbol}',
+              e,
+            );
+            errors.add(
+              'TWSE 除權除息明細 ${row.symbol} '
+              '${_dateFormat.format(row.exDate)}: $e',
+            );
+          }
+        }
+      } on RateLimitException {
+        rethrow;
+      } on NetworkException {
+        rethrow;
+      } catch (e) {
+        AppLogger.warning('DividendSyncer', 'TWSE 除權除息同步失敗', e);
+        errors.add('TWSE 除權除息: $e');
+      }
+    }
+
+    return DividendDistributionSyncResult(
+      written: written,
+      calls: calls,
+      pendingDetails: pendingDetails,
+      errors: errors,
+    );
+  }
+
+  /// 寫入已拆開現金與配股的除權除息列，回傳筆數
+  Future<int> _writeDistributions(List<ExRightResult> rows) async {
+    await _db.upsertDividendDistributions([
+      for (final row in rows)
+        DividendDistributionCompanion.insert(
+          symbol: row.symbol,
+          exDate: row.exDate,
+          cashDividend: row.cashDividend!,
+          stockSharesPerThousand: row.stockSharesPerThousand!,
+        ),
+    ]);
+    return rows.length;
+  }
+
   /// 建立 DividendHistoryCompanion
   DividendHistoryCompanion _toDividendCompanion({
     required String symbol,
@@ -285,4 +436,25 @@ class DividendSyncResult {
   final List<String> errors;
 
   bool get hasErrors => errors.isNotEmpty;
+}
+
+/// 除權除息同步結果
+class DividendDistributionSyncResult {
+  const DividendDistributionSyncResult({
+    required this.written,
+    required this.calls,
+    required this.pendingDetails,
+    required this.errors,
+  });
+
+  /// 寫入列數（含金額皆 0 的已處理列）
+  final int written;
+
+  /// 列表＋明細呼叫次數
+  final int calls;
+
+  /// 超過每輪上限、留待下一輪的明細筆數
+  final int pendingDetails;
+
+  final List<String> errors;
 }

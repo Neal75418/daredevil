@@ -353,6 +353,9 @@ class UpdateService {
       result.candidatesFound = candidates.length;
       await _syncOtcCandidatesData(ctx, candidates, ctx.normalizedDate);
 
+      // 步驟 6.6：除權除息（股利配發表）
+      await _syncDividendDistributions(ctx);
+
       // 步驟 7-8：執行分析
       ctx.reportProgress(7, 10, '執行分析');
       final scoredStocks = await _analyzeStocks(
@@ -678,6 +681,41 @@ class UpdateService {
     } catch (e) {
       AppLogger.warning('UpdateService', '未定案重抓失敗', e);
       ctx.result.recordError('未定案重抓失敗: $e', e);
+    }
+  }
+
+  /// 步驟 6.6：除權除息同步至股利配發表。
+  ///
+  /// 放在並行同步之後依序執行：TWT49UDetail 逐列查明細，並行階段還有其他
+  /// 同步器在打 TWSE，疊在一起更容易觸發限流、中止整輪。排在 5.5 與 6.5
+  /// 之後、評分之前：那兩步抓的是本輪評分要用的資料，不能被本步驟的限流
+  /// 擋掉；前面撞到限流時本步驟跳過，除權除息每輪都重掃本月，下一輪補回。
+  /// 每輪呼叫上限 [ApiConfig.dividendSyncMaxCallsPerRun]，沒查完的下一輪接續。
+  Future<void> _syncDividendDistributions(_UpdateContext ctx) async {
+    if (ctx.rateLimitedAbort) return;
+    final syncer = _dividendSyncer;
+    if (syncer == null) return;
+    try {
+      final result = await syncer.syncDistributions(
+        today: _clock.now(),
+        maxCalls: ApiConfig.dividendSyncMaxCallsPerRun,
+      );
+      AppLogger.info(
+        'UpdateService',
+        '步驟 6.6: 除權除息 ${result.written} 筆（呼叫 ${result.calls} 次'
+            '${result.pendingDetails > 0 ? '，${result.pendingDetails} 筆明細留待下輪' : ''}）',
+      );
+      // per-source 失敗收在 errors、不 throw，必須轉發
+      for (final err in result.errors) {
+        ctx.result.errors.add('除權除息同步失敗: $err');
+      }
+    } on RateLimitException catch (e) {
+      ctx.rateLimitedAbort = true;
+      AppLogger.warning('UpdateService', '除權除息同步中止 (rate limit)', e);
+      ctx.result.recordError('除權除息同步中止 (rate limit): $e', e);
+    } catch (e) {
+      AppLogger.warning('UpdateService', '除權除息同步失敗', e);
+      ctx.result.recordError('除權除息同步失敗: $e', e);
     }
   }
 

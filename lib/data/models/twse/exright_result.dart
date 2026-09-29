@@ -26,10 +26,6 @@ class ExRightResult {
   bool get needsDetail =>
       cashDividend == null || stockSharesPerThousand == null;
 
-  /// 有配發現金或股票。只有現金增資的除權不算；明細補齊前一律 false。
-  bool get isDistribution =>
-      !needsDetail && (cashDividend! > 0 || stockSharesPerThousand! > 0);
-
   /// 以 TWT49UDetail 的明細取代列表推得的金額
   ExRightResult withDetail(ExRightDetail detail) => ExRightResult(
     symbol: symbol,

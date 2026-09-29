@@ -24,7 +24,8 @@ mixin DividendDaoMixin on $AppDatabase {
     });
   }
 
-  /// 寫入股利配發（一次除權息一列）。同一除息日重抓以新值覆蓋。
+  /// 寫入除權除息（一次一列，含金額皆 0 的已處理列）。同一除息日重抓以
+  /// 新值覆蓋。
   Future<void> upsertDividendDistributions(
     List<DividendDistributionCompanion> entries,
   ) async {
@@ -35,24 +36,25 @@ mixin DividendDaoMixin on $AppDatabase {
     });
   }
 
-  /// 取得股票的股利配發（依除息日由新到舊）
+  /// 取得股票的股利配發（依除息日由新到舊）。只回有配發的列，不含只有
+  /// 現金增資的除權。
   Future<List<DividendDistributionEntry>> getDividendDistributions(
     String symbol,
   ) {
     return (select(dividendDistribution)
-          ..where((t) => t.symbol.equals(symbol))
+          ..where((t) => t.symbol.equals(symbol) & _isDistribution(t))
           ..orderBy([(t) => OrderingTerm.desc(t.exDate)]))
         .get();
   }
 
-  /// 批次取得多檔股票的股利配發（各檔依除息日由新到舊）
+  /// 批次取得多檔股票的股利配發（各檔依除息日由新到舊）。只回有配發的列。
   Future<Map<String, List<DividendDistributionEntry>>>
   getDividendDistributionsBatch(List<String> symbols) async {
     if (symbols.isEmpty) return {};
 
     final result =
         await (select(dividendDistribution)
-              ..where((t) => t.symbol.isIn(symbols))
+              ..where((t) => t.symbol.isIn(symbols) & _isDistribution(t))
               ..orderBy([(t) => OrderingTerm.desc(t.exDate)]))
             .get();
 
@@ -62,6 +64,33 @@ mixin DividendDaoMixin on $AppDatabase {
     }
     return map;
   }
+
+  /// [from]～[to]（含頭尾）已處理的除權除息 (symbol, exDate)，含金額皆 0
+  /// 的列。同步據此跳過已查過明細的列。
+  Future<Set<(String, DateTime)>> getDividendDistributionKeys({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final rows =
+        await (selectOnly(dividendDistribution)
+              ..addColumns([
+                dividendDistribution.symbol,
+                dividendDistribution.exDate,
+              ])
+              ..where(dividendDistribution.exDate.isBetweenValues(from, to)))
+            .get();
+    return {
+      for (final row in rows)
+        (
+          row.read(dividendDistribution.symbol)!,
+          row.read(dividendDistribution.exDate)!,
+        ),
+    };
+  }
+
+  Expression<bool> _isDistribution($DividendDistributionTable t) =>
+      t.cashDividend.isBiggerThanValue(0) |
+      t.stockSharesPerThousand.isBiggerThanValue(0);
 
   /// 批次取得多檔股票的股利歷史
   Future<Map<String, List<DividendHistoryEntry>>> getDividendHistoryBatch(
