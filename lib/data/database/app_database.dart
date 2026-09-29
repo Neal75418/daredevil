@@ -25,6 +25,11 @@ import 'package:daredevil/data/database/app_database.drift.dart';
 // Re-export generated types for backward compatibility
 export 'package:daredevil/data/database/app_database.drift.dart';
 export 'package:daredevil/data/database/dao/price_dao.dart' show PriceCoverage;
+export 'package:daredevil/data/database/dao/dividend_dao.dart'
+    show
+        DividendMonthLedgerEntryX,
+        DividendMonthFailureEntryX,
+        encodeDividendSymbols;
 export 'package:daredevil/data/database/tables/stock_master.drift.dart';
 export 'package:daredevil/data/database/tables/daily_price.drift.dart';
 export 'package:daredevil/data/database/tables/daily_institutional.drift.dart';
@@ -99,6 +104,8 @@ import 'package:daredevil/data/database/dao/valuation_dao.dart';
     // 股利歷史
     DividendHistory,
     DividendDistribution,
+    DividendMonthLedger,
+    DividendMonthFailure,
     // 融資融券資料（Phase 4）
     MarginTrading,
     // 風險控管資料（Killer Features）
@@ -216,6 +223,7 @@ class AppDatabase extends $AppDatabase
       await _ensureQuarterlyReportSchema();
       await _ensureMarketDayFetchSchema();
       await _ensureDividendDistributionSchema();
+      await _ensureDividendBackfillSchema();
       await ensurePriceAlertManagedByColumn();
       await _ensureRetiredSchemaDropped();
       await ensureInsiderTransferPk();
@@ -368,6 +376,16 @@ class AppDatabase extends $AppDatabase
   /// CREATE TABLE IF NOT EXISTS：既有 DB 冪等補建，新裝機由 createAll 先建好。
   Future<void> _ensureDividendDistributionSchema() async {
     await Migrator(this).createTable(dividendDistribution);
+  }
+
+  /// 除權除息逐月完成紀錄與失敗紀錄（2026-09-29，additive）。
+  ///
+  /// 沿 [_ensureDividendDistributionSchema] 先例：**不 bump fingerprint**，
+  /// 也**不加進 [_userInputTableNames]**——reset 時要與 dividend_distribution
+  /// 一起清，否則完成紀錄留著、資料沒了，會被讀成「沒配息」。
+  Future<void> _ensureDividendBackfillSchema() async {
+    await Migrator(this).createTable(dividendMonthLedger);
+    await Migrator(this).createTable(dividendMonthFailure);
   }
 
   /// `price_alert` 補 `managed_by` 欄（2026-08-16）。

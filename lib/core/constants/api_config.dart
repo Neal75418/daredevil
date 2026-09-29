@@ -298,6 +298,22 @@ abstract final class ApiConfig {
   /// 天」較早者，月初幾天仍涵蓋上個月底。列表不論範圍長短都只打 1 次。
   static const int dividendSyncOverlapDays = 7;
 
+  /// 除權除息歷史回補的深度：今年往前這麼多個完整年度的 1 月起。個股頁
+  /// 股利表顯示最近 5 年，其他讀取端最多用 2–3 年。
+  static const int dividendBackfillYears = 5;
+
+  /// 某市場在市主檔少於此檔數時，該市場本輪不回補：主檔空或殘缺（新裝機、
+  /// 主檔同步失敗）會讓每個月都「完成並略過全部代號」，白打列表。2026-09
+  /// 在市：上市 1251、上櫃 1328 檔。
+  static const int dividendBackfillMinActiveStocksPerMarket = 500;
+
+  /// 同一（市場, 月）失敗達此次數後進入退避：前兩次失敗下一輪就重試，
+  /// 容忍暫時性錯誤。
+  static const int dividendBackfillBackoffAfterFailures = 3;
+
+  /// 退避期間（天）：壞掉的月份每 7 天才重試一次，不每輪吃預算。
+  static const int dividendBackfillRetryIntervalDays = 7;
+
   /// 財報同步回溯天數（約 2 年）
   static const int financialSyncLookbackDays = 730;
 

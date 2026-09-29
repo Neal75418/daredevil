@@ -220,6 +220,89 @@ class DividendDistribution extends Table {
   Set<Column> get primaryKey => {symbol, exDate};
 }
 
+/// 除權除息逐月完成紀錄：一列＝一個事實
+///
+/// 一列代表：該市場該月的除權除息列表中，代號屬於當時在市股票主檔
+/// （`getAllActiveStocks`，與每輪本月同步同一定義）的每一列都已寫入
+/// [DividendDistribution]，「權」「權息」列都已查過 TWT49UDetail。當時略過
+/// 的代號記在 [skippedSymbols]；其中任一個之後變成在市，這個事實就不再
+/// 涵蓋現況，該月視為未完成、重新回補。
+///
+/// - 沒有列＝未知，不等於那個月沒配息。本月與未來月份永遠沒有列。
+/// - 只能經 DAO 的 `completeDividendMonth` 寫入（同一個 transaction 內核對
+///   預期的列都在庫）。
+/// - 與 [DividendDistribution] 同生共死：不可加進 schema fingerprint 的
+///   保留白名單。資料被清掉而完成紀錄還在，會把缺資料讀成沒配息。
+/// - 月份鍵用 year＋month 兩個 INT：DateTimeColumn 在 text 模式下會帶
+///   時區 offset，PK 比的是原始字串、比較卻走 julianday，兩者不一致。
+@DataClassName('DividendMonthLedgerEntry')
+class DividendMonthLedger extends Table {
+  /// `MarketCode.twse`／`MarketCode.tpex`
+  TextColumn get market => text()();
+
+  /// 西元年
+  IntColumn get year => integer()();
+
+  /// 1–12
+  // Drift 文件的欄位 CHECK 寫法，產生碼處理自我引用，不會遞迴
+  // ignore: recursive_getters
+  IntColumn get month => integer().check(month.isBetweenValues(1, 12))();
+
+  /// 完成時間（台北牆鐘，診斷用）
+  DateTimeColumn get completedAt => dateTime()();
+
+  /// 列表原始列數（含不在主檔的代號）
+  IntColumn get listedRows => integer()();
+
+  /// 已知代號的列數；完成時這些列全在 [DividendDistribution]（含金額皆 0
+  /// 的已處理列）
+  IntColumn get knownRows => integer()();
+
+  /// 當時不在主檔而略過的代號：排序、去重、逗號分隔；沒有則為空字串
+  TextColumn get skippedSymbols => text()();
+
+  @override
+  Set<Column> get primaryKey => {market, year, month};
+}
+
+/// 除權除息逐月回補的失敗紀錄（營運狀態，不是事實）
+///
+/// 給回補排程退避與 warning 用；判斷資料是否完整只看
+/// [DividendMonthLedger]。該單位完成時整列刪除。與 [DividendMonthLedger]
+/// 同生共死，不可加進保留白名單。
+@DataClassName('DividendMonthFailureEntry')
+class DividendMonthFailure extends Table {
+  /// `MarketCode.twse`／`MarketCode.tpex`
+  TextColumn get market => text()();
+
+  /// 西元年
+  IntColumn get year => integer()();
+
+  /// 1–12
+  // Drift 文件的欄位 CHECK 寫法，產生碼處理自我引用，不會遞迴
+  // ignore: recursive_getters
+  IntColumn get month => integer().check(month.isBetweenValues(1, 12))();
+
+  /// 自上次完成以來失敗的輪數
+  IntColumn get failCount => integer()();
+
+  /// 最後一次失敗的時間（台北牆鐘）
+  DateTimeColumn get lastFailedAt => dateTime()();
+
+  /// 最後一次失敗的第一個錯誤（截斷至 300 字）
+  TextColumn get lastError => text()();
+
+  /// 最後一次失敗時明細查不到的代號：排序、去重、逗號分隔。第 3 段可據此
+  /// 判斷「除了這些代號，這個月其餘都在庫」。
+  TextColumn get failedSymbols => text()();
+
+  /// 最後一次失敗時列表本身是否成功（列表失敗時整月的列都不可信）
+  BoolColumn get listOk => boolean()();
+
+  @override
+  Set<Column> get primaryKey => {market, year, month};
+}
+
 /// 月營收 Table
 ///
 /// 用於基本面分析訊號

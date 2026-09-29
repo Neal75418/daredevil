@@ -57,6 +57,10 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
       .$DividendHistoryTable(this);
   late final i7.$DividendDistributionTable dividendDistribution = i7
       .$DividendDistributionTable(this);
+  late final i7.$DividendMonthLedgerTable dividendMonthLedger = i7
+      .$DividendMonthLedgerTable(this);
+  late final i7.$DividendMonthFailureTable dividendMonthFailure = i7
+      .$DividendMonthFailureTable(this);
   late final i7.$MarginTradingTable marginTrading = i7.$MarginTradingTable(
     this,
   );
@@ -107,6 +111,8 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
     stockValuation,
     dividendHistory,
     dividendDistribution,
+    dividendMonthLedger,
+    dividendMonthFailure,
     marginTrading,
     tradingWarning,
     insiderHolding,
@@ -385,6 +391,10 @@ class $AppDatabaseManager {
       i7.$$DividendHistoryTableTableManager(_db, _db.dividendHistory);
   i7.$$DividendDistributionTableTableManager get dividendDistribution =>
       i7.$$DividendDistributionTableTableManager(_db, _db.dividendDistribution);
+  i7.$$DividendMonthLedgerTableTableManager get dividendMonthLedger =>
+      i7.$$DividendMonthLedgerTableTableManager(_db, _db.dividendMonthLedger);
+  i7.$$DividendMonthFailureTableTableManager get dividendMonthFailure =>
+      i7.$$DividendMonthFailureTableTableManager(_db, _db.dividendMonthFailure);
   i7.$$MarginTradingTableTableManager get marginTrading =>
       i7.$$MarginTradingTableTableManager(_db, _db.marginTrading);
   i7.$$TradingWarningTableTableManager get tradingWarning =>

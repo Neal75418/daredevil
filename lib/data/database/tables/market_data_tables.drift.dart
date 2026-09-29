@@ -2654,6 +2654,546 @@ typedef $$DividendDistributionTableProcessedTableManager =
       i1.DividendDistributionEntry,
       i0.PrefetchHooks Function({bool symbol})
     >;
+typedef $$DividendMonthLedgerTableCreateCompanionBuilder =
+    i1.DividendMonthLedgerCompanion Function({
+      required String market,
+      required int year,
+      required int month,
+      required DateTime completedAt,
+      required int listedRows,
+      required int knownRows,
+      required String skippedSymbols,
+      i0.Value<int> rowid,
+    });
+typedef $$DividendMonthLedgerTableUpdateCompanionBuilder =
+    i1.DividendMonthLedgerCompanion Function({
+      i0.Value<String> market,
+      i0.Value<int> year,
+      i0.Value<int> month,
+      i0.Value<DateTime> completedAt,
+      i0.Value<int> listedRows,
+      i0.Value<int> knownRows,
+      i0.Value<String> skippedSymbols,
+      i0.Value<int> rowid,
+    });
+
+class $$DividendMonthLedgerTableFilterComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendMonthLedgerTable> {
+  $$DividendMonthLedgerTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnFilters<String> get market => $composableBuilder(
+    column: $table.market,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get year => $composableBuilder(
+    column: $table.year,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get month => $composableBuilder(
+    column: $table.month,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get listedRows => $composableBuilder(
+    column: $table.listedRows,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get knownRows => $composableBuilder(
+    column: $table.knownRows,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<String> get skippedSymbols => $composableBuilder(
+    column: $table.skippedSymbols,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+}
+
+class $$DividendMonthLedgerTableOrderingComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendMonthLedgerTable> {
+  $$DividendMonthLedgerTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnOrderings<String> get market => $composableBuilder(
+    column: $table.market,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get year => $composableBuilder(
+    column: $table.year,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get month => $composableBuilder(
+    column: $table.month,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get listedRows => $composableBuilder(
+    column: $table.listedRows,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get knownRows => $composableBuilder(
+    column: $table.knownRows,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<String> get skippedSymbols => $composableBuilder(
+    column: $table.skippedSymbols,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+}
+
+class $$DividendMonthLedgerTableAnnotationComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendMonthLedgerTable> {
+  $$DividendMonthLedgerTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.GeneratedColumn<String> get market =>
+      $composableBuilder(column: $table.market, builder: (column) => column);
+
+  i0.GeneratedColumn<int> get year =>
+      $composableBuilder(column: $table.year, builder: (column) => column);
+
+  i0.GeneratedColumn<int> get month =>
+      $composableBuilder(column: $table.month, builder: (column) => column);
+
+  i0.GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => column,
+  );
+
+  i0.GeneratedColumn<int> get listedRows => $composableBuilder(
+    column: $table.listedRows,
+    builder: (column) => column,
+  );
+
+  i0.GeneratedColumn<int> get knownRows =>
+      $composableBuilder(column: $table.knownRows, builder: (column) => column);
+
+  i0.GeneratedColumn<String> get skippedSymbols => $composableBuilder(
+    column: $table.skippedSymbols,
+    builder: (column) => column,
+  );
+}
+
+class $$DividendMonthLedgerTableTableManager
+    extends
+        i0.RootTableManager<
+          i0.GeneratedDatabase,
+          i1.$DividendMonthLedgerTable,
+          i1.DividendMonthLedgerEntry,
+          i1.$$DividendMonthLedgerTableFilterComposer,
+          i1.$$DividendMonthLedgerTableOrderingComposer,
+          i1.$$DividendMonthLedgerTableAnnotationComposer,
+          $$DividendMonthLedgerTableCreateCompanionBuilder,
+          $$DividendMonthLedgerTableUpdateCompanionBuilder,
+          (
+            i1.DividendMonthLedgerEntry,
+            i0.BaseReferences<
+              i0.GeneratedDatabase,
+              i1.$DividendMonthLedgerTable,
+              i1.DividendMonthLedgerEntry
+            >,
+          ),
+          i1.DividendMonthLedgerEntry,
+          i0.PrefetchHooks Function()
+        > {
+  $$DividendMonthLedgerTableTableManager(
+    i0.GeneratedDatabase db,
+    i1.$DividendMonthLedgerTable table,
+  ) : super(
+        i0.TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () => i1
+              .$$DividendMonthLedgerTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              i1.$$DividendMonthLedgerTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              i1.$$DividendMonthLedgerTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                i0.Value<String> market = const i0.Value.absent(),
+                i0.Value<int> year = const i0.Value.absent(),
+                i0.Value<int> month = const i0.Value.absent(),
+                i0.Value<DateTime> completedAt = const i0.Value.absent(),
+                i0.Value<int> listedRows = const i0.Value.absent(),
+                i0.Value<int> knownRows = const i0.Value.absent(),
+                i0.Value<String> skippedSymbols = const i0.Value.absent(),
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.DividendMonthLedgerCompanion(
+                market: market,
+                year: year,
+                month: month,
+                completedAt: completedAt,
+                listedRows: listedRows,
+                knownRows: knownRows,
+                skippedSymbols: skippedSymbols,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String market,
+                required int year,
+                required int month,
+                required DateTime completedAt,
+                required int listedRows,
+                required int knownRows,
+                required String skippedSymbols,
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.DividendMonthLedgerCompanion.insert(
+                market: market,
+                year: year,
+                month: month,
+                completedAt: completedAt,
+                listedRows: listedRows,
+                knownRows: knownRows,
+                skippedSymbols: skippedSymbols,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), i0.BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DividendMonthLedgerTableProcessedTableManager =
+    i0.ProcessedTableManager<
+      i0.GeneratedDatabase,
+      i1.$DividendMonthLedgerTable,
+      i1.DividendMonthLedgerEntry,
+      i1.$$DividendMonthLedgerTableFilterComposer,
+      i1.$$DividendMonthLedgerTableOrderingComposer,
+      i1.$$DividendMonthLedgerTableAnnotationComposer,
+      $$DividendMonthLedgerTableCreateCompanionBuilder,
+      $$DividendMonthLedgerTableUpdateCompanionBuilder,
+      (
+        i1.DividendMonthLedgerEntry,
+        i0.BaseReferences<
+          i0.GeneratedDatabase,
+          i1.$DividendMonthLedgerTable,
+          i1.DividendMonthLedgerEntry
+        >,
+      ),
+      i1.DividendMonthLedgerEntry,
+      i0.PrefetchHooks Function()
+    >;
+typedef $$DividendMonthFailureTableCreateCompanionBuilder =
+    i1.DividendMonthFailureCompanion Function({
+      required String market,
+      required int year,
+      required int month,
+      required int failCount,
+      required DateTime lastFailedAt,
+      required String lastError,
+      required String failedSymbols,
+      required bool listOk,
+      i0.Value<int> rowid,
+    });
+typedef $$DividendMonthFailureTableUpdateCompanionBuilder =
+    i1.DividendMonthFailureCompanion Function({
+      i0.Value<String> market,
+      i0.Value<int> year,
+      i0.Value<int> month,
+      i0.Value<int> failCount,
+      i0.Value<DateTime> lastFailedAt,
+      i0.Value<String> lastError,
+      i0.Value<String> failedSymbols,
+      i0.Value<bool> listOk,
+      i0.Value<int> rowid,
+    });
+
+class $$DividendMonthFailureTableFilterComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendMonthFailureTable> {
+  $$DividendMonthFailureTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnFilters<String> get market => $composableBuilder(
+    column: $table.market,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get year => $composableBuilder(
+    column: $table.year,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get month => $composableBuilder(
+    column: $table.month,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get failCount => $composableBuilder(
+    column: $table.failCount,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<DateTime> get lastFailedAt => $composableBuilder(
+    column: $table.lastFailedAt,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<String> get failedSymbols => $composableBuilder(
+    column: $table.failedSymbols,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<bool> get listOk => $composableBuilder(
+    column: $table.listOk,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+}
+
+class $$DividendMonthFailureTableOrderingComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendMonthFailureTable> {
+  $$DividendMonthFailureTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnOrderings<String> get market => $composableBuilder(
+    column: $table.market,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get year => $composableBuilder(
+    column: $table.year,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get month => $composableBuilder(
+    column: $table.month,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get failCount => $composableBuilder(
+    column: $table.failCount,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<DateTime> get lastFailedAt => $composableBuilder(
+    column: $table.lastFailedAt,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<String> get failedSymbols => $composableBuilder(
+    column: $table.failedSymbols,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<bool> get listOk => $composableBuilder(
+    column: $table.listOk,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+}
+
+class $$DividendMonthFailureTableAnnotationComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendMonthFailureTable> {
+  $$DividendMonthFailureTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.GeneratedColumn<String> get market =>
+      $composableBuilder(column: $table.market, builder: (column) => column);
+
+  i0.GeneratedColumn<int> get year =>
+      $composableBuilder(column: $table.year, builder: (column) => column);
+
+  i0.GeneratedColumn<int> get month =>
+      $composableBuilder(column: $table.month, builder: (column) => column);
+
+  i0.GeneratedColumn<int> get failCount =>
+      $composableBuilder(column: $table.failCount, builder: (column) => column);
+
+  i0.GeneratedColumn<DateTime> get lastFailedAt => $composableBuilder(
+    column: $table.lastFailedAt,
+    builder: (column) => column,
+  );
+
+  i0.GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  i0.GeneratedColumn<String> get failedSymbols => $composableBuilder(
+    column: $table.failedSymbols,
+    builder: (column) => column,
+  );
+
+  i0.GeneratedColumn<bool> get listOk =>
+      $composableBuilder(column: $table.listOk, builder: (column) => column);
+}
+
+class $$DividendMonthFailureTableTableManager
+    extends
+        i0.RootTableManager<
+          i0.GeneratedDatabase,
+          i1.$DividendMonthFailureTable,
+          i1.DividendMonthFailureEntry,
+          i1.$$DividendMonthFailureTableFilterComposer,
+          i1.$$DividendMonthFailureTableOrderingComposer,
+          i1.$$DividendMonthFailureTableAnnotationComposer,
+          $$DividendMonthFailureTableCreateCompanionBuilder,
+          $$DividendMonthFailureTableUpdateCompanionBuilder,
+          (
+            i1.DividendMonthFailureEntry,
+            i0.BaseReferences<
+              i0.GeneratedDatabase,
+              i1.$DividendMonthFailureTable,
+              i1.DividendMonthFailureEntry
+            >,
+          ),
+          i1.DividendMonthFailureEntry,
+          i0.PrefetchHooks Function()
+        > {
+  $$DividendMonthFailureTableTableManager(
+    i0.GeneratedDatabase db,
+    i1.$DividendMonthFailureTable table,
+  ) : super(
+        i0.TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              i1.$$DividendMonthFailureTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              i1.$$DividendMonthFailureTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              i1.$$DividendMonthFailureTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                i0.Value<String> market = const i0.Value.absent(),
+                i0.Value<int> year = const i0.Value.absent(),
+                i0.Value<int> month = const i0.Value.absent(),
+                i0.Value<int> failCount = const i0.Value.absent(),
+                i0.Value<DateTime> lastFailedAt = const i0.Value.absent(),
+                i0.Value<String> lastError = const i0.Value.absent(),
+                i0.Value<String> failedSymbols = const i0.Value.absent(),
+                i0.Value<bool> listOk = const i0.Value.absent(),
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.DividendMonthFailureCompanion(
+                market: market,
+                year: year,
+                month: month,
+                failCount: failCount,
+                lastFailedAt: lastFailedAt,
+                lastError: lastError,
+                failedSymbols: failedSymbols,
+                listOk: listOk,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String market,
+                required int year,
+                required int month,
+                required int failCount,
+                required DateTime lastFailedAt,
+                required String lastError,
+                required String failedSymbols,
+                required bool listOk,
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.DividendMonthFailureCompanion.insert(
+                market: market,
+                year: year,
+                month: month,
+                failCount: failCount,
+                lastFailedAt: lastFailedAt,
+                lastError: lastError,
+                failedSymbols: failedSymbols,
+                listOk: listOk,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), i0.BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DividendMonthFailureTableProcessedTableManager =
+    i0.ProcessedTableManager<
+      i0.GeneratedDatabase,
+      i1.$DividendMonthFailureTable,
+      i1.DividendMonthFailureEntry,
+      i1.$$DividendMonthFailureTableFilterComposer,
+      i1.$$DividendMonthFailureTableOrderingComposer,
+      i1.$$DividendMonthFailureTableAnnotationComposer,
+      $$DividendMonthFailureTableCreateCompanionBuilder,
+      $$DividendMonthFailureTableUpdateCompanionBuilder,
+      (
+        i1.DividendMonthFailureEntry,
+        i0.BaseReferences<
+          i0.GeneratedDatabase,
+          i1.$DividendMonthFailureTable,
+          i1.DividendMonthFailureEntry
+        >,
+      ),
+      i1.DividendMonthFailureEntry,
+      i0.PrefetchHooks Function()
+    >;
 typedef $$MonthlyRevenueTableCreateCompanionBuilder =
     i1.MonthlyRevenueCompanion Function({
       required String symbol,
@@ -8447,6 +8987,1065 @@ class DividendDistributionCompanion
           ..write('exDate: $exDate, ')
           ..write('cashDividend: $cashDividend, ')
           ..write('stockSharesPerThousand: $stockSharesPerThousand, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DividendMonthLedgerTable extends i2.DividendMonthLedger
+    with i0.TableInfo<$DividendMonthLedgerTable, i1.DividendMonthLedgerEntry> {
+  @override
+  final i0.GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DividendMonthLedgerTable(this.attachedDatabase, [this._alias]);
+  static const i0.VerificationMeta _marketMeta = const i0.VerificationMeta(
+    'market',
+  );
+  @override
+  late final i0.GeneratedColumn<String> market = i0.GeneratedColumn<String>(
+    'market',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _yearMeta = const i0.VerificationMeta(
+    'year',
+  );
+  @override
+  late final i0.GeneratedColumn<int> year = i0.GeneratedColumn<int>(
+    'year',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _monthMeta = const i0.VerificationMeta(
+    'month',
+  );
+  @override
+  late final i0.GeneratedColumn<int> month = i0.GeneratedColumn<int>(
+    'month',
+    aliasedName,
+    false,
+    check: () => i3.ComparableExpr(month).isBetweenValues(1, 12),
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _completedAtMeta = const i0.VerificationMeta(
+    'completedAt',
+  );
+  @override
+  late final i0.GeneratedColumn<DateTime> completedAt =
+      i0.GeneratedColumn<DateTime>(
+        'completed_at',
+        aliasedName,
+        false,
+        type: i0.DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const i0.VerificationMeta _listedRowsMeta = const i0.VerificationMeta(
+    'listedRows',
+  );
+  @override
+  late final i0.GeneratedColumn<int> listedRows = i0.GeneratedColumn<int>(
+    'listed_rows',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _knownRowsMeta = const i0.VerificationMeta(
+    'knownRows',
+  );
+  @override
+  late final i0.GeneratedColumn<int> knownRows = i0.GeneratedColumn<int>(
+    'known_rows',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _skippedSymbolsMeta =
+      const i0.VerificationMeta('skippedSymbols');
+  @override
+  late final i0.GeneratedColumn<String> skippedSymbols =
+      i0.GeneratedColumn<String>(
+        'skipped_symbols',
+        aliasedName,
+        false,
+        type: i0.DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  @override
+  List<i0.GeneratedColumn> get $columns => [
+    market,
+    year,
+    month,
+    completedAt,
+    listedRows,
+    knownRows,
+    skippedSymbols,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'dividend_month_ledger';
+  @override
+  i0.VerificationContext validateIntegrity(
+    i0.Insertable<i1.DividendMonthLedgerEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = i0.VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('market')) {
+      context.handle(
+        _marketMeta,
+        market.isAcceptableOrUnknown(data['market']!, _marketMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_marketMeta);
+    }
+    if (data.containsKey('year')) {
+      context.handle(
+        _yearMeta,
+        year.isAcceptableOrUnknown(data['year']!, _yearMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_yearMeta);
+    }
+    if (data.containsKey('month')) {
+      context.handle(
+        _monthMeta,
+        month.isAcceptableOrUnknown(data['month']!, _monthMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_monthMeta);
+    }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+        _completedAtMeta,
+        completedAt.isAcceptableOrUnknown(
+          data['completed_at']!,
+          _completedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_completedAtMeta);
+    }
+    if (data.containsKey('listed_rows')) {
+      context.handle(
+        _listedRowsMeta,
+        listedRows.isAcceptableOrUnknown(data['listed_rows']!, _listedRowsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_listedRowsMeta);
+    }
+    if (data.containsKey('known_rows')) {
+      context.handle(
+        _knownRowsMeta,
+        knownRows.isAcceptableOrUnknown(data['known_rows']!, _knownRowsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_knownRowsMeta);
+    }
+    if (data.containsKey('skipped_symbols')) {
+      context.handle(
+        _skippedSymbolsMeta,
+        skippedSymbols.isAcceptableOrUnknown(
+          data['skipped_symbols']!,
+          _skippedSymbolsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_skippedSymbolsMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<i0.GeneratedColumn> get $primaryKey => {market, year, month};
+  @override
+  i1.DividendMonthLedgerEntry map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return i1.DividendMonthLedgerEntry(
+      market: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}market'],
+      )!,
+      year: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}year'],
+      )!,
+      month: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}month'],
+      )!,
+      completedAt: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.dateTime,
+        data['${effectivePrefix}completed_at'],
+      )!,
+      listedRows: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}listed_rows'],
+      )!,
+      knownRows: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}known_rows'],
+      )!,
+      skippedSymbols: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}skipped_symbols'],
+      )!,
+    );
+  }
+
+  @override
+  $DividendMonthLedgerTable createAlias(String alias) {
+    return $DividendMonthLedgerTable(attachedDatabase, alias);
+  }
+}
+
+class DividendMonthLedgerEntry extends i0.DataClass
+    implements i0.Insertable<i1.DividendMonthLedgerEntry> {
+  /// `MarketCode.twse`／`MarketCode.tpex`
+  final String market;
+
+  /// 西元年
+  final int year;
+
+  /// 1–12
+  final int month;
+
+  /// 完成時間（台北牆鐘，診斷用）
+  final DateTime completedAt;
+
+  /// 列表原始列數（含不在主檔的代號）
+  final int listedRows;
+
+  /// 已知代號的列數；完成時這些列全在 [DividendDistribution]（含金額皆 0
+  /// 的已處理列）
+  final int knownRows;
+
+  /// 當時不在主檔而略過的代號：排序、去重、逗號分隔；沒有則為空字串
+  final String skippedSymbols;
+  const DividendMonthLedgerEntry({
+    required this.market,
+    required this.year,
+    required this.month,
+    required this.completedAt,
+    required this.listedRows,
+    required this.knownRows,
+    required this.skippedSymbols,
+  });
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    map['market'] = i0.Variable<String>(market);
+    map['year'] = i0.Variable<int>(year);
+    map['month'] = i0.Variable<int>(month);
+    map['completed_at'] = i0.Variable<DateTime>(completedAt);
+    map['listed_rows'] = i0.Variable<int>(listedRows);
+    map['known_rows'] = i0.Variable<int>(knownRows);
+    map['skipped_symbols'] = i0.Variable<String>(skippedSymbols);
+    return map;
+  }
+
+  i1.DividendMonthLedgerCompanion toCompanion(bool nullToAbsent) {
+    return i1.DividendMonthLedgerCompanion(
+      market: i0.Value(market),
+      year: i0.Value(year),
+      month: i0.Value(month),
+      completedAt: i0.Value(completedAt),
+      listedRows: i0.Value(listedRows),
+      knownRows: i0.Value(knownRows),
+      skippedSymbols: i0.Value(skippedSymbols),
+    );
+  }
+
+  factory DividendMonthLedgerEntry.fromJson(
+    Map<String, dynamic> json, {
+    i0.ValueSerializer? serializer,
+  }) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return DividendMonthLedgerEntry(
+      market: serializer.fromJson<String>(json['market']),
+      year: serializer.fromJson<int>(json['year']),
+      month: serializer.fromJson<int>(json['month']),
+      completedAt: serializer.fromJson<DateTime>(json['completedAt']),
+      listedRows: serializer.fromJson<int>(json['listedRows']),
+      knownRows: serializer.fromJson<int>(json['knownRows']),
+      skippedSymbols: serializer.fromJson<String>(json['skippedSymbols']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({i0.ValueSerializer? serializer}) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'market': serializer.toJson<String>(market),
+      'year': serializer.toJson<int>(year),
+      'month': serializer.toJson<int>(month),
+      'completedAt': serializer.toJson<DateTime>(completedAt),
+      'listedRows': serializer.toJson<int>(listedRows),
+      'knownRows': serializer.toJson<int>(knownRows),
+      'skippedSymbols': serializer.toJson<String>(skippedSymbols),
+    };
+  }
+
+  i1.DividendMonthLedgerEntry copyWith({
+    String? market,
+    int? year,
+    int? month,
+    DateTime? completedAt,
+    int? listedRows,
+    int? knownRows,
+    String? skippedSymbols,
+  }) => i1.DividendMonthLedgerEntry(
+    market: market ?? this.market,
+    year: year ?? this.year,
+    month: month ?? this.month,
+    completedAt: completedAt ?? this.completedAt,
+    listedRows: listedRows ?? this.listedRows,
+    knownRows: knownRows ?? this.knownRows,
+    skippedSymbols: skippedSymbols ?? this.skippedSymbols,
+  );
+  DividendMonthLedgerEntry copyWithCompanion(
+    i1.DividendMonthLedgerCompanion data,
+  ) {
+    return DividendMonthLedgerEntry(
+      market: data.market.present ? data.market.value : this.market,
+      year: data.year.present ? data.year.value : this.year,
+      month: data.month.present ? data.month.value : this.month,
+      completedAt: data.completedAt.present
+          ? data.completedAt.value
+          : this.completedAt,
+      listedRows: data.listedRows.present
+          ? data.listedRows.value
+          : this.listedRows,
+      knownRows: data.knownRows.present ? data.knownRows.value : this.knownRows,
+      skippedSymbols: data.skippedSymbols.present
+          ? data.skippedSymbols.value
+          : this.skippedSymbols,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DividendMonthLedgerEntry(')
+          ..write('market: $market, ')
+          ..write('year: $year, ')
+          ..write('month: $month, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('listedRows: $listedRows, ')
+          ..write('knownRows: $knownRows, ')
+          ..write('skippedSymbols: $skippedSymbols')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    market,
+    year,
+    month,
+    completedAt,
+    listedRows,
+    knownRows,
+    skippedSymbols,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is i1.DividendMonthLedgerEntry &&
+          other.market == this.market &&
+          other.year == this.year &&
+          other.month == this.month &&
+          other.completedAt == this.completedAt &&
+          other.listedRows == this.listedRows &&
+          other.knownRows == this.knownRows &&
+          other.skippedSymbols == this.skippedSymbols);
+}
+
+class DividendMonthLedgerCompanion
+    extends i0.UpdateCompanion<i1.DividendMonthLedgerEntry> {
+  final i0.Value<String> market;
+  final i0.Value<int> year;
+  final i0.Value<int> month;
+  final i0.Value<DateTime> completedAt;
+  final i0.Value<int> listedRows;
+  final i0.Value<int> knownRows;
+  final i0.Value<String> skippedSymbols;
+  final i0.Value<int> rowid;
+  const DividendMonthLedgerCompanion({
+    this.market = const i0.Value.absent(),
+    this.year = const i0.Value.absent(),
+    this.month = const i0.Value.absent(),
+    this.completedAt = const i0.Value.absent(),
+    this.listedRows = const i0.Value.absent(),
+    this.knownRows = const i0.Value.absent(),
+    this.skippedSymbols = const i0.Value.absent(),
+    this.rowid = const i0.Value.absent(),
+  });
+  DividendMonthLedgerCompanion.insert({
+    required String market,
+    required int year,
+    required int month,
+    required DateTime completedAt,
+    required int listedRows,
+    required int knownRows,
+    required String skippedSymbols,
+    this.rowid = const i0.Value.absent(),
+  }) : market = i0.Value(market),
+       year = i0.Value(year),
+       month = i0.Value(month),
+       completedAt = i0.Value(completedAt),
+       listedRows = i0.Value(listedRows),
+       knownRows = i0.Value(knownRows),
+       skippedSymbols = i0.Value(skippedSymbols);
+  static i0.Insertable<i1.DividendMonthLedgerEntry> custom({
+    i0.Expression<String>? market,
+    i0.Expression<int>? year,
+    i0.Expression<int>? month,
+    i0.Expression<DateTime>? completedAt,
+    i0.Expression<int>? listedRows,
+    i0.Expression<int>? knownRows,
+    i0.Expression<String>? skippedSymbols,
+    i0.Expression<int>? rowid,
+  }) {
+    return i0.RawValuesInsertable({
+      if (market != null) 'market': market,
+      if (year != null) 'year': year,
+      if (month != null) 'month': month,
+      if (completedAt != null) 'completed_at': completedAt,
+      if (listedRows != null) 'listed_rows': listedRows,
+      if (knownRows != null) 'known_rows': knownRows,
+      if (skippedSymbols != null) 'skipped_symbols': skippedSymbols,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  i1.DividendMonthLedgerCompanion copyWith({
+    i0.Value<String>? market,
+    i0.Value<int>? year,
+    i0.Value<int>? month,
+    i0.Value<DateTime>? completedAt,
+    i0.Value<int>? listedRows,
+    i0.Value<int>? knownRows,
+    i0.Value<String>? skippedSymbols,
+    i0.Value<int>? rowid,
+  }) {
+    return i1.DividendMonthLedgerCompanion(
+      market: market ?? this.market,
+      year: year ?? this.year,
+      month: month ?? this.month,
+      completedAt: completedAt ?? this.completedAt,
+      listedRows: listedRows ?? this.listedRows,
+      knownRows: knownRows ?? this.knownRows,
+      skippedSymbols: skippedSymbols ?? this.skippedSymbols,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    if (market.present) {
+      map['market'] = i0.Variable<String>(market.value);
+    }
+    if (year.present) {
+      map['year'] = i0.Variable<int>(year.value);
+    }
+    if (month.present) {
+      map['month'] = i0.Variable<int>(month.value);
+    }
+    if (completedAt.present) {
+      map['completed_at'] = i0.Variable<DateTime>(completedAt.value);
+    }
+    if (listedRows.present) {
+      map['listed_rows'] = i0.Variable<int>(listedRows.value);
+    }
+    if (knownRows.present) {
+      map['known_rows'] = i0.Variable<int>(knownRows.value);
+    }
+    if (skippedSymbols.present) {
+      map['skipped_symbols'] = i0.Variable<String>(skippedSymbols.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = i0.Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DividendMonthLedgerCompanion(')
+          ..write('market: $market, ')
+          ..write('year: $year, ')
+          ..write('month: $month, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('listedRows: $listedRows, ')
+          ..write('knownRows: $knownRows, ')
+          ..write('skippedSymbols: $skippedSymbols, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DividendMonthFailureTable extends i2.DividendMonthFailure
+    with
+        i0.TableInfo<$DividendMonthFailureTable, i1.DividendMonthFailureEntry> {
+  @override
+  final i0.GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DividendMonthFailureTable(this.attachedDatabase, [this._alias]);
+  static const i0.VerificationMeta _marketMeta = const i0.VerificationMeta(
+    'market',
+  );
+  @override
+  late final i0.GeneratedColumn<String> market = i0.GeneratedColumn<String>(
+    'market',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _yearMeta = const i0.VerificationMeta(
+    'year',
+  );
+  @override
+  late final i0.GeneratedColumn<int> year = i0.GeneratedColumn<int>(
+    'year',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _monthMeta = const i0.VerificationMeta(
+    'month',
+  );
+  @override
+  late final i0.GeneratedColumn<int> month = i0.GeneratedColumn<int>(
+    'month',
+    aliasedName,
+    false,
+    check: () => i3.ComparableExpr(month).isBetweenValues(1, 12),
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _failCountMeta = const i0.VerificationMeta(
+    'failCount',
+  );
+  @override
+  late final i0.GeneratedColumn<int> failCount = i0.GeneratedColumn<int>(
+    'fail_count',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _lastFailedAtMeta =
+      const i0.VerificationMeta('lastFailedAt');
+  @override
+  late final i0.GeneratedColumn<DateTime> lastFailedAt =
+      i0.GeneratedColumn<DateTime>(
+        'last_failed_at',
+        aliasedName,
+        false,
+        type: i0.DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const i0.VerificationMeta _lastErrorMeta = const i0.VerificationMeta(
+    'lastError',
+  );
+  @override
+  late final i0.GeneratedColumn<String> lastError = i0.GeneratedColumn<String>(
+    'last_error',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _failedSymbolsMeta =
+      const i0.VerificationMeta('failedSymbols');
+  @override
+  late final i0.GeneratedColumn<String> failedSymbols =
+      i0.GeneratedColumn<String>(
+        'failed_symbols',
+        aliasedName,
+        false,
+        type: i0.DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const i0.VerificationMeta _listOkMeta = const i0.VerificationMeta(
+    'listOk',
+  );
+  @override
+  late final i0.GeneratedColumn<bool> listOk = i0.GeneratedColumn<bool>(
+    'list_ok',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: i0.GeneratedColumn.constraintIsAlways(
+      'CHECK ("list_ok" IN (0, 1))',
+    ),
+  );
+  @override
+  List<i0.GeneratedColumn> get $columns => [
+    market,
+    year,
+    month,
+    failCount,
+    lastFailedAt,
+    lastError,
+    failedSymbols,
+    listOk,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'dividend_month_failure';
+  @override
+  i0.VerificationContext validateIntegrity(
+    i0.Insertable<i1.DividendMonthFailureEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = i0.VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('market')) {
+      context.handle(
+        _marketMeta,
+        market.isAcceptableOrUnknown(data['market']!, _marketMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_marketMeta);
+    }
+    if (data.containsKey('year')) {
+      context.handle(
+        _yearMeta,
+        year.isAcceptableOrUnknown(data['year']!, _yearMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_yearMeta);
+    }
+    if (data.containsKey('month')) {
+      context.handle(
+        _monthMeta,
+        month.isAcceptableOrUnknown(data['month']!, _monthMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_monthMeta);
+    }
+    if (data.containsKey('fail_count')) {
+      context.handle(
+        _failCountMeta,
+        failCount.isAcceptableOrUnknown(data['fail_count']!, _failCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_failCountMeta);
+    }
+    if (data.containsKey('last_failed_at')) {
+      context.handle(
+        _lastFailedAtMeta,
+        lastFailedAt.isAcceptableOrUnknown(
+          data['last_failed_at']!,
+          _lastFailedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastFailedAtMeta);
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(
+        _lastErrorMeta,
+        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_lastErrorMeta);
+    }
+    if (data.containsKey('failed_symbols')) {
+      context.handle(
+        _failedSymbolsMeta,
+        failedSymbols.isAcceptableOrUnknown(
+          data['failed_symbols']!,
+          _failedSymbolsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_failedSymbolsMeta);
+    }
+    if (data.containsKey('list_ok')) {
+      context.handle(
+        _listOkMeta,
+        listOk.isAcceptableOrUnknown(data['list_ok']!, _listOkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_listOkMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<i0.GeneratedColumn> get $primaryKey => {market, year, month};
+  @override
+  i1.DividendMonthFailureEntry map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return i1.DividendMonthFailureEntry(
+      market: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}market'],
+      )!,
+      year: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}year'],
+      )!,
+      month: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}month'],
+      )!,
+      failCount: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}fail_count'],
+      )!,
+      lastFailedAt: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.dateTime,
+        data['${effectivePrefix}last_failed_at'],
+      )!,
+      lastError: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}last_error'],
+      )!,
+      failedSymbols: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}failed_symbols'],
+      )!,
+      listOk: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.bool,
+        data['${effectivePrefix}list_ok'],
+      )!,
+    );
+  }
+
+  @override
+  $DividendMonthFailureTable createAlias(String alias) {
+    return $DividendMonthFailureTable(attachedDatabase, alias);
+  }
+}
+
+class DividendMonthFailureEntry extends i0.DataClass
+    implements i0.Insertable<i1.DividendMonthFailureEntry> {
+  /// `MarketCode.twse`／`MarketCode.tpex`
+  final String market;
+
+  /// 西元年
+  final int year;
+
+  /// 1–12
+  final int month;
+
+  /// 自上次完成以來失敗的輪數
+  final int failCount;
+
+  /// 最後一次失敗的時間（台北牆鐘）
+  final DateTime lastFailedAt;
+
+  /// 最後一次失敗的第一個錯誤（截斷至 300 字）
+  final String lastError;
+
+  /// 最後一次失敗時明細查不到的代號：排序、去重、逗號分隔。第 3 段可據此
+  /// 判斷「除了這些代號，這個月其餘都在庫」。
+  final String failedSymbols;
+
+  /// 最後一次失敗時列表本身是否成功（列表失敗時整月的列都不可信）
+  final bool listOk;
+  const DividendMonthFailureEntry({
+    required this.market,
+    required this.year,
+    required this.month,
+    required this.failCount,
+    required this.lastFailedAt,
+    required this.lastError,
+    required this.failedSymbols,
+    required this.listOk,
+  });
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    map['market'] = i0.Variable<String>(market);
+    map['year'] = i0.Variable<int>(year);
+    map['month'] = i0.Variable<int>(month);
+    map['fail_count'] = i0.Variable<int>(failCount);
+    map['last_failed_at'] = i0.Variable<DateTime>(lastFailedAt);
+    map['last_error'] = i0.Variable<String>(lastError);
+    map['failed_symbols'] = i0.Variable<String>(failedSymbols);
+    map['list_ok'] = i0.Variable<bool>(listOk);
+    return map;
+  }
+
+  i1.DividendMonthFailureCompanion toCompanion(bool nullToAbsent) {
+    return i1.DividendMonthFailureCompanion(
+      market: i0.Value(market),
+      year: i0.Value(year),
+      month: i0.Value(month),
+      failCount: i0.Value(failCount),
+      lastFailedAt: i0.Value(lastFailedAt),
+      lastError: i0.Value(lastError),
+      failedSymbols: i0.Value(failedSymbols),
+      listOk: i0.Value(listOk),
+    );
+  }
+
+  factory DividendMonthFailureEntry.fromJson(
+    Map<String, dynamic> json, {
+    i0.ValueSerializer? serializer,
+  }) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return DividendMonthFailureEntry(
+      market: serializer.fromJson<String>(json['market']),
+      year: serializer.fromJson<int>(json['year']),
+      month: serializer.fromJson<int>(json['month']),
+      failCount: serializer.fromJson<int>(json['failCount']),
+      lastFailedAt: serializer.fromJson<DateTime>(json['lastFailedAt']),
+      lastError: serializer.fromJson<String>(json['lastError']),
+      failedSymbols: serializer.fromJson<String>(json['failedSymbols']),
+      listOk: serializer.fromJson<bool>(json['listOk']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({i0.ValueSerializer? serializer}) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'market': serializer.toJson<String>(market),
+      'year': serializer.toJson<int>(year),
+      'month': serializer.toJson<int>(month),
+      'failCount': serializer.toJson<int>(failCount),
+      'lastFailedAt': serializer.toJson<DateTime>(lastFailedAt),
+      'lastError': serializer.toJson<String>(lastError),
+      'failedSymbols': serializer.toJson<String>(failedSymbols),
+      'listOk': serializer.toJson<bool>(listOk),
+    };
+  }
+
+  i1.DividendMonthFailureEntry copyWith({
+    String? market,
+    int? year,
+    int? month,
+    int? failCount,
+    DateTime? lastFailedAt,
+    String? lastError,
+    String? failedSymbols,
+    bool? listOk,
+  }) => i1.DividendMonthFailureEntry(
+    market: market ?? this.market,
+    year: year ?? this.year,
+    month: month ?? this.month,
+    failCount: failCount ?? this.failCount,
+    lastFailedAt: lastFailedAt ?? this.lastFailedAt,
+    lastError: lastError ?? this.lastError,
+    failedSymbols: failedSymbols ?? this.failedSymbols,
+    listOk: listOk ?? this.listOk,
+  );
+  DividendMonthFailureEntry copyWithCompanion(
+    i1.DividendMonthFailureCompanion data,
+  ) {
+    return DividendMonthFailureEntry(
+      market: data.market.present ? data.market.value : this.market,
+      year: data.year.present ? data.year.value : this.year,
+      month: data.month.present ? data.month.value : this.month,
+      failCount: data.failCount.present ? data.failCount.value : this.failCount,
+      lastFailedAt: data.lastFailedAt.present
+          ? data.lastFailedAt.value
+          : this.lastFailedAt,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      failedSymbols: data.failedSymbols.present
+          ? data.failedSymbols.value
+          : this.failedSymbols,
+      listOk: data.listOk.present ? data.listOk.value : this.listOk,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DividendMonthFailureEntry(')
+          ..write('market: $market, ')
+          ..write('year: $year, ')
+          ..write('month: $month, ')
+          ..write('failCount: $failCount, ')
+          ..write('lastFailedAt: $lastFailedAt, ')
+          ..write('lastError: $lastError, ')
+          ..write('failedSymbols: $failedSymbols, ')
+          ..write('listOk: $listOk')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    market,
+    year,
+    month,
+    failCount,
+    lastFailedAt,
+    lastError,
+    failedSymbols,
+    listOk,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is i1.DividendMonthFailureEntry &&
+          other.market == this.market &&
+          other.year == this.year &&
+          other.month == this.month &&
+          other.failCount == this.failCount &&
+          other.lastFailedAt == this.lastFailedAt &&
+          other.lastError == this.lastError &&
+          other.failedSymbols == this.failedSymbols &&
+          other.listOk == this.listOk);
+}
+
+class DividendMonthFailureCompanion
+    extends i0.UpdateCompanion<i1.DividendMonthFailureEntry> {
+  final i0.Value<String> market;
+  final i0.Value<int> year;
+  final i0.Value<int> month;
+  final i0.Value<int> failCount;
+  final i0.Value<DateTime> lastFailedAt;
+  final i0.Value<String> lastError;
+  final i0.Value<String> failedSymbols;
+  final i0.Value<bool> listOk;
+  final i0.Value<int> rowid;
+  const DividendMonthFailureCompanion({
+    this.market = const i0.Value.absent(),
+    this.year = const i0.Value.absent(),
+    this.month = const i0.Value.absent(),
+    this.failCount = const i0.Value.absent(),
+    this.lastFailedAt = const i0.Value.absent(),
+    this.lastError = const i0.Value.absent(),
+    this.failedSymbols = const i0.Value.absent(),
+    this.listOk = const i0.Value.absent(),
+    this.rowid = const i0.Value.absent(),
+  });
+  DividendMonthFailureCompanion.insert({
+    required String market,
+    required int year,
+    required int month,
+    required int failCount,
+    required DateTime lastFailedAt,
+    required String lastError,
+    required String failedSymbols,
+    required bool listOk,
+    this.rowid = const i0.Value.absent(),
+  }) : market = i0.Value(market),
+       year = i0.Value(year),
+       month = i0.Value(month),
+       failCount = i0.Value(failCount),
+       lastFailedAt = i0.Value(lastFailedAt),
+       lastError = i0.Value(lastError),
+       failedSymbols = i0.Value(failedSymbols),
+       listOk = i0.Value(listOk);
+  static i0.Insertable<i1.DividendMonthFailureEntry> custom({
+    i0.Expression<String>? market,
+    i0.Expression<int>? year,
+    i0.Expression<int>? month,
+    i0.Expression<int>? failCount,
+    i0.Expression<DateTime>? lastFailedAt,
+    i0.Expression<String>? lastError,
+    i0.Expression<String>? failedSymbols,
+    i0.Expression<bool>? listOk,
+    i0.Expression<int>? rowid,
+  }) {
+    return i0.RawValuesInsertable({
+      if (market != null) 'market': market,
+      if (year != null) 'year': year,
+      if (month != null) 'month': month,
+      if (failCount != null) 'fail_count': failCount,
+      if (lastFailedAt != null) 'last_failed_at': lastFailedAt,
+      if (lastError != null) 'last_error': lastError,
+      if (failedSymbols != null) 'failed_symbols': failedSymbols,
+      if (listOk != null) 'list_ok': listOk,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  i1.DividendMonthFailureCompanion copyWith({
+    i0.Value<String>? market,
+    i0.Value<int>? year,
+    i0.Value<int>? month,
+    i0.Value<int>? failCount,
+    i0.Value<DateTime>? lastFailedAt,
+    i0.Value<String>? lastError,
+    i0.Value<String>? failedSymbols,
+    i0.Value<bool>? listOk,
+    i0.Value<int>? rowid,
+  }) {
+    return i1.DividendMonthFailureCompanion(
+      market: market ?? this.market,
+      year: year ?? this.year,
+      month: month ?? this.month,
+      failCount: failCount ?? this.failCount,
+      lastFailedAt: lastFailedAt ?? this.lastFailedAt,
+      lastError: lastError ?? this.lastError,
+      failedSymbols: failedSymbols ?? this.failedSymbols,
+      listOk: listOk ?? this.listOk,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    if (market.present) {
+      map['market'] = i0.Variable<String>(market.value);
+    }
+    if (year.present) {
+      map['year'] = i0.Variable<int>(year.value);
+    }
+    if (month.present) {
+      map['month'] = i0.Variable<int>(month.value);
+    }
+    if (failCount.present) {
+      map['fail_count'] = i0.Variable<int>(failCount.value);
+    }
+    if (lastFailedAt.present) {
+      map['last_failed_at'] = i0.Variable<DateTime>(lastFailedAt.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = i0.Variable<String>(lastError.value);
+    }
+    if (failedSymbols.present) {
+      map['failed_symbols'] = i0.Variable<String>(failedSymbols.value);
+    }
+    if (listOk.present) {
+      map['list_ok'] = i0.Variable<bool>(listOk.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = i0.Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DividendMonthFailureCompanion(')
+          ..write('market: $market, ')
+          ..write('year: $year, ')
+          ..write('month: $month, ')
+          ..write('failCount: $failCount, ')
+          ..write('lastFailedAt: $lastFailedAt, ')
+          ..write('lastError: $lastError, ')
+          ..write('failedSymbols: $failedSymbols, ')
+          ..write('listOk: $listOk, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
