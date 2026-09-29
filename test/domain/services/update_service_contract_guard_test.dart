@@ -86,6 +86,31 @@ void main() {
     );
   });
 
+  test('🚨 摘要回報限流的 if (x.rateLimited) 區塊也要翻旗標', () {
+    // 回報限流的第二種形狀:子步驟接住限流、放進摘要回傳(不 rethrow,
+    // 保留已抓資料),由 coordinator 讀摘要決定中止。沒翻旗標的話,後面
+    // 的步驟會繼續打已被限流的 API,而上一條規則掃不到這種寫法。
+    final blocks = RegExp(
+      r'if \(\w+\.rateLimited\) \{(.*?)\n(\s*)\}',
+      dotAll: true,
+    ).allMatches(source).toList();
+    expect(
+      blocks.length,
+      greaterThanOrEqualTo(3),
+      reason: '5.5 未定案重抓、歷史價格、6.6 除權除息回補；數量驟減＝掃描器失效',
+    );
+    final offenders = [
+      for (final m in blocks)
+        if (!m.group(1)!.contains('rateLimitedAbort = true'))
+          '\n'.allMatches(source.substring(0, m.start)).length + 1,
+    ];
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'update_service.dart 這些行號的 rateLimited 區塊沒有翻旗標',
+    );
+  });
+
   test('sanity:掃描器真的看得到契約字面(防假綠)', () {
     // 上面兩條都是「找不到違規就過」——掃描器若因重構/改名而失效,
     // 兩條會一起變成套套邏輯。這條確保字面確實存在於檔案裡。

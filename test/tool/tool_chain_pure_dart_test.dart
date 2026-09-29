@@ -18,10 +18,18 @@ void main() {
   // 2026-08-08:新增 tool/intraday_alert_check.dart(launchd 每 5 分鐘的
   // 盤中提醒檢查)後,守門改為涵蓋整條 tool 鏈——同一個失效模式
   // (混進 flutter → 編譯失敗 → 排程靜默斷)對兩支同等致命。
-  for (final entry in [
-    'tool/daily_update.dart',
-    'tool/intraday_alert_check.dart',
-  ]) {
+  // 2026-09-29:加入除權除息回補修復工具——它與每輪更新共用
+  // DividendBackfiller,同一個閉包染上 flutter 會讓兩邊一起壞。
+  //
+  // 錨點各自不同(確認確實走到深層,防 regex/路徑解析壞掉造成假綠)。
+  const anchors = {
+    'tool/daily_update.dart': 'lib/domain/services/update_service.dart',
+    'tool/intraday_alert_check.dart':
+        'lib/domain/services/alert/intraday_alert_monitor.dart',
+    'tool/backfill_dividend_distributions.dart':
+        'lib/domain/services/update/dividend_backfiller.dart',
+  };
+  for (final entry in anchors.keys) {
     test('$entry 的 import 閉包不得含 flutter/easy_localization/dart:ui', () {
       const banned = [
         'package:flutter/',
@@ -92,11 +100,7 @@ void main() {
             '編譯失敗,launchd 繼續跑舊產物:\n${violations.join('\n')}',
       );
       // sanity:確實走到了深層(防 regex/路徑解析壞掉造成假綠)。
-      // 錨點各自不同——daily_update 走 update chain、intraday 走 alert chain。
-      final anchor = entry == 'tool/daily_update.dart'
-          ? 'lib/domain/services/update_service.dart'
-          : 'lib/domain/services/alert/intraday_alert_monitor.dart';
-      expect(visited, contains(anchor));
+      expect(visited, contains(anchors[entry]));
       expect(visited.length, greaterThan(5));
     });
   }

@@ -37,6 +37,13 @@ mixin DividendDaoMixin on $AppDatabase {
     });
   }
 
+  /// 刪除一列除權除息（含金額皆 0 的已處理列）。回補發現 DB 裡的舊列與
+  /// 明細不符時用：留著的話，下一輪會把它當成已處理、不再查明細。
+  Future<void> deleteDividendDistribution(String symbol, DateTime exDate) =>
+      (delete(
+        dividendDistribution,
+      )..where((t) => t.symbol.equals(symbol) & t.exDate.equals(exDate))).go();
+
   /// 取得股票的股利配發（依除息日由新到舊）。只回有配發的列，不含只有
   /// 現金增資的除權。
   Future<List<DividendDistributionEntry>> getDividendDistributions(

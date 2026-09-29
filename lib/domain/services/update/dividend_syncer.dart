@@ -9,12 +9,25 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 
+/// 已拆開現金與配股的除權除息列 → 股利配發表的寫入列（本月同步與歷史回補
+/// 共用）。列表拆不出、尚未補明細的列（[ExRightResult.needsDetail]）不可傳入。
+DividendDistributionCompanion dividendDistributionCompanion(
+  ExRightResult row,
+) => DividendDistributionCompanion.insert(
+  symbol: row.symbol,
+  exDate: row.exDate,
+  cashDividend: row.cashDividend!,
+  stockSharesPerThousand: row.stockSharesPerThousand!,
+);
+
 /// 已宣告股利 + 股東會 + 除權除息同步器
 ///
 /// 從 TWSE/TPEX 取得：
 /// 1. 已宣告股利 upsert 至 DividendHistory（更新 exDividendDate/exRightsDate）
 /// 2. 股東會日程寫入 StockEvent（eventType = SHAREHOLDER_MEETING）
 /// 3. 除權除息計算結果寫入 DividendDistribution（[syncDistributions]）
+///
+/// 3 只管本月；歷史月份由 `DividendBackfiller` 回補（同一步驟、本月同步之後）。
 ///
 /// 1、2（[sync]）在 UpdateService._syncAuxiliaryData()（並行階段）呼叫，與
 /// MarketIndexSyncer、TdccHoldingSyncer 同級；3 在更新步驟 6.6（上櫃候選補充
@@ -25,7 +38,7 @@ class DividendSyncer {
     TwseClient? twseClient,
     TpexClient? tpexClient,
     Duration detailCallDelay = const Duration(
-      milliseconds: ApiConfig.dividendDetailCallDelayMs,
+      milliseconds: ApiConfig.dividendCallDelayMs,
     ),
   }) : _db = database,
        _twse = twseClient,
@@ -319,6 +332,14 @@ class DividendSyncer {
           calls++;
           try {
             final detail = await _twse.getExRightDetail(row.symbol, row.exDate);
+            if (!row.matchesReference(detail)) {
+              errors.add(
+                'TWSE 除權除息明細 ${row.symbol} '
+                '${_dateFormat.format(row.exDate)}: 明細推算的參考價與列表不符'
+                '（查到的可能是別次除權息）',
+              );
+              continue;
+            }
             written += await _writeDistributions([row.withDetail(detail)]);
           } on RateLimitException {
             rethrow;
@@ -357,13 +378,7 @@ class DividendSyncer {
   /// 寫入已拆開現金與配股的除權除息列，回傳筆數
   Future<int> _writeDistributions(List<ExRightResult> rows) async {
     await _db.upsertDividendDistributions([
-      for (final row in rows)
-        DividendDistributionCompanion.insert(
-          symbol: row.symbol,
-          exDate: row.exDate,
-          cashDividend: row.cashDividend!,
-          stockSharesPerThousand: row.stockSharesPerThousand!,
-        ),
+      for (final row in rows) dividendDistributionCompanion(row),
     ]);
     return rows.length;
   }

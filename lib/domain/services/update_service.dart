@@ -27,6 +27,7 @@ import 'package:daredevil/domain/services/rule_accuracy_service.dart';
 import 'package:daredevil/domain/services/thesis/thesis_monitor_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/scoring_service.dart';
+import 'package:daredevil/domain/services/update/dividend_backfiller.dart';
 import 'package:daredevil/domain/services/update/market_day_refetcher.dart';
 import 'package:daredevil/domain/services/update/news_mention_snapshot_service.dart';
 import 'package:daredevil/domain/services/update/update.dart';
@@ -144,6 +145,15 @@ class UpdateService {
                tpexClient: clients.tpex,
              )
            : null,
+       _dividendBackfiller =
+           services.dividendBackfiller ??
+           ((clients.twse != null || clients.tpex != null)
+               ? DividendBackfiller(
+                   database: database,
+                   twseClient: clients.twse,
+                   tpexClient: clients.tpex,
+                 )
+               : null),
        _twseClient = clients.twse,
        _tpexClient = clients.tpex,
        _marketDayRefetcher =
@@ -188,6 +198,7 @@ class UpdateService {
   final MarketIndexSyncer? _marketIndexSyncer;
   final TdccHoldingSyncer? _tdccHoldingSyncer;
   final DividendSyncer? _dividendSyncer;
+  final DividendBackfiller? _dividendBackfiller;
   final InsiderTransferSyncer? _insiderTransferSyncer;
   final QuarterlyReportSyncer? _quarterlyReportSyncer;
   final TwseClient? _twseClient;
@@ -691,13 +702,22 @@ class UpdateService {
   /// 之後、評分之前：那兩步抓的是本輪評分要用的資料，不能被本步驟的限流
   /// 擋掉；前面撞到限流時本步驟跳過，除權除息每輪都重掃本月，下一輪補回。
   /// 每輪呼叫上限 [ApiConfig.dividendSyncMaxCallsPerRun]，沒查完的下一輪接續。
+  ///
+  /// 本月同步之後用剩下的份額回補歷史月份（[DividendBackfiller]）。本月同步
+  /// 失敗（限流、例外）時不回補。回補的失敗只記 log、不進 errors：收斂期
+  /// 每輪都可能有，進 errors 會讓每一輪都 PARTIAL、launchd exit 1；回補整體
+  /// 拋出的例外（DB、程式錯誤）是系統性問題，記 error 送 Sentry。
   Future<void> _syncDividendDistributions(_UpdateContext ctx) async {
     if (ctx.rateLimitedAbort) return;
     final syncer = _dividendSyncer;
     if (syncer == null) return;
+    ctx.reportProgress(6, 10, '同步除權息資料');
+    // 只取一次：月界時兩次取值可能落在不同月份
+    final now = _clock.now();
+    final DividendDistributionSyncResult result;
     try {
-      final result = await syncer.syncDistributions(
-        today: _clock.now(),
+      result = await syncer.syncDistributions(
+        today: now,
         maxCalls: ApiConfig.dividendSyncMaxCallsPerRun,
       );
       AppLogger.info(
@@ -713,9 +733,37 @@ class UpdateService {
       ctx.rateLimitedAbort = true;
       AppLogger.warning('UpdateService', '除權除息同步中止 (rate limit)', e);
       ctx.result.recordError('除權除息同步中止 (rate limit): $e', e);
+      return;
     } catch (e) {
       AppLogger.warning('UpdateService', '除權除息同步失敗', e);
       ctx.result.recordError('除權除息同步失敗: $e', e);
+      return;
+    }
+
+    final backfiller = _dividendBackfiller;
+    if (backfiller == null) return;
+    try {
+      final summary = await backfiller.backfill(
+        now: now,
+        maxCalls: ApiConfig.dividendSyncMaxCallsPerRun - result.calls,
+      );
+      AppLogger.info('UpdateService', '步驟 6.6: ${summary.toLogLine()}');
+      final warning = summary.warningLine();
+      if (warning != null) AppLogger.warning('UpdateService', warning);
+      if (summary.rateLimited) {
+        ctx.rateLimitedAbort = true;
+        AppLogger.warning(
+          'UpdateService',
+          '除權除息回補中止 (rate limit)',
+          summary.rateLimitError,
+        );
+      }
+    } on RateLimitException catch (e) {
+      // 回補在內部接住限流；這裡擋的是日後逃出來的限流，照樣翻旗標
+      ctx.rateLimitedAbort = true;
+      AppLogger.warning('UpdateService', '除權除息回補中止 (rate limit)', e);
+    } catch (e, st) {
+      AppLogger.error('UpdateService', '除權除息回補失敗（系統性）', e, st);
     }
   }
 

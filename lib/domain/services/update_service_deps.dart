@@ -18,6 +18,7 @@ import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/rule_accuracy_service.dart';
 import 'package:daredevil/domain/services/thesis/thesis_monitor_service.dart';
 import 'package:daredevil/domain/services/scoring_service.dart';
+import 'package:daredevil/domain/services/update/dividend_backfiller.dart';
 import 'package:daredevil/domain/services/update/market_day_refetcher.dart';
 import 'package:daredevil/domain/services/update/news_mention_snapshot_service.dart';
 
@@ -70,6 +71,7 @@ class UpdateServices {
     this.thesisMonitor,
     this.newsMentionSnapshot,
     this.marketDayRefetcher,
+    this.dividendBackfiller,
   });
 
   final AnalysisService? analysis;
@@ -86,4 +88,8 @@ class UpdateServices {
   /// 未定案盤後資料重抓（spec §4.5(b)）。null 時由 [UpdateService] 用真實
   /// 依賴建立；測試注入用。
   final MarketDayRefetcher? marketDayRefetcher;
+
+  /// 除權除息歷史回補。null 時由 [UpdateService] 用真實依賴建立（有 TWSE 或
+  /// TPEx client 時）；測試注入用。
+  final DividendBackfiller? dividendBackfiller;
 }

@@ -37,7 +37,7 @@ flowchart LR
 
 `UpdateService` — 協調所有 syncer 執行順序 + 錯誤處理。
 住在 `lib/domain/services/`，**不在 `update/` 底下**（`update/update.dart` 只是 barrel export）。
-`market_day_refetcher`／`news_mention_snapshot_service`／`history_coverage`／`zeroing_impact_reporter` 刻意不進 barrel，由使用者直接 import。
+`market_day_refetcher`／`news_mention_snapshot_service`／`history_coverage`／`zeroing_impact_reporter`／`dividend_backfiller`／`dividend_coverage` 刻意不進 barrel，由使用者直接 import。
 
 ### 11 Syncer / Updater
 
@@ -169,7 +169,7 @@ TDCC holding、dividend、insider transfer、quarterly report。
   schema fingerprint）。範圍＝本月初與今天往前 7 天中較早者～今天，先上櫃
   （exDailyQ）再上市（TWT49U），各 1 次列表
 - TWSE「權」「權息」列拆不開現金與配股，逐列查 TWT49UDetail，每次間隔
-  `ApiConfig.dividendDetailCallDelayMs`（2 秒，保守值）；列表＋明細每輪合計
+  `ApiConfig.dividendCallDelayMs`（2 秒，保守值）；列表＋明細每輪合計
   最多 `ApiConfig.dividendSyncMaxCallsPerRun`（30），每筆查到就寫入、沒查完
   的下一輪接續
 - ⚠️ **只有現金增資的除權也寫入（金額皆 0）**，當作「已處理」紀錄讓明細只
@@ -179,6 +179,39 @@ TDCC holding、dividend、insider transfer、quarterly report。
   容易觸發限流、中止整輪。排在 5.5 與 6.5 之後、評分之前：那兩步抓的是本輪
   評分要用的資料，不能被本步驟的限流擋掉；前面撞到限流時本步驟跳過，每輪都
   重掃本月，下一輪補回
+- 權／權息明細推算的參考價與列表不符時不寫入、進 errors（與明細抓取失敗
+  同一處理）。不符的列沒寫入，下一輪會再查——若持續不符，本月剩下的每一輪
+  都 PARTIAL；月份滑出 7 天重疊窗、進入回補範圍後改由回補的失敗紀錄與退避
+  接手、不進 errors
+
+**歷史回補（`DividendBackfiller`，同在步驟 6.6、接在本月同步之後）**
+
+- 目標＝今年往前 5 年的 1 月～上個月（`ApiConfig.dividendBackfillYears`），
+  單位是（市場, 月）；由新到舊、同月先上櫃。完整度的判定在
+  `dividend_coverage.dart`（`DividendCoverage`），每輪摘要與修復工具共用
+- 與本月同步**共用**每輪 30 次呼叫：本月同步用剩的才給回補。本月同步撞到
+  限流或拋錯時本輪不回補
+- 完成紀錄 `dividend_month_ledger`：`completeDividendMonth` 在同一個
+  transaction 內核對列表上每一列（在市主檔有的代號）都在庫才寫。⚠️ 月中寫下
+  的紀錄在下個月不算完成（`completedAt` 必須晚於該月）；列表上有、當時主檔
+  沒有的代號記在 `skipped_symbols`，之後進了主檔該月就重做
+- 失敗紀錄 `dividend_month_failure`：列表 0 列、列表日期不在該月、明細失敗或
+  參考價核對不符（`ExRightResult.matchesReference`：前收盤推算的參考價與列表
+  差超過 0.01）都記失敗，不符時連同 DB 裡同一鍵的舊列一起刪（否則下一輪把
+  它當成已處理、不查明細就記完成）；連續失敗 3 次後退避 7 天。網路錯誤只停該市場本輪、
+  不記失敗；同一市場連續 3 次一般失敗停掉該市場本輪（斷路器）
+- 回補內部的系統性例外（DB 錯誤等）記 `AppLogger.error`、**不進 errors**：
+  回補缺一輪只是慢，進 errors 會讓每輪 launchd 都 exit 1。限流照常翻
+  `rateLimitedAbort`
+- 每輪一行日誌可追收斂：grep「除權除息回補」（本輪完成／失敗、累計、剩餘單位、
+  停止原因）；有待重試的失敗時另記 warning。桌機可用修復工具
+  `tool/backfill_dividend_distributions.dart` 一次補完（不設上限、不理退避，
+  共用同一個 `DividendBackfiller`；逐月呼叫，斷路器計數跨月累計，被斷路器或
+  網路錯誤停掉的市場在之後的月份也不再處理）
+- ⚠️ 三張表（`dividend_distribution`、`dividend_month_ledger`、
+  `dividend_month_failure`）同生共死：fingerprint reset 一起清空；若之後加
+  保留期清理，三張表的規則必須一致——只刪配發資料而留下完成紀錄，缺洞會被
+  當成已完成、永遠補不回來
 
 ### 3 Helpers
 

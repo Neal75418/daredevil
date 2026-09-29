@@ -280,18 +280,20 @@ abstract final class ApiConfig {
   /// [finalityRefetchCallDelayMs] 更保守，降低大範圍重抓觸發限流的風險。
   static const int repairToolCallDelayMs = 3000;
 
-  /// 除權除息明細（TWSE TWT49UDetail）呼叫間隔（毫秒）
+  /// 除權除息呼叫間隔（毫秒）：本月同步的每次明細（TWSE TWT49UDetail）、
+  /// 歷史回補的每次列表與明細，呼叫前都等這麼久
   ///
   /// 保守值，不是量測出的安全上限：已知 0.5 秒間隔連打約 50 次會觸發
   /// TWSE 反爬限流（`MarketIndexSyncer` 回補的 2026-07-16 活體驗證）；每輪
   /// 自動重抓的 [finalityRefetchCallDelayMs]（1 秒）2026-09-29 前尚未在
   /// 交易日實際跑過。
-  static const int dividendDetailCallDelayMs = 2000;
+  static const int dividendCallDelayMs = 2000;
 
-  /// 除權除息同步（更新步驟 6.6）每輪呼叫上限，列表與明細合計
+  /// 除權除息（更新步驟 6.6）每輪呼叫上限：本月同步與歷史回補合計，列表
+  /// 與明細都算。回補只用本月同步剩下的份額。
   ///
-  /// 以 [dividendDetailCallDelayMs] 間隔計，每輪最多多花約 1 分鐘（2026-09
-  /// 交易日更新本身約 30–140 秒）。沒查完的明細下一輪接續。
+  /// 以 [dividendCallDelayMs] 間隔計，每輪最多多花約 1 分鐘（2026-09
+  /// 交易日更新本身約 30–140 秒）。沒查完的下一輪接續。
   static const int dividendSyncMaxCallsPerRun = 30;
 
   /// 每日除權除息同步往前涵蓋的天數：範圍取「本月初」與「今天往前這麼多
@@ -313,6 +315,12 @@ abstract final class ApiConfig {
 
   /// 退避期間（天）：壞掉的月份每 7 天才重試一次，不每輪吃預算。
   static const int dividendBackfillRetryIntervalDays = 7;
+
+  /// 回補斷路器：同一輪、同一市場連續這麼多次一般失敗（列表或明細）就停掉
+  /// 該市場，端點整批改版時每輪只白打這幾次；任何一次成功就歸零。修復工具
+  /// 逐月呼叫回補，計數跨月累計（`DividendBackfillBreaker`），被停掉的市場在
+  /// 之後的月份也不再處理。
+  static const int dividendBackfillMaxConsecutiveFailures = 3;
 
   /// 財報同步回溯天數（約 2 年）
   static const int financialSyncLookbackDays = 730;

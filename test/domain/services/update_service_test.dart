@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/default_stocks.dart';
+import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/constants/rule_enums.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/data/database/app_database.dart';
@@ -26,6 +27,8 @@ import 'package:daredevil/domain/repositories/price_repository.dart'
     show MarketSyncResult;
 import 'package:daredevil/domain/services/scoring_service.dart';
 import 'package:daredevil/domain/services/update/market_day_refetcher.dart';
+import 'package:daredevil/domain/services/update/dividend_backfiller.dart';
+import 'package:daredevil/domain/services/update/dividend_coverage.dart';
 import 'package:daredevil/domain/services/update/news_mention_snapshot_service.dart';
 import 'package:daredevil/domain/services/thesis/thesis_monitor_service.dart';
 import 'package:daredevil/core/utils/clock.dart';
@@ -71,6 +74,28 @@ class MockInsiderRepository extends Mock implements InsiderRepository {}
 
 class MockMarketDayRefetcher extends Mock implements MarketDayRefetcher {}
 
+class MockDividendBackfiller extends Mock implements DividendBackfiller {}
+
+DividendBackfillSummary _backfillSummary(
+  DateTime now, {
+  RateLimitException? rateLimitError,
+  Map<String, String> marketStops = const {},
+}) => DividendBackfillSummary(
+  calls: 0,
+  maxCalls: 0,
+  completed: const [],
+  failures: const [],
+  marketStops: marketStops,
+  rateLimitError: rateLimitError,
+  stoppedAt: null,
+  coverage: DividendCoverage.compute(
+    now: now,
+    ledger: const [],
+    failures: const [],
+    knownSymbols: const {},
+  ),
+);
+
 class _FakeLedger extends Fake implements MarketDayFetchLedger {}
 
 void main() {
@@ -86,6 +111,7 @@ void main() {
   final tradingDay = DateTime(2026, 7, 6);
 
   late MockMarketDayRefetcher mockRefetcher;
+  late MockDividendBackfiller mockBackfiller;
 
   setUpAll(() {
     registerFallbackValue(DateTime(2026, 7, 6));
@@ -93,6 +119,8 @@ void main() {
       ScoringBatchData(pricesMap: const {}, newsMap: const {}),
     );
     registerFallbackValue(_FakeLedger());
+    registerFallbackValue(const DividendBackfillScope());
+    registerFallbackValue(<DividendDistributionCompanion>[]);
   });
 
   setUp(() {
@@ -240,6 +268,17 @@ void main() {
         ledger: any(named: 'ledger'),
       ),
     ).thenAnswer((_) async => RefetchSummary());
+
+    mockBackfiller = MockDividendBackfiller();
+    when(
+      () => mockBackfiller.backfill(
+        now: any(named: 'now'),
+        maxCalls: any(named: 'maxCalls'),
+        scope: any(named: 'scope'),
+      ),
+    ).thenAnswer(
+      (inv) async => _backfillSummary(inv.namedArguments[#now] as DateTime),
+    );
   });
 
   /// 建立最小依賴的 UpdateService：
@@ -259,6 +298,7 @@ void main() {
     ThesisMonitorService? thesisMonitor,
     MarketDayRefetcher? refetcher,
     AppClock? clock,
+    bool realDividendBackfiller = false,
   }) {
     return UpdateService(
       // 固定在非 12 月：預設用系統時鐘時，12 月起交易日曆提醒會附在
@@ -287,6 +327,7 @@ void main() {
         newsMentionSnapshot: newsMentionSnapshot,
         thesisMonitor: thesisMonitor,
         marketDayRefetcher: refetcher ?? mockRefetcher,
+        dividendBackfiller: realDividendBackfiller ? null : mockBackfiller,
       ),
     );
   }
@@ -1614,6 +1655,254 @@ void main() {
           endDate: any(named: 'endDate'),
         ),
       ).called(1);
+    });
+  });
+
+  // 步驟 6.6 的歷史回補：用本月同步剩下的份額、同一個 now；本月同步失敗時
+  // 不回補；回補的失敗只記 log，不進 errors（收斂期每輪都會有，進 errors 會
+  // 讓每一輪都 PARTIAL、launchd exit 1）
+  group('步驟 6.6 歷史回補', () {
+    MockTpexClient healthyTpex() {
+      final tpex = MockTpexClient();
+      when(
+        () => mockTdcc.getAllHoldingDistribution(),
+      ).thenAnswer((_) async => {});
+      when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
+      when(
+        () => mockDb.upsertDividendDistributions(any()),
+      ).thenAnswer((_) async {});
+      when(
+        () => mockDb.getDividendDistributionKeys(
+          from: any(named: 'from'),
+          to: any(named: 'to'),
+        ),
+      ).thenAnswer((_) async => {});
+      when(() => tpex.getDeclaredDividends()).thenAnswer((_) async => []);
+      when(() => tpex.getShareholderMeetings()).thenAnswer((_) async => []);
+      when(() => tpex.getInsiderTransfers()).thenAnswer((_) async => []);
+      when(
+        () => tpex.getExRightResults(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenAnswer((_) async => []);
+      return tpex;
+    }
+
+    Future<List<dynamic>> capturedBackfill() async => verify(
+      () => mockBackfiller.backfill(
+        now: captureAny(named: 'now'),
+        maxCalls: captureAny(named: 'maxCalls'),
+        scope: any(named: 'scope'),
+      ),
+    ).captured;
+
+    test('回補拿到本月同步剩下的份額（只有上櫃：30 − 1）', () async {
+      await buildService(
+        tpex: healthyTpex(),
+      ).runDailyUpdate(forDate: tradingDay);
+
+      final captured = await capturedBackfill();
+      expect(captured[1], 29);
+    });
+
+    test('本月同步與回補用同一個 now（只取一次時鐘）', () async {
+      final tpex = healthyTpex();
+      await buildService(
+        tpex: tpex,
+        clock: _IncrementingClock(DateTime(2026, 7, 6, 15, 30)),
+      ).runDailyUpdate(forDate: tradingDay);
+
+      final now = (await capturedBackfill())[0] as DateTime;
+      final syncEnd =
+          verify(
+                () => tpex.getExRightResults(
+                  startDate: any(named: 'startDate'),
+                  endDate: captureAny(named: 'endDate'),
+                ),
+              ).captured.single
+              as DateTime;
+      expect(syncEnd, DateTime(now.year, now.month, now.day));
+      expect(now, isNot(DateTime(2026, 7, 6, 15, 30)), reason: '時鐘遞增有效');
+    });
+
+    for (final (name, error) in [
+      ('限流', const RateLimitException('redirect loop') as Object),
+      ('網路錯誤', const NetworkException('timeout')),
+    ]) {
+      test('本月同步$name：不回補', () async {
+        final tpex = healthyTpex();
+        when(
+          () => tpex.getExRightResults(
+            startDate: any(named: 'startDate'),
+            endDate: any(named: 'endDate'),
+          ),
+        ).thenThrow(error);
+
+        await buildService(tpex: tpex).runDailyUpdate(forDate: tradingDay);
+
+        verifyNever(
+          () => mockBackfiller.backfill(
+            now: any(named: 'now'),
+            maxCalls: any(named: 'maxCalls'),
+            scope: any(named: 'scope'),
+          ),
+        );
+      });
+    }
+
+    test('本月同步有 per-source 錯誤：回補照常，errors 只有那一條', () async {
+      final tpex = healthyTpex();
+      when(
+        () => tpex.getExRightResults(
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenThrow(Exception('exDailyQ payload broken'));
+
+      final result = await buildService(
+        tpex: tpex,
+      ).runDailyUpdate(forDate: tradingDay);
+
+      await capturedBackfill();
+      expect(result.errors.where((e) => e.contains('除權除息')), hasLength(1));
+    });
+
+    test('回補整體拋錯：本輪仍成功、不進 errors、不標限流；記 error 送 Sentry', () async {
+      final captured = <String>[];
+      AppLogger.setSentryDelegates(
+        capture: (error, _, tag, message) =>
+            captured.add('$tag $message $error'),
+      );
+      addTearDown(AppLogger.setSentryDelegates);
+      when(
+        () => mockBackfiller.backfill(
+          now: any(named: 'now'),
+          maxCalls: any(named: 'maxCalls'),
+          scope: any(named: 'scope'),
+        ),
+      ).thenThrow(Exception('disk I/O error'));
+
+      final result = await buildService(
+        tpex: healthyTpex(),
+      ).runDailyUpdate(forDate: tradingDay);
+
+      expect(result.success, isTrue);
+      // mock 環境下其他步驟本來就有無關的 errors，只看回補相關的
+      expect(
+        result.errors.where((e) => e.contains('回補') || e.contains('disk I/O')),
+        isEmpty,
+      );
+      expect(result.hasRateLimitError, isFalse);
+      expect(captured.where((c) => c.contains('除權除息回補失敗（系統性）')), [
+        contains('disk I/O error'),
+      ]);
+    });
+
+    test('回補有市場被停掉：警示行記成 warning（Sentry breadcrumb）、不進 errors', () async {
+      final warnings = <String>[];
+      AppLogger.setSentryDelegates(
+        breadcrumb: (message, _, level, _) {
+          if (level == 'warning') warnings.add(message);
+        },
+      );
+      addTearDown(AppLogger.setSentryDelegates);
+      when(
+        () => mockBackfiller.backfill(
+          now: any(named: 'now'),
+          maxCalls: any(named: 'maxCalls'),
+          scope: any(named: 'scope'),
+        ),
+      ).thenAnswer(
+        (inv) async => _backfillSummary(
+          inv.namedArguments[#now] as DateTime,
+          marketStops: {'TWSE': 'TWSE 網路錯誤，本輪停止'},
+        ),
+      );
+
+      final result = await buildService(
+        tpex: healthyTpex(),
+      ).runDailyUpdate(forDate: tradingDay);
+
+      expect(result.errors.where((e) => e.contains('除權除息')), isEmpty);
+      expect(
+        warnings.where((w) => w.contains('停掉的市場：TWSE 網路錯誤')),
+        hasLength(1),
+      );
+    });
+
+    // 中止旗標翻起來由 update_service_contract_guard_test 靜態守住：6.6 之後
+    // 沒有步驟讀它，這裡從行為上觀察不到
+    test('回補撞到限流：不進 errors、不標限流錯誤', () async {
+      when(
+        () => mockBackfiller.backfill(
+          now: any(named: 'now'),
+          maxCalls: any(named: 'maxCalls'),
+          scope: any(named: 'scope'),
+        ),
+      ).thenAnswer(
+        (inv) async => _backfillSummary(
+          inv.namedArguments[#now] as DateTime,
+          rateLimitError: const RateLimitException('redirect loop'),
+        ),
+      );
+
+      final result = await buildService(
+        tpex: healthyTpex(),
+      ).runDailyUpdate(forDate: tradingDay);
+
+      expect(result.errors.where((e) => e.contains('除權除息')), isEmpty);
+      expect(result.hasRateLimitError, isFalse);
+    });
+
+    test('進度訊息：同步除權息資料', () async {
+      final messages = <String>[];
+      await buildService(tpex: healthyTpex()).runDailyUpdate(
+        forDate: tradingDay,
+        onProgress: (_, _, m) => messages.add(m),
+      );
+
+      expect(messages, contains('同步除權息資料'));
+    });
+
+    test('真實接線：回補由新到舊打到上個月的上櫃列表；限流不進 errors', () async {
+      final tpex = healthyTpex();
+      when(() => mockDb.getAllActiveStocks()).thenAnswer(
+        (_) async => [
+          for (var i = 0; i < 500; i++)
+            StockMasterEntry(
+              symbol: 'T$i',
+              name: 'T$i',
+              market: 'TPEx',
+              isActive: true,
+              updatedAt: DateTime(2026, 7, 1),
+            ),
+        ],
+      );
+      when(
+        () => mockDb.getDividendMonthLedgerEntries(),
+      ).thenAnswer((_) async => []);
+      when(() => mockDb.getDividendMonthFailures()).thenAnswer((_) async => []);
+      when(
+        () => tpex.getExRightResults(
+          startDate: DateTime(2026, 6, 1),
+          endDate: DateTime(2026, 6, 30),
+        ),
+      ).thenThrow(const RateLimitException('redirect loop'));
+
+      final result = await buildService(
+        tpex: tpex,
+        realDividendBackfiller: true,
+      ).runDailyUpdate(forDate: tradingDay);
+
+      verify(
+        () => tpex.getExRightResults(
+          startDate: DateTime(2026, 6, 1),
+          endDate: DateTime(2026, 6, 30),
+        ),
+      ).called(1);
+      expect(result.hasRateLimitError, isFalse);
+      expect(result.errors.where((e) => e.contains('回補')), isEmpty);
     });
   });
 

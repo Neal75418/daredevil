@@ -1047,7 +1047,9 @@ class TwseClient {
   ///
   /// 回傳 `[]`＝區間內沒有除權息；`null`＝回應不可信：stat 異常、回應的
   /// `strDate`/`endDate` 與請求不符、缺必要欄位，或**任何一列**解析不了
-  /// （日期無效、代號空白、類別不明、「息」列金額缺漏）。不略過單列：這是
+  /// （日期無效、代號空白、類別不明、「息」列金額缺漏、「權」「權息」列缺
+  /// 除權息前收盤價或減除股利參考價——這兩欄用來核對明細，見
+  /// [ExRightResult.matchesReference]）。不略過單列：這是
   /// 回補歷史的來源，略過的配發之後不會再被抓到；整批拒收讓格式變動變成
   /// 看得見的錯誤。
   ///
@@ -1077,7 +1079,9 @@ class TwseClient {
     final codeCol = fields.indexOf('股票代號');
     final valueCol = fields.indexOf('權值+息值');
     final kindCol = fields.indexOf('權/息');
-    final cols = [dateCol, codeCol, valueCol, kindCol];
+    final closeCol = fields.indexOf('除權息前收盤價');
+    final adjustedCol = fields.indexOf('減除股利參考價');
+    final cols = [dateCol, codeCol, valueCol, kindCol, closeCol, adjustedCol];
     if (cols.any((i) => i < 0)) return null;
     final minLength = cols.reduce(max) + 1;
 
@@ -1087,6 +1091,10 @@ class TwseClient {
       );
       final code = row[codeCol]?.toString().trim() ?? '';
       if (exDate == null || code.isEmpty) return null;
+      final close = TwParseUtils.parseFormattedDouble(row[closeCol]);
+      final adjusted = TwParseUtils.parseFormattedDouble(row[adjustedCol]);
+      // 需查明細的列要拿這兩欄核對明細，缺了就無從確認
+      final canVerify = close != null && adjusted != null;
       switch (row[kindCol]?.toString().trim()) {
         case '息':
           final cash = TwParseUtils.parseFormattedDouble(row[valueCol]);
@@ -1098,18 +1106,24 @@ class TwseClient {
             stockSharesPerThousand: 0,
           );
         case '權':
+          if (!canVerify) return null;
           return ExRightResult(
             symbol: code,
             exDate: exDate,
             cashDividend: 0,
             stockSharesPerThousand: null,
+            closeBefore: close,
+            dividendAdjustedReference: adjusted,
           );
         case '權息':
+          if (!canVerify) return null;
           return ExRightResult(
             symbol: code,
             exDate: exDate,
             cashDividend: null,
             stockSharesPerThousand: null,
+            closeBefore: close,
+            dividendAdjustedReference: adjusted,
           );
         default:
           return null;

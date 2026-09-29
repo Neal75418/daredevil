@@ -195,6 +195,36 @@ void main() {
     expect(await db.getDividendDistributions('6762'), hasLength(1));
   });
 
+  test('明細與列表的參考價對不上（查到別次除權息）：記錯誤、不寫入', () async {
+    stubTwse([
+      ExRightResult(
+        symbol: '2836',
+        exDate: DateTime(2026, 9, 17),
+        cashDividend: null,
+        stockSharesPerThousand: null,
+        closeBefore: 12.55,
+        dividendAdjustedReference: 11.89,
+      ),
+      ExRightResult(
+        symbol: '4108',
+        exDate: DateTime(2026, 9, 18),
+        cashDividend: 0,
+        stockSharesPerThousand: null,
+        closeBefore: 25.20,
+        dividendAdjustedReference: 25.20,
+      ),
+    ]);
+    stubDetail('2836', 0.15, 45); // 2021 那次的明細
+    stubDetail('4108', 0, 0);
+
+    final result = await syncer.syncDistributions(today: today, maxCalls: 30);
+
+    expect(result.errors.single, allOf(contains('2836'), contains('參考價')));
+    expect(await db.getDividendDistributionKeys(from: start, to: end), {
+      ('4108', DateTime(2026, 9, 18)),
+    });
+  });
+
   test('單列明細失敗：記錯誤、其餘列照寫', () async {
     stubTwse([
       _row('2836', DateTime(2026, 9, 17)),

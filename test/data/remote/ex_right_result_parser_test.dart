@@ -35,18 +35,25 @@ const _twseFields = [
   '最近一次申報每股 (單位)盈餘',
 ];
 
-List<String> _twseRow(String date, String code, String value, String kind) => [
+List<String> _twseRow(
+  String date,
+  String code,
+  String value,
+  String kind, {
+  String close = '10.00',
+  String adjustedReference = '9.50',
+}) => [
   date,
   code,
   '名稱',
-  '10.00',
+  close,
   '9.50',
   value,
   kind,
   '11.00',
   '9.00',
   '9.50',
-  '9.50',
+  adjustedReference,
   '$code,x',
   '',
   '',
@@ -267,6 +274,143 @@ void main() {
     });
   });
 
+  group('TWSE 列表帶出核對明細用的前收與減除股利參考價', () {
+    List<ExRightResult>? parse(Map<String, dynamic> body) =>
+        TwseClient.parseExRightResults(body, startDate: start, endDate: end);
+
+    test('權、權息列：前收與減除股利參考價（含千分位）', () {
+      for (final kind in ['權', '權息']) {
+        final r = parse(
+          _twseBody([
+            _twseRow(
+              '114年09月02日',
+              '6669',
+              '5,185.010000',
+              kind,
+              close: '7,800.00',
+              adjustedReference: '2,614.99',
+            ),
+          ]),
+        )!.single;
+        expect(r.closeBefore, 7800, reason: kind);
+        expect(r.dividendAdjustedReference, 2614.99, reason: kind);
+      }
+    });
+
+    test('欄位清單缺前收或減除股利參考價：回 null（即使全是息列）', () {
+      for (final col in ['除權息前收盤價', '減除股利參考價']) {
+        final body = _twseBody([
+          _twseRow('114年03月18日', '2330', '4.500020', '息'),
+        ]);
+        body['fields'] = [for (final f in _twseFields) f == col ? '其他' : f];
+        expect(parse(body), isNull, reason: col);
+      }
+    });
+
+    test('需查明細的列缺前收或參考價：整批拒收（無從核對明細）', () {
+      final good = _twseRow('114年03月18日', '2330', '4.500020', '息');
+      for (final bad in [
+        _twseRow('114年01月13日', '2836', '0.600000', '權息', close: '--'),
+        _twseRow(
+          '114年01月13日',
+          '2836',
+          '0.600000',
+          '權',
+          adjustedReference: '--',
+        ),
+      ]) {
+        expect(parse(_twseBody([good])), isNotNull, reason: '正向對照');
+        expect(parse(_twseBody([good, bad])), isNull);
+      }
+    });
+
+    test('息列不需核對：前收或參考價缺漏不影響', () {
+      final r = parse(
+        _twseBody([
+          _twseRow('114年03月18日', '2330', '4.500020', '息', close: '--'),
+        ]),
+      )!.single;
+      expect(r.cashDividend, 4.50002);
+      expect(r.closeBefore, isNull);
+    });
+  });
+
+  group('ExRightResult.matchesReference（2026-09-29 實測樣本）', () {
+    ExRightResult twseRow(double close, double reference) => ExRightResult(
+      symbol: 'X',
+      exDate: DateTime(2026, 9, 1),
+      cashDividend: null,
+      stockSharesPerThousand: null,
+      closeBefore: close,
+      dividendAdjustedReference: reference,
+    );
+    ExRightDetail detail(double cash, double shares) => ExRightDetail(
+      symbol: 'X',
+      cashDividend: cash,
+      stockSharesPerThousand: shares,
+    );
+
+    test('明細推算的減除股利參考價與列表一致（TWSE 捨去到 0.01）', () {
+      for (final (close, reference, cash, shares) in [
+        (127.50, 110.86, 0.0, 150.0), // 4763 2021 只配股
+        (59.50, 51.84, 0.4, 140.0), // 2543 2024 權息＋現金增資
+        (7800.0, 2614.99, 0.0, 1982.8), // 6669 2026 大額配股
+        (25.20, 25.20, 0.0, 0.0), // 4108 2021 只有現金增資
+        (10.60, 10.00, 0.15, 45.0), // 2836 2021 權息
+        // 明細股數只顯示到小數 1 位：反推真值約 109.73 股、25.62–25.68 股
+        (538.00, 484.80, 0.0, 109.7), // 6446 2025-09 只配股
+        (168.00, 159.17, 4.743589, 25.6), // 4572 2025-07 權息
+      ]) {
+        expect(
+          twseRow(close, reference).matchesReference(detail(cash, shares)),
+          isTrue,
+          reason: '$close $reference',
+        );
+      }
+    });
+
+    test('明細是別次除權息（2836 的 2024 列表配 2021 明細）→ 不一致', () {
+      expect(twseRow(12.55, 11.89).matchesReference(detail(0.15, 45)), isFalse);
+      expect(
+        twseRow(12.55, 11.89).matchesReference(detail(0.3, 30)),
+        isTrue,
+        reason: '正向對照：2024 的明細',
+      );
+    });
+
+    test('容差邊界：捨去誤差不到 0.01 算一致（含剛好 0.01 的浮點餘裕），超過就不一致', () {
+      // 前收 100、無配發 → 推算 100
+      bool at(double reference) =>
+          twseRow(100, reference).matchesReference(detail(0, 0));
+      expect(at(99.991), isTrue);
+      expect(at(99.99), isTrue, reason: '100 − 99.99 在浮點下略大於 0.01');
+      expect(at(99.989), isFalse);
+      expect(at(100.011), isFalse, reason: '列表比推算值高也算不一致');
+    });
+
+    test('明細配股只到小數 1 位：真值在 ±0.1 股內算一致，超出就不一致', () {
+      // 前收 1000、明細 100 股
+      bool at(double reference) =>
+          twseRow(1000, reference).matchesReference(detail(0, 100));
+      expect(at(909.09), isTrue, reason: '100 股：1000 ÷ 1.1 = 909.0909');
+      expect(at(909.01), isTrue, reason: '真值 100.09 股：909.0165 捨去');
+      expect(at(908.92), isFalse, reason: '真值 100.2 股：908.9256 捨去');
+      expect(at(909.19), isFalse, reason: '真值 99.88 股：909.1901 捨去');
+    });
+
+    test('列表沒有核對欄位（上櫃列、測試建構）→ 不擋', () {
+      expect(
+        ExRightResult(
+          symbol: 'X',
+          exDate: DateTime(2026, 9, 1),
+          cashDividend: null,
+          stockSharesPerThousand: null,
+        ).matchesReference(detail(1, 1)),
+        isTrue,
+      );
+    });
+  });
+
   group('TwseClient.parseExRightDetail（TWT49UDetail）', () {
     test('權息明細：每股現金股利與每千股無償配股', () {
       final d = TwseClient.parseExRightDetail(
@@ -370,6 +514,8 @@ void main() {
       expect(r.cashDividend, 0.15);
       expect(r.stockSharesPerThousand, 45);
       expect(r.needsDetail, isFalse);
+      expect(r.closeBefore, 10, reason: '核對欄位照原列保留');
+      expect(r.dividendAdjustedReference, 9.5);
     });
 
     test('權列補上明細：只有現金增資時金額皆 0', () {

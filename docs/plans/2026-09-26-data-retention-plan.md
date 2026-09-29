@@ -18,6 +18,9 @@
 - 模式：`RetentionMode.lean`（iOS、Android）、`RetentionMode.research`（macOS）；平台判斷只存在 `RetentionMode.forCurrentPlatform()`，只在 `UpdateServiceFactory.build`、`providers.dart`、`tool/backfill.dart` 呼叫；所有接收模式的參數**必填、無預設值**
 - 精簡模式保留期：financial_data 7 種項目、每檔每種報表 14 季（無允許項目的組整組保留）；holding_distribution 每檔各自最新 2 期；daily_price 460 天；daily_reason／daily_analysis 365 天；market_index 400 天；insider_holding 430 天；daily_institutional 200 天；shareholding 120 天；margin_trading 90 天；day_trading 60 天；stock_valuation 60 天
 - 研究模式：時間序列全部保留
+- 除權除息三張表（`dividend_distribution`、`dividend_month_ledger`、`dividend_month_failure`，2026-09 加入，本計畫
+  寫成時還沒有）的規則必須一致：只刪配發資料而留下完成紀錄，回補會把缺洞當成已完成、永遠補不回來。實作前先把三張表
+  加進 Task 2 的政策宣告
 - 兩種模式共同：trading_warning 刪 `is_active = 0` 且超過 30 天；update_run 留最近 200 筆；news_item／news_stock_map 外部管理（既有 `cleanupOldNews` 與 FK cascade），通用清理不碰
 - 財報允許項目：`EPS`、`IncomeAfterTaxes`、`Revenue`、`GrossProfit`、`OperatingIncome`、`Equity`、`TotalAssets`
 - 例外（不因期限刪）：天數型 per-symbol 表每檔最新一筆；daily_price 的 ACTIVE 論點 pinnedDate 起的價格；daily_price 與 stock_event 同檔同台北日的價格

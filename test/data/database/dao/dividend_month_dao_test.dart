@@ -258,6 +258,28 @@ void main() {
     });
   });
 
+  test('deleteDividendDistribution：只刪指定的（代號, 除息日），含金額皆 0 的列', () async {
+    await db.upsertDividendDistributions([
+      row('2330', DateTime(2025, 9, 16)),
+      row('2330', DateTime(2025, 9, 17)),
+      row('6488', DateTime(2025, 9, 16)),
+      DividendDistributionCompanion.insert(
+        symbol: '6488',
+        exDate: DateTime(2025, 9, 18),
+        cashDividend: 0,
+        stockSharesPerThousand: 0,
+      ),
+    ]);
+
+    await db.deleteDividendDistribution('2330', DateTime(2025, 9, 16));
+    await db.deleteDividendDistribution('6488', DateTime(2025, 9, 18));
+
+    expect(
+      await db.getDividendDistributionKeys(from: sep.firstDay, to: sep.lastDay),
+      {('2330', DateTime(2025, 9, 17)), ('6488', DateTime(2025, 9, 16))},
+    );
+  });
+
   test('代號集合編碼：排序、去重、逗號分隔', () {
     expect(
       encodeDividendSymbols(['910322', '00950B', '910322']),

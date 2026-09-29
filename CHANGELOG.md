@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - `tool/refetch_market_days.dart`：指定日期範圍一律以官方歷史端點重抓價格、法人、當沖、融資券、外資持股或上市估值，
   並記錄抓取狀態，用來修復既有的錯誤資料；可用 `--db` 對副本彩排、`--dry-run` 只印出交易日數與預估呼叫次數、不打 API
+- 除權除息資料：每輪更新抓本月的除權除息結果（上市 TWT49U／明細、上櫃 exDailyQ），並用剩下的呼叫份額由新到舊回補過去
+  5 年，逐月核對列表上（本機股票清單有的）每一筆都在庫才標記完成；上市權息明細以前收盤推算參考價核對。回補讓每輪更新多約 1 分鐘，
+  估計 Mac 約 3–4 週、手機約 7 週補齊
+- `tool/backfill_dividend_distributions.dart`：一次補完指定範圍的除權除息資料（不受每輪呼叫上限與失敗退避限制），
+  中斷後重跑同一條指令即可接續（`--recheck` 會從頭重做）；可用 `--db` 對副本彩排、`--dry-run` 只印出計畫
 
 ### Fixed
 
