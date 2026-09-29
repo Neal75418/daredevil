@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:daredevil/core/constants/analysis_params.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/services/price_calculator.dart';
 
 /// 大盤位階（均線排列）分類
 ///
@@ -655,17 +656,12 @@ class TechnicalIndicatorService {
     return 100 - (100 / (1 + rs));
   }
 
-  /// 計算成交量 MA 並比較今日成交量
+  /// 今日之前 [period] 日的均量，與今日成交量
   ///
-  /// [prices] 每日收盤價列表
-  /// [period] 計算週期
-  /// 回傳 (volumeMA, 今日成交量)
-  ///
-  /// 停牌/無成交列的 volume 為 0.0（非 null），計算均量時會排除（而非計為
-  /// 0 的有效觀測值稀釋均量），且要求窗口內至少 [RuleParams.volMaMinValidDayRatio]
-  /// 比例的有效交易日，否則回傳 null——停牌排除與有效日比例的做法與
-  /// volume_rules.dart 的 VolumeSpikeRule/PriceSpikeRule 一致；但本均量**含今日**，
-  /// VolumeSpike/PriceSpike 的均量排除今日（`skipLast: true`）。
+  /// 均量**排除今日**：與 VolumeSpikeRule／PriceSpikeRule 等「今日量 vs 均量」
+  /// 的比較同一口徑，今日放量不會拉高自己的比較基準。停牌列（volume 0.0）
+  /// 不計入，且需至少 [RuleParams.volMaMinValidDayRatio] 比例的有效交易日，
+  /// 不足或資料少於 [period] + 1 列時 volumeMA 回 null。
   static ({double? volumeMA, double? todayVolume}) latestVolumeMA(
     List<DailyPriceEntry> prices,
     int period,
@@ -673,23 +669,18 @@ class TechnicalIndicatorService {
     if (prices.isEmpty) return (volumeMA: null, todayVolume: null);
 
     final todayVol = prices.last.volume;
-    if (prices.length < period) return (volumeMA: null, todayVolume: todayVol);
-
-    double volSum = 0;
-    int count = 0;
-    for (int i = prices.length - period; i < prices.length; i++) {
-      final vol = prices[i].volume;
-      if (vol != null && vol > 0) {
-        volSum += vol;
-        count++;
-      }
-    }
-
-    final minValidDays = (period * RuleParams.volMaMinValidDayRatio).floor();
-    if (count < minValidDays) {
+    // helper 資料不足時會退化成短均量，長度在這裡把關
+    if (prices.length < period + 1) {
       return (volumeMA: null, todayVolume: todayVol);
     }
 
-    return (volumeMA: volSum / count, todayVolume: todayVol);
+    final volumeMA = PriceCalculator.calculateAverageVolume(
+      prices,
+      days: period,
+      skipLast: true,
+      filterZero: true,
+      minValidDays: (period * RuleParams.volMaMinValidDayRatio).floor(),
+    );
+    return (volumeMA: volumeMA, todayVolume: todayVol);
   }
 }

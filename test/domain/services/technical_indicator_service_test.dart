@@ -825,6 +825,55 @@ void main() {
       expect(result.todayVolume, isNull);
     });
 
+    // 均量排除今日：與 VolumeSpike/PriceSpike 等「今日量 vs 均量」同口徑，
+    // 今日放量不會拉高自己的比較基準
+    List<DailyPriceEntry> volumes(List<double> vs) {
+      final now = DateTime.now();
+      return [
+        for (var i = 0; i < vs.length; i++)
+          createTestPrice(
+            date: now.subtract(Duration(days: vs.length - i)),
+            close: 100.0,
+            volume: vs[i],
+          ),
+      ];
+    }
+
+    test('均量不含今日：今日放量不拉高均量', () {
+      final result = TechnicalIndicatorService.latestVolumeMA(
+        volumes([...List.filled(20, 1000.0), 5000.0]),
+        20,
+      );
+      expect(result.volumeMA, closeTo(1000.0, 0.001));
+      expect(result.todayVolume, 5000.0);
+    });
+
+    test('更早的列不計入：窗口上限 20 日', () {
+      final result = TechnicalIndicatorService.latestVolumeMA(
+        volumes([9000.0, ...List.filled(20, 1000.0), 1000.0]),
+        20,
+      );
+      expect(result.volumeMA, closeTo(1000.0, 0.001));
+    });
+
+    test('需要 period + 1 列（前 20 日 + 今日），只有 20 列回 null', () {
+      final result = TechnicalIndicatorService.latestVolumeMA(
+        volumes(List.filled(20, 1000.0)),
+        20,
+      );
+      expect(result.volumeMA, isNull);
+      expect(result.todayVolume, 1000.0);
+    });
+
+    test('今日停牌（量 0）：均量照算、todayVolume 回 0', () {
+      final result = TechnicalIndicatorService.latestVolumeMA(
+        volumes([...List.filled(20, 1000.0), 0.0]),
+        20,
+      );
+      expect(result.volumeMA, closeTo(1000.0, 0.001));
+      expect(result.todayVolume, 0.0);
+    });
+
     // ----------------------------------------------------------------
     // Gap-bridging root cause: 停牌列 volume=0.0（非 null），舊邏輯僅濾
     // null 會把停牌日當成 0 成交量的有效觀測值計入分母，稀釋均量。
@@ -836,11 +885,11 @@ void main() {
       'excludes zero-volume halt days from the average (fair average, not diluted)',
       () {
         final now = DateTime.now();
-        // 20 筆窗口：3 筆停牌（volume=0），17 筆正常成交（volume=1000）
-        // 17/20 = 85% ≥ volMaMinValidDayRatio(80%) 下限，聚焦驗證「排除 0」
-        // 本身而不同時觸發下限 null（下限另有專屬測試）
+        // 前 20 日窗口：3 筆停牌（volume=0），17 筆正常成交（volume=1000），
+        // 第 21 筆為今日。17/20 = 85% ≥ volMaMinValidDayRatio(80%) 下限，
+        // 聚焦驗證「排除 0」本身而不同時觸發下限 null（下限另有專屬測試）
         final haltIndexes = {0, 7, 14};
-        final prices = List.generate(20, (i) {
+        final prices = List.generate(21, (i) {
           return createTestPrice(
             date: now.subtract(Duration(days: 20 - i)),
             close: 100.0,
@@ -859,8 +908,8 @@ void main() {
       'returns null when valid (non-zero) days fall below volMaMinValidDayRatio floor',
       () {
         final now = DateTime.now();
-        // 20 筆窗口只有 10 筆有效成交（10 < 20*0.8=16 下限）
-        final prices = List.generate(20, (i) {
+        // 前 20 日窗口只有 10 筆有效成交（10 < 20*0.8=16 下限），第 21 筆為今日
+        final prices = List.generate(21, (i) {
           return createTestPrice(
             date: now.subtract(Duration(days: 20 - i)),
             close: 100.0,
@@ -874,10 +923,18 @@ void main() {
       },
     );
 
+    test('有效日比下限少 1 天（15 天）回 null', () {
+      final result = TechnicalIndicatorService.latestVolumeMA(
+        volumes([...List.filled(5, 0.0), ...List.filled(15, 1000.0), 1000.0]),
+        20,
+      );
+      expect(result.volumeMA, isNull);
+    });
+
     test('returns a value when valid days exactly meet the floor ratio', () {
       final now = DateTime.now();
-      // 20 筆窗口恰好 16 筆有效成交（= 20*0.8 下限，含）
-      final prices = List.generate(20, (i) {
+      // 前 20 日窗口恰好 16 筆有效成交（= 20*0.8 下限，含），第 21 筆為今日
+      final prices = List.generate(21, (i) {
         return createTestPrice(
           date: now.subtract(Duration(days: 20 - i)),
           close: 100.0,

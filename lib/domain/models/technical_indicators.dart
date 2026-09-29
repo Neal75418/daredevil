@@ -40,6 +40,6 @@ class TechnicalIndicators {
   /// 60 日移動平均線
   final double? ma60;
 
-  /// 20 日成交量移動平均線
+  /// 今日之前 20 日的均量（不含今日，見 TechnicalIndicatorService.latestVolumeMA）
   final double? volumeMA20;
 }
