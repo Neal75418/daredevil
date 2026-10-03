@@ -52,23 +52,15 @@ class FundamentalDataGroup {
   final Map<String, double>? maxHistoricalRevenueMap;
 }
 
-/// 財務健康（EPS + ROE + 股利）資料群組
+/// 財務健康（EPS + ROE）資料群組
 ///
-/// 包含近 8 季 EPS/ROE 趨勢與歷年股利資料，
-/// 用於評估公司長期獲利能力與股東回報。
+/// 包含近 8 季 EPS/ROE 趨勢，用於評估公司長期獲利能力。
 class FinancialHealthGroup {
-  const FinancialHealthGroup({
-    this.epsHistoryMap,
-    this.roeHistoryMap,
-    this.dividendHistoryMap,
-  });
+  const FinancialHealthGroup({this.epsHistoryMap, this.roeHistoryMap});
 
   /// EPS 歷史（symbol → 近8季 EPS）
   final Map<String, List<FinancialDataEntry>>? epsHistoryMap;
 
   /// ROE 歷史（symbol → 近8季 ROE）
   final Map<String, List<FinancialDataEntry>>? roeHistoryMap;
-
-  /// 股利歷史（symbol → 歷年股利）
-  final Map<String, List<DividendHistoryEntry>>? dividendHistoryMap;
 }

@@ -89,6 +89,8 @@ class CalibratedScoreContext {
   ///
   /// 目前僅 WEEK_52_HIGH（short）與 EPS_CONSECUTIVE_GROWTH（short+long）
   /// 為 true；其餘 ~40 條被校準砍到 0、走 hardcoded fallback → false。
+  /// 2026-10 起回放沒有 52 週樣本：重跑校準並 promote 後 WEEK_52_HIGH 會
+  /// 失去校準分（見 docs/CALIBRATION.md）。
   /// 2026-07-29:歸零規則 lookup 回 0(非 null),但「歸零」是校準判死、
   /// 不是背書——判斷改為「任一 horizon 有**非零**校準分」。
   bool isCalibrationBacked(String ruleId) =>

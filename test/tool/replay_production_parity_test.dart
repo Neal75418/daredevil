@@ -7,6 +7,9 @@
 //   (b) 缺 regime gate：回檔規則的校準樣本含生產會壓掉的空頭觸發
 //   (c) 法人窗不同：生產裁到 institutionalStreakLookbackDays，replay 餵全歷史
 //
+// 另有一條**刻意 delta**（不是 parity）：股利情境一律 incomplete——校準 DB 沒有
+// 除權除息配發資料，52 週在回放中不觸發（2026-10 起）。
+//
 // ⚠️ **這組測試證明的是「等價」,不是「正確」**(2026-08-29 domain 稽核)。
 // 當時生產端的 `PriceCalculator.marketUptrendOrNull` 用等權平均判多空,而
 // 該稽核實測:1,373 個可判定日裡有 **381 日(27.7%)** 說「多頭」但同期
@@ -55,7 +58,13 @@ void main() {
         trendState: TrendState.up,
       ),
     );
-    registerFallbackValue(const StockData(symbol: '', prices: []));
+    registerFallbackValue(
+      const StockData(
+        symbol: '',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      ),
+    );
     registerFallbackValue(
       const AnalysisResult(
         trendState: TrendState.up,
@@ -221,6 +230,19 @@ void main() {
       dates,
       isNot(contains(first.add(const Duration(days: 28)))),
       reason: '窗界外一天的列必須裁掉——此斷言釘住窗常數的值',
+    );
+  });
+
+  test('🚨 刻意 delta：股利情境一律 incomplete，校準 DB 沒有除權除息配發資料，52 週在回放中不觸發', () async {
+    await seedPrices('1111', 120);
+
+    await makeCalibrator().run();
+
+    final snapshots = capturedFor('1111');
+    expect(snapshots, isNotEmpty);
+    expect(
+      snapshots.map((s) => s.dividends),
+      everyElement(isA<DividendIncomplete>()),
     );
   });
 

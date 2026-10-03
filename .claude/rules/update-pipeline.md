@@ -173,8 +173,9 @@ TDCC holding、dividend、insider transfer、quarterly report。
   最多 `ApiConfig.dividendSyncMaxCallsPerRun`（30），每筆查到就寫入、沒查完
   的下一輪接續
 - ⚠️ **只有現金增資的除權也寫入（金額皆 0）**，當作「已處理」紀錄讓明細只
-  查一次；讀取端一律用 DAO 的 `getDividendDistributions*`（只回有配發的列），
-  直接 select 這張表會讀到這些 0 列
+  查一次；畫面讀取端用 DAO 的 `getDividendDistributions*`（只回有配發的列）；
+  52 週還原用 `getDividendEventsBatch`，刻意含 0/0 列（現金增資也要還原）。直接
+  select 這張表會讀到這些 0 列
 - 依序執行、不放進並行階段：並行階段還有其他同步器在打 TWSE，疊在一起更
   容易觸發限流、中止整輪。排在 5.5 與 6.5 之後、評分之前：那兩步抓的是本輪
   評分要用的資料，不能被本步驟的限流擋掉；前面撞到限流時本步驟跳過，每輪都
@@ -218,7 +219,9 @@ TDCC holding、dividend、insider transfer、quarterly report。
   整批取代）。明細中斷（預算、網路、限流）也照記，未查的列為 `pendingDetail`；本月
   同步的事實寫入失敗只進 errors。讀取端一律用 `DividendCompleteness`
   （`lib/domain/services/dividend_completeness.dart`）：兩個市場都查，有效列表日把
-  完成紀錄算成列到月底
+  完成紀錄算成列到月底。評分的 52 週規則也讀這些事實（`BatchDataLoader` 以
+  `BatchDataBuilder.buildDividendContexts` 替每檔建股利情境）：本月同步沒把列表日推進到
+  資料日的那一輪，52 週對所有股票都不觸發（評分日誌「52 週：完整度不足 N 檔」），下一輪本月同步成功後恢復
 - ⚠️ 五張表（`dividend_distribution`、`dividend_month_ledger`、`dividend_month_failure`、
   `dividend_listing`、`dividend_unresolved`）同生共死：fingerprint reset 一起清空；若之後
   加保留期清理，五張表的規則必須一致——只刪配發資料而留下完成紀錄或事實，缺洞會被
@@ -228,7 +231,7 @@ TDCC holding、dividend、insider transfer、quarterly report。
 
 | Helper              | 職責                                                                                                                   |
 |:--------------------|:-----------------------------------------------------------------------------------------------------------------------|
-| `BatchDataBuilder`  | 建構外資／董監等評分資料 Map，含衍生欄位                                                                               |
+| `BatchDataBuilder`  | 建構外資／董監等評分資料 Map，含衍生欄位；52 週的股利情境                                                              |
 | `BatchDataLoader`   | 從 DB 平行載入評分批次資料 → `ScoringBatchData`                                                                        |
 | `CandidateSelector` | 選出評分候選。流動性下限＝20 日中位成交值 ≥ 3,000 萬 NTD，**套用於市場候選／熱門股／其餘可分析股票三者**，僅自選股豁免 |
 

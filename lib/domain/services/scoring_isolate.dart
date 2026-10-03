@@ -13,6 +13,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/models.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
+import 'package:daredevil/domain/services/rules/indicator_rules.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
 import 'package:daredevil/domain/services/scoring_pipeline.dart';
 
@@ -25,6 +26,7 @@ class ScoringIsolateInput {
     required this.pricesMap,
     required this.newsMap,
     required this.institutionalMap,
+    required this.dividendContexts,
     this.revenueMap,
     this.valuationMap,
     this.revenueHistoryMap,
@@ -35,7 +37,6 @@ class ScoringIsolateInput {
     this.insiderMap,
     this.epsHistoryMap,
     this.roeHistoryMap,
-    this.dividendHistoryMap,
     this.maxHistoricalRevenueMap,
     this.calibratedScores = CalibratedScoreContext.empty,
     this.watchlistSymbols = const [],
@@ -45,6 +46,10 @@ class ScoringIsolateInput {
   final Map<String, List<DailyPriceEntry>> pricesMap;
   final Map<String, List<NewsItemEntry>> newsMap;
   final Map<String, List<DailyInstitutionalEntry>> institutionalMap;
+
+  /// 用到還原價的規則（52 週新高／新低）所需的股利情境（symbol → 情境）；
+  /// 沒有的代號視為不完整（見 `ScoringBatchData.dividendContexts`）
+  final Map<String, DividendContext> dividendContexts;
   final Map<String, MonthlyRevenueEntry>? revenueMap;
   final Map<String, StockValuationEntry>? valuationMap;
   final Map<String, List<MonthlyRevenueEntry>>? revenueHistoryMap;
@@ -69,9 +74,6 @@ class ScoringIsolateInput {
 
   /// ROE 歷史資料 Map（symbol -> 最近 8 季 ROE，降序）
   final Map<String, List<FinancialDataEntry>>? roeHistoryMap;
-
-  /// 股利歷史資料 Map（symbol -> 歷年股利，降序）
-  final Map<String, List<DividendHistoryEntry>>? dividendHistoryMap;
 
   /// 歷史最高月營收 Map（symbol -> maxRevenue）
   final Map<String, double>? maxHistoricalRevenueMap;
@@ -160,6 +162,8 @@ class ScoringBatchResult {
     required this.skippedNoAnalysis,
     required this.skippedNoReasons,
     required this.skippedLowScore,
+    this.week52Incomplete = 0,
+    this.week52Discontinuity = 0,
   });
 
   final List<ScoringIsolateOutput> outputs;
@@ -184,6 +188,14 @@ class ScoringBatchResult {
   /// 規則引擎未觸發任何訊號——正常結果（多數股票屬此類）
   final int skippedNoReasons;
   final int skippedLowScore;
+
+  /// 52 週規則因股利資料不完整而不評估的檔數。觀測用、不屬於略過帳目（這些
+  /// 股票照常評其他規則）；本月同步沒跑成的那一輪，會接近走到規則評估、且價格有 250 根以上的檔數（不是
+  /// 日誌的「評分完成」檔數）
+  final int week52Incomplete;
+
+  /// 52 週規則因還原後仍有水位斷點（減資、分割等）而不評估的檔數（觀測用）
+  final int week52Discontinuity;
 
   int get skippedTotal =>
       skippedNoData +
@@ -219,7 +231,7 @@ Future<ScoringBatchResult> evaluateStocksInIsolate(
   // CPU 浪費 + 峰值記憶體 ~3×(同時持有跨界複本、Map、重建的 typed 圖),
   // 不是 main-isolate 的 UI jank。isolate 訊息傳遞本就能載任意純資料
   // 物件;可跨界性由真 spawn 的 sendability 測試把關(scoring_watchlist_
-  // zero_reason_test,九個元素型別各放一顆真實例——sendability 走
+  // zero_reason_test,各元素型別各放一顆真實例——sendability 走
   // runtime 物件圖,空集合驗不到元素型別)。
   return Isolate.run(() {
     AppLogger.forceOutput = forceOutput;
@@ -258,6 +270,8 @@ ScoringBatchResult evaluateStocksIsolated(ScoringIsolateInput input) {
   var skippedNoAnalysis = 0;
   var skippedNoReasons = 0;
   var skippedLowScore = 0;
+  var week52Incomplete = 0;
+  var week52Discontinuity = 0;
   final watchlist = input.watchlistSymbols.toSet();
 
   for (final symbol in input.candidates) {
@@ -330,6 +344,9 @@ ScoringBatchResult evaluateStocksIsolated(ScoringIsolateInput input) {
     final stockData = StockData(
       symbol: symbol,
       prices: prices,
+      // 找不到情境＝不完整：寧可 52 週不觸發，也不拿原始價格判斷
+      dividends:
+          input.dividendContexts[symbol] ?? const DividendContext.incomplete(),
       institutional: batchData.institutionalHistory,
       news: batchData.recentNews,
       latestRevenue: batchData.latestRevenue,
@@ -337,9 +354,12 @@ ScoringBatchResult evaluateStocksIsolated(ScoringIsolateInput input) {
       revenueHistory: batchData.revenueHistory,
       epsHistory: batchData.epsHistory,
       roeHistory: batchData.roeHistory,
-      dividendHistory: batchData.dividendHistory,
       maxHistoricalRevenue: batchData.maxHistoricalRevenue,
     );
+    // 52 週觀測：與規則共用同一個判斷（week52AdjustedPrices）
+    final week52Block = week52AdjustedPrices(stockData).block;
+    if (week52Block == Week52Block.incomplete) week52Incomplete++;
+    if (week52Block == Week52Block.discontinuity) week52Discontinuity++;
     final reasons = ruleEngine.evaluateStock(context, stockData);
 
     // 無訊號是正常結果（多數股票屬此類），但仍須計數讓帳目平。
@@ -436,6 +456,8 @@ ScoringBatchResult evaluateStocksIsolated(ScoringIsolateInput input) {
     skippedNoAnalysis: skippedNoAnalysis,
     skippedNoReasons: skippedNoReasons,
     skippedLowScore: skippedLowScore,
+    week52Incomplete: week52Incomplete,
+    week52Discontinuity: week52Discontinuity,
   );
 }
 
@@ -452,7 +474,7 @@ MarketDataContext? _buildMarketDataContext(
   );
 }
 
-/// 轉換各項批次資料（法人、新聞、營收、估值、EPS、ROE、股利）
+/// 轉換各項批次資料（法人、新聞、營收、估值、EPS、ROE）
 ({
   List<DailyInstitutionalEntry>? institutionalHistory,
   List<NewsItemEntry>? recentNews,
@@ -461,7 +483,6 @@ MarketDataContext? _buildMarketDataContext(
   List<MonthlyRevenueEntry>? revenueHistory,
   List<FinancialDataEntry>? epsHistory,
   List<FinancialDataEntry>? roeHistory,
-  List<DividendHistoryEntry>? dividendHistory,
   double? maxHistoricalRevenue,
 })
 _convertBatchData(ScoringIsolateInput input, String symbol) {
@@ -470,7 +491,6 @@ _convertBatchData(ScoringIsolateInput input, String symbol) {
   final revenueHistory = input.revenueHistoryMap?[symbol];
   final epsHistory = input.epsHistoryMap?[symbol];
   final roeHistory = input.roeHistoryMap?[symbol];
-  final dividendHistory = input.dividendHistoryMap?[symbol];
 
   return (
     institutionalHistory: institutional != null && institutional.isNotEmpty
@@ -484,9 +504,6 @@ _convertBatchData(ScoringIsolateInput input, String symbol) {
         : null,
     epsHistory: epsHistory != null && epsHistory.isNotEmpty ? epsHistory : null,
     roeHistory: roeHistory != null && roeHistory.isNotEmpty ? roeHistory : null,
-    dividendHistory: dividendHistory != null && dividendHistory.isNotEmpty
-        ? dividendHistory
-        : null,
     maxHistoricalRevenue: input.maxHistoricalRevenueMap?[symbol],
   );
 }

@@ -26,7 +26,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -49,7 +53,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -70,7 +78,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -95,7 +107,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -118,7 +134,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -139,7 +159,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -163,7 +187,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -185,7 +213,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -205,7 +237,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -232,7 +268,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -256,7 +296,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -281,7 +325,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -303,7 +351,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -326,7 +378,11 @@ void main() {
           ),
         );
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -346,7 +402,11 @@ void main() {
           ),
         );
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -368,7 +428,11 @@ void main() {
           ),
         );
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -386,7 +450,11 @@ void main() {
           ),
         );
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -400,7 +468,11 @@ void main() {
           trendState: TrendState.range,
         );
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -421,7 +493,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -437,7 +513,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -459,7 +539,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -479,7 +563,11 @@ void main() {
         );
 
         final prices = generateFlatPrices(days: 20, basePrice: 100.0);
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 

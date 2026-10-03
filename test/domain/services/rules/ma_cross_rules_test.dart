@@ -14,6 +14,7 @@ import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/technical_indicators.dart';
 import 'package:daredevil/domain/services/rules/ma_cross_rules.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 
 void main() {
   List<DailyPriceEntry> pricesEndingWith({
@@ -51,6 +52,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: pricesEndingWith(prevClose: 98, close: 102),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNotNull);
@@ -65,6 +67,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: pricesEndingWith(prevClose: 100, close: 101),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNotNull);
@@ -76,6 +79,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: pricesEndingWith(prevClose: 103, close: 105),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNull);
@@ -87,6 +91,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: pricesEndingWith(prevClose: 95, close: 97),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNull);
@@ -98,6 +103,7 @@ void main() {
         StockData(
           symbol: '0050',
           prices: pricesEndingWith(prevClose: 98, close: 102, symbol: '0050'),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNull);
@@ -109,6 +115,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: pricesEndingWith(prevClose: 98, close: 102),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNull);
@@ -124,6 +131,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: pricesEndingWith(prevClose: 99, close: 101),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNotNull);
@@ -136,6 +144,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: pricesEndingWith(prevClose: 101, close: 103),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNull);
@@ -150,6 +159,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: pricesEndingWith(prevClose: 102, close: 98),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNotNull);
@@ -163,6 +173,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: pricesEndingWith(prevClose: 100.5, close: 99),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNotNull);
@@ -177,6 +188,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: pricesEndingWith(prevClose: 97, close: 95),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNull);
@@ -209,7 +221,11 @@ void main() {
       const rule = CoilingBelowMa20Rule();
       final r = rule.evaluate(
         ctx(ma20: 100),
-        StockData(symbol: 'TEST', prices: coilingPrices(close: 98)),
+        StockData(
+          symbol: 'TEST',
+          prices: coilingPrices(close: 98),
+          dividends: DividendContext.noEvents,
+        ),
       );
       expect(r, isNotNull);
       expect(r!.type, ReasonType.coilingBelowMa20);
@@ -220,7 +236,11 @@ void main() {
       const rule = CoilingBelowMa20Rule();
       final r = rule.evaluate(
         ctx(ma20: 100),
-        StockData(symbol: 'TEST', prices: coilingPrices(close: 101)),
+        StockData(
+          symbol: 'TEST',
+          prices: coilingPrices(close: 101),
+          dividends: DividendContext.noEvents,
+        ),
       );
       expect(r, isNull);
     });
@@ -229,7 +249,11 @@ void main() {
       const rule = CoilingBelowMa20Rule();
       final r = rule.evaluate(
         ctx(ma20: 100),
-        StockData(symbol: 'TEST', prices: coilingPrices(close: 96)),
+        StockData(
+          symbol: 'TEST',
+          prices: coilingPrices(close: 96),
+          dividends: DividendContext.noEvents,
+        ),
       );
       expect(r, isNull);
     });
@@ -241,6 +265,7 @@ void main() {
         StockData(
           symbol: 'TEST',
           prices: coilingPrices(close: 98, past60Close: 95), // 60D 僅 +3%
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNull);
@@ -250,7 +275,11 @@ void main() {
       const rule = CoilingBelowMa60Rule();
       final r = rule.evaluate(
         ctx(ma60: 100),
-        StockData(symbol: 'TEST', prices: coilingPrices(close: 99)),
+        StockData(
+          symbol: 'TEST',
+          prices: coilingPrices(close: 99),
+          dividends: DividendContext.noEvents,
+        ),
       );
       expect(r, isNotNull);
       expect(r!.type, ReasonType.coilingBelowMa60);
@@ -263,6 +292,7 @@ void main() {
         StockData(
           symbol: '0050',
           prices: coilingPrices(close: 98, symbol: '0050'),
+          dividends: DividendContext.noEvents,
         ),
       );
       expect(r, isNull);

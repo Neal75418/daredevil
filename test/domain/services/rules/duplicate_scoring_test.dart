@@ -19,6 +19,7 @@ import 'package:daredevil/domain/models/triggered_reason.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/rules/extended_market_rules.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 
 AnalysisContext ctxWithForeignChange(double change) => AnalysisContext(
   trendState: TrendState.up,
@@ -26,8 +27,11 @@ AnalysisContext ctxWithForeignChange(double change) => AnalysisContext(
   marketData: MarketDataContext(foreignSharesRatioChange: change),
 );
 
-StockData get emptyStock =>
-    const StockData(symbol: '1111', prices: <DailyPriceEntry>[]);
+StockData get emptyStock => const StockData(
+  symbol: '1111',
+  prices: <DailyPriceEntry>[],
+  dividends: DividendContext.noEvents,
+);
 
 void main() {
   group('外資減持:EXODUS 與 DECREASING 不得同時觸發(負分→條件互斥)', () {

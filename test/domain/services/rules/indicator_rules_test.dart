@@ -56,6 +56,35 @@ List<DailyPriceEntry> _generateDowntrendWithVolume({
   });
 }
 
+/// 從 2025-01-01 起逐日一根，高低為收盤 ±2%
+List<DailyPriceEntry> _daily(List<double> closes) =>
+    generatePriceHistoryFromList(
+      prices: closes,
+      startDate: DateTime(2025, 1, 1),
+    );
+
+/// 第 [i] 根的日期
+DateTime _day(int i) => DateTime(2025, 1, 1).add(Duration(days: i));
+
+List<double> _flat(int n, double value) => List.filled(n, value);
+
+/// 第 200 根除息（前收 100 → 參考價 90，因子 0.9）的 260 根：第 50 根是原始
+/// 高點 104（高 106.08），還原後只剩 95.47；第 230 根的 97（高 98.94）才是
+/// 還原後的高點。今天收 99：原始差 6.7% 不觸發，還原後創新高
+List<double> _adjustOnlyHighCloses() =>
+    [..._flat(200, 100), ..._flat(59, 95), 99.0]
+      ..[50] = 104
+      ..[230] = 97;
+
+final _exAt200 = DividendPriceEvent(
+  exDate: _day(200),
+  closeBefore: 100,
+  referencePrice: 90,
+);
+
+AnalysisContext _ctx() =>
+    AnalysisContext(evaluationTime: _day(259), trendState: TrendState.range);
+
 void main() {
   // ==========================================
   // Week52HighRule
@@ -75,13 +104,13 @@ void main() {
           volume: 1000,
         ),
       );
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.up,
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
 
-      final result = rule.evaluate(context, data);
+      final result = rule.evaluate(_ctx(), data);
 
       expect(result, isNotNull);
       expect(result!.type, equals(ReasonType.week52High));
@@ -94,17 +123,16 @@ void main() {
       prices.add(
         createTestPrice(date: DateTime.now(), close: 100.5, volume: 1000),
       );
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.up,
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
 
-      final result = rule.evaluate(context, data);
+      final result = rule.evaluate(_ctx(), data);
 
       expect(result, isNotNull);
-      expect(result!.type, equals(ReasonType.week52High));
-      expect(result.evidence!['isNewHigh'], isFalse);
+      expect(result!.evidence!['isNewHigh'], isFalse);
     });
 
     test('does not trigger when close is far from 52-week high', () {
@@ -112,92 +140,125 @@ void main() {
       prices.add(
         createTestPrice(date: DateTime.now(), close: 90.0, volume: 1000),
       );
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.range,
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
 
-      expect(rule.evaluate(context, data), isNull);
+      expect(rule.evaluate(_ctx(), data), isNull);
     });
 
     test('does not trigger with insufficient data (< 250 days)', () {
-      final prices = generateConstantPrices(days: 100, basePrice: 100.0);
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.range,
+      final data = StockData(
+        symbol: 'TEST',
+        prices: generateConstantPrices(days: 100, basePrice: 100.0),
+        dividends: DividendContext.noEvents,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
 
-      expect(rule.evaluate(context, data), isNull);
+      expect(rule.evaluate(_ctx(), data), isNull);
     });
 
     test('does not trigger when close is null', () {
       final prices = generateConstantPrices(days: 249, basePrice: 100.0);
       prices.add(createTestPrice(date: DateTime.now()));
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.range,
-      );
-      final data = StockData(symbol: 'TEST', prices: prices);
-
-      expect(rule.evaluate(context, data), isNull);
-    });
-
-    test('triggers with dividend adjustment (stock at adjusted high)', () {
-      // 歷史高點 100, 期間內配 5 元現金股利
-      // 調整後高點 = 100 - 5 = 95, 門檻 = 95 * 0.99 = 94.05
-      // 收盤 96 > 94.05 → 應觸發
-      final now = DateTime.now();
-      final prices = generateConstantPrices(days: 249, basePrice: 100.0);
-      prices.add(createTestPrice(date: now, close: 96.0, volume: 1000));
-
-      // 期間內有除息紀錄
-      final dividends = [
-        DividendHistoryEntry(
-          symbol: 'TEST',
-          year: now.year,
-          cashDividend: 5.0,
-          stockDividend: 0,
-          exDividendDate: now
-              .subtract(const Duration(days: 30))
-              .toIso8601String()
-              .split('T')
-              .first,
-        ),
-      ];
-
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.up,
-      );
       final data = StockData(
         symbol: 'TEST',
         prices: prices,
-        dividendHistory: dividends,
+        dividends: DividendContext.noEvents,
       );
 
-      final result = rule.evaluate(context, data);
-
-      expect(result, isNotNull);
-      expect(result!.type, equals(ReasonType.week52High));
-      expect(result.evidence!['dividendAdjustment'], equals(5.0));
+      expect(rule.evaluate(_ctx(), data), isNull);
     });
 
-    test('does not trigger without dividend adjustment for same price', () {
-      // 同上場景但無 dividend data → 96 < 99 (100*0.99) → 不觸發
-      final prices = generateConstantPrices(days: 249, basePrice: 100.0);
-      prices.add(
-        createTestPrice(date: DateTime.now(), close: 96.0, volume: 1000),
+    test('🚨 還原後才創新高：極值以還原後價格判斷，evidence 保留原始極值與兩者差', () {
+      final prices = _daily(_adjustOnlyHighCloses());
+
+      expect(
+        rule.evaluate(
+          _ctx(),
+          StockData(
+            symbol: 'T',
+            prices: prices,
+            dividends: DividendContext.noEvents,
+          ),
+        ),
+        isNull,
+        reason: '前提：沒有除權息事件時，原始高點 106.08 讓今天的 99 差太遠',
       );
 
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.up,
+      final result = rule.evaluate(
+        _ctx(),
+        StockData(
+          symbol: 'T',
+          prices: prices,
+          dividends: DividendContext.complete([_exAt200]),
+        ),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
 
-      expect(rule.evaluate(context, data), isNull);
+      expect(result, isNotNull);
+      expect(result!.description, '創 52 週新高');
+      final e = result.evidence!;
+      expect(e['week52High'], closeTo(106.08, 1e-9), reason: '原始極值（第 50 根）');
+      expect(e['adjustedHigh'], closeTo(98.94, 1e-9), reason: '還原後極值（第 230 根）');
+      expect(e['dividendAdjustment'], closeTo(7.14, 1e-9));
+      expect(e['isNewHigh'], isTrue);
+    });
+
+    test('🚨 股利資料不完整：原始價格會觸發也不觸發', () {
+      final prices = _daily([..._flat(259, 100), 103.0]);
+
+      expect(
+        rule.evaluate(
+          _ctx(),
+          StockData(
+            symbol: 'T',
+            prices: prices,
+            dividends: DividendContext.noEvents,
+          ),
+        ),
+        isNotNull,
+        reason: '前提：資料完整時照原始價格會觸發',
+      );
+      expect(
+        rule.evaluate(
+          _ctx(),
+          StockData(
+            symbol: 'T',
+            prices: prices,
+            dividends: const DividendContext.incomplete(),
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('🚨 還原後仍有水位斷點（減資、分割等不在除權除息列表）→ 不觸發', () {
+      // 第 200 根起從 50 跳到 100；今天 101.5 在原始高點 102 的 1% 內
+      final data = StockData(
+        symbol: 'T',
+        prices: _daily([..._flat(200, 50), ..._flat(59, 100), 101.5]),
+        dividends: DividendContext.noEvents,
+      );
+
+      expect(week52AdjustedPrices(data).block, Week52Block.discontinuity);
+      expect(rule.evaluate(_ctx(), data), isNull);
+    });
+
+    test('🚨 除權息日在今天之後的事件不套用（不得前視）', () {
+      final data = StockData(
+        symbol: 'T',
+        prices: _daily(_adjustOnlyHighCloses()),
+        dividends: DividendContext.complete([
+          DividendPriceEvent(
+            exDate: _day(260),
+            closeBefore: 100,
+            referencePrice: 90,
+          ),
+        ]),
+      );
+
+      expect(rule.evaluate(_ctx(), data), isNull);
     });
   });
 
@@ -213,13 +274,13 @@ void main() {
         startPrice: 200.0,
         dailyLoss: 0.3,
       );
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.down,
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
 
-      final result = rule.evaluate(context, data);
+      final result = rule.evaluate(_ctx(), data);
 
       expect(result, isNotNull);
       expect(result!.type, equals(ReasonType.week52Low));
@@ -231,37 +292,125 @@ void main() {
       prices.add(
         createTestPrice(date: DateTime.now(), close: 200.0, volume: 1000),
       );
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.range,
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
 
-      expect(rule.evaluate(context, data), isNull);
+      expect(rule.evaluate(_ctx(), data), isNull);
     });
 
     test('does not trigger when MA filter not confirmed (close >= MA20)', () {
-      // Flat at 100 → close = MA20 ≈ MA60 ≈ 100, close >= MA20 → filtered
-      final prices = generateConstantPrices(days: 250, basePrice: 100.0);
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.range,
-        indicators: indicatorsFromPrices(prices),
+      // 持平 100：收盤＝MA20，未確認空頭
+      final data = StockData(
+        symbol: 'TEST',
+        prices: generateConstantPrices(days: 250, basePrice: 100.0),
+        dividends: DividendContext.noEvents,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
 
-      expect(rule.evaluate(context, data), isNull);
+      expect(rule.evaluate(_ctx(), data), isNull);
     });
 
     test('does not trigger with insufficient data', () {
-      final prices = generateConstantPrices(days: 100, basePrice: 100.0);
-      final context = AnalysisContext(
-        evaluationTime: DateTime(2025, 6, 1),
-        trendState: TrendState.range,
+      final data = StockData(
+        symbol: 'TEST',
+        prices: generateConstantPrices(days: 100, basePrice: 100.0),
+        dividends: DividendContext.noEvents,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+
+      expect(rule.evaluate(_ctx(), data), isNull);
+    });
+
+    test('🚨 均線用還原後收盤：除權息跳空造成的原始空頭排列不算數', () {
+      // 第 250 根除息（因子 0.9），之後持平 90。原始 MA20＝95、MA60≈98.3，
+      // 收盤 90 < MA20 < MA60 看似空頭；還原後整段持平 90，收盤不低於 MA20
+      final prices = _daily([..._flat(250, 100), ..._flat(10, 90)]);
+      final context = AnalysisContext(
+        evaluationTime: _day(259),
+        trendState: TrendState.down,
+        indicators: indicatorsFromPrices(prices),
+      );
+      expect(
+        context.indicators!.ma20! < context.indicators!.ma60!,
+        isTrue,
+        reason: '前提：原始均線呈空頭排列',
+      );
+
+      final data = StockData(
+        symbol: 'T',
+        prices: prices,
+        dividends: DividendContext.complete([
+          DividendPriceEvent(
+            exDate: _day(250),
+            closeBefore: 100,
+            referencePrice: 90,
+          ),
+        ]),
+      );
 
       expect(rule.evaluate(context, data), isNull);
+    });
+  });
+
+  // ==========================================
+  // week52AdjustedPrices（規則與每輪觀測共用）
+  // ==========================================
+  group('week52AdjustedPrices', () {
+    test('不足 250 根：不評估、不計入觀測', () {
+      final r = week52AdjustedPrices(
+        StockData(
+          symbol: 'T',
+          prices: _daily(_flat(249, 100)),
+          dividends: const DividendContext.incomplete(),
+        ),
+      );
+
+      expect((r.adjusted, r.block), (null, null));
+    });
+
+    test('不完整 → incomplete', () {
+      final r = week52AdjustedPrices(
+        StockData(
+          symbol: 'T',
+          prices: _daily(_flat(260, 100)),
+          dividends: const DividendContext.incomplete(),
+        ),
+      );
+
+      expect((r.adjusted, r.block), (null, Week52Block.incomplete));
+    });
+
+    test('除權息解釋得了的跳空可用（截止日＝最後一根）；解釋不了的是斷點', () {
+      final prices = _daily([..._flat(200, 100), ..._flat(60, 80)]); // −20%
+
+      expect(
+        week52AdjustedPrices(
+          StockData(
+            symbol: 'T',
+            prices: prices,
+            dividends: DividendContext.noEvents,
+          ),
+        ).block,
+        Week52Block.discontinuity,
+      );
+
+      final r = week52AdjustedPrices(
+        StockData(
+          symbol: 'T',
+          prices: prices,
+          dividends: DividendContext.complete([
+            DividendPriceEvent(
+              exDate: _day(200),
+              closeBefore: 100,
+              referencePrice: 80,
+            ),
+          ]),
+        ),
+      );
+      expect(r.block, isNull);
+      expect(r.adjusted, hasLength(260));
+      expect(r.adjusted!.first.close, closeTo(80, 1e-9));
     });
   });
 
@@ -284,7 +433,11 @@ void main() {
         trendState: TrendState.up,
         indicators: indicatorsFromPrices(prices),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -305,7 +458,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.up,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -316,7 +473,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -327,7 +488,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -350,7 +515,11 @@ void main() {
         trendState: TrendState.down,
         indicators: indicatorsFromPrices(prices),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -365,7 +534,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -376,7 +549,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -403,7 +580,11 @@ void main() {
         trendState: TrendState.up,
         indicators: TechnicalIndicators(rsi: rsi),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -422,7 +603,11 @@ void main() {
         trendState: TrendState.range,
         indicators: TechnicalIndicators(rsi: rsi),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -433,7 +618,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -460,7 +649,11 @@ void main() {
         trendState: TrendState.down,
         indicators: TechnicalIndicators(rsi: rsi),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -479,7 +672,11 @@ void main() {
         trendState: TrendState.range,
         indicators: TechnicalIndicators(rsi: rsi),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -490,7 +687,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -527,7 +728,11 @@ void main() {
           prevKdD: 30.0,
         ),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -561,7 +766,11 @@ void main() {
           prevKdD: 55.0,
         ),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -590,7 +799,11 @@ void main() {
           prevKdD: 30.0,
         ),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -601,7 +814,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -638,7 +855,11 @@ void main() {
           prevKdD: 70.0,
         ),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -671,7 +892,11 @@ void main() {
           prevKdD: 45.0,
         ),
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -682,7 +907,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });

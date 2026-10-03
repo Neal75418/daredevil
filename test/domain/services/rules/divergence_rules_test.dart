@@ -40,7 +40,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -67,7 +71,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -90,7 +98,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -101,7 +113,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -131,7 +147,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -157,7 +177,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -179,7 +203,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -215,7 +243,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -244,7 +276,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -266,7 +302,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -277,7 +317,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -312,7 +356,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -341,7 +389,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -364,7 +416,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });

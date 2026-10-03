@@ -32,7 +32,11 @@ void main() {
 
       final reasons = ruleEngine.evaluateStock(
         context,
-        StockData(symbol: 'TEST', prices: prices),
+        StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
 
       // 驗證成交量爆增規則有觸發
@@ -65,7 +69,11 @@ void main() {
 
       final reasons = customEngine.evaluateStock(
         context,
-        StockData(symbol: 'UNKNOWN', prices: prices),
+        StockData(
+          symbol: 'UNKNOWN',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
 
       // 驗證突破規則有觸發

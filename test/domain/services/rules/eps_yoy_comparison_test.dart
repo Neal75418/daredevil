@@ -22,6 +22,7 @@ import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/technical_indicators.dart';
 import 'package:daredevil/domain/services/rules/fundamental_scan_rules.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 
 import '../../../helpers/price_data_generators.dart';
 
@@ -60,8 +61,12 @@ List<FinancialDataEntry> epsSeries(List<({int y, int q, double v})> items) => [
 void main() {
   const growth = EPSConsecutiveGrowthRule();
 
-  StockData stock(List<FinancialDataEntry> eps) =>
-      StockData(symbol: '1111', prices: aboveMa20(), epsHistory: eps);
+  StockData stock(List<FinancialDataEntry> eps) => StockData(
+    symbol: '1111',
+    prices: aboveMa20(),
+    epsHistory: eps,
+    dividends: DividendContext.noEvents,
+  );
 
   test('🚨 季節性遞減不得判成衰退——YoY 全部成長就該觸發成長', () {
     // 典型季節性公司:每年 Q1 低、Q4 高,但**每季都比去年同季好**

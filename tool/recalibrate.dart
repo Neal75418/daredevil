@@ -819,10 +819,14 @@ void _printReplayContext(Database db) {
     if (unfixable.isNotEmpty) {
       print(
         '   ℹ️  ${unfixable.length} 條這條管線抓不到資料'
-        '(集保/內部人/警示股/新聞無 backfill phase),永遠是手調分:',
+        '(集保/內部人/警示股/新聞無 backfill phase;52 週的回放沒有除權除息配發資料),'
+        '永遠是手調分:',
       );
       print('      ${_previewIds(unfixable)}');
-      print('      → 重跑管線無效。要校準它們得先為這些來源加 backfill phase。');
+      print(
+        '      → 重跑管線無效。要校準它們得先為這些來源加 backfill phase'
+        '(52 週的補法不同,見 docs/CALIBRATION.md)。',
+      );
     }
   }
   if (coverage.orphaned.isNotEmpty) {

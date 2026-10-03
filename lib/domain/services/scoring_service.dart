@@ -11,6 +11,7 @@ import 'package:daredevil/domain/repositories/analysis_repository.dart';
 import 'package:daredevil/domain/models/models.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
+import 'package:daredevil/domain/services/rules/indicator_rules.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
 import 'package:daredevil/domain/services/scoring_isolate.dart';
 import 'package:daredevil/domain/services/scoring_pipeline.dart';
@@ -91,6 +92,8 @@ class ScoringService {
     var skippedNoAnalysis = 0;
     var skippedNoReasons = 0;
     var skippedLowScore = 0;
+    var week52Incomplete = 0;
+    var week52Discontinuity = 0;
     var stocksWithSufficientData = 0;
     final watchlistSet = watchlistSymbols.toSet();
 
@@ -162,6 +165,10 @@ class ScoringService {
       final stockData = StockData(
         symbol: symbol,
         prices: prices,
+        // 找不到情境＝不完整：寧可 52 週不觸發，也不拿原始價格判斷
+        dividends:
+            batchData.dividendContexts[symbol] ??
+            const DividendContext.incomplete(),
         institutional: institutionalHistory,
         news: recentNews,
         latestRevenue: batchData.revenueMap?[symbol],
@@ -169,9 +176,12 @@ class ScoringService {
         revenueHistory: batchData.revenueHistoryMap?[symbol],
         epsHistory: batchData.epsHistoryMap?[symbol],
         roeHistory: batchData.roeHistoryMap?[symbol],
-        dividendHistory: batchData.dividendHistoryMap?[symbol],
         maxHistoricalRevenue: batchData.maxHistoricalRevenueMap?[symbol],
       );
+      // 52 週觀測：與 isolate 路徑逐字對應
+      final week52Block = week52AdjustedPrices(stockData).block;
+      if (week52Block == Week52Block.incomplete) week52Incomplete++;
+      if (week52Block == Week52Block.discontinuity) week52Discontinuity++;
       final reasons = _ruleEngine.evaluateStock(context, stockData);
 
       // 無訊號是正常結果，但仍須計數讓帳目平。
@@ -305,6 +315,8 @@ class ScoringService {
       skippedNoReasons,
       skippedLowScore,
       candidateCount: candidates.length,
+      week52Incomplete: week52Incomplete,
+      week52Discontinuity: week52Discontinuity,
     );
 
     // 依流動性加權分數（短線 horizon）排序
@@ -346,6 +358,7 @@ class ScoringService {
       institutionalMap:
           batchData.institutionalMap ??
           <String, List<DailyInstitutionalEntry>>{},
+      dividendContexts: batchData.dividendContexts,
       revenueMap: batchData.revenueMap,
       valuationMap: batchData.valuationMap,
       revenueHistoryMap: batchData.revenueHistoryMap,
@@ -356,7 +369,6 @@ class ScoringService {
       insiderMap: batchData.insiderMap,
       epsHistoryMap: batchData.epsHistoryMap,
       roeHistoryMap: batchData.roeHistoryMap,
-      dividendHistoryMap: batchData.dividendHistoryMap,
       maxHistoricalRevenueMap: batchData.maxHistoricalRevenueMap,
       calibratedScores: calibratedScores,
       watchlistSymbols: watchlistSymbols,
@@ -490,6 +502,8 @@ class ScoringService {
     int skippedNoReasons,
     int skippedLowScore, {
     required int candidateCount,
+    required int week52Incomplete,
+    required int week52Discontinuity,
     String suffix = '',
   }) {
     final maxScoreShort = scored.isEmpty
@@ -510,6 +524,12 @@ class ScoringService {
           '(無資料 $skippedNoData, 資料不足 $skippedInsufficient, '
           '低流動 $skippedLiquidity, 非當日 bar $skippedStaleBar, '
           '無訊號 $skippedNoReasons, 分數不足 $skippedLowScore)$suffix',
+    );
+
+    // 52 週停發不能靜默：每輪都記，0 也記
+    AppLogger.info(
+      'ScoringService',
+      '52 週：完整度不足 $week52Incomplete 檔、斷點 $week52Discontinuity 檔',
     );
 
     // 與 isolate 路徑同一診斷契約（見 _logScoringResultsFromIsolate）
@@ -545,6 +565,13 @@ class ScoringService {
           '${result.skippedLowLiquidity}, 非當日 bar '
           '${result.skippedStaleBar}, 無訊號 ${result.skippedNoReasons}, '
           '分數不足 ${result.skippedLowScore}) (Isolate)',
+    );
+
+    // 52 週停發不能靜默：每輪都記，0 也記（與主執行緒路徑同一行）
+    AppLogger.info(
+      'ScoringService',
+      '52 週：完整度不足 ${result.week52Incomplete} 檔、'
+          '斷點 ${result.week52Discontinuity} 檔',
     );
 
     // 趨勢資料不足：兩道閘門差 1（見 AnalysisCoordinatorService.analyzeStock），

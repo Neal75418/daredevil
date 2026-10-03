@@ -6,6 +6,7 @@ class StockData {
   const StockData({
     required this.symbol,
     required this.prices,
+    required this.dividends,
     this.institutional,
     this.news,
     this.latestRevenue,
@@ -13,12 +14,16 @@ class StockData {
     this.revenueHistory,
     this.epsHistory,
     this.roeHistory,
-    this.dividendHistory,
     this.maxHistoricalRevenue,
   });
 
   final String symbol;
   final List<DailyPriceEntry> prices;
+
+  /// 除權除息情境（52 週新高／新低還原價格用）：完整時帶窗口內、評分日以前
+  /// 的事件；不完整時用到還原價的規則不觸發。刻意必填——評分兩條路徑與工具
+  /// 都必須明確決定，漏傳會讓 52 週規則用原始價格判斷或靜默停發
+  final DividendContext dividends;
   final List<DailyInstitutionalEntry>? institutional;
   final List<NewsItemEntry>? news;
 
@@ -38,9 +43,6 @@ class StockData {
 
   /// ROE 歷史（最近 8 季，依時間降序，虛擬 FinancialDataEntry）
   final List<FinancialDataEntry>? roeHistory;
-
-  /// 股利歷史（依年度降序，用於 52 週新高/新低除息調整）
-  final List<DividendHistoryEntry>? dividendHistory;
 
   /// 歷史最高月營收（用於營收創新高規則）
   final double? maxHistoricalRevenue;

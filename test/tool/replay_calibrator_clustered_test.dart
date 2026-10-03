@@ -35,7 +35,13 @@ void main() {
         trendState: TrendState.up,
       ),
     );
-    registerFallbackValue(const StockData(symbol: '', prices: []));
+    registerFallbackValue(
+      const StockData(
+        symbol: '',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      ),
+    );
     registerFallbackValue(
       const AnalysisResult(
         trendState: TrendState.up,

@@ -22,7 +22,11 @@ void main() {
           foreignSharesRatioChange: 0.8, // >= 0.5
         ),
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -40,7 +44,11 @@ void main() {
           foreignSharesRatioChange: 0.3, // < 0.5
         ),
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -50,7 +58,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -71,7 +83,11 @@ void main() {
           foreignSharesRatioChange: -0.7, // <= -0.5
         ),
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -89,7 +105,11 @@ void main() {
           foreignSharesRatioChange: -0.2, // > -0.5
         ),
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -100,7 +120,11 @@ void main() {
         trendState: TrendState.range,
         marketData: const MarketDataContext(foreignSharesRatio: 25.0),
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -129,6 +153,7 @@ void main() {
             volume: 15000000, // > 10,000,000 (萬張)
           ),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -157,6 +182,7 @@ void main() {
         prices: [
           createTestPrice(date: DateTime.now(), close: 100.0, volume: 15000000),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -180,6 +206,7 @@ void main() {
         prices: [
           createTestPrice(date: DateTime.now(), close: 100.0, volume: 15000000),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -196,6 +223,7 @@ void main() {
         prices: [
           createTestPrice(date: DateTime.now(), close: 100.0, volume: 15000000),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       // DayTradingHighRule only triggers for [50, 70), extreme is handled by DayTradingExtremeRule
@@ -217,6 +245,7 @@ void main() {
             volume: 5000000, // < 10,000,000 (萬張)
           ),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -244,6 +273,7 @@ void main() {
             volume: 35000000, // > 30,000,000 (3 萬張)
           ),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -264,6 +294,7 @@ void main() {
         prices: [
           createTestPrice(date: DateTime.now(), close: 100.0, volume: 35000000),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -284,6 +315,7 @@ void main() {
             volume: 20000000, // < 30,000,000 (3 萬張)
           ),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -302,7 +334,11 @@ void main() {
         trendState: TrendState.range,
         marketData: const MarketDataContext(concentrationRatio: 75.0), // >= 60
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -317,7 +353,11 @@ void main() {
         trendState: TrendState.range,
         marketData: const MarketDataContext(concentrationRatio: 55.0), // < 60
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -328,7 +368,11 @@ void main() {
         trendState: TrendState.range,
         marketData: const MarketDataContext(),
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -342,7 +386,11 @@ void main() {
               InstitutionalParams.concentrationHighThreshold, // 60.0
         ),
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -369,6 +417,7 @@ void main() {
         prices: [
           createTestPrice(date: DateTime.now(), close: 100.0, volume: 15000000),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -380,7 +429,11 @@ void main() {
         trendState: TrendState.range,
         marketData: const MarketDataContext(dayTradingRatio: 60.0),
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -398,6 +451,7 @@ void main() {
         prices: [
           createTestPrice(date: DateTime.now(), close: 100.0, volume: 15000000),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -417,6 +471,7 @@ void main() {
         prices: [
           createTestPrice(date: DateTime.now(), close: 100.0, volume: null),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -437,6 +492,7 @@ void main() {
         prices: [
           createTestPrice(date: DateTime.now(), close: 100.0, volume: 35000000),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -456,6 +512,7 @@ void main() {
         prices: [
           createTestPrice(date: DateTime.now(), close: 100.0, volume: 35000000),
         ],
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);

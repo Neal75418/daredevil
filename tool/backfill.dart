@@ -36,8 +36,9 @@
 //   5. financial_data (EPS)  via FundamentalRepository.syncFinancialStatements
 //   6. stock_valuation (PER) via FundamentalRepository.syncValuationData
 //
-// `dividend_history` 暫不 backfill — 它只用於 52 週新高/新低的股息
-// 調整，非 calibration 的必要輸入。
+// 除權除息不 backfill：52 週新高／新低改用配發表的除權息參考價還原
+// （2026-10 起）後，回放傳 `DividendContext.incomplete`，這兩條規則在
+// 回放中不觸發（見 `CalibrationThresholds.notBackfillableReasons`）。
 //
 // ## Rate limit
 //

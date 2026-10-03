@@ -23,7 +23,11 @@ void main() {
       );
       final now = DateTime.now();
       final doji = createDojiCandle(date: now, price: 100.0, range: 10.0);
-      final data = StockData(symbol: 'TEST', prices: [doji]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [doji],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -39,7 +43,11 @@ void main() {
       );
       final now = DateTime.now();
       final doji = createDojiCandle(date: now, price: 100.0);
-      final data = StockData(symbol: 'TEST', prices: [doji]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [doji],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
       expect(result, isNull);
@@ -53,7 +61,11 @@ void main() {
       );
       final now = DateTime.now();
       final doji = createDojiCandle(date: now, price: 100.0, range: 10.0);
-      final data = StockData(symbol: 'TEST', prices: [doji]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [doji],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -70,7 +82,11 @@ void main() {
       );
       final now = DateTime.now();
       final doji = createDojiCandle(date: now, price: 100.0);
-      final data = StockData(symbol: 'TEST', prices: [doji]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [doji],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
       expect(result, isNull);
@@ -81,7 +97,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -100,7 +120,14 @@ void main() {
           range: 10.0,
         );
         return rule
-            .evaluate(context, StockData(symbol: 'TEST', prices: [doji]))
+            .evaluate(
+              context,
+              StockData(
+                symbol: 'TEST',
+                prices: [doji],
+                dividends: DividendContext.noEvents,
+              ),
+            )
             ?.type;
       }
 
@@ -151,7 +178,11 @@ void main() {
         volume: 2000, // above average
       );
       final allPrices = [...basePrices, pair.prev, pair.today];
-      final data = StockData(symbol: 'TEST', prices: allPrices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: allPrices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -178,7 +209,11 @@ void main() {
         volume: 2000,
       );
       final allPrices = [...basePrices, pair.prev, pair.today];
-      final data = StockData(symbol: 'TEST', prices: allPrices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: allPrices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNotNull);
     });
@@ -193,7 +228,11 @@ void main() {
         prevDate: now.subtract(const Duration(days: 1)),
         todayDate: now,
       );
-      final data = StockData(symbol: 'TEST', prices: [pair.prev, pair.today]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [pair.prev, pair.today],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -206,6 +245,7 @@ void main() {
       final data = StockData(
         symbol: 'TEST',
         prices: [createTestPrice(date: DateTime.now(), close: 100.0)],
+        dividends: DividendContext.noEvents,
       );
       expect(rule.evaluate(context, data), isNull);
     });
@@ -237,7 +277,11 @@ void main() {
         volume: 2000, // above average
       );
       final allPrices = [...basePrices, pair.prev, pair.today];
-      final data = StockData(symbol: 'TEST', prices: allPrices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: allPrices,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -264,6 +308,7 @@ void main() {
       final data = StockData(
         symbol: 'TEST',
         prices: [...basePrices, pair.prev, pair.today],
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -289,6 +334,7 @@ void main() {
       final data = StockData(
         symbol: 'TEST',
         prices: [...basePrices, pair.prev, pair.today],
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -302,6 +348,7 @@ void main() {
       final data = StockData(
         symbol: 'TEST',
         prices: [createTestPrice(date: DateTime.now(), close: 100.0)],
+        dividends: DividendContext.noEvents,
       );
       expect(rule.evaluate(context, data), isNull);
     });
@@ -320,7 +367,11 @@ void main() {
         trendState: TrendState.down,
       );
       final hammer = createHammerCandle(date: DateTime.now(), close: 100.0);
-      final data = StockData(symbol: 'TEST', prices: [hammer]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [hammer],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -335,7 +386,11 @@ void main() {
         trendState: TrendState.up,
       );
       final hammer = createHammerCandle(date: DateTime.now(), close: 100.0);
-      final data = StockData(symbol: 'TEST', prices: [hammer]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [hammer],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -354,7 +409,11 @@ void main() {
         close: 101.0,
         volume: 1000,
       );
-      final data = StockData(symbol: 'TEST', prices: [normal]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [normal],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -364,7 +423,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.down,
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
       expect(rule.evaluate(context, data), isNull);
     });
 
@@ -381,7 +444,11 @@ void main() {
           resistanceLevel: 110.0,
         );
         final hammer = createHammerCandle(date: DateTime.now(), close: 102.4);
-        final data = StockData(symbol: 'TEST', prices: [hammer]);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: [hammer],
+          dividends: DividendContext.noEvents,
+        );
 
         expect(rule.evaluate(context, data), isNull);
       },
@@ -398,7 +465,11 @@ void main() {
         );
         // close 92 → position (92-90)/20 = 0.10，近支撐
         final hammer = createHammerCandle(date: DateTime.now(), close: 92.0);
-        final data = StockData(symbol: 'TEST', prices: [hammer]);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: [hammer],
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
         expect(result, isNotNull);
@@ -420,7 +491,11 @@ void main() {
         trendState: TrendState.up,
       );
       final hammer = createHammerCandle(date: DateTime.now(), close: 100.0);
-      final data = StockData(symbol: 'TEST', prices: [hammer]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [hammer],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -435,7 +510,11 @@ void main() {
         trendState: TrendState.down,
       );
       final hammer = createHammerCandle(date: DateTime.now(), close: 100.0);
-      final data = StockData(symbol: 'TEST', prices: [hammer]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [hammer],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -453,7 +532,11 @@ void main() {
         close: 101.0,
         volume: 1000,
       );
-      final data = StockData(symbol: 'TEST', prices: [normal]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [normal],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -477,7 +560,11 @@ void main() {
         todayDate: now,
         gapSize: 3.0,
       );
-      final data = StockData(symbol: 'TEST', prices: [pair.prev, pair.today]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [pair.prev, pair.today],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -497,7 +584,11 @@ void main() {
         todayDate: now,
         gapSize: 0.01, // tiny gap
       );
-      final data = StockData(symbol: 'TEST', prices: [pair.prev, pair.today]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [pair.prev, pair.today],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -523,7 +614,11 @@ void main() {
         low: 99.0, // overlaps with prev.high
         close: 101.5,
       );
-      final data = StockData(symbol: 'TEST', prices: [prev, today]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [prev, today],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -536,6 +631,7 @@ void main() {
       final data = StockData(
         symbol: 'TEST',
         prices: [createTestPrice(date: DateTime.now(), close: 100.0)],
+        dividends: DividendContext.noEvents,
       );
       expect(rule.evaluate(context, data), isNull);
     });
@@ -559,7 +655,11 @@ void main() {
         todayDate: now,
         gapSize: 3.0,
       );
-      final data = StockData(symbol: 'TEST', prices: [pair.prev, pair.today]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [pair.prev, pair.today],
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -579,7 +679,11 @@ void main() {
         todayDate: now,
         gapSize: 0.01,
       );
-      final data = StockData(symbol: 'TEST', prices: [pair.prev, pair.today]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [pair.prev, pair.today],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -604,7 +708,11 @@ void main() {
         low: 97.0,
         close: 98.0,
       );
-      final data = StockData(symbol: 'TEST', prices: [prev, today]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [prev, today],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -617,6 +725,7 @@ void main() {
       final data = StockData(
         symbol: 'TEST',
         prices: [createTestPrice(date: DateTime.now(), close: 100.0)],
+        dividends: DividendContext.noEvents,
       );
       expect(rule.evaluate(context, data), isNull);
     });
@@ -637,7 +746,11 @@ void main() {
       final pattern = createMorningStarPattern(
         startDate: DateTime.now().subtract(const Duration(days: 2)),
       );
-      final data = StockData(symbol: 'TEST', prices: pattern);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: pattern,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -654,7 +767,11 @@ void main() {
       final pattern = createMorningStarPattern(
         startDate: DateTime.now().subtract(const Duration(days: 2)),
       );
-      final data = StockData(symbol: 'TEST', prices: pattern);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: pattern,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -687,7 +804,11 @@ void main() {
         low: 100.0,
         close: 105.0,
       );
-      final data = StockData(symbol: 'TEST', prices: [c1, c2, c3]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [c1, c2, c3],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -706,6 +827,7 @@ void main() {
             close: 99.0,
           ),
         ],
+        dividends: DividendContext.noEvents,
       );
       expect(rule.evaluate(context, data), isNull);
     });
@@ -726,7 +848,11 @@ void main() {
       final pattern = createEveningStarPattern(
         startDate: DateTime.now().subtract(const Duration(days: 2)),
       );
-      final data = StockData(symbol: 'TEST', prices: pattern);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: pattern,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -743,7 +869,11 @@ void main() {
       final pattern = createEveningStarPattern(
         startDate: DateTime.now().subtract(const Duration(days: 2)),
       );
-      final data = StockData(symbol: 'TEST', prices: pattern);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: pattern,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -776,7 +906,11 @@ void main() {
         low: 95.0,
         close: 96.0,
       );
-      final data = StockData(symbol: 'TEST', prices: [c1, c2, c3]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [c1, c2, c3],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -789,6 +923,7 @@ void main() {
       final data = StockData(
         symbol: 'TEST',
         prices: [createTestPrice(date: DateTime.now(), close: 100.0)],
+        dividends: DividendContext.noEvents,
       );
       expect(rule.evaluate(context, data), isNull);
     });
@@ -809,7 +944,11 @@ void main() {
       final pattern = createThreeWhiteSoldiersPattern(
         startDate: DateTime.now().subtract(const Duration(days: 2)),
       );
-      final data = StockData(symbol: 'TEST', prices: pattern);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: pattern,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -826,7 +965,11 @@ void main() {
       final pattern = createThreeWhiteSoldiersPattern(
         startDate: DateTime.now().subtract(const Duration(days: 2)),
       );
-      final data = StockData(symbol: 'TEST', prices: pattern);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: pattern,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -859,7 +1002,11 @@ void main() {
         low: 100.2,
         close: 100.8, // body = 0.3%
       );
-      final data = StockData(symbol: 'TEST', prices: [c1, c2, c3]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [c1, c2, c3],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -880,7 +1027,11 @@ void main() {
       final pattern = createThreeBlackCrowsPattern(
         startDate: DateTime.now().subtract(const Duration(days: 2)),
       );
-      final data = StockData(symbol: 'TEST', prices: pattern);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: pattern,
+        dividends: DividendContext.noEvents,
+      );
 
       final result = rule.evaluate(context, data);
 
@@ -897,7 +1048,11 @@ void main() {
       final pattern = createThreeBlackCrowsPattern(
         startDate: DateTime.now().subtract(const Duration(days: 2)),
       );
-      final data = StockData(symbol: 'TEST', prices: pattern);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: pattern,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -930,7 +1085,11 @@ void main() {
         low: 99.3,
         close: 99.5, // body = 0.3%
       );
-      final data = StockData(symbol: 'TEST', prices: [c1, c2, c3]);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: [c1, c2, c3],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });

@@ -9,6 +9,7 @@ import 'package:daredevil/data/repositories/shareholding_repository.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/scoring_batch_data.dart';
 import 'package:daredevil/domain/models/scoring_data_groups.dart';
+import 'package:daredevil/domain/services/dividend_completeness.dart';
 import 'package:daredevil/domain/services/update/batch_data_builder.dart';
 
 /// 評分用批次資料載入器
@@ -136,13 +137,18 @@ class BatchDataLoader {
     );
     final epsFuture = timed('eps', _db.getEPSHistoryBatch(candidates));
     final roeFuture = timed('roe', _db.getROEHistoryBatch(candidates));
-    final dividendFuture = timed(
-      'dividend',
-      _db.getDividendHistoryBatch(candidates),
-    );
     final maxRevenueFuture = timed(
       'maxRevenue',
       _db.getMaxRevenueBatch(candidates),
+    );
+    // 52 週規則的股利情境：完整度事實＋價格窗內的除權除息（含 0/0 列）
+    final dividendCompletenessFuture = timed(
+      'dividendCompleteness',
+      loadDividendCompleteness(_db, now: date),
+    );
+    final dividendEventsFuture = timed(
+      'dividendEvents',
+      _db.getDividendEventsBatch(candidates, from: startDate, to: date),
     );
 
     // 型別安全的並行等待（Dart 3 Record 解構）
@@ -178,16 +184,18 @@ class BatchDataLoader {
       insiderEntries,
       epsHistoryMap,
       roeHistoryMap,
-      dividendHistoryMap,
       maxHistoricalRevenueMap,
+      dividendCompleteness,
+      dividendEvents,
     ) = await (
       prevShareholdingFuture,
       warningFuture,
       insiderFuture,
       epsFuture,
       roeFuture,
-      dividendFuture,
       maxRevenueFuture,
+      dividendCompletenessFuture,
+      dividendEventsFuture,
     ).wait;
 
     // 批次載入籌碼集中度（TDCC 股權分散表）
@@ -235,9 +243,17 @@ class BatchDataLoader {
       _insiderRepo,
     );
 
+    final dividendContexts = BatchDataBuilder.buildDividendContexts(
+      pricesMap: pricesMap,
+      completeness: dividendCompleteness,
+      events: dividendEvents,
+      date: date,
+    );
+
     return ScoringBatchData.grouped(
       pricesMap: pricesMap,
       newsMap: newsMap,
+      dividendContexts: dividendContexts,
       dayTradingMap: dayTradingMap,
       institutional: InstitutionalIntelligence(
         institutionalMap: institutionalMap,
@@ -254,7 +270,6 @@ class BatchDataLoader {
       financialHealth: FinancialHealthGroup(
         epsHistoryMap: epsHistoryMap,
         roeHistoryMap: roeHistoryMap,
-        dividendHistoryMap: dividendHistoryMap,
       ),
     );
   }

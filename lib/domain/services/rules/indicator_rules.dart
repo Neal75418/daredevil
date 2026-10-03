@@ -1,6 +1,10 @@
 import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/utils/logger.dart';
+import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/services/dividend_adjuster.dart';
 import 'package:daredevil/domain/services/price_calculator.dart';
+import 'package:daredevil/domain/services/price_continuity.dart';
+import 'package:daredevil/domain/services/technical_indicator_service.dart';
 import 'package:daredevil/domain/models/models.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
 
@@ -8,39 +12,72 @@ import 'package:daredevil/domain/services/rules/stock_rules.dart';
 // 第 3 階段：技術訊號規則
 // ==================================================
 
-/// 計算價格歷史期間內的累計現金股利
-///
-/// 遍歷 [StockData.dividendHistory]，篩選除息日落在價格資料起始日之後的股利，
-/// 回傳累計現金股利金額。用於調整 52 週新高/新低的歷史價格基準。
-///
-/// 前提：`data.prices` 按日期升冪排列（由 PriceDAO 保證）。
-/// `.first` 為分析視窗起始日，篩選在此之後的除息日。
-double _sumDividendsInPeriod(StockData data) {
-  final dividends = data.dividendHistory;
-  if (dividends == null || dividends.isEmpty || data.prices.isEmpty) {
-    return 0;
-  }
+/// 52 週規則不評估的原因（每輪觀測計數用）
+enum Week52Block {
+  /// 窗口內除權除息資料不完整（含缺價格）
+  incomplete,
 
-  final lookbackStart = data.prices.first.date;
-  double total = 0;
-  for (final div in dividends) {
-    if (div.exDividendDate == null) continue;
-    final exDate = DateTime.tryParse(div.exDividendDate!);
-    if (exDate != null && exDate.isAfter(lookbackStart)) {
-      total += div.cashDividend;
-    }
+  /// 還原後仍有水位斷點（減資、分割、面額變更等不在除權除息列表的事件）
+  discontinuity,
+}
+
+/// 52 週新高／新低用的還原價格與閘門，規則與每輪觀測共用同一個判斷：
+///
+/// - 不足 [IndicatorParams.week52Days] 根：兩者皆 null（規則本來就不評估，
+///   不計入觀測）
+/// - 股利情境不完整：block 為 [Week52Block.incomplete]
+/// - 以交易所除權息參考價還原（[DividendAdjuster]，截止日＝最後一根的日期，
+///   評分時由候選資格保證它就是評分日）後仍有水位斷點：block 為
+///   [Week52Block.discontinuity]
+/// - 其餘：adjusted 為還原後的整段價格
+({List<DailyPriceEntry>? adjusted, Week52Block? block}) week52AdjustedPrices(
+  StockData data,
+) {
+  if (data.prices.length < IndicatorParams.week52Days) {
+    return (adjusted: null, block: null);
   }
-  return total;
+  final dividends = data.dividends;
+  if (dividends is! DividendComplete) {
+    return (adjusted: null, block: Week52Block.incomplete);
+  }
+  final adjusted = DividendAdjuster.adjust(
+    data.prices,
+    dividends.events,
+    asOf: data.prices.last.date,
+  );
+  if (adjusted.contiguousSuffix().length < adjusted.length) {
+    return (adjusted: null, block: Week52Block.discontinuity);
+  }
+  return (adjusted: adjusted, block: null);
 }
 
 /// 52 週新高/新低的方向
 enum _Week52Direction { high, low }
 
+/// [series] 排除最後一根（今日）的極值與有效根數；沒有有效值時回 null
+({double value, int validCount})? _week52Extreme(
+  List<DailyPriceEntry> series, {
+  required bool isHigh,
+}) {
+  double? extreme;
+  var validCount = 0;
+  for (var i = 0; i < series.length - 1; i++) {
+    final p = series[i];
+    final value = isHigh ? (p.high ?? p.close) : (p.low ?? p.close);
+    if (value == null || value <= 0) continue;
+    validCount++;
+    if (extreme == null || (isHigh ? value > extreme : value < extreme)) {
+      extreme = value;
+    }
+  }
+  return extreme == null ? null : (value: extreme, validCount: validCount);
+}
+
 /// 52 週新高/新低規則的共用基底類別
 ///
-/// 將 [Week52HighRule] 與 [Week52LowRule] 的共同邏輯抽取至此，
-/// 透過 [_direction] 參數化兩者之間的差異（極值初始值、比較方向、
-/// 門檻計算、evidence key 等）。
+/// 極值以 [week52AdjustedPrices] 還原後的價格計算（2026-10 起；之前從極值扣掉
+/// 窗內現金股利，但除息日幾乎全空，扣除額幾乎為 0），evidence 同時保留原始
+/// 極值。股利資料不完整或還原後仍有水位斷點時不觸發。
 abstract class _Week52RuleBase extends StockRule {
   const _Week52RuleBase({
     required _Week52Direction direction,
@@ -66,11 +103,11 @@ abstract class _Week52RuleBase extends StockRule {
   @override
   String get id => _ruleId;
 
-  /// 子類別可覆寫以加入額外過濾條件（例如 MA 空頭確認）。
-  /// 回傳 true 表示應過濾掉（不觸發）。
+  /// 子類別可覆寫以加入額外過濾條件（例如 MA 空頭確認）；[adjusted] 是還原後
+  /// 的整段價格。回傳 true 表示應過濾掉（不觸發）。
   bool additionalFilter(
-    AnalysisContext context,
-    StockData data,
+    String symbol,
+    List<DailyPriceEntry> adjusted,
     double close,
   ) => false;
 
@@ -89,72 +126,55 @@ abstract class _Week52RuleBase extends StockRule {
       return null;
     }
 
-    final today = data.prices.last;
-    final close = today.close;
+    final close = data.prices.last.close;
     if (close == null) return null;
 
-    // 從「過去」的價格歷史計算 52 週極值（排除今日）
-    // 避免前瞻偏差
-    double extreme = isHigh ? 0 : double.infinity;
-    int validCount = 0;
-    for (int i = 0; i < data.prices.length - 1; i++) {
-      final p = data.prices[i];
-      final value = isHigh ? (p.high ?? p.close) : (p.low ?? p.close);
-      if (value == null || value <= 0) continue;
-      validCount++;
-      if (isHigh ? value > extreme : value < extreme) extreme = value;
-    }
+    final adjusted = week52AdjustedPrices(data).adjusted;
+    if (adjusted == null) return null;
 
-    // 需要足夠有效資料才有意義
-    final isExtremeInvalid = isHigh
-        ? extreme <= 0
-        : (extreme == double.infinity || extreme <= 0);
-    if (isExtremeInvalid || validCount < IndicatorParams.week52MinValidBars) {
+    // 從「過去」的價格歷史計算 52 週極值（排除今日），避免前瞻偏差
+    final adj = _week52Extreme(adjusted, isHigh: isHigh);
+    if (adj == null || adj.validCount < IndicatorParams.week52MinValidBars) {
       return null;
     }
+    // 還原只乘正數因子、不改變哪幾根有效，所以原始極值必有值
+    final raw = _week52Extreme(data.prices, isHigh: isHigh)!;
 
-    // 除息調整：歷史極值需調降以反映除息影響
-    final totalDividend = _sumDividendsInPeriod(data);
-    final adjusted = extreme - totalDividend;
-    if (adjusted <= 0) return null;
-
-    // 檢查當前收盤是否處於或接近 52 週極值（在門檻範圍內）
+    // 收盤是否處於或接近還原後的 52 週極值（在門檻範圍內）；今日不受任何
+    // 事件影響，收盤就是還原後的收盤
+    final extreme = adj.value;
     final thresholdPrice = isHigh
-        ? adjusted * (1 - _threshold)
-        : adjusted * (1 + _threshold);
+        ? extreme * (1 - _threshold)
+        : extreme * (1 + _threshold);
     final isInRange = isHigh
         ? close >= thresholdPrice
         : close <= thresholdPrice;
+    if (!isInRange) return null;
 
-    if (isInRange) {
-      final isNew = isHigh ? close >= adjusted : close <= adjusted;
+    // 子類別額外過濾（例如 Week52Low 的 MA 空頭趨勢確認）
+    if (additionalFilter(data.symbol, adjusted, close)) return null;
 
-      // 子類別額外過濾（例如 Week52Low 的 MA 空頭趨勢確認）
-      if (additionalFilter(context, data, close)) return null;
-
-      final extremeLabel = isHigh ? '高' : '低';
-      AppLogger.debug(
-        _ruleName,
-        '${data.symbol}: 收盤=${close.toStringAsFixed(2)}, '
-        '52週$extremeLabel=${extreme.toStringAsFixed(2)}, '
-        '除息調整=${adjusted.toStringAsFixed(2)}, '
-        '新$extremeLabel=$isNew',
-      );
-      return TriggeredReason(
-        type: _reasonType,
-        score: _ruleScore,
-        description: isNew ? '創 52 週新$extremeLabel' : '接近 52 週新$extremeLabel',
-        evidence: {
-          'close': close,
-          if (isHigh) 'week52High': extreme else 'week52Low': extreme,
-          if (isHigh) 'adjustedHigh': adjusted else 'adjustedLow': adjusted,
-          'dividendAdjustment': totalDividend,
-          if (isHigh) 'isNewHigh': isNew else 'isNewLow': isNew,
-        },
-      );
-    }
-
-    return null;
+    final isNew = isHigh ? close >= extreme : close <= extreme;
+    final extremeLabel = isHigh ? '高' : '低';
+    AppLogger.debug(
+      _ruleName,
+      '${data.symbol}: 收盤=${close.toStringAsFixed(2)}, '
+      '52週$extremeLabel=${raw.value.toStringAsFixed(2)}, '
+      '還原後=${extreme.toStringAsFixed(2)}, '
+      '新$extremeLabel=$isNew',
+    );
+    return TriggeredReason(
+      type: _reasonType,
+      score: _ruleScore,
+      description: isNew ? '創 52 週新$extremeLabel' : '接近 52 週新$extremeLabel',
+      evidence: {
+        'close': close,
+        if (isHigh) 'week52High': raw.value else 'week52Low': raw.value,
+        if (isHigh) 'adjustedHigh': extreme else 'adjustedLow': extreme,
+        'dividendAdjustment': raw.value - extreme,
+        if (isHigh) 'isNewHigh': isNew else 'isNewLow': isNew,
+      },
+    );
   }
 }
 
@@ -187,19 +207,24 @@ class Week52LowRule extends _Week52RuleBase {
         threshold: IndicatorParams.week52LowThreshold,
       );
 
-  /// 精準度過濾：確認近期確實處於下跌趨勢
-  /// 避免長期盤整在低檔區的股票誤觸發
+  /// 精準度過濾：確認近期確實處於下跌趨勢，避免長期盤整在低檔區的股票誤觸發。
+  /// 均線以還原後收盤計算——原始價格的 MA60 含除權息前的較高價格，除權息的
+  /// 跳空會讓「收盤 < MA20 < MA60」看似成立
   @override
-  bool additionalFilter(AnalysisContext context, StockData data, double close) {
-    final ma20 = context.indicators?.ma20;
-    final ma60 = context.indicators?.ma60;
+  bool additionalFilter(
+    String symbol,
+    List<DailyPriceEntry> adjusted,
+    double close,
+  ) {
+    final ma20 = TechnicalIndicatorService.latestSMA(adjusted, 20);
+    final ma60 = TechnicalIndicatorService.latestSMA(adjusted, 60);
 
     // 過濾條件：收盤價 < MA20 且 MA20 < MA60（空頭趨勢確認）
     if (ma20 != null && ma60 != null) {
       if (close >= ma20 || ma20 >= ma60) {
         AppLogger.debug(
           _ruleName,
-          '${data.symbol}: 過濾（未確認空頭趨勢 close=$close, MA20=$ma20, MA60=$ma60）',
+          '$symbol: 過濾（未確認空頭趨勢 close=$close, MA20=$ma20, MA60=$ma60）',
         );
         return true;
       }

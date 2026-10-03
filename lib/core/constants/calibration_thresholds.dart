@@ -202,7 +202,9 @@ abstract final class CalibrationThresholds {
   /// `holding_distribution`）、內部人（`insider_transfer`）、警示股
   /// （`trading_warning`）、新聞（`news_item`）**表都存在但是 0 列**——缺的是
   /// backfill phase，不是 schema。`ReplayCalibrator` 對應的 context 欄位一律
-  /// 傳 null，這些規則在 replay 期間永遠 no-fire。
+  /// 傳 null（股利情境傳 incomplete），這些規則在 replay 期間永遠 no-fire。
+  /// WEEK_52_HIGH／WEEK_52_LOW 的原因不同：它們以除權除息配發表還原價格判斷，
+  /// 校準 DB 沒有配發資料；補法與重跑校準的後果見 docs/CALIBRATION.md。
   ///
   /// **為什麼要顯式列出**：`recalibrate` 的涵蓋警告原本對它們說「需重跑完整
   /// 管線 `./scripts/calibrate.sh`」——跑一百次也不會有樣本。給無效建議比
@@ -227,6 +229,10 @@ abstract final class CalibrationThresholds {
     'TRADING_WARNING_DISPOSAL',
     // 新聞（RSS）
     'NEWS_RELATED',
+    // 除權除息配發（52 週新高／新低以還原價判斷；回補管線沒有配發資料，
+    // ReplayCalibrator 傳 DividendContext.incomplete，兩條規則在回放中不觸發）
+    'WEEK_52_HIGH',
+    'WEEK_52_LOW',
   };
 
   /// 需要 FinMind 基本面資料（revenue／financial／valuation）才能觸發的規則。

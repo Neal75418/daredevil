@@ -23,6 +23,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/repositories/analysis_repository.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 import 'package:daredevil/domain/models/scoring_batch_data.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
@@ -112,6 +113,7 @@ void main() {
         // 安全)。用今天是因為 generateConstantPrices 的最後一根就是今天,
         // 否則會停在 staleBar 而走不到零訊號那一步。
         date: today,
+        dividendContexts: {},
       );
       // 直接呼叫純函數,不 spawn isolate(確定性 + 快)
       return evaluateStocksIsolated(input);
@@ -207,8 +209,9 @@ void main() {
       // 這條把所有 optional 欄位都填滿,任何欄位變不可傳當場紅。
       // ⚠️ 每個 map 都要放**一顆真實例**,不能空(2026-08-29 review 實測:
       // sendability 走的是 runtime 物件圖不是靜態型別——空 Map<String,
-      // 不可傳型別> 照樣過得了 Isolate.run,守門形同虛設)。這裡的九個
-      // 元素型別正是本次刪掉手寫 mapper 的那批。
+      // 不可傳型別> 照樣過得了 Isolate.run,守門形同虛設)。這裡的元素
+      // 型別是本次刪掉手寫 mapper 的那批，加上 2026-10 的 DividendContext
+      // （complete 帶 DividendPriceEvent、incomplete 各一）。
       final input = ScoringIsolateInput(
         candidates: const ['1111'],
         pricesMap: {'1111': flatHeavy('1111')},
@@ -289,15 +292,15 @@ void main() {
             ),
           ],
         },
-        dividendHistoryMap: const {
-          '1111': [
-            DividendHistoryEntry(
-              symbol: '1111',
-              year: 2025,
-              cashDividend: 2.0,
-              stockDividend: 0,
+        dividendContexts: {
+          '1111': DividendContext.complete([
+            DividendPriceEvent(
+              exDate: today,
+              closeBefore: 100,
+              referencePrice: 95,
             ),
-          ],
+          ]),
+          '2330': const DividendContext.incomplete(),
         },
         maxHistoricalRevenueMap: const {'1111': 1.0},
         calibratedScores: const CalibratedScoreContext(
@@ -338,6 +341,7 @@ void main() {
           pricesMap: {'1111': gen('1111'), '2222': gen('2222')},
           newsMap: const {},
           institutionalMap: const {},
+          dividendContexts: {},
         ),
         marketDataBuilder: dayTradingRatio == null
             ? null

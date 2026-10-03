@@ -93,6 +93,30 @@ mixin DividendDaoMixin on $AppDatabase {
     return map;
   }
 
+  /// 批次取得除權息日在 [from]～[to]（含頭尾）的除權除息列，**含只有現金
+  /// 增資的 0/0 列**與前收盤、除權息參考價——還原價格用（畫面用
+  /// [getDividendDistributionsBatch]，只回有配發的列）。各檔依除息日由舊到新。
+  Future<Map<String, List<DividendDistributionEntry>>> getDividendEventsBatch(
+    List<String> symbols, {
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    if (symbols.isEmpty) return {};
+    final rows =
+        await (select(dividendDistribution)
+              ..where(
+                (t) =>
+                    t.symbol.isIn(symbols) & t.exDate.isBetweenValues(from, to),
+              )
+              ..orderBy([(t) => OrderingTerm.asc(t.exDate)]))
+            .get();
+    final map = <String, List<DividendDistributionEntry>>{};
+    for (final row in rows) {
+      map.putIfAbsent(row.symbol, () => []).add(row);
+    }
+    return map;
+  }
+
   /// [from]～[to]（含頭尾）已處理的除權除息 (symbol, exDate)，含金額皆 0
   /// 的列。同步據此跳過已查過明細的列。
   Future<Set<(String, DateTime)>> getDividendDistributionKeys({

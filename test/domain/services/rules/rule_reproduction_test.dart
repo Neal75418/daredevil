@@ -60,7 +60,11 @@ void main() {
 
       final reasons = ruleEngine.evaluateStock(
         context,
-        StockData(symbol: '2330', prices: prices),
+        StockData(
+          symbol: '2330',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
 
       expect(reasons.any((r) => r.type == ReasonType.kdGoldenCross), isTrue);
@@ -100,7 +104,12 @@ void main() {
 
       final reasons = ruleEngine.evaluateStock(
         context,
-        StockData(symbol: '2330', prices: prices, latestValuation: valuation),
+        StockData(
+          symbol: '2330',
+          prices: prices,
+          latestValuation: valuation,
+          dividends: DividendContext.noEvents,
+        ),
       );
 
       expect(reasons.any((r) => r.type == ReasonType.peUndervalued), isTrue);

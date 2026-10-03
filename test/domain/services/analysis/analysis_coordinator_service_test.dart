@@ -27,8 +27,8 @@ void main() {
   // **截斷放在指標計算裡,不在價格入口**:入口截斷會讓 prices.length 本身
   // 變短,踩到下游一連串長度閘——實測 165 檔被截斷者中 52 檔掉到 60 根以下
   // (整個 indicator 區塊 null)、142 檔掉到 250 根以下(52 週規則永不觸發)。
-  // 而 52 週規則**本來就正確處理除息**(_sumDividendsInPeriod 把窗內現金
-  // 股利從極值扣掉),入口截斷等於破壞一條已經解好的規則。
+  // 而 52 週規則自己以交易所除權息參考價還原整段價格(DividendAdjuster,
+  // 2026-10 起),需要完整歷史——入口截斷會讓它永不觸發。
   group('指標只用價格水位斷點之後的資料', () {
     /// [preCount] 根在 [preClose] 水位 + [postCount] 根在 [postClose] 水位
     List<DailyPriceEntry> withShift({

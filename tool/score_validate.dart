@@ -23,6 +23,8 @@
 //   - 固定持有 5D/60D、無停損；存活者偏誤(FinMind 無下市股) → 偏樂觀
 //   - 流動樣本(top volume)；過去多空的證據，非未來保證
 //   - 用 reason.score 基礎分近似 app 行為(僅 3 筆 calibrated override/2 條 rule)
+//   - 2026-10 起不含 52 週新高／新低(ReplayCalibrator 沒有除權除息配發資料)，
+//     與 app 的差距變大、與之前的結果不可比
 
 import 'dart:io';
 

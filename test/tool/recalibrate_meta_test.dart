@@ -426,6 +426,13 @@ void main() {
   });
 
   group('notBackfillableReasons', () {
+    test('🚨 52 週新高／新低歸「抓不到」：回放沒有除權除息配發資料', () {
+      expect(
+        CalibrationThresholds.notBackfillableReasons,
+        containsAll(['WEEK_52_HIGH', 'WEEK_52_LOW']),
+      );
+    });
+
     test('🚨 每一項都是有效的 ReasonType code（改名不得留下孤兒）', () {
       final codes = ReasonType.values.map((r) => r.code.toUpperCase()).toSet();
       final orphans = CalibrationThresholds.notBackfillableReasons

@@ -15,6 +15,7 @@ import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/technical_indicators.dart';
 import 'package:daredevil/domain/services/rules/pullback_rules.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 
 void main() {
   // --- fixtures ---
@@ -64,8 +65,11 @@ void main() {
     indicators: ind,
   );
 
-  StockData stock(List<DailyPriceEntry> prices) =>
-      StockData(symbol: 'TEST', prices: prices);
+  StockData stock(List<DailyPriceEntry> prices) => StockData(
+    symbol: 'TEST',
+    prices: prices,
+    dividends: DividendContext.noEvents,
+  );
 
   // ============================================================
   // HealthyPullbackToMa20Rule
@@ -871,8 +875,11 @@ void main() {
   });
 
   group('ETF guard（00 開頭代碼一律 null）', () {
-    StockData etf(List<DailyPriceEntry> prices) =>
-        StockData(symbol: '00878', prices: prices);
+    StockData etf(List<DailyPriceEntry> prices) => StockData(
+      symbol: '00878',
+      prices: prices,
+      dividends: DividendContext.noEvents,
+    );
 
     test('HealthyPullbackToMa20Rule 對 ETF 不觸發（同 setup 個股會 fire）', () {
       const rule = HealthyPullbackToMa20Rule();

@@ -1,4 +1,5 @@
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/scoring_data_groups.dart';
 
@@ -33,7 +34,7 @@ class ShareholdingData {
 /// 將評分所需的 14+ 個 Map 參數按語意分為三大群組：
 /// - [institutional] 法人與籌碼面
 /// - [fundamental] 基本面（營收 + 估值）
-/// - [financialHealth] 財務健康（EPS + ROE + 股利）
+/// - [financialHealth] 財務健康（EPS + ROE）
 ///
 /// 保留 forwarding getters 確保現有消費者不需立即改動。
 class ScoringBatchData {
@@ -44,13 +45,13 @@ class ScoringBatchData {
   ScoringBatchData({
     required this.pricesMap,
     required this.newsMap,
+    required this.dividendContexts,
     Map<String, List<DailyInstitutionalEntry>>? institutionalMap,
     Map<String, MonthlyRevenueEntry>? revenueMap,
     Map<String, StockValuationEntry>? valuationMap,
     Map<String, List<MonthlyRevenueEntry>>? revenueHistoryMap,
     Map<String, List<FinancialDataEntry>>? epsHistoryMap,
     Map<String, List<FinancialDataEntry>>? roeHistoryMap,
-    Map<String, List<DividendHistoryEntry>>? dividendHistoryMap,
     this.dayTradingMap,
     Map<String, ShareholdingData>? shareholdingMap,
     Map<String, WarningDataContext>? warningMap,
@@ -71,13 +72,13 @@ class ScoringBatchData {
        financialHealth = FinancialHealthGroup(
          epsHistoryMap: epsHistoryMap,
          roeHistoryMap: roeHistoryMap,
-         dividendHistoryMap: dividendHistoryMap,
        );
 
   /// 群組建構子 — 直接接受語意群組，供新程式碼使用。
   const ScoringBatchData.grouped({
     required this.pricesMap,
     required this.newsMap,
+    required this.dividendContexts,
     this.institutional = const InstitutionalIntelligence(),
     this.fundamental = const FundamentalDataGroup(),
     this.financialHealth = const FinancialHealthGroup(),
@@ -94,6 +95,10 @@ class ScoringBatchData {
   /// 新聞（symbol → 新聞列表）
   final Map<String, List<NewsItemEntry>> newsMap;
 
+  /// 用到還原價的規則（52 週新高／新低）所需的股利情境（symbol → 情境），
+  /// 由 `BatchDataLoader` 依完整度事實算好；沒有的代號視為不完整
+  final Map<String, DividendContext> dividendContexts;
+
   /// 當沖比例（symbol → ratio）
   final Map<String, double>? dayTradingMap;
 
@@ -107,7 +112,7 @@ class ScoringBatchData {
   /// 基本面（營收 + 估值）資料
   final FundamentalDataGroup fundamental;
 
-  /// 財務健康（EPS + ROE + 股利）資料
+  /// 財務健康（EPS + ROE）資料
   final FinancialHealthGroup financialHealth;
 
   // ==================================================
@@ -136,10 +141,6 @@ class ScoringBatchData {
   /// ROE 歷史（symbol → 近8季 ROE）
   Map<String, List<FinancialDataEntry>>? get roeHistoryMap =>
       financialHealth.roeHistoryMap;
-
-  /// 股利歷史（symbol → 歷年股利）
-  Map<String, List<DividendHistoryEntry>>? get dividendHistoryMap =>
-      financialHealth.dividendHistoryMap;
 
   /// 外資持股（symbol → 持股資料）
   Map<String, ShareholdingData>? get shareholdingMap =>

@@ -21,14 +21,22 @@ void main() {
         createTestPrice(date: DateTime.now(), close: 100.0),
         createTestPrice(date: DateTime.now(), close: 105.0),
       ];
-      final data = StockData(symbol: 'TEST', prices: prices);
+      final data = StockData(
+        symbol: 'TEST',
+        prices: prices,
+        dividends: DividendContext.noEvents,
+      );
 
       expect(data.latestPrice, equals(prices.last));
       expect(data.latestClose, equals(105.0));
     });
 
     test('returns null when prices are empty', () {
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(data.latestPrice, isNull);
       expect(data.latestClose, isNull);
@@ -190,7 +198,11 @@ void main() {
 
       final reasons = engine.evaluateStock(
         context,
-        StockData(symbol: 'UNKNOWN', prices: prices),
+        StockData(
+          symbol: 'UNKNOWN',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
 
       // 拋出例外的規則被跳過，不影響結果
@@ -213,7 +225,11 @@ void main() {
 
       final reasons = engine.evaluateStock(
         context,
-        StockData(symbol: 'UNKNOWN', prices: prices),
+        StockData(
+          symbol: 'UNKNOWN',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
 
       // _ThrowingRule 拋例外被跳過，VolumeSpikeRule 正常觸發
@@ -255,7 +271,11 @@ void main() {
           evaluationTime: DateTime(2025, 6, 1),
           trendState: TrendState.range,
         ),
-        const StockData(symbol: 'UNKNOWN', prices: []),
+        const StockData(
+          symbol: 'UNKNOWN',
+          prices: [],
+          dividends: DividendContext.noEvents,
+        ),
       );
       expect(reasons, isEmpty);
     });
@@ -291,7 +311,11 @@ void main() {
 
       final reasons = engine.evaluateStock(
         context,
-        StockData(symbol: 'UNKNOWN', prices: prices),
+        StockData(
+          symbol: 'UNKNOWN',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
 
       expect(reasons.length, 3);
@@ -333,7 +357,11 @@ void main() {
 
       final allReasons = engine.evaluateStock(
         context,
-        StockData(symbol: 'TEST', prices: prices),
+        StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
       // evaluateStock 自身已不過濾 mutex — 兩條 reason 都會出現
       expect(allReasons.length, 2);
@@ -377,7 +405,11 @@ void main() {
 
       final allReasons = engine.evaluateStock(
         context,
-        StockData(symbol: 'TEST', prices: prices),
+        StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
       final reasons = engine.applyMutexGroups(allReasons, (r) => r.score);
 
@@ -413,7 +445,11 @@ void main() {
 
       final allReasons = engine.evaluateStock(
         context,
-        StockData(symbol: 'TEST', prices: prices),
+        StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
       final reasons = engine.applyMutexGroups(allReasons, (r) => r.score);
 
@@ -453,7 +489,11 @@ void main() {
 
       final allReasons = engine.evaluateStock(
         context,
-        StockData(symbol: 'TEST', prices: prices),
+        StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
       final reasons = engine.applyMutexGroups(allReasons, (r) => r.score);
 
@@ -491,7 +531,11 @@ void main() {
 
         final allReasons = engine.evaluateStock(
           context,
-          StockData(symbol: 'TEST', prices: prices),
+          StockData(
+            symbol: 'TEST',
+            prices: prices,
+            dividends: DividendContext.noEvents,
+          ),
         );
 
         // hardcoded 路徑：techBreakout 贏（25 > 22）
@@ -561,7 +605,11 @@ void main() {
       // 呼叫，這樣才能用 horizon-aware calibrated 分數做 mutex 過濾。
       final allReasons = engine.evaluateStock(
         context,
-        StockData(symbol: 'TEST', prices: prices),
+        StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        ),
       );
       final muted = engine.applyMutexGroups(allReasons, (r) => r.score);
       final score = engine.calculateScore(muted, horizon: Horizon.short);

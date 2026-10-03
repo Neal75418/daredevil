@@ -54,7 +54,20 @@ n=11,742）；那是資料變了，不是時間到了。
 |:---|:---|:---|
 | N 條無 replay 樣本，**但所需資料都在** | 規則比上次 replay 新 | 重跑 Stage 2（約 12 分） |
 | N 條**需要 FinMind 基本面資料** | 老問題，要額度 | 通常不動；要補才 `BACKFILL_SKIP_FUNDAMENTALS=0` |
-| N 條**這條管線抓不到資料** | 集保／內部人／警示股／新聞無 backfill phase | 忽略，重跑無效 |
+| N 條**這條管線抓不到資料** | 集保／內部人／警示股／新聞無 backfill phase；52 週的回放沒有除權除息配發資料（見下） | 忽略，重跑無效（52 週見下方警告） |
+
+> ⚠️ **WEEK_52_HIGH／WEEK_52_LOW（2026-10 起）**：52 週改用除權除息配發表的除權息參考價還原後判斷，
+> 校準 DB 沒有配發資料，`ReplayCalibrator` 傳 `DividendContext.incomplete`，這兩條在回放中沒有樣本。
+> WEEK_52_HIGH 現行短線校準分是 35（`assets/rule_scores_calibrated_short.json`）；**下一次重跑 replay 並
+> promote，它會回到 hardcoded 28、畫面上的校準背書標記也會消失**——即使那次校準是為了別的規則。
+> 重跑前先決定：接受這個變化，或先在校準 DB 跑 `tool/backfill_dividend_distributions.dart`，並改
+> `ReplayCalibrator`：餵給規則的價格先截成生產的 `RuleParams.historyRequiredDays`（400 日曆天）窗——現在
+> 餵的是 `prices.sublist(0, i + 1)` 全歷史，窗口首日早於回補起點會讓 `priceContext` 一律 incomplete——
+> 再以 `DividendCompleteness.priceContext` 建股利情境（`test/tools/scoring_snapshot.dart` 的 52 週回放
+> 兩件都有做）。回補只到今年往前 5 年的 1 月，最早約一年的回放日仍會是 incomplete。
+>
+> 決定時一併考慮：現行的 35 分本身是在回放餵全歷史的定義下校準的（52 週極值取自整段歷史，不是生產的
+> 400 日曆天窗）。
 
 實際輸出跑一次就有（唯讀、約 1 秒、不寫任何檔）：
 

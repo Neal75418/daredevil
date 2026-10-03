@@ -19,6 +19,7 @@ void main() {
         pricesMap: {'2330': []},
         newsMap: {'2330': []},
         institutionalMap: {'2330': []},
+        dividendContexts: {},
       );
 
       // Default 值是 empty — lookup 永遠回 null

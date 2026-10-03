@@ -73,7 +73,13 @@ void main() {
         trendState: TrendState.range,
       ),
     );
-    registerFallbackValue(const StockData(symbol: 'TEST', prices: []));
+    registerFallbackValue(
+      const StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      ),
+    );
     registerFallbackValue(
       const AnalysisResult(
         trendState: TrendState.range,
@@ -170,7 +176,11 @@ void main() {
       final result = await scoringService.scoreStocks(
         candidates: ['LOW_VOL'],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: pricesMap, newsMap: {}),
+        batchData: ScoringBatchData(
+          pricesMap: pricesMap,
+          newsMap: {},
+          dividendContexts: {},
+        ),
       );
 
       // Assert
@@ -207,7 +217,11 @@ void main() {
       final result = await scoringService.scoreStocks(
         candidates: ['LOW_TURN'],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: pricesMap, newsMap: {}),
+        batchData: ScoringBatchData(
+          pricesMap: pricesMap,
+          newsMap: {},
+          dividendContexts: {},
+        ),
       );
 
       // Assert
@@ -311,7 +325,11 @@ void main() {
       final result = await scoringService.scoreStocks(
         candidates: ['GOOD'],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: pricesMap, newsMap: {}),
+        batchData: ScoringBatchData(
+          pricesMap: pricesMap,
+          newsMap: {},
+          dividendContexts: {},
+        ),
       );
 
       // Assert
@@ -425,7 +443,11 @@ void main() {
       final result = await scoringService.scoreStocks(
         candidates: ['LOW_SCORE', 'HIGH_SCORE'],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: pricesMap, newsMap: {}),
+        batchData: ScoringBatchData(
+          pricesMap: pricesMap,
+          newsMap: {},
+          dividendContexts: {},
+        ),
       );
 
       // Assert
@@ -538,7 +560,11 @@ void main() {
       await scoringService.scoreStocks(
         candidates: ['GOOD'],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: {'GOOD': prices}, newsMap: {}),
+        batchData: ScoringBatchData(
+          pricesMap: {'GOOD': prices},
+          newsMap: {},
+          dividendContexts: {},
+        ),
       );
 
       // Assert：clear 必須在寫入 transaction 內執行——
@@ -571,7 +597,11 @@ void main() {
       final result = await scoringService.scoreStocks(
         candidates: [],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: const {}, newsMap: const {}),
+        batchData: ScoringBatchData(
+          pricesMap: const {},
+          newsMap: const {},
+          dividendContexts: {},
+        ),
       );
 
       expect(result, isEmpty);
@@ -582,7 +612,11 @@ void main() {
       final result = await scoringService.scoreStocks(
         candidates: ['MISSING'],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: const {}, newsMap: const {}),
+        batchData: ScoringBatchData(
+          pricesMap: const {},
+          newsMap: const {},
+          dividendContexts: {},
+        ),
       );
 
       expect(result, isEmpty);
@@ -599,7 +633,11 @@ void main() {
       final result = await scoringService.scoreStocks(
         candidates: ['SHORT'],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: {'SHORT': prices}, newsMap: {}),
+        batchData: ScoringBatchData(
+          pricesMap: {'SHORT': prices},
+          newsMap: {},
+          dividendContexts: {},
+        ),
       );
 
       expect(result, isEmpty);
@@ -622,7 +660,11 @@ void main() {
       final result = await scoringService.scoreStocks(
         candidates: ['STALE'],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: {'STALE': prices}, newsMap: {}),
+        batchData: ScoringBatchData(
+          pricesMap: {'STALE': prices},
+          newsMap: {},
+          dividendContexts: {},
+        ),
       );
 
       expect(result, isEmpty);
@@ -657,6 +699,7 @@ void main() {
         batchData: ScoringBatchData(
           pricesMap: {'NULL_ANALYSIS': prices},
           newsMap: {},
+          dividendContexts: {},
         ),
       );
 
@@ -698,6 +741,7 @@ void main() {
         batchData: ScoringBatchData(
           pricesMap: {'EMPTY_REASONS': prices},
           newsMap: {},
+          dividendContexts: {},
         ),
       );
 
@@ -807,7 +851,11 @@ void main() {
       final result = await scoringService.scoreStocks(
         candidates: ['NOISE'],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: {'NOISE': prices}, newsMap: {}),
+        batchData: ScoringBatchData(
+          pricesMap: {'NOISE': prices},
+          newsMap: {},
+          dividendContexts: {},
+        ),
       );
 
       // 低於觀察門檻 = 雜訊，不持久化
@@ -823,7 +871,11 @@ void main() {
         final result = await scoringService.scoreStocks(
           candidates: ['OBS'],
           date: _scoringDate,
-          batchData: ScoringBatchData(pricesMap: {'OBS': prices}, newsMap: {}),
+          batchData: ScoringBatchData(
+            pricesMap: {'OBS': prices},
+            newsMap: {},
+            dividendContexts: {},
+          ),
         );
 
         // 8 ≥ 觀察門檻但 < 訊號門檻 12 → 保留為「觀察區」（接近觸發）
@@ -842,6 +894,7 @@ void main() {
         batchData: ScoringBatchData(
           pricesMap: {'BOUNDARY': prices},
           newsMap: {},
+          dividendContexts: {},
         ),
       );
 
@@ -878,6 +931,7 @@ void main() {
         batchData: ScoringBatchData(
           pricesMap: {'A': prices, 'B': prices, 'C': prices},
           newsMap: {},
+          dividendContexts: {},
         ),
         onProgress: (current, total) => progressCalls.add((current, total)),
       );
@@ -954,7 +1008,11 @@ void main() {
       await scoringService.scoreStocks(
         candidates: ['MKT'],
         date: _scoringDate,
-        batchData: ScoringBatchData(pricesMap: {'MKT': prices}, newsMap: {}),
+        batchData: ScoringBatchData(
+          pricesMap: {'MKT': prices},
+          newsMap: {},
+          dividendContexts: {},
+        ),
         marketDataBuilder: (symbol) async {
           builderCalled = true;
           expect(symbol, 'MKT');

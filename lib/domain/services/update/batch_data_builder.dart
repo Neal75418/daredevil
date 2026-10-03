@@ -5,12 +5,33 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/insider_repository.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/scoring_batch_data.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
+import 'package:daredevil/domain/services/dividend_completeness.dart';
 
 /// 批次資料轉換工具
 ///
 /// 將 DB entry 轉換為型別安全的 DTO，供 [ScoringBatchData] 使用。
 class BatchDataBuilder {
   const BatchDataBuilder._();
+
+  /// 每檔用到還原價的規則（52 週）所需的股利情境：價格窗首日～[date] 的
+  /// 除權除息完整（含價格）時帶窗內事件，否則 incomplete（見
+  /// [DividendCompleteness.priceContext]）。沒有價格的代號不列入。
+  static Map<String, DividendContext> buildDividendContexts({
+    required Map<String, List<DailyPriceEntry>> pricesMap,
+    required DividendCompleteness completeness,
+    required Map<String, List<DividendDistributionEntry>> events,
+    required DateTime date,
+  }) => {
+    for (final MapEntry(key: symbol, value: prices) in pricesMap.entries)
+      if (prices.isNotEmpty)
+        symbol: completeness.priceContext(
+          symbol,
+          from: prices.first.date,
+          asOf: date,
+          rows: events[symbol] ?? const [],
+        ),
+  };
 
   /// 為「當日無法人進出」的交易日補上淨額 0 的列
   ///

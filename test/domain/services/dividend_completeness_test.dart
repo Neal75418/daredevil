@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/calendar_month.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 import 'package:daredevil/domain/services/dividend_completeness.dart';
 
 final _now = DateTime(2026, 10, 2, 21, 30);
@@ -48,6 +49,19 @@ DividendUnresolvedEntry _unresolved(String market, String symbol, DateTime d) =>
       reason: DividendUnresolvedReason.pendingDetail.code,
       recordedAt: _now,
     );
+
+DividendDistributionEntry _row(
+  DateTime exDate, {
+  double? close = 100,
+  double? reference = 95,
+}) => DividendDistributionEntry(
+  symbol: '2330',
+  exDate: exDate,
+  cashDividend: 5,
+  stockSharesPerThousand: 0,
+  closeBefore: close,
+  referencePrice: reference,
+);
 
 /// 回補範圍（2021-01）至 [through] 兩市場都完整：過去月份用完成紀錄，
 /// 本月用列表日
@@ -319,6 +333,78 @@ void main() {
           (e) => e.market == MarketCode.tpex && e.year == 2021 && e.month == 1,
         );
       expect(_compute(ledger: ledger).displayEnd, isNull);
+    });
+  });
+
+  group('priceContext：用到還原價的讀取端（52 週）', () {
+    final from = DateTime(2025, 9, 1);
+    final asOf = DateTime(2026, 10, 2);
+
+    test('完整：帶窗口內、評分日以前（含）的事件；除權息日等於窗口首日或晚於評分日的不帶', () {
+      final c = _compute(listings: octListed);
+
+      final context = c.priceContext(
+        '2330',
+        from: from,
+        asOf: asOf,
+        rows: [
+          _row(from),
+          _row(DateTime(2026, 6, 11), close: 1100, reference: 1094),
+          _row(asOf, close: 1500, reference: 1490),
+          _row(DateTime(2026, 10, 5)),
+        ],
+      );
+
+      expect(context, isA<DividendComplete>());
+      expect(
+        [
+          for (final e in (context as DividendComplete).events)
+            (e.exDate, e.closeBefore, e.referencePrice),
+        ],
+        [(DateTime(2026, 6, 11), 1100.0, 1094.0), (asOf, 1500.0, 1490.0)],
+      );
+    });
+
+    test('🚨 本月列表日還沒到評分日（本月同步沒跑成的那一輪）→ incomplete', () {
+      final c = _compute(
+        listings: [
+          _listing(MarketCode.twse, _oct, DateTime(2026, 10, 1)),
+          _listing(MarketCode.tpex, _oct, DateTime(2026, 10, 2)),
+        ],
+      );
+
+      expect(
+        c.priceContext('2330', from: from, asOf: asOf, rows: const []),
+        isA<DividendIncomplete>(),
+      );
+    });
+
+    test('窗內有缺價格的列（完整度條件 4，requirePrices）→ incomplete', () {
+      final c = _compute(
+        listings: octListed,
+        missingPrices: [('2330', DateTime(2026, 9, 16))],
+      );
+
+      expect(
+        c.priceContext('2330', from: from, asOf: asOf, rows: const []),
+        isA<DividendIncomplete>(),
+      );
+    });
+
+    test('列在完整度讀取之後才變成缺價格或 ≤ 0（兩次讀取之間被改寫）→ incomplete，不拋例外', () {
+      final c = _compute(listings: octListed);
+
+      for (final row in [
+        _row(DateTime(2026, 9, 16), close: null),
+        _row(DateTime(2026, 9, 16), reference: null),
+        _row(DateTime(2026, 9, 16), close: 0),
+        _row(DateTime(2026, 9, 16), reference: -1),
+      ]) {
+        expect(
+          c.priceContext('2330', from: from, asOf: asOf, rows: [row]),
+          isA<DividendIncomplete>(),
+        );
+      }
     });
   });
 

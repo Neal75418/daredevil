@@ -51,6 +51,7 @@ void main() {
         pricesMap: {'9991': [], '9992': []},
         newsMap: {'9991': [], '9992': []},
         institutionalMap: {'9991': [], '9992': []},
+        dividendContexts: {},
       );
 
       final result = await evaluateStocksInIsolate(input);
@@ -90,6 +91,7 @@ void main() {
         newsMap: const {'FLAT': []},
         institutionalMap: const {'FLAT': []},
         date: DateTime(2026, 6, 30),
+        dividendContexts: {},
       );
 
       final result = await evaluateStocksInIsolate(input);
@@ -129,6 +131,7 @@ void main() {
           newsMap: const {'STALE': []},
           institutionalMap: const {'STALE': []},
           date: DateTime(2026, 7, 1),
+          dividendContexts: {},
         ),
       );
 
@@ -158,6 +161,7 @@ void main() {
           newsMap: const {'FRESH': []},
           institutionalMap: const {'FRESH': []},
           date: DateTime(2026, 6, 30), // = fresh.last.date
+          dividendContexts: {},
         ),
       );
 

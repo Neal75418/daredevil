@@ -28,7 +28,11 @@ void main() {
           rangeTop: 100.0,
         );
 
-        final data = StockData(symbol: 'TEST', prices: pricesWithBreakout);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: pricesWithBreakout,
+          dividends: DividendContext.noEvents,
+        );
         final result = rule.evaluate(context, data);
 
         expect(result, isNotNull);
@@ -43,7 +47,11 @@ void main() {
           rangeTop: 100.0,
         );
 
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
         final result = rule.evaluate(context, data);
 
         expect(result, isNull);
@@ -67,7 +75,11 @@ void main() {
           supportLevel: 100.0,
         );
 
-        final data = StockData(symbol: 'TEST', prices: pricesWithBreakdown);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: pricesWithBreakdown,
+          dividends: DividendContext.noEvents,
+        );
         final result = rule.evaluate(context, data);
 
         expect(result, isNotNull);
@@ -82,7 +94,11 @@ void main() {
           supportLevel: 100.0,
         );
 
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
         final result = rule.evaluate(context, data);
 
         expect(result, isNull);
@@ -108,7 +124,11 @@ void main() {
           resistanceLevel: 100.0,
         );
 
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
         final result = rule.evaluate(context, data);
 
         expect(result, isNotNull);
@@ -127,7 +147,11 @@ void main() {
           resistanceLevel: 100.0,
         );
 
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
         final result = rule.evaluate(context, data);
 
         expect(result, isNull);
@@ -153,7 +177,11 @@ void main() {
           supportLevel: 100.0,
         );
 
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
         final result = rule.evaluate(context, data);
 
         expect(result, isNotNull);
@@ -172,7 +200,11 @@ void main() {
           supportLevel: 100.0,
         );
 
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
         final result = rule.evaluate(context, data);
 
         expect(result, isNull);
@@ -192,7 +224,11 @@ void main() {
           evaluationTime: DateTime(2025, 6, 1),
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -206,7 +242,11 @@ void main() {
           evaluationTime: DateTime(2025, 6, 1),
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -242,7 +282,11 @@ void main() {
           evaluationTime: DateTime(2025, 6, 1),
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -273,7 +317,11 @@ void main() {
           evaluationTime: DateTime(2025, 6, 1),
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -302,7 +350,11 @@ void main() {
           evaluationTime: DateTime(2025, 6, 1),
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -334,7 +386,11 @@ void main() {
           evaluationTime: DateTime(2025, 6, 1),
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -363,7 +419,11 @@ void main() {
           evaluationTime: DateTime(2025, 6, 1),
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: prices);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: prices,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -409,6 +469,7 @@ void main() {
           symbol: 'TEST',
           prices: prices,
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         final result = rule.evaluate(context, data);
@@ -431,6 +492,7 @@ void main() {
           symbol: 'TEST',
           prices: [],
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         final result = rule.evaluate(context, data);
@@ -474,6 +536,7 @@ void main() {
           symbol: 'TEST',
           prices: prices,
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         final result = rule.evaluate(context, data);
@@ -515,6 +578,7 @@ void main() {
           symbol: 'TEST',
           prices: prices,
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         final result = rule.evaluate(context, data);
@@ -553,6 +617,7 @@ void main() {
           symbol: 'TEST',
           prices: prices,
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         final result = rule.evaluate(context, data);
@@ -590,6 +655,7 @@ void main() {
           symbol: 'TEST',
           prices: prices,
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         final result = rule.evaluate(context, data);
@@ -638,6 +704,7 @@ void main() {
           symbol: 'TEST',
           prices: prices,
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         final result = rule.evaluate(context, data);
@@ -671,6 +738,7 @@ void main() {
           symbol: 'TEST',
           prices: prices,
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         expect(rule.evaluate(context, data), isNull);
@@ -702,6 +770,7 @@ void main() {
           symbol: 'TEST',
           prices: prices,
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         expect(rule.evaluate(context, data), isNull);
@@ -735,6 +804,7 @@ void main() {
           symbol: 'TEST',
           prices: prices,
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         final result = rule.evaluate(context, data);
@@ -776,6 +846,7 @@ void main() {
           symbol: 'TEST',
           prices: prices,
           institutional: history,
+          dividends: DividendContext.noEvents,
         );
 
         final result = rule.evaluate(context, data);
@@ -809,7 +880,12 @@ void main() {
           evaluationTime: DateTime.now(),
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: [], news: news);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: [],
+          news: news,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -835,7 +911,12 @@ void main() {
           evaluationTime: DateTime.now(),
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: [], news: news);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: [],
+          news: news,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -862,7 +943,12 @@ void main() {
           evaluationTime: now,
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: [], news: news);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: [],
+          news: news,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -888,7 +974,12 @@ void main() {
           evaluationTime: now,
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: [], news: news);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: [],
+          news: news,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -914,7 +1005,12 @@ void main() {
           evaluationTime: now,
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: [], news: news);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: [],
+          news: news,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 
@@ -940,7 +1036,12 @@ void main() {
           evaluationTime: evaluationTime,
           trendState: TrendState.range,
         );
-        final data = StockData(symbol: 'TEST', prices: [], news: news);
+        final data = StockData(
+          symbol: 'TEST',
+          prices: [],
+          news: news,
+          dividends: DividendContext.noEvents,
+        );
 
         final result = rule.evaluate(context, data);
 

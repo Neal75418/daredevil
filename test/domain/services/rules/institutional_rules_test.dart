@@ -64,6 +64,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -100,6 +101,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -131,6 +133,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -155,6 +158,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -179,6 +183,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -200,6 +205,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -233,6 +239,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -248,6 +255,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -265,6 +273,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -275,7 +284,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -299,6 +312,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -321,6 +335,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -344,6 +359,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       final result = rule.evaluate(context, data);
@@ -369,6 +385,7 @@ void main() {
           symbol: 'TEST',
           prices: [],
           institutional: institutional,
+          dividends: DividendContext.noEvents,
         );
 
         final result = rule.evaluate(context, data);
@@ -394,6 +411,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       expect(rule.evaluate(context, data), isNull);
@@ -404,7 +422,11 @@ void main() {
         evaluationTime: DateTime(2025, 6, 1),
         trendState: TrendState.range,
       );
-      const data = StockData(symbol: 'TEST', prices: []);
+      const data = StockData(
+        symbol: 'TEST',
+        prices: [],
+        dividends: DividendContext.noEvents,
+      );
 
       expect(rule.evaluate(context, data), isNull);
     });
@@ -431,6 +453,7 @@ void main() {
         symbol: 'TEST',
         prices: [],
         institutional: institutional,
+        dividends: DividendContext.noEvents,
       );
 
       // From end: day 7(-600k), day 6(-600k), day 5(+300k → breaks)

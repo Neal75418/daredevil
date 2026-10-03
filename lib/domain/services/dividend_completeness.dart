@@ -1,6 +1,7 @@
 import 'package:daredevil/core/utils/calendar_month.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 import 'package:daredevil/domain/services/update/dividend_coverage.dart';
 
 /// 除權除息資料的逐檔完整度：讀取端（52 週規則、個股頁股利表、ETF 近一年
@@ -154,6 +155,44 @@ class DividendCompleteness {
       return false;
     }
     return true;
+  }
+
+  /// 用到還原價的讀取端（52 週規則）所需的股利情境：[symbol] 在
+  /// [from]～[asOf] 完整（[isComplete]，含價格）時回傳 complete，帶 [rows]
+  /// 中除權息日在 [from] 之後、[asOf] 以前（含）的事件；否則 incomplete。
+  ///
+  /// 除權息日不晚於 [from] 的事件不影響窗內任何一天（還原只調整除權息日之前
+  /// 的價格），所以不帶。[rows] 是另一次查詢讀的，中間可能被改寫：要帶的列
+  /// 缺價格或價格 ≤ 0 時也回 incomplete，不拋例外。
+  DividendContext priceContext(
+    String symbol, {
+    required DateTime from,
+    required DateTime asOf,
+    required Iterable<DividendDistributionEntry> rows,
+  }) {
+    final start = DateContext.normalize(from);
+    final end = DateContext.normalize(asOf);
+    if (!isComplete(symbol, start, end, requirePrices: true)) {
+      return const DividendContext.incomplete();
+    }
+    final events = <DividendPriceEvent>[];
+    for (final row in rows) {
+      final exDate = DateContext.normalize(row.exDate);
+      if (!exDate.isAfter(start) || exDate.isAfter(end)) continue;
+      final close = row.closeBefore;
+      final reference = row.referencePrice;
+      if (close == null || reference == null || close <= 0 || reference <= 0) {
+        return const DividendContext.incomplete();
+      }
+      events.add(
+        DividendPriceEvent(
+          exDate: exDate,
+          closeBefore: close,
+          referencePrice: reference,
+        ),
+      );
+    }
+    return DividendContext.complete(events);
   }
 }
 

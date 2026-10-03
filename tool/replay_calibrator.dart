@@ -82,6 +82,9 @@
 // noData 不豁免），replay 皆不模擬——把「今天的自選」注入全部歷史日等於
 // lookahead，且那是使用者 overlay、不是規則母體。影響面：自選股多為流動
 // 股，delta 實際近零。
+// 另一條刻意 delta（2026-10 起）：股利情境一律傳 `DividendContext.incomplete`，
+// 52 週新高／新低在回放中不觸發——校準 DB 沒有除權除息配發資料（後果見
+// docs/CALIBRATION.md）。
 //
 // ⚠️ **epoch 斷代**：套用此門檻起，校準統計與歷次全語料的結果**不可比**
 // （樣本縮至約 36%、所有規則的 hit rate/t 值/cut 重算）。比較基準一律取
@@ -98,6 +101,7 @@ import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/constants/scoring_mode.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/liquidity_checker.dart';
 import 'package:daredevil/domain/services/price_calculator.dart';
@@ -901,7 +905,7 @@ class ReplayCalibrator {
   /// 組裝特定日期 cut-off 的 [StockData]
   ///
   /// 所有 history list 都會被過濾成 `date <= currentDate`。非 backfillable
-  /// 的欄位（dividendHistory / news）傳 null，讓對應 rules 自然 no-fire。
+  /// 的 news 傳 null、股利情境傳 incomplete，讓對應 rules 自然 no-fire。
   ///
   /// `marketData` 自 2026-08-22 起**部分**填入：當沖比率有 backfill phase
   /// 所以接上了（見主迴圈）；外資持股／集保／質押／警示／內部人仍為 null，
@@ -965,6 +969,10 @@ class ReplayCalibrator {
     return StockData(
       symbol: symbol,
       prices: pricesUpToDay,
+      // 校準 DB 沒有除權除息配發資料：52 週新高／新低在回放中不觸發（見
+      // CalibrationThresholds.notBackfillableReasons）；重跑 replay＋promote 會讓
+      // WEEK_52_HIGH 失去校準分，見 docs/CALIBRATION.md
+      dividends: const DividendContext.incomplete(),
       institutional: institutional,
       latestRevenue: latestRevenue,
       latestValuation: latestValuation,
@@ -972,7 +980,7 @@ class ReplayCalibrator {
       epsHistory: epsHistory,
       roeHistory: roeHistory,
       maxHistoricalRevenue: maxRevenue,
-      // news / dividendHistory — not backfilled, leave null
+      // news — not backfilled, leave null
     );
   }
 

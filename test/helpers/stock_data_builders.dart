@@ -1,4 +1,5 @@
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
 
 /// StockData 測試建構工具
@@ -22,10 +23,12 @@ StockData createTestStockData({
   List<FinancialDataEntry>? epsHistory,
   List<FinancialDataEntry>? roeHistory,
   double? maxHistoricalRevenue,
+  DividendContext dividends = DividendContext.noEvents,
 }) {
   return StockData(
     symbol: symbol,
     prices: prices ?? [],
+    dividends: dividends,
     institutional: institutional,
     news: news,
     latestRevenue: latestRevenue,

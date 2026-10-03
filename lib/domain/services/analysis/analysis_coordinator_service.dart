@@ -140,10 +140,9 @@ class AnalysisCoordinatorService {
   /// `prices.length` 本身變短，連帶踩到下游一連串**長度**閘——實測 165 檔被
   /// 截斷者中，52 檔掉到 60 根以下（整個 indicator 區塊變 null）、**142 檔掉到
   /// 250 根以下（52 週規則永不觸發）**、17 檔掉到 21 根以下（連
-  /// `daily_analysis` 列都不寫）。而 52 週規則**本來就正確處理除息**
-  /// （`_sumDividendsInPeriod` 把窗內現金股利從極值扣掉，見 evidence 的
-  /// `adjustedHigh`/`dividendAdjustment`）——入口截斷等於破壞一條已經解好的
-  /// 規則。放在這裡則外層閘門（[_minIndicatorDataPoints]）仍看完整歷史，
+  /// `daily_analysis` 列都不寫）。而 52 週規則自己以交易所除權息參考價還原
+  /// 整段價格（`DividendAdjuster`，2026-10 起），需要完整歷史——入口截斷會讓
+  /// 它永不觸發。放在這裡則外層閘門（[_minIndicatorDataPoints]）仍看完整歷史，
   /// 只有指標值本身改用斷點後的序列：2603 長榮（2026-06-17 除息 −12.0%，
   /// 斷點後 53 根）保住 RSI／KD／MA5/10/20 與 52 週規則，只有 MA60 變 null
   /// ——那是真的算不出來。2026-08-31／09-01 生產實測證實：它照常發出依賴

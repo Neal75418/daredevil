@@ -198,8 +198,9 @@ class DividendHistory extends Table {
 /// （[DividendHistory] 以 (symbol, year) 為 PK，同年多次配息會互相覆蓋）。
 ///
 /// 只有現金增資的除權不是股利，但也寫入（金額皆 0）：有這列＝這次除權息
-/// 已處理過，同步才不會對它重查 TWT49UDetail。讀取端查詢（DAO 的
-/// `getDividendDistributions*`）只回有配發的列。
+/// 已處理過，同步才不會對它重查 TWT49UDetail。畫面讀取端查詢（DAO 的
+/// `getDividendDistributions*`）只回有配發的列；52 週還原用的
+/// `getDividendEventsBatch` 刻意含這些列（現金增資也要還原）。
 @DataClassName('DividendDistributionEntry')
 class DividendDistribution extends Table {
   /// 股票代碼

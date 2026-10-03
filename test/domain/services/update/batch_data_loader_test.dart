@@ -63,7 +63,17 @@ void main() {
     ).thenAnswer((_) async => {});
     when(() => db.getEPSHistoryBatch(any())).thenAnswer((_) async => {});
     when(() => db.getROEHistoryBatch(any())).thenAnswer((_) async => {});
-    when(() => db.getDividendHistoryBatch(any())).thenAnswer((_) async => {});
+    when(
+      () => db.getDividendEventsBatch(
+        any(),
+        from: any(named: 'from'),
+        to: any(named: 'to'),
+      ),
+    ).thenAnswer((_) async => {});
+    when(() => db.getDividendListings()).thenAnswer((_) async => []);
+    when(() => db.getDividendMonthLedgerEntries()).thenAnswer((_) async => []);
+    when(() => db.getDividendUnresolved()).thenAnswer((_) async => []);
+    when(() => db.getDividendMissingPriceKeys()).thenAnswer((_) async => {});
     when(() => db.getMaxRevenueBatch(any())).thenAnswer((_) async => {});
     when(
       () => db.getInstitutionalHistoryBatch(

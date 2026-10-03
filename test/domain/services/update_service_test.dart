@@ -116,7 +116,11 @@ void main() {
   setUpAll(() {
     registerFallbackValue(DateTime(2026, 7, 6));
     registerFallbackValue(
-      ScoringBatchData(pricesMap: const {}, newsMap: const {}),
+      ScoringBatchData(
+        pricesMap: const {},
+        newsMap: const {},
+        dividendContexts: {},
+      ),
     );
     registerFallbackValue(_FakeLedger());
     registerFallbackValue(const DividendBackfillScope());
@@ -255,7 +259,19 @@ void main() {
     when(() => mockDb.getEPSHistoryBatch(any())).thenAnswer((_) async => {});
     when(() => mockDb.getROEHistoryBatch(any())).thenAnswer((_) async => {});
     when(
-      () => mockDb.getDividendHistoryBatch(any()),
+      () => mockDb.getDividendEventsBatch(
+        any(),
+        from: any(named: 'from'),
+        to: any(named: 'to'),
+      ),
+    ).thenAnswer((_) async => {});
+    when(() => mockDb.getDividendListings()).thenAnswer((_) async => []);
+    when(
+      () => mockDb.getDividendMonthLedgerEntries(),
+    ).thenAnswer((_) async => []);
+    when(() => mockDb.getDividendUnresolved()).thenAnswer((_) async => []);
+    when(
+      () => mockDb.getDividendMissingPriceKeys(),
     ).thenAnswer((_) async => {});
     when(() => mockDb.getMaxRevenueBatch(any())).thenAnswer((_) async => {});
     // 評分（空結果）；當日清除已移入 ScoringService 的寫入 transaction，
