@@ -24,7 +24,7 @@ void main() {
 
   tearDown(() => tempDir.deleteSync(recursive: true));
 
-  test('既有 DB 沒有兩張新表：開啟後補建，行情資料保留', () async {
+  test('既有 DB 沒有四張股利紀錄表：開啟後補建，行情資料保留', () async {
     final db1 = AppDatabase(NativeDatabase(dbFile));
     await db1.upsertStocks([
       StockMasterCompanion.insert(symbol: '2330', name: '台積電', market: 'TWSE'),
@@ -36,18 +36,26 @@ void main() {
         close: const Value(100),
       ),
     ]);
-    await db1.customStatement('DROP TABLE dividend_month_ledger');
-    await db1.customStatement('DROP TABLE dividend_month_failure');
+    for (final table in [
+      'dividend_month_ledger',
+      'dividend_month_failure',
+      'dividend_listing',
+      'dividend_unresolved',
+    ]) {
+      await db1.customStatement('DROP TABLE $table');
+    }
     await db1.close();
 
     final db2 = AppDatabase(NativeDatabase(dbFile));
     expect(await db2.getPricesForDate(DateTime(2026, 9, 24)), hasLength(1));
     expect(await db2.getDividendMonthLedgerEntries(), isEmpty);
     expect(await db2.getDividendMonthFailures(), isEmpty);
+    expect(await db2.getDividendListings(), isEmpty);
+    expect(await db2.getDividendUnresolved(), isEmpty);
     await db2.close();
   });
 
-  test('fingerprint reset：配發、完成紀錄、失敗紀錄一起清空', () async {
+  test('fingerprint reset：五張股利表一起清空', () async {
     final db1 = AppDatabase(NativeDatabase(dbFile));
     await db1.upsertStocks([
       StockMasterCompanion.insert(symbol: '2330', name: '台積電', market: 'TWSE'),
@@ -81,6 +89,17 @@ void main() {
     );
     expect(await db1.getDividendMonthLedgerEntries(), hasLength(1));
     expect(await db1.getDividendMonthFailures(), hasLength(1));
+    await db1.recordDividendListing(
+      market: 'TWSE',
+      from: DateTime(2026, 10, 1),
+      to: DateTime(2026, 10, 2),
+      listedThrough: DateTime(2026, 10, 2),
+      listedKnownKeys: {('2330', DateTime(2026, 10, 2))},
+      notInMasterKeys: const {},
+      recordedAt: DateTime(2026, 10, 2),
+    );
+    expect(await db1.getDividendListings(), hasLength(1));
+    expect(await db1.getDividendUnresolved(), hasLength(1));
     await db1.close();
 
     final rawDb = raw.sqlite3.open(dbFile.path);
@@ -99,6 +118,8 @@ void main() {
     );
     expect(await db2.getDividendMonthLedgerEntries(), isEmpty);
     expect(await db2.getDividendMonthFailures(), isEmpty);
+    expect(await db2.getDividendListings(), isEmpty);
+    expect(await db2.getDividendUnresolved(), isEmpty);
     await db2.close();
   });
 }

@@ -32,26 +32,31 @@ ExRightResult _cash(String symbol, DateTime exDate, double cash) =>
       exDate: exDate,
       cashDividend: cash,
       stockSharesPerThousand: 0,
+      closeBefore: 100,
+      referencePrice: 100 - cash,
     );
 
 /// 權息列（2836 2021-01-13 的真實數字：前收 10.60、減除股利參考價 10.00，
-/// 明細 0.15 元／45 股）
+/// 明細 0.15 元／45 股；沒有現金增資，除權息參考價同為 10.00）
 ExRightResult _rightsAndCash(String symbol, DateTime exDate) => ExRightResult(
   symbol: symbol,
   exDate: exDate,
   cashDividend: null,
   stockSharesPerThousand: null,
   closeBefore: 10.60,
+  referencePrice: 10.00,
   dividendAdjustedReference: 10.00,
 );
 
-/// 只有現金增資的權列（前收＝減除股利參考價，明細 0 元／0 股）
+/// 只有現金增資的權列（前收＝減除股利參考價，明細 0 元／0 股；除權息
+/// 參考價反映增資，低於前收）
 ExRightResult _rightsIssue(String symbol, DateTime exDate) => ExRightResult(
   symbol: symbol,
   exDate: exDate,
   cashDividend: 0,
   stockSharesPerThousand: null,
   closeBefore: 25.20,
+  referencePrice: 24.80,
   dividendAdjustedReference: 25.20,
 );
 
@@ -70,6 +75,9 @@ void main() {
   setUpAll(() {
     registerFallbackValue(DateTime(2000));
     registerFallbackValue(<DividendDistributionCompanion>[]);
+    registerFallbackValue(<DividendListedPrice>[]);
+    registerFallbackValue(<(String, DateTime)>{});
+    registerFallbackValue(<(String, DateTime), DividendUnresolvedReason>{});
     registerFallbackValue(const CalendarMonth(2000, 1));
   });
 
@@ -710,6 +718,212 @@ void main() {
     });
   });
 
+  group('補價：2026-10 以前的完成紀錄', () {
+    Future<void> legacyComplete(String market, CalendarMonth m) => db
+        .into(db.dividendMonthLedger)
+        .insert(
+          DividendMonthLedgerCompanion.insert(
+            market: market,
+            year: m.year,
+            month: m.month,
+            completedAt: now,
+            listedRows: 1,
+            knownRows: 1,
+            skippedSymbols: '',
+          ),
+        );
+
+    const twseAug = DividendBackfillScope(
+      from: aug,
+      to: aug,
+      markets: {MarketCode.twse},
+    );
+    const tpexAug = DividendBackfillScope(
+      from: aug,
+      to: aug,
+      markets: {MarketCode.tpex},
+    );
+
+    test('上市：重開只打列表、不重查明細，已在庫列補上兩欄並記為已存價格', () async {
+      await db.upsertDividendDistributions([
+        DividendDistributionCompanion.insert(
+          symbol: '2836',
+          exDate: DateTime(2026, 8, 13),
+          cashDividend: 0.15,
+          stockSharesPerThousand: 45,
+        ),
+      ]);
+      await legacyComplete(MarketCode.twse, aug);
+      listTwse(aug, [_rightsAndCash('2836', DateTime(2026, 8, 13))]);
+
+      final summary = await run(scope: twseAug);
+
+      expect(summary.calls, 1);
+      verifyNever(() => twse.getExRightDetail(any(), any()));
+      final r = (await db.getDividendDistributions('2836')).single;
+      expect(
+        (r.cashDividend, r.closeBefore, r.referencePrice),
+        (0.15, 10.60, 10.00),
+      );
+      expect(
+        (await db.getDividendMonthLedgerEntries()).single.pricesRecorded,
+        isTrue,
+      );
+    });
+
+    test('上櫃：重開只打 1 次列表，列以列表值重寫並記為已存價格', () async {
+      await db.upsertDividendDistributions([
+        DividendDistributionCompanion.insert(
+          symbol: '6488',
+          exDate: DateTime(2026, 8, 10),
+          cashDividend: 3,
+          stockSharesPerThousand: 0,
+        ),
+      ]);
+      await legacyComplete(MarketCode.tpex, aug);
+      listTpex(aug, [_cash('6488', DateTime(2026, 8, 10), 3)]);
+
+      final summary = await run(scope: tpexAug);
+
+      expect(summary.calls, 1);
+      final r = (await db.getDividendDistributions('6488')).single;
+      expect((r.closeBefore, r.referencePrice), (100.0, 97.0));
+      expect(
+        (await db.getDividendMonthLedgerEntries()).single.pricesRecorded,
+        isTrue,
+      );
+    });
+
+    test('重開過一次後不再重開（即使列表本身缺值）', () async {
+      await legacyComplete(MarketCode.tpex, aug);
+      listTpex(aug, [
+        ExRightResult(
+          symbol: '6488',
+          exDate: DateTime(2026, 8, 10),
+          cashDividend: 3,
+          stockSharesPerThousand: 0,
+        ),
+      ]);
+
+      await run(scope: tpexAug);
+      await run(scope: tpexAug);
+
+      verify(
+        () => tpex.getExRightResults(
+          startDate: aug.firstDay,
+          endDate: aug.lastDay,
+        ),
+      ).called(1);
+    });
+  });
+
+  group('完整度事實', () {
+    Future<Map<String, String>> unresolved() async => {
+      for (final u in await db.getDividendUnresolved())
+        '${u.market} ${u.symbol}': u.reason,
+    };
+
+    test('上櫃整月完成：只剩未知代號；列表日由完成紀錄推導、不另寫', () async {
+      listTpex(aug, [
+        _cash('6488', DateTime(2026, 8, 10), 3),
+        _cash('00950B', DateTime(2026, 8, 11), 0.08),
+      ]);
+
+      await run(
+        scope: const DividendBackfillScope(
+          from: aug,
+          to: aug,
+          markets: {MarketCode.tpex},
+        ),
+      );
+
+      expect(await unresolved(), {'TPEx 00950B': 'NOT_IN_MASTER'});
+      expect(await db.getDividendListings(), isEmpty);
+      expect(await ledgerKeys(), {'TPEx 2026-08'});
+    });
+
+    test('上市預算中途用完：已查的明細在庫，未查的記 pendingDetail，列表日記到月底', () async {
+      listTwse(aug, [
+        _rightsAndCash('2836', DateTime(2026, 8, 13)),
+        _rightsIssue('4108', DateTime(2026, 8, 14)),
+      ]);
+      detail('2836', _detailOk);
+
+      await run(
+        maxCalls: 2,
+        scope: const DividendBackfillScope(
+          from: aug,
+          to: aug,
+          markets: {MarketCode.twse},
+        ),
+      );
+
+      expect(await unresolved(), {'TWSE 4108': 'PENDING_DETAIL'});
+      expect(
+        (await db.getDividendListings()).single.listedThrough,
+        aug.lastDay,
+      );
+    });
+
+    test('上市明細失敗與參考價不符：各記原因', () async {
+      await db.upsertStocks([
+        StockMasterCompanion.insert(
+          symbol: '1101',
+          name: '1101',
+          market: 'TWSE',
+        ),
+      ]);
+      listTwse(aug, [
+        _rightsAndCash('2836', DateTime(2026, 8, 13)),
+        _rightsAndCash('1101', DateTime(2026, 8, 14)),
+      ]);
+      when(
+        () => twse.getExRightDetail('2836', any()),
+      ).thenThrow(const ApiException('改版', 200));
+      detail(
+        '1101',
+        const ExRightDetail(
+          symbol: '',
+          cashDividend: 0.5,
+          stockSharesPerThousand: 0,
+        ),
+      );
+
+      await run(
+        scope: const DividendBackfillScope(
+          from: aug,
+          to: aug,
+          markets: {MarketCode.twse},
+        ),
+      );
+
+      expect(await unresolved(), {
+        'TWSE 2836': 'DETAIL_FAILED',
+        'TWSE 1101': 'REFERENCE_MISMATCH',
+      });
+    });
+
+    test('列表失敗：不記事實', () async {
+      when(
+        () => twse.getExRightResults(
+          startDate: aug.firstDay,
+          endDate: aug.lastDay,
+        ),
+      ).thenThrow(const ApiException('改版', 200));
+
+      await run(
+        scope: const DividendBackfillScope(
+          from: aug,
+          to: aug,
+          markets: {MarketCode.twse},
+        ),
+      );
+
+      expect(await db.getDividendListings(), isEmpty);
+      expect(await db.getDividendUnresolved(), isEmpty);
+    });
+  });
+
   group('停止條件', () {
     test('斷路器：同一市場連續 3 次一般失敗停掉該市場，另一市場照常', () async {
       for (final m in [aug, jul, const CalendarMonth(2026, 6)]) {
@@ -1061,6 +1275,21 @@ void main() {
           completedAt: any(named: 'completedAt'),
         ),
       ).thenThrow(Exception('disk I/O error'));
+      when(
+        () => mockDb.updateDividendDistributionPrices(any()),
+      ).thenAnswer((_) async {});
+      when(
+        () => mockDb.recordDividendListing(
+          market: any(named: 'market'),
+          from: any(named: 'from'),
+          to: any(named: 'to'),
+          listedThrough: any(named: 'listedThrough'),
+          listedKnownKeys: any(named: 'listedKnownKeys'),
+          notInMasterKeys: any(named: 'notInMasterKeys'),
+          reasons: any(named: 'reasons'),
+          recordedAt: any(named: 'recordedAt'),
+        ),
+      ).thenAnswer((_) async {});
       stubHealthyMonths();
 
       await expectLater(
@@ -1104,6 +1333,21 @@ void main() {
       ).thenAnswer((_) async => {});
       when(
         () => mockDb.upsertDividendDistributions(any()),
+      ).thenAnswer((_) async {});
+      when(
+        () => mockDb.updateDividendDistributionPrices(any()),
+      ).thenAnswer((_) async {});
+      when(
+        () => mockDb.recordDividendListing(
+          market: any(named: 'market'),
+          from: any(named: 'from'),
+          to: any(named: 'to'),
+          listedThrough: any(named: 'listedThrough'),
+          listedKnownKeys: any(named: 'listedKnownKeys'),
+          notInMasterKeys: any(named: 'notInMasterKeys'),
+          reasons: any(named: 'reasons'),
+          recordedAt: any(named: 'recordedAt'),
+        ),
       ).thenAnswer((_) async {});
       when(
         () => mockDb.getDividendDistributionKeys(

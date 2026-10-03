@@ -121,6 +121,9 @@ void main() {
     registerFallbackValue(_FakeLedger());
     registerFallbackValue(const DividendBackfillScope());
     registerFallbackValue(<DividendDistributionCompanion>[]);
+    registerFallbackValue(<DividendListedPrice>[]);
+    registerFallbackValue(<(String, DateTime)>{});
+    registerFallbackValue(<(String, DateTime), DividendUnresolvedReason>{});
   });
 
   setUp(() {
@@ -134,6 +137,21 @@ void main() {
 
     // --- 主流程 happy-path stubs（candidates 為空，聚焦輔助資料步驟）---
     when(() => mockDb.createUpdateRun(any(), any())).thenAnswer((_) async => 1);
+    when(
+      () => mockDb.updateDividendDistributionPrices(any()),
+    ).thenAnswer((_) async {});
+    when(
+      () => mockDb.recordDividendListing(
+        market: any(named: 'market'),
+        from: any(named: 'from'),
+        to: any(named: 'to'),
+        listedThrough: any(named: 'listedThrough'),
+        listedKnownKeys: any(named: 'listedKnownKeys'),
+        notInMasterKeys: any(named: 'notInMasterKeys'),
+        reasons: any(named: 'reasons'),
+        recordedAt: any(named: 'recordedAt'),
+      ),
+    ).thenAnswer((_) async {});
     when(
       () =>
           mockDb.finishUpdateRun(any(), any(), message: any(named: 'message')),
@@ -1696,6 +1714,29 @@ void main() {
         scope: any(named: 'scope'),
       ),
     ).captured;
+
+    test('本月同步的列表日記資料日，不是牆鐘（凌晨補跑）', () async {
+      await buildService(
+        tpex: healthyTpex(),
+        clock: _Clock(DateTime(2026, 7, 7, 1, 0)),
+      ).runDailyUpdate(forDate: tradingDay);
+
+      final listedThrough =
+          verify(
+                () => mockDb.recordDividendListing(
+                  market: 'TPEx',
+                  from: any(named: 'from'),
+                  to: any(named: 'to'),
+                  listedThrough: captureAny(named: 'listedThrough'),
+                  listedKnownKeys: any(named: 'listedKnownKeys'),
+                  notInMasterKeys: any(named: 'notInMasterKeys'),
+                  reasons: any(named: 'reasons'),
+                  recordedAt: any(named: 'recordedAt'),
+                ),
+              ).captured.single
+              as DateTime;
+      expect(listedThrough, DateTime(2026, 7, 6));
+    });
 
     test('回補拿到本月同步剩下的份額（只有上櫃：30 − 1）', () async {
       await buildService(

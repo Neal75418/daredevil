@@ -2303,6 +2303,8 @@ typedef $$DividendDistributionTableCreateCompanionBuilder =
       required DateTime exDate,
       required double cashDividend,
       required double stockSharesPerThousand,
+      i0.Value<double?> closeBefore,
+      i0.Value<double?> referencePrice,
       i0.Value<int> rowid,
     });
 typedef $$DividendDistributionTableUpdateCompanionBuilder =
@@ -2311,6 +2313,8 @@ typedef $$DividendDistributionTableUpdateCompanionBuilder =
       i0.Value<DateTime> exDate,
       i0.Value<double> cashDividend,
       i0.Value<double> stockSharesPerThousand,
+      i0.Value<double?> closeBefore,
+      i0.Value<double?> referencePrice,
       i0.Value<int> rowid,
     });
 
@@ -2386,6 +2390,16 @@ class $$DividendDistributionTableFilterComposer
     builder: (column) => i0.ColumnFilters(column),
   );
 
+  i0.ColumnFilters<double> get closeBefore => $composableBuilder(
+    column: $table.closeBefore,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<double> get referencePrice => $composableBuilder(
+    column: $table.referencePrice,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
   i4.$$StockMasterTableFilterComposer get symbol {
     final i4.$$StockMasterTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -2438,6 +2452,16 @@ class $$DividendDistributionTableOrderingComposer
     builder: (column) => i0.ColumnOrderings(column),
   );
 
+  i0.ColumnOrderings<double> get closeBefore => $composableBuilder(
+    column: $table.closeBefore,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<double> get referencePrice => $composableBuilder(
+    column: $table.referencePrice,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
   i4.$$StockMasterTableOrderingComposer get symbol {
     final i4.$$StockMasterTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -2485,6 +2509,16 @@ class $$DividendDistributionTableAnnotationComposer
 
   i0.GeneratedColumn<double> get stockSharesPerThousand => $composableBuilder(
     column: $table.stockSharesPerThousand,
+    builder: (column) => column,
+  );
+
+  i0.GeneratedColumn<double> get closeBefore => $composableBuilder(
+    column: $table.closeBefore,
+    builder: (column) => column,
+  );
+
+  i0.GeneratedColumn<double> get referencePrice => $composableBuilder(
+    column: $table.referencePrice,
     builder: (column) => column,
   );
 
@@ -2563,12 +2597,16 @@ class $$DividendDistributionTableTableManager
                 i0.Value<double> cashDividend = const i0.Value.absent(),
                 i0.Value<double> stockSharesPerThousand =
                     const i0.Value.absent(),
+                i0.Value<double?> closeBefore = const i0.Value.absent(),
+                i0.Value<double?> referencePrice = const i0.Value.absent(),
                 i0.Value<int> rowid = const i0.Value.absent(),
               }) => i1.DividendDistributionCompanion(
                 symbol: symbol,
                 exDate: exDate,
                 cashDividend: cashDividend,
                 stockSharesPerThousand: stockSharesPerThousand,
+                closeBefore: closeBefore,
+                referencePrice: referencePrice,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2577,12 +2615,16 @@ class $$DividendDistributionTableTableManager
                 required DateTime exDate,
                 required double cashDividend,
                 required double stockSharesPerThousand,
+                i0.Value<double?> closeBefore = const i0.Value.absent(),
+                i0.Value<double?> referencePrice = const i0.Value.absent(),
                 i0.Value<int> rowid = const i0.Value.absent(),
               }) => i1.DividendDistributionCompanion.insert(
                 symbol: symbol,
                 exDate: exDate,
                 cashDividend: cashDividend,
                 stockSharesPerThousand: stockSharesPerThousand,
+                closeBefore: closeBefore,
+                referencePrice: referencePrice,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2663,6 +2705,7 @@ typedef $$DividendMonthLedgerTableCreateCompanionBuilder =
       required int listedRows,
       required int knownRows,
       required String skippedSymbols,
+      i0.Value<bool> pricesRecorded,
       i0.Value<int> rowid,
     });
 typedef $$DividendMonthLedgerTableUpdateCompanionBuilder =
@@ -2674,6 +2717,7 @@ typedef $$DividendMonthLedgerTableUpdateCompanionBuilder =
       i0.Value<int> listedRows,
       i0.Value<int> knownRows,
       i0.Value<String> skippedSymbols,
+      i0.Value<bool> pricesRecorded,
       i0.Value<int> rowid,
     });
 
@@ -2718,6 +2762,11 @@ class $$DividendMonthLedgerTableFilterComposer
 
   i0.ColumnFilters<String> get skippedSymbols => $composableBuilder(
     column: $table.skippedSymbols,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<bool> get pricesRecorded => $composableBuilder(
+    column: $table.pricesRecorded,
     builder: (column) => i0.ColumnFilters(column),
   );
 }
@@ -2765,6 +2814,11 @@ class $$DividendMonthLedgerTableOrderingComposer
     column: $table.skippedSymbols,
     builder: (column) => i0.ColumnOrderings(column),
   );
+
+  i0.ColumnOrderings<bool> get pricesRecorded => $composableBuilder(
+    column: $table.pricesRecorded,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
 }
 
 class $$DividendMonthLedgerTableAnnotationComposer
@@ -2800,6 +2854,11 @@ class $$DividendMonthLedgerTableAnnotationComposer
 
   i0.GeneratedColumn<String> get skippedSymbols => $composableBuilder(
     column: $table.skippedSymbols,
+    builder: (column) => column,
+  );
+
+  i0.GeneratedColumn<bool> get pricesRecorded => $composableBuilder(
+    column: $table.pricesRecorded,
     builder: (column) => column,
   );
 }
@@ -2854,6 +2913,7 @@ class $$DividendMonthLedgerTableTableManager
                 i0.Value<int> listedRows = const i0.Value.absent(),
                 i0.Value<int> knownRows = const i0.Value.absent(),
                 i0.Value<String> skippedSymbols = const i0.Value.absent(),
+                i0.Value<bool> pricesRecorded = const i0.Value.absent(),
                 i0.Value<int> rowid = const i0.Value.absent(),
               }) => i1.DividendMonthLedgerCompanion(
                 market: market,
@@ -2863,6 +2923,7 @@ class $$DividendMonthLedgerTableTableManager
                 listedRows: listedRows,
                 knownRows: knownRows,
                 skippedSymbols: skippedSymbols,
+                pricesRecorded: pricesRecorded,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2874,6 +2935,7 @@ class $$DividendMonthLedgerTableTableManager
                 required int listedRows,
                 required int knownRows,
                 required String skippedSymbols,
+                i0.Value<bool> pricesRecorded = const i0.Value.absent(),
                 i0.Value<int> rowid = const i0.Value.absent(),
               }) => i1.DividendMonthLedgerCompanion.insert(
                 market: market,
@@ -2883,6 +2945,7 @@ class $$DividendMonthLedgerTableTableManager
                 listedRows: listedRows,
                 knownRows: knownRows,
                 skippedSymbols: skippedSymbols,
+                pricesRecorded: pricesRecorded,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3192,6 +3255,417 @@ typedef $$DividendMonthFailureTableProcessedTableManager =
         >,
       ),
       i1.DividendMonthFailureEntry,
+      i0.PrefetchHooks Function()
+    >;
+typedef $$DividendListingTableCreateCompanionBuilder =
+    i1.DividendListingCompanion Function({
+      required String market,
+      required int year,
+      required int month,
+      required DateTime listedThrough,
+      i0.Value<int> rowid,
+    });
+typedef $$DividendListingTableUpdateCompanionBuilder =
+    i1.DividendListingCompanion Function({
+      i0.Value<String> market,
+      i0.Value<int> year,
+      i0.Value<int> month,
+      i0.Value<DateTime> listedThrough,
+      i0.Value<int> rowid,
+    });
+
+class $$DividendListingTableFilterComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendListingTable> {
+  $$DividendListingTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnFilters<String> get market => $composableBuilder(
+    column: $table.market,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get year => $composableBuilder(
+    column: $table.year,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get month => $composableBuilder(
+    column: $table.month,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<DateTime> get listedThrough => $composableBuilder(
+    column: $table.listedThrough,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+}
+
+class $$DividendListingTableOrderingComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendListingTable> {
+  $$DividendListingTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnOrderings<String> get market => $composableBuilder(
+    column: $table.market,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get year => $composableBuilder(
+    column: $table.year,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get month => $composableBuilder(
+    column: $table.month,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<DateTime> get listedThrough => $composableBuilder(
+    column: $table.listedThrough,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+}
+
+class $$DividendListingTableAnnotationComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendListingTable> {
+  $$DividendListingTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.GeneratedColumn<String> get market =>
+      $composableBuilder(column: $table.market, builder: (column) => column);
+
+  i0.GeneratedColumn<int> get year =>
+      $composableBuilder(column: $table.year, builder: (column) => column);
+
+  i0.GeneratedColumn<int> get month =>
+      $composableBuilder(column: $table.month, builder: (column) => column);
+
+  i0.GeneratedColumn<DateTime> get listedThrough => $composableBuilder(
+    column: $table.listedThrough,
+    builder: (column) => column,
+  );
+}
+
+class $$DividendListingTableTableManager
+    extends
+        i0.RootTableManager<
+          i0.GeneratedDatabase,
+          i1.$DividendListingTable,
+          i1.DividendListingEntry,
+          i1.$$DividendListingTableFilterComposer,
+          i1.$$DividendListingTableOrderingComposer,
+          i1.$$DividendListingTableAnnotationComposer,
+          $$DividendListingTableCreateCompanionBuilder,
+          $$DividendListingTableUpdateCompanionBuilder,
+          (
+            i1.DividendListingEntry,
+            i0.BaseReferences<
+              i0.GeneratedDatabase,
+              i1.$DividendListingTable,
+              i1.DividendListingEntry
+            >,
+          ),
+          i1.DividendListingEntry,
+          i0.PrefetchHooks Function()
+        > {
+  $$DividendListingTableTableManager(
+    i0.GeneratedDatabase db,
+    i1.$DividendListingTable table,
+  ) : super(
+        i0.TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              i1.$$DividendListingTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              i1.$$DividendListingTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () => i1
+              .$$DividendListingTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                i0.Value<String> market = const i0.Value.absent(),
+                i0.Value<int> year = const i0.Value.absent(),
+                i0.Value<int> month = const i0.Value.absent(),
+                i0.Value<DateTime> listedThrough = const i0.Value.absent(),
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.DividendListingCompanion(
+                market: market,
+                year: year,
+                month: month,
+                listedThrough: listedThrough,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String market,
+                required int year,
+                required int month,
+                required DateTime listedThrough,
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.DividendListingCompanion.insert(
+                market: market,
+                year: year,
+                month: month,
+                listedThrough: listedThrough,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), i0.BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DividendListingTableProcessedTableManager =
+    i0.ProcessedTableManager<
+      i0.GeneratedDatabase,
+      i1.$DividendListingTable,
+      i1.DividendListingEntry,
+      i1.$$DividendListingTableFilterComposer,
+      i1.$$DividendListingTableOrderingComposer,
+      i1.$$DividendListingTableAnnotationComposer,
+      $$DividendListingTableCreateCompanionBuilder,
+      $$DividendListingTableUpdateCompanionBuilder,
+      (
+        i1.DividendListingEntry,
+        i0.BaseReferences<
+          i0.GeneratedDatabase,
+          i1.$DividendListingTable,
+          i1.DividendListingEntry
+        >,
+      ),
+      i1.DividendListingEntry,
+      i0.PrefetchHooks Function()
+    >;
+typedef $$DividendUnresolvedTableCreateCompanionBuilder =
+    i1.DividendUnresolvedCompanion Function({
+      required String market,
+      required String symbol,
+      required DateTime exDate,
+      required String reason,
+      required DateTime recordedAt,
+      i0.Value<int> rowid,
+    });
+typedef $$DividendUnresolvedTableUpdateCompanionBuilder =
+    i1.DividendUnresolvedCompanion Function({
+      i0.Value<String> market,
+      i0.Value<String> symbol,
+      i0.Value<DateTime> exDate,
+      i0.Value<String> reason,
+      i0.Value<DateTime> recordedAt,
+      i0.Value<int> rowid,
+    });
+
+class $$DividendUnresolvedTableFilterComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendUnresolvedTable> {
+  $$DividendUnresolvedTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnFilters<String> get market => $composableBuilder(
+    column: $table.market,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<String> get symbol => $composableBuilder(
+    column: $table.symbol,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<DateTime> get exDate => $composableBuilder(
+    column: $table.exDate,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<DateTime> get recordedAt => $composableBuilder(
+    column: $table.recordedAt,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+}
+
+class $$DividendUnresolvedTableOrderingComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendUnresolvedTable> {
+  $$DividendUnresolvedTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnOrderings<String> get market => $composableBuilder(
+    column: $table.market,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<String> get symbol => $composableBuilder(
+    column: $table.symbol,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<DateTime> get exDate => $composableBuilder(
+    column: $table.exDate,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<DateTime> get recordedAt => $composableBuilder(
+    column: $table.recordedAt,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+}
+
+class $$DividendUnresolvedTableAnnotationComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$DividendUnresolvedTable> {
+  $$DividendUnresolvedTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.GeneratedColumn<String> get market =>
+      $composableBuilder(column: $table.market, builder: (column) => column);
+
+  i0.GeneratedColumn<String> get symbol =>
+      $composableBuilder(column: $table.symbol, builder: (column) => column);
+
+  i0.GeneratedColumn<DateTime> get exDate =>
+      $composableBuilder(column: $table.exDate, builder: (column) => column);
+
+  i0.GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  i0.GeneratedColumn<DateTime> get recordedAt => $composableBuilder(
+    column: $table.recordedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$DividendUnresolvedTableTableManager
+    extends
+        i0.RootTableManager<
+          i0.GeneratedDatabase,
+          i1.$DividendUnresolvedTable,
+          i1.DividendUnresolvedEntry,
+          i1.$$DividendUnresolvedTableFilterComposer,
+          i1.$$DividendUnresolvedTableOrderingComposer,
+          i1.$$DividendUnresolvedTableAnnotationComposer,
+          $$DividendUnresolvedTableCreateCompanionBuilder,
+          $$DividendUnresolvedTableUpdateCompanionBuilder,
+          (
+            i1.DividendUnresolvedEntry,
+            i0.BaseReferences<
+              i0.GeneratedDatabase,
+              i1.$DividendUnresolvedTable,
+              i1.DividendUnresolvedEntry
+            >,
+          ),
+          i1.DividendUnresolvedEntry,
+          i0.PrefetchHooks Function()
+        > {
+  $$DividendUnresolvedTableTableManager(
+    i0.GeneratedDatabase db,
+    i1.$DividendUnresolvedTable table,
+  ) : super(
+        i0.TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () => i1
+              .$$DividendUnresolvedTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              i1.$$DividendUnresolvedTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              i1.$$DividendUnresolvedTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                i0.Value<String> market = const i0.Value.absent(),
+                i0.Value<String> symbol = const i0.Value.absent(),
+                i0.Value<DateTime> exDate = const i0.Value.absent(),
+                i0.Value<String> reason = const i0.Value.absent(),
+                i0.Value<DateTime> recordedAt = const i0.Value.absent(),
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.DividendUnresolvedCompanion(
+                market: market,
+                symbol: symbol,
+                exDate: exDate,
+                reason: reason,
+                recordedAt: recordedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String market,
+                required String symbol,
+                required DateTime exDate,
+                required String reason,
+                required DateTime recordedAt,
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.DividendUnresolvedCompanion.insert(
+                market: market,
+                symbol: symbol,
+                exDate: exDate,
+                reason: reason,
+                recordedAt: recordedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), i0.BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DividendUnresolvedTableProcessedTableManager =
+    i0.ProcessedTableManager<
+      i0.GeneratedDatabase,
+      i1.$DividendUnresolvedTable,
+      i1.DividendUnresolvedEntry,
+      i1.$$DividendUnresolvedTableFilterComposer,
+      i1.$$DividendUnresolvedTableOrderingComposer,
+      i1.$$DividendUnresolvedTableAnnotationComposer,
+      $$DividendUnresolvedTableCreateCompanionBuilder,
+      $$DividendUnresolvedTableUpdateCompanionBuilder,
+      (
+        i1.DividendUnresolvedEntry,
+        i0.BaseReferences<
+          i0.GeneratedDatabase,
+          i1.$DividendUnresolvedTable,
+          i1.DividendUnresolvedEntry
+        >,
+      ),
+      i1.DividendUnresolvedEntry,
       i0.PrefetchHooks Function()
     >;
 typedef $$MonthlyRevenueTableCreateCompanionBuilder =
@@ -8686,12 +9160,37 @@ class $DividendDistributionTable extends i2.DividendDistribution
         type: i0.DriftSqlType.double,
         requiredDuringInsert: true,
       );
+  static const i0.VerificationMeta _closeBeforeMeta = const i0.VerificationMeta(
+    'closeBefore',
+  );
+  @override
+  late final i0.GeneratedColumn<double> closeBefore =
+      i0.GeneratedColumn<double>(
+        'close_before',
+        aliasedName,
+        true,
+        type: i0.DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
+  static const i0.VerificationMeta _referencePriceMeta =
+      const i0.VerificationMeta('referencePrice');
+  @override
+  late final i0.GeneratedColumn<double> referencePrice =
+      i0.GeneratedColumn<double>(
+        'reference_price',
+        aliasedName,
+        true,
+        type: i0.DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
   @override
   List<i0.GeneratedColumn> get $columns => [
     symbol,
     exDate,
     cashDividend,
     stockSharesPerThousand,
+    closeBefore,
+    referencePrice,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -8743,6 +9242,24 @@ class $DividendDistributionTable extends i2.DividendDistribution
     } else if (isInserting) {
       context.missing(_stockSharesPerThousandMeta);
     }
+    if (data.containsKey('close_before')) {
+      context.handle(
+        _closeBeforeMeta,
+        closeBefore.isAcceptableOrUnknown(
+          data['close_before']!,
+          _closeBeforeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reference_price')) {
+      context.handle(
+        _referencePriceMeta,
+        referencePrice.isAcceptableOrUnknown(
+          data['reference_price']!,
+          _referencePriceMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -8771,6 +9288,14 @@ class $DividendDistributionTable extends i2.DividendDistribution
         i0.DriftSqlType.double,
         data['${effectivePrefix}stock_shares_per_thousand'],
       )!,
+      closeBefore: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.double,
+        data['${effectivePrefix}close_before'],
+      ),
+      referencePrice: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.double,
+        data['${effectivePrefix}reference_price'],
+      ),
     );
   }
 
@@ -8794,11 +9319,21 @@ class DividendDistributionEntry extends i0.DataClass
   /// 每千股無償配股（股）。存股數而非面額元：面額不一定是 10 元，
   /// 股數才是股東實際配到的量。必填、無預設值（同上）。
   final double stockSharesPerThousand;
+
+  /// 除權息前收盤價（列表）。還原因子的分母。null＝列表缺值，或 2026-10
+  /// 以前寫入、尚未由回補補價的列
+  final double? closeBefore;
+
+  /// 除權息參考價（列表）：交易所訂的除權息後參考價，含現金增資的影響。
+  /// 還原因子＝[referencePrice] ÷ [closeBefore]
+  final double? referencePrice;
   const DividendDistributionEntry({
     required this.symbol,
     required this.exDate,
     required this.cashDividend,
     required this.stockSharesPerThousand,
+    this.closeBefore,
+    this.referencePrice,
   });
   @override
   Map<String, i0.Expression> toColumns(bool nullToAbsent) {
@@ -8809,6 +9344,12 @@ class DividendDistributionEntry extends i0.DataClass
     map['stock_shares_per_thousand'] = i0.Variable<double>(
       stockSharesPerThousand,
     );
+    if (!nullToAbsent || closeBefore != null) {
+      map['close_before'] = i0.Variable<double>(closeBefore);
+    }
+    if (!nullToAbsent || referencePrice != null) {
+      map['reference_price'] = i0.Variable<double>(referencePrice);
+    }
     return map;
   }
 
@@ -8818,6 +9359,12 @@ class DividendDistributionEntry extends i0.DataClass
       exDate: i0.Value(exDate),
       cashDividend: i0.Value(cashDividend),
       stockSharesPerThousand: i0.Value(stockSharesPerThousand),
+      closeBefore: closeBefore == null && nullToAbsent
+          ? const i0.Value.absent()
+          : i0.Value(closeBefore),
+      referencePrice: referencePrice == null && nullToAbsent
+          ? const i0.Value.absent()
+          : i0.Value(referencePrice),
     );
   }
 
@@ -8833,6 +9380,8 @@ class DividendDistributionEntry extends i0.DataClass
       stockSharesPerThousand: serializer.fromJson<double>(
         json['stockSharesPerThousand'],
       ),
+      closeBefore: serializer.fromJson<double?>(json['closeBefore']),
+      referencePrice: serializer.fromJson<double?>(json['referencePrice']),
     );
   }
   @override
@@ -8845,6 +9394,8 @@ class DividendDistributionEntry extends i0.DataClass
       'stockSharesPerThousand': serializer.toJson<double>(
         stockSharesPerThousand,
       ),
+      'closeBefore': serializer.toJson<double?>(closeBefore),
+      'referencePrice': serializer.toJson<double?>(referencePrice),
     };
   }
 
@@ -8853,12 +9404,18 @@ class DividendDistributionEntry extends i0.DataClass
     DateTime? exDate,
     double? cashDividend,
     double? stockSharesPerThousand,
+    i0.Value<double?> closeBefore = const i0.Value.absent(),
+    i0.Value<double?> referencePrice = const i0.Value.absent(),
   }) => i1.DividendDistributionEntry(
     symbol: symbol ?? this.symbol,
     exDate: exDate ?? this.exDate,
     cashDividend: cashDividend ?? this.cashDividend,
     stockSharesPerThousand:
         stockSharesPerThousand ?? this.stockSharesPerThousand,
+    closeBefore: closeBefore.present ? closeBefore.value : this.closeBefore,
+    referencePrice: referencePrice.present
+        ? referencePrice.value
+        : this.referencePrice,
   );
   DividendDistributionEntry copyWithCompanion(
     i1.DividendDistributionCompanion data,
@@ -8872,6 +9429,12 @@ class DividendDistributionEntry extends i0.DataClass
       stockSharesPerThousand: data.stockSharesPerThousand.present
           ? data.stockSharesPerThousand.value
           : this.stockSharesPerThousand,
+      closeBefore: data.closeBefore.present
+          ? data.closeBefore.value
+          : this.closeBefore,
+      referencePrice: data.referencePrice.present
+          ? data.referencePrice.value
+          : this.referencePrice,
     );
   }
 
@@ -8881,14 +9444,22 @@ class DividendDistributionEntry extends i0.DataClass
           ..write('symbol: $symbol, ')
           ..write('exDate: $exDate, ')
           ..write('cashDividend: $cashDividend, ')
-          ..write('stockSharesPerThousand: $stockSharesPerThousand')
+          ..write('stockSharesPerThousand: $stockSharesPerThousand, ')
+          ..write('closeBefore: $closeBefore, ')
+          ..write('referencePrice: $referencePrice')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(symbol, exDate, cashDividend, stockSharesPerThousand);
+  int get hashCode => Object.hash(
+    symbol,
+    exDate,
+    cashDividend,
+    stockSharesPerThousand,
+    closeBefore,
+    referencePrice,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -8896,7 +9467,9 @@ class DividendDistributionEntry extends i0.DataClass
           other.symbol == this.symbol &&
           other.exDate == this.exDate &&
           other.cashDividend == this.cashDividend &&
-          other.stockSharesPerThousand == this.stockSharesPerThousand);
+          other.stockSharesPerThousand == this.stockSharesPerThousand &&
+          other.closeBefore == this.closeBefore &&
+          other.referencePrice == this.referencePrice);
 }
 
 class DividendDistributionCompanion
@@ -8905,12 +9478,16 @@ class DividendDistributionCompanion
   final i0.Value<DateTime> exDate;
   final i0.Value<double> cashDividend;
   final i0.Value<double> stockSharesPerThousand;
+  final i0.Value<double?> closeBefore;
+  final i0.Value<double?> referencePrice;
   final i0.Value<int> rowid;
   const DividendDistributionCompanion({
     this.symbol = const i0.Value.absent(),
     this.exDate = const i0.Value.absent(),
     this.cashDividend = const i0.Value.absent(),
     this.stockSharesPerThousand = const i0.Value.absent(),
+    this.closeBefore = const i0.Value.absent(),
+    this.referencePrice = const i0.Value.absent(),
     this.rowid = const i0.Value.absent(),
   });
   DividendDistributionCompanion.insert({
@@ -8918,6 +9495,8 @@ class DividendDistributionCompanion
     required DateTime exDate,
     required double cashDividend,
     required double stockSharesPerThousand,
+    this.closeBefore = const i0.Value.absent(),
+    this.referencePrice = const i0.Value.absent(),
     this.rowid = const i0.Value.absent(),
   }) : symbol = i0.Value(symbol),
        exDate = i0.Value(exDate),
@@ -8928,6 +9507,8 @@ class DividendDistributionCompanion
     i0.Expression<DateTime>? exDate,
     i0.Expression<double>? cashDividend,
     i0.Expression<double>? stockSharesPerThousand,
+    i0.Expression<double>? closeBefore,
+    i0.Expression<double>? referencePrice,
     i0.Expression<int>? rowid,
   }) {
     return i0.RawValuesInsertable({
@@ -8936,6 +9517,8 @@ class DividendDistributionCompanion
       if (cashDividend != null) 'cash_dividend': cashDividend,
       if (stockSharesPerThousand != null)
         'stock_shares_per_thousand': stockSharesPerThousand,
+      if (closeBefore != null) 'close_before': closeBefore,
+      if (referencePrice != null) 'reference_price': referencePrice,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -8945,6 +9528,8 @@ class DividendDistributionCompanion
     i0.Value<DateTime>? exDate,
     i0.Value<double>? cashDividend,
     i0.Value<double>? stockSharesPerThousand,
+    i0.Value<double?>? closeBefore,
+    i0.Value<double?>? referencePrice,
     i0.Value<int>? rowid,
   }) {
     return i1.DividendDistributionCompanion(
@@ -8953,6 +9538,8 @@ class DividendDistributionCompanion
       cashDividend: cashDividend ?? this.cashDividend,
       stockSharesPerThousand:
           stockSharesPerThousand ?? this.stockSharesPerThousand,
+      closeBefore: closeBefore ?? this.closeBefore,
+      referencePrice: referencePrice ?? this.referencePrice,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -8974,6 +9561,12 @@ class DividendDistributionCompanion
         stockSharesPerThousand.value,
       );
     }
+    if (closeBefore.present) {
+      map['close_before'] = i0.Variable<double>(closeBefore.value);
+    }
+    if (referencePrice.present) {
+      map['reference_price'] = i0.Variable<double>(referencePrice.value);
+    }
     if (rowid.present) {
       map['rowid'] = i0.Variable<int>(rowid.value);
     }
@@ -8987,6 +9580,8 @@ class DividendDistributionCompanion
           ..write('exDate: $exDate, ')
           ..write('cashDividend: $cashDividend, ')
           ..write('stockSharesPerThousand: $stockSharesPerThousand, ')
+          ..write('closeBefore: $closeBefore, ')
+          ..write('referencePrice: $referencePrice, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9078,6 +9673,20 @@ class $DividendMonthLedgerTable extends i2.DividendMonthLedger
         type: i0.DriftSqlType.string,
         requiredDuringInsert: true,
       );
+  static const i0.VerificationMeta _pricesRecordedMeta =
+      const i0.VerificationMeta('pricesRecorded');
+  @override
+  late final i0.GeneratedColumn<bool> pricesRecorded = i0.GeneratedColumn<bool>(
+    'prices_recorded',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: i0.GeneratedColumn.constraintIsAlways(
+      'CHECK ("prices_recorded" IN (0, 1))',
+    ),
+    defaultValue: const i3.Constant(false),
+  );
   @override
   List<i0.GeneratedColumn> get $columns => [
     market,
@@ -9087,6 +9696,7 @@ class $DividendMonthLedgerTable extends i2.DividendMonthLedger
     listedRows,
     knownRows,
     skippedSymbols,
+    pricesRecorded,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9162,6 +9772,15 @@ class $DividendMonthLedgerTable extends i2.DividendMonthLedger
     } else if (isInserting) {
       context.missing(_skippedSymbolsMeta);
     }
+    if (data.containsKey('prices_recorded')) {
+      context.handle(
+        _pricesRecordedMeta,
+        pricesRecorded.isAcceptableOrUnknown(
+          data['prices_recorded']!,
+          _pricesRecordedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -9202,6 +9821,10 @@ class $DividendMonthLedgerTable extends i2.DividendMonthLedger
         i0.DriftSqlType.string,
         data['${effectivePrefix}skipped_symbols'],
       )!,
+      pricesRecorded: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.bool,
+        data['${effectivePrefix}prices_recorded'],
+      )!,
     );
   }
 
@@ -9234,6 +9857,10 @@ class DividendMonthLedgerEntry extends i0.DataClass
 
   /// 當時不在主檔而略過的代號：排序、去重、逗號分隔；沒有則為空字串
   final String skippedSymbols;
+
+  /// 完成時是否已以列表記錄該月各列的前收盤與除權息參考價。2026-10 以前
+  /// 寫下的紀錄為 false，回補重開這些月份一次（只打列表）補價
+  final bool pricesRecorded;
   const DividendMonthLedgerEntry({
     required this.market,
     required this.year,
@@ -9242,6 +9869,7 @@ class DividendMonthLedgerEntry extends i0.DataClass
     required this.listedRows,
     required this.knownRows,
     required this.skippedSymbols,
+    required this.pricesRecorded,
   });
   @override
   Map<String, i0.Expression> toColumns(bool nullToAbsent) {
@@ -9253,6 +9881,7 @@ class DividendMonthLedgerEntry extends i0.DataClass
     map['listed_rows'] = i0.Variable<int>(listedRows);
     map['known_rows'] = i0.Variable<int>(knownRows);
     map['skipped_symbols'] = i0.Variable<String>(skippedSymbols);
+    map['prices_recorded'] = i0.Variable<bool>(pricesRecorded);
     return map;
   }
 
@@ -9265,6 +9894,7 @@ class DividendMonthLedgerEntry extends i0.DataClass
       listedRows: i0.Value(listedRows),
       knownRows: i0.Value(knownRows),
       skippedSymbols: i0.Value(skippedSymbols),
+      pricesRecorded: i0.Value(pricesRecorded),
     );
   }
 
@@ -9281,6 +9911,7 @@ class DividendMonthLedgerEntry extends i0.DataClass
       listedRows: serializer.fromJson<int>(json['listedRows']),
       knownRows: serializer.fromJson<int>(json['knownRows']),
       skippedSymbols: serializer.fromJson<String>(json['skippedSymbols']),
+      pricesRecorded: serializer.fromJson<bool>(json['pricesRecorded']),
     );
   }
   @override
@@ -9294,6 +9925,7 @@ class DividendMonthLedgerEntry extends i0.DataClass
       'listedRows': serializer.toJson<int>(listedRows),
       'knownRows': serializer.toJson<int>(knownRows),
       'skippedSymbols': serializer.toJson<String>(skippedSymbols),
+      'pricesRecorded': serializer.toJson<bool>(pricesRecorded),
     };
   }
 
@@ -9305,6 +9937,7 @@ class DividendMonthLedgerEntry extends i0.DataClass
     int? listedRows,
     int? knownRows,
     String? skippedSymbols,
+    bool? pricesRecorded,
   }) => i1.DividendMonthLedgerEntry(
     market: market ?? this.market,
     year: year ?? this.year,
@@ -9313,6 +9946,7 @@ class DividendMonthLedgerEntry extends i0.DataClass
     listedRows: listedRows ?? this.listedRows,
     knownRows: knownRows ?? this.knownRows,
     skippedSymbols: skippedSymbols ?? this.skippedSymbols,
+    pricesRecorded: pricesRecorded ?? this.pricesRecorded,
   );
   DividendMonthLedgerEntry copyWithCompanion(
     i1.DividendMonthLedgerCompanion data,
@@ -9331,6 +9965,9 @@ class DividendMonthLedgerEntry extends i0.DataClass
       skippedSymbols: data.skippedSymbols.present
           ? data.skippedSymbols.value
           : this.skippedSymbols,
+      pricesRecorded: data.pricesRecorded.present
+          ? data.pricesRecorded.value
+          : this.pricesRecorded,
     );
   }
 
@@ -9343,7 +9980,8 @@ class DividendMonthLedgerEntry extends i0.DataClass
           ..write('completedAt: $completedAt, ')
           ..write('listedRows: $listedRows, ')
           ..write('knownRows: $knownRows, ')
-          ..write('skippedSymbols: $skippedSymbols')
+          ..write('skippedSymbols: $skippedSymbols, ')
+          ..write('pricesRecorded: $pricesRecorded')
           ..write(')'))
         .toString();
   }
@@ -9357,6 +9995,7 @@ class DividendMonthLedgerEntry extends i0.DataClass
     listedRows,
     knownRows,
     skippedSymbols,
+    pricesRecorded,
   );
   @override
   bool operator ==(Object other) =>
@@ -9368,7 +10007,8 @@ class DividendMonthLedgerEntry extends i0.DataClass
           other.completedAt == this.completedAt &&
           other.listedRows == this.listedRows &&
           other.knownRows == this.knownRows &&
-          other.skippedSymbols == this.skippedSymbols);
+          other.skippedSymbols == this.skippedSymbols &&
+          other.pricesRecorded == this.pricesRecorded);
 }
 
 class DividendMonthLedgerCompanion
@@ -9380,6 +10020,7 @@ class DividendMonthLedgerCompanion
   final i0.Value<int> listedRows;
   final i0.Value<int> knownRows;
   final i0.Value<String> skippedSymbols;
+  final i0.Value<bool> pricesRecorded;
   final i0.Value<int> rowid;
   const DividendMonthLedgerCompanion({
     this.market = const i0.Value.absent(),
@@ -9389,6 +10030,7 @@ class DividendMonthLedgerCompanion
     this.listedRows = const i0.Value.absent(),
     this.knownRows = const i0.Value.absent(),
     this.skippedSymbols = const i0.Value.absent(),
+    this.pricesRecorded = const i0.Value.absent(),
     this.rowid = const i0.Value.absent(),
   });
   DividendMonthLedgerCompanion.insert({
@@ -9399,6 +10041,7 @@ class DividendMonthLedgerCompanion
     required int listedRows,
     required int knownRows,
     required String skippedSymbols,
+    this.pricesRecorded = const i0.Value.absent(),
     this.rowid = const i0.Value.absent(),
   }) : market = i0.Value(market),
        year = i0.Value(year),
@@ -9415,6 +10058,7 @@ class DividendMonthLedgerCompanion
     i0.Expression<int>? listedRows,
     i0.Expression<int>? knownRows,
     i0.Expression<String>? skippedSymbols,
+    i0.Expression<bool>? pricesRecorded,
     i0.Expression<int>? rowid,
   }) {
     return i0.RawValuesInsertable({
@@ -9425,6 +10069,7 @@ class DividendMonthLedgerCompanion
       if (listedRows != null) 'listed_rows': listedRows,
       if (knownRows != null) 'known_rows': knownRows,
       if (skippedSymbols != null) 'skipped_symbols': skippedSymbols,
+      if (pricesRecorded != null) 'prices_recorded': pricesRecorded,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -9437,6 +10082,7 @@ class DividendMonthLedgerCompanion
     i0.Value<int>? listedRows,
     i0.Value<int>? knownRows,
     i0.Value<String>? skippedSymbols,
+    i0.Value<bool>? pricesRecorded,
     i0.Value<int>? rowid,
   }) {
     return i1.DividendMonthLedgerCompanion(
@@ -9447,6 +10093,7 @@ class DividendMonthLedgerCompanion
       listedRows: listedRows ?? this.listedRows,
       knownRows: knownRows ?? this.knownRows,
       skippedSymbols: skippedSymbols ?? this.skippedSymbols,
+      pricesRecorded: pricesRecorded ?? this.pricesRecorded,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -9475,6 +10122,9 @@ class DividendMonthLedgerCompanion
     if (skippedSymbols.present) {
       map['skipped_symbols'] = i0.Variable<String>(skippedSymbols.value);
     }
+    if (pricesRecorded.present) {
+      map['prices_recorded'] = i0.Variable<bool>(pricesRecorded.value);
+    }
     if (rowid.present) {
       map['rowid'] = i0.Variable<int>(rowid.value);
     }
@@ -9491,6 +10141,7 @@ class DividendMonthLedgerCompanion
           ..write('listedRows: $listedRows, ')
           ..write('knownRows: $knownRows, ')
           ..write('skippedSymbols: $skippedSymbols, ')
+          ..write('pricesRecorded: $pricesRecorded, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9762,8 +10413,10 @@ class DividendMonthFailureEntry extends i0.DataClass
   /// 最後一次失敗的第一個錯誤（截斷至 300 字）
   final String lastError;
 
-  /// 最後一次失敗時明細查不到的代號：排序、去重、逗號分隔。第 3 段可據此
-  /// 判斷「除了這些代號，這個月其餘都在庫」。
+  /// 最後一次失敗時明細查不到或核對不符的代號：排序、去重、逗號分隔。
+  /// 診斷用，程式不讀（退避看 failCount／lastFailedAt，warning 看
+  /// failCount／lastError）；預算用完而中斷時未查的列也不在這裡，哪些列
+  /// 不在庫要看 `dividend_unresolved`。
   final String failedSymbols;
 
   /// 最後一次失敗時列表本身是否成功（列表失敗時整月的列都不可信）
@@ -10046,6 +10699,725 @@ class DividendMonthFailureCompanion
           ..write('lastError: $lastError, ')
           ..write('failedSymbols: $failedSymbols, ')
           ..write('listOk: $listOk, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DividendListingTable extends i2.DividendListing
+    with i0.TableInfo<$DividendListingTable, i1.DividendListingEntry> {
+  @override
+  final i0.GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DividendListingTable(this.attachedDatabase, [this._alias]);
+  static const i0.VerificationMeta _marketMeta = const i0.VerificationMeta(
+    'market',
+  );
+  @override
+  late final i0.GeneratedColumn<String> market = i0.GeneratedColumn<String>(
+    'market',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _yearMeta = const i0.VerificationMeta(
+    'year',
+  );
+  @override
+  late final i0.GeneratedColumn<int> year = i0.GeneratedColumn<int>(
+    'year',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _monthMeta = const i0.VerificationMeta(
+    'month',
+  );
+  @override
+  late final i0.GeneratedColumn<int> month = i0.GeneratedColumn<int>(
+    'month',
+    aliasedName,
+    false,
+    check: () => i3.ComparableExpr(month).isBetweenValues(1, 12),
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _listedThroughMeta =
+      const i0.VerificationMeta('listedThrough');
+  @override
+  late final i0.GeneratedColumn<DateTime> listedThrough =
+      i0.GeneratedColumn<DateTime>(
+        'listed_through',
+        aliasedName,
+        false,
+        type: i0.DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  @override
+  List<i0.GeneratedColumn> get $columns => [market, year, month, listedThrough];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'dividend_listing';
+  @override
+  i0.VerificationContext validateIntegrity(
+    i0.Insertable<i1.DividendListingEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = i0.VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('market')) {
+      context.handle(
+        _marketMeta,
+        market.isAcceptableOrUnknown(data['market']!, _marketMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_marketMeta);
+    }
+    if (data.containsKey('year')) {
+      context.handle(
+        _yearMeta,
+        year.isAcceptableOrUnknown(data['year']!, _yearMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_yearMeta);
+    }
+    if (data.containsKey('month')) {
+      context.handle(
+        _monthMeta,
+        month.isAcceptableOrUnknown(data['month']!, _monthMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_monthMeta);
+    }
+    if (data.containsKey('listed_through')) {
+      context.handle(
+        _listedThroughMeta,
+        listedThrough.isAcceptableOrUnknown(
+          data['listed_through']!,
+          _listedThroughMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_listedThroughMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<i0.GeneratedColumn> get $primaryKey => {market, year, month};
+  @override
+  i1.DividendListingEntry map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return i1.DividendListingEntry(
+      market: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}market'],
+      )!,
+      year: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}year'],
+      )!,
+      month: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}month'],
+      )!,
+      listedThrough: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.dateTime,
+        data['${effectivePrefix}listed_through'],
+      )!,
+    );
+  }
+
+  @override
+  $DividendListingTable createAlias(String alias) {
+    return $DividendListingTable(attachedDatabase, alias);
+  }
+}
+
+class DividendListingEntry extends i0.DataClass
+    implements i0.Insertable<i1.DividendListingEntry> {
+  /// `MarketCode.twse`／`MarketCode.tpex`
+  final String market;
+
+  /// 西元年
+  final int year;
+
+  /// 1–12
+  final int month;
+
+  /// 列表已涵蓋到的日期（含），當地午夜
+  final DateTime listedThrough;
+  const DividendListingEntry({
+    required this.market,
+    required this.year,
+    required this.month,
+    required this.listedThrough,
+  });
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    map['market'] = i0.Variable<String>(market);
+    map['year'] = i0.Variable<int>(year);
+    map['month'] = i0.Variable<int>(month);
+    map['listed_through'] = i0.Variable<DateTime>(listedThrough);
+    return map;
+  }
+
+  i1.DividendListingCompanion toCompanion(bool nullToAbsent) {
+    return i1.DividendListingCompanion(
+      market: i0.Value(market),
+      year: i0.Value(year),
+      month: i0.Value(month),
+      listedThrough: i0.Value(listedThrough),
+    );
+  }
+
+  factory DividendListingEntry.fromJson(
+    Map<String, dynamic> json, {
+    i0.ValueSerializer? serializer,
+  }) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return DividendListingEntry(
+      market: serializer.fromJson<String>(json['market']),
+      year: serializer.fromJson<int>(json['year']),
+      month: serializer.fromJson<int>(json['month']),
+      listedThrough: serializer.fromJson<DateTime>(json['listedThrough']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({i0.ValueSerializer? serializer}) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'market': serializer.toJson<String>(market),
+      'year': serializer.toJson<int>(year),
+      'month': serializer.toJson<int>(month),
+      'listedThrough': serializer.toJson<DateTime>(listedThrough),
+    };
+  }
+
+  i1.DividendListingEntry copyWith({
+    String? market,
+    int? year,
+    int? month,
+    DateTime? listedThrough,
+  }) => i1.DividendListingEntry(
+    market: market ?? this.market,
+    year: year ?? this.year,
+    month: month ?? this.month,
+    listedThrough: listedThrough ?? this.listedThrough,
+  );
+  DividendListingEntry copyWithCompanion(i1.DividendListingCompanion data) {
+    return DividendListingEntry(
+      market: data.market.present ? data.market.value : this.market,
+      year: data.year.present ? data.year.value : this.year,
+      month: data.month.present ? data.month.value : this.month,
+      listedThrough: data.listedThrough.present
+          ? data.listedThrough.value
+          : this.listedThrough,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DividendListingEntry(')
+          ..write('market: $market, ')
+          ..write('year: $year, ')
+          ..write('month: $month, ')
+          ..write('listedThrough: $listedThrough')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(market, year, month, listedThrough);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is i1.DividendListingEntry &&
+          other.market == this.market &&
+          other.year == this.year &&
+          other.month == this.month &&
+          other.listedThrough == this.listedThrough);
+}
+
+class DividendListingCompanion
+    extends i0.UpdateCompanion<i1.DividendListingEntry> {
+  final i0.Value<String> market;
+  final i0.Value<int> year;
+  final i0.Value<int> month;
+  final i0.Value<DateTime> listedThrough;
+  final i0.Value<int> rowid;
+  const DividendListingCompanion({
+    this.market = const i0.Value.absent(),
+    this.year = const i0.Value.absent(),
+    this.month = const i0.Value.absent(),
+    this.listedThrough = const i0.Value.absent(),
+    this.rowid = const i0.Value.absent(),
+  });
+  DividendListingCompanion.insert({
+    required String market,
+    required int year,
+    required int month,
+    required DateTime listedThrough,
+    this.rowid = const i0.Value.absent(),
+  }) : market = i0.Value(market),
+       year = i0.Value(year),
+       month = i0.Value(month),
+       listedThrough = i0.Value(listedThrough);
+  static i0.Insertable<i1.DividendListingEntry> custom({
+    i0.Expression<String>? market,
+    i0.Expression<int>? year,
+    i0.Expression<int>? month,
+    i0.Expression<DateTime>? listedThrough,
+    i0.Expression<int>? rowid,
+  }) {
+    return i0.RawValuesInsertable({
+      if (market != null) 'market': market,
+      if (year != null) 'year': year,
+      if (month != null) 'month': month,
+      if (listedThrough != null) 'listed_through': listedThrough,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  i1.DividendListingCompanion copyWith({
+    i0.Value<String>? market,
+    i0.Value<int>? year,
+    i0.Value<int>? month,
+    i0.Value<DateTime>? listedThrough,
+    i0.Value<int>? rowid,
+  }) {
+    return i1.DividendListingCompanion(
+      market: market ?? this.market,
+      year: year ?? this.year,
+      month: month ?? this.month,
+      listedThrough: listedThrough ?? this.listedThrough,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    if (market.present) {
+      map['market'] = i0.Variable<String>(market.value);
+    }
+    if (year.present) {
+      map['year'] = i0.Variable<int>(year.value);
+    }
+    if (month.present) {
+      map['month'] = i0.Variable<int>(month.value);
+    }
+    if (listedThrough.present) {
+      map['listed_through'] = i0.Variable<DateTime>(listedThrough.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = i0.Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DividendListingCompanion(')
+          ..write('market: $market, ')
+          ..write('year: $year, ')
+          ..write('month: $month, ')
+          ..write('listedThrough: $listedThrough, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DividendUnresolvedTable extends i2.DividendUnresolved
+    with i0.TableInfo<$DividendUnresolvedTable, i1.DividendUnresolvedEntry> {
+  @override
+  final i0.GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DividendUnresolvedTable(this.attachedDatabase, [this._alias]);
+  static const i0.VerificationMeta _marketMeta = const i0.VerificationMeta(
+    'market',
+  );
+  @override
+  late final i0.GeneratedColumn<String> market = i0.GeneratedColumn<String>(
+    'market',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _symbolMeta = const i0.VerificationMeta(
+    'symbol',
+  );
+  @override
+  late final i0.GeneratedColumn<String> symbol = i0.GeneratedColumn<String>(
+    'symbol',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _exDateMeta = const i0.VerificationMeta(
+    'exDate',
+  );
+  @override
+  late final i0.GeneratedColumn<DateTime> exDate = i0.GeneratedColumn<DateTime>(
+    'ex_date',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _reasonMeta = const i0.VerificationMeta(
+    'reason',
+  );
+  @override
+  late final i0.GeneratedColumn<String> reason = i0.GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _recordedAtMeta = const i0.VerificationMeta(
+    'recordedAt',
+  );
+  @override
+  late final i0.GeneratedColumn<DateTime> recordedAt =
+      i0.GeneratedColumn<DateTime>(
+        'recorded_at',
+        aliasedName,
+        false,
+        type: i0.DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  @override
+  List<i0.GeneratedColumn> get $columns => [
+    market,
+    symbol,
+    exDate,
+    reason,
+    recordedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'dividend_unresolved';
+  @override
+  i0.VerificationContext validateIntegrity(
+    i0.Insertable<i1.DividendUnresolvedEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = i0.VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('market')) {
+      context.handle(
+        _marketMeta,
+        market.isAcceptableOrUnknown(data['market']!, _marketMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_marketMeta);
+    }
+    if (data.containsKey('symbol')) {
+      context.handle(
+        _symbolMeta,
+        symbol.isAcceptableOrUnknown(data['symbol']!, _symbolMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_symbolMeta);
+    }
+    if (data.containsKey('ex_date')) {
+      context.handle(
+        _exDateMeta,
+        exDate.isAcceptableOrUnknown(data['ex_date']!, _exDateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_exDateMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reasonMeta);
+    }
+    if (data.containsKey('recorded_at')) {
+      context.handle(
+        _recordedAtMeta,
+        recordedAt.isAcceptableOrUnknown(data['recorded_at']!, _recordedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_recordedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<i0.GeneratedColumn> get $primaryKey => {market, symbol, exDate};
+  @override
+  i1.DividendUnresolvedEntry map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return i1.DividendUnresolvedEntry(
+      market: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}market'],
+      )!,
+      symbol: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}symbol'],
+      )!,
+      exDate: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.dateTime,
+        data['${effectivePrefix}ex_date'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      recordedAt: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.dateTime,
+        data['${effectivePrefix}recorded_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DividendUnresolvedTable createAlias(String alias) {
+    return $DividendUnresolvedTable(attachedDatabase, alias);
+  }
+}
+
+class DividendUnresolvedEntry extends i0.DataClass
+    implements i0.Insertable<i1.DividendUnresolvedEntry> {
+  /// `MarketCode.twse`／`MarketCode.tpex`
+  final String market;
+
+  /// 不加外鍵：可能是不在股票主檔的代號
+  final String symbol;
+
+  /// 除權息交易日（當地午夜）
+  final DateTime exDate;
+
+  /// `DividendUnresolvedReason.code`
+  final String reason;
+
+  /// 這次判定的時間（台北牆鐘，診斷用）
+  final DateTime recordedAt;
+  const DividendUnresolvedEntry({
+    required this.market,
+    required this.symbol,
+    required this.exDate,
+    required this.reason,
+    required this.recordedAt,
+  });
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    map['market'] = i0.Variable<String>(market);
+    map['symbol'] = i0.Variable<String>(symbol);
+    map['ex_date'] = i0.Variable<DateTime>(exDate);
+    map['reason'] = i0.Variable<String>(reason);
+    map['recorded_at'] = i0.Variable<DateTime>(recordedAt);
+    return map;
+  }
+
+  i1.DividendUnresolvedCompanion toCompanion(bool nullToAbsent) {
+    return i1.DividendUnresolvedCompanion(
+      market: i0.Value(market),
+      symbol: i0.Value(symbol),
+      exDate: i0.Value(exDate),
+      reason: i0.Value(reason),
+      recordedAt: i0.Value(recordedAt),
+    );
+  }
+
+  factory DividendUnresolvedEntry.fromJson(
+    Map<String, dynamic> json, {
+    i0.ValueSerializer? serializer,
+  }) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return DividendUnresolvedEntry(
+      market: serializer.fromJson<String>(json['market']),
+      symbol: serializer.fromJson<String>(json['symbol']),
+      exDate: serializer.fromJson<DateTime>(json['exDate']),
+      reason: serializer.fromJson<String>(json['reason']),
+      recordedAt: serializer.fromJson<DateTime>(json['recordedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({i0.ValueSerializer? serializer}) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'market': serializer.toJson<String>(market),
+      'symbol': serializer.toJson<String>(symbol),
+      'exDate': serializer.toJson<DateTime>(exDate),
+      'reason': serializer.toJson<String>(reason),
+      'recordedAt': serializer.toJson<DateTime>(recordedAt),
+    };
+  }
+
+  i1.DividendUnresolvedEntry copyWith({
+    String? market,
+    String? symbol,
+    DateTime? exDate,
+    String? reason,
+    DateTime? recordedAt,
+  }) => i1.DividendUnresolvedEntry(
+    market: market ?? this.market,
+    symbol: symbol ?? this.symbol,
+    exDate: exDate ?? this.exDate,
+    reason: reason ?? this.reason,
+    recordedAt: recordedAt ?? this.recordedAt,
+  );
+  DividendUnresolvedEntry copyWithCompanion(
+    i1.DividendUnresolvedCompanion data,
+  ) {
+    return DividendUnresolvedEntry(
+      market: data.market.present ? data.market.value : this.market,
+      symbol: data.symbol.present ? data.symbol.value : this.symbol,
+      exDate: data.exDate.present ? data.exDate.value : this.exDate,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      recordedAt: data.recordedAt.present
+          ? data.recordedAt.value
+          : this.recordedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DividendUnresolvedEntry(')
+          ..write('market: $market, ')
+          ..write('symbol: $symbol, ')
+          ..write('exDate: $exDate, ')
+          ..write('reason: $reason, ')
+          ..write('recordedAt: $recordedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(market, symbol, exDate, reason, recordedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is i1.DividendUnresolvedEntry &&
+          other.market == this.market &&
+          other.symbol == this.symbol &&
+          other.exDate == this.exDate &&
+          other.reason == this.reason &&
+          other.recordedAt == this.recordedAt);
+}
+
+class DividendUnresolvedCompanion
+    extends i0.UpdateCompanion<i1.DividendUnresolvedEntry> {
+  final i0.Value<String> market;
+  final i0.Value<String> symbol;
+  final i0.Value<DateTime> exDate;
+  final i0.Value<String> reason;
+  final i0.Value<DateTime> recordedAt;
+  final i0.Value<int> rowid;
+  const DividendUnresolvedCompanion({
+    this.market = const i0.Value.absent(),
+    this.symbol = const i0.Value.absent(),
+    this.exDate = const i0.Value.absent(),
+    this.reason = const i0.Value.absent(),
+    this.recordedAt = const i0.Value.absent(),
+    this.rowid = const i0.Value.absent(),
+  });
+  DividendUnresolvedCompanion.insert({
+    required String market,
+    required String symbol,
+    required DateTime exDate,
+    required String reason,
+    required DateTime recordedAt,
+    this.rowid = const i0.Value.absent(),
+  }) : market = i0.Value(market),
+       symbol = i0.Value(symbol),
+       exDate = i0.Value(exDate),
+       reason = i0.Value(reason),
+       recordedAt = i0.Value(recordedAt);
+  static i0.Insertable<i1.DividendUnresolvedEntry> custom({
+    i0.Expression<String>? market,
+    i0.Expression<String>? symbol,
+    i0.Expression<DateTime>? exDate,
+    i0.Expression<String>? reason,
+    i0.Expression<DateTime>? recordedAt,
+    i0.Expression<int>? rowid,
+  }) {
+    return i0.RawValuesInsertable({
+      if (market != null) 'market': market,
+      if (symbol != null) 'symbol': symbol,
+      if (exDate != null) 'ex_date': exDate,
+      if (reason != null) 'reason': reason,
+      if (recordedAt != null) 'recorded_at': recordedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  i1.DividendUnresolvedCompanion copyWith({
+    i0.Value<String>? market,
+    i0.Value<String>? symbol,
+    i0.Value<DateTime>? exDate,
+    i0.Value<String>? reason,
+    i0.Value<DateTime>? recordedAt,
+    i0.Value<int>? rowid,
+  }) {
+    return i1.DividendUnresolvedCompanion(
+      market: market ?? this.market,
+      symbol: symbol ?? this.symbol,
+      exDate: exDate ?? this.exDate,
+      reason: reason ?? this.reason,
+      recordedAt: recordedAt ?? this.recordedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    if (market.present) {
+      map['market'] = i0.Variable<String>(market.value);
+    }
+    if (symbol.present) {
+      map['symbol'] = i0.Variable<String>(symbol.value);
+    }
+    if (exDate.present) {
+      map['ex_date'] = i0.Variable<DateTime>(exDate.value);
+    }
+    if (reason.present) {
+      map['reason'] = i0.Variable<String>(reason.value);
+    }
+    if (recordedAt.present) {
+      map['recorded_at'] = i0.Variable<DateTime>(recordedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = i0.Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DividendUnresolvedCompanion(')
+          ..write('market: $market, ')
+          ..write('symbol: $symbol, ')
+          ..write('exDate: $exDate, ')
+          ..write('reason: $reason, ')
+          ..write('recordedAt: $recordedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();

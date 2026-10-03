@@ -719,6 +719,7 @@ class UpdateService {
       result = await syncer.syncDistributions(
         today: now,
         maxCalls: ApiConfig.dividendSyncMaxCallsPerRun,
+        dataDate: ctx.normalizedDate,
       );
       AppLogger.info(
         'UpdateService',

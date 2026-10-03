@@ -11,6 +11,7 @@ class ExRightResult {
     required this.cashDividend,
     required this.stockSharesPerThousand,
     this.closeBefore,
+    this.referencePrice,
     this.dividendAdjustedReference,
   });
 
@@ -25,10 +26,15 @@ class ExRightResult {
   /// 每千股無償配股（股）；null＝列表拆不出（TWSE 除權、權息），需查明細
   final double? stockSharesPerThousand;
 
-  /// 除權息前收盤價（TWSE 列表；核對明細用）
+  /// 除權息前收盤價（兩市場列表；還原因子的分母，也用來核對明細）
   final double? closeBefore;
 
-  /// 減除股利參考價：只扣股利、不含現金增資的參考價（TWSE 列表；核對明細用）
+  /// 除權息參考價：交易所訂的除權息後參考價，含現金增資的影響（兩市場
+  /// 列表）。還原因子＝[referencePrice] ÷ [closeBefore]
+  final double? referencePrice;
+
+  /// 減除股利參考價：只扣股利、不含現金增資的參考價（TWSE「權」「權息」
+  /// 列；核對明細用，見 [matchesReference]）
   final double? dividendAdjustedReference;
 
   bool get needsDetail =>
@@ -41,6 +47,7 @@ class ExRightResult {
     cashDividend: detail.cashDividend,
     stockSharesPerThousand: detail.stockSharesPerThousand,
     closeBefore: closeBefore,
+    referencePrice: referencePrice,
     dividendAdjustedReference: dividendAdjustedReference,
   );
 

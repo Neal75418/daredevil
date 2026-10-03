@@ -288,6 +288,40 @@ void main() {
     expect(encodeDividendSymbols(const []), '');
   });
 
+  test('completeDividendMonth 寫下的完成紀錄記為「已存價格」', () async {
+    expect(await complete(expected: const {}), isEmpty);
+    expect(
+      (await db.getDividendMonthLedgerEntries()).single.pricesRecorded,
+      isTrue,
+    );
+  });
+
+  test('updateDividendDistributionPrices：只更新已在庫列的兩欄，不動金額、不新增', () async {
+    await db.upsertDividendDistributions([row('2330', DateTime(2025, 9, 16))]);
+
+    await db.updateDividendDistributionPrices([
+      (
+        symbol: '2330',
+        exDate: DateTime(2025, 9, 16),
+        closeBefore: 1000.0,
+        referencePrice: 995.0,
+      ),
+      (
+        symbol: '6488',
+        exDate: DateTime(2025, 9, 17),
+        closeBefore: 300.0,
+        referencePrice: 297.0,
+      ),
+    ]);
+
+    final stored = (await db.getDividendDistributions('2330')).single;
+    expect(
+      (stored.cashDividend, stored.closeBefore, stored.referencePrice),
+      (1.0, 1000.0, 995.0),
+    );
+    expect(await db.getDividendDistributions('6488'), isEmpty);
+  });
+
   test('月份超出 1–12：資料庫 CHECK 拒絕', () async {
     await expectLater(
       db.customStatement(

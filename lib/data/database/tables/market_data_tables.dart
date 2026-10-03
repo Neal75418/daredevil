@@ -216,6 +216,14 @@ class DividendDistribution extends Table {
   /// 股數才是股東實際配到的量。必填、無預設值（同上）。
   RealColumn get stockSharesPerThousand => real()();
 
+  /// 除權息前收盤價（列表）。還原因子的分母。null＝列表缺值，或 2026-10
+  /// 以前寫入、尚未由回補補價的列
+  RealColumn get closeBefore => real().nullable()();
+
+  /// 除權息參考價（列表）：交易所訂的除權息後參考價，含現金增資的影響。
+  /// 還原因子＝[referencePrice] ÷ [closeBefore]
+  RealColumn get referencePrice => real().nullable()();
+
   @override
   Set<Column> get primaryKey => {symbol, exDate};
 }
@@ -261,6 +269,11 @@ class DividendMonthLedger extends Table {
   /// 當時不在主檔而略過的代號：排序、去重、逗號分隔；沒有則為空字串
   TextColumn get skippedSymbols => text()();
 
+  /// 完成時是否已以列表記錄該月各列的前收盤與除權息參考價。2026-10 以前
+  /// 寫下的紀錄為 false，回補重開這些月份一次（只打列表）補價
+  BoolColumn get pricesRecorded =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {market, year, month};
 }
@@ -292,8 +305,10 @@ class DividendMonthFailure extends Table {
   /// 最後一次失敗的第一個錯誤（截斷至 300 字）
   TextColumn get lastError => text()();
 
-  /// 最後一次失敗時明細查不到的代號：排序、去重、逗號分隔。第 3 段可據此
-  /// 判斷「除了這些代號，這個月其餘都在庫」。
+  /// 最後一次失敗時明細查不到或核對不符的代號：排序、去重、逗號分隔。
+  /// 診斷用，程式不讀（退避看 failCount／lastFailedAt，warning 看
+  /// failCount／lastError）；預算用完而中斷時未查的列也不在這裡，哪些列
+  /// 不在庫要看 `dividend_unresolved`。
   TextColumn get failedSymbols => text()();
 
   /// 最後一次失敗時列表本身是否成功（列表失敗時整月的列都不可信）
@@ -301,6 +316,59 @@ class DividendMonthFailure extends Table {
 
   @override
   Set<Column> get primaryKey => {market, year, month};
+}
+
+/// 除權除息列表已同步到哪一天：一列＝某市場某月的列表已涵蓋到
+/// [listedThrough]（含）
+///
+/// 本月同步與歷史回補在列表成功後寫入（DAO `recordDividendListing`），只能
+/// 連續前進。讀取端的「有效列表日」另把完成紀錄算進去（完成＝列到月底），
+/// 只寫完成紀錄的舊版程式寫下的完成也算數。與 [DividendDistribution] 同生
+/// 共死，不可加進保留白名單。
+@DataClassName('DividendListingEntry')
+class DividendListing extends Table {
+  /// `MarketCode.twse`／`MarketCode.tpex`
+  TextColumn get market => text()();
+
+  /// 西元年
+  IntColumn get year => integer()();
+
+  /// 1–12
+  // Drift 文件的欄位 CHECK 寫法，產生碼處理自我引用，不會遞迴
+  // ignore: recursive_getters
+  IntColumn get month => integer().check(month.isBetweenValues(1, 12))();
+
+  /// 列表已涵蓋到的日期（含），當地午夜
+  DateTimeColumn get listedThrough => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {market, year, month};
+}
+
+/// 列表上有、但不在 [DividendDistribution] 的除權除息列
+///
+/// 列表成功後以範圍內的現況整批取代（DAO `recordDividendListing`）。讀取端
+/// 據此逐檔判斷完整度：清單上的代號在那段期間不完整。與
+/// [DividendDistribution] 同生共死，不可加進保留白名單。
+@DataClassName('DividendUnresolvedEntry')
+class DividendUnresolved extends Table {
+  /// `MarketCode.twse`／`MarketCode.tpex`
+  TextColumn get market => text()();
+
+  /// 不加外鍵：可能是不在股票主檔的代號
+  TextColumn get symbol => text()();
+
+  /// 除權息交易日（當地午夜）
+  DateTimeColumn get exDate => dateTime()();
+
+  /// `DividendUnresolvedReason.code`
+  TextColumn get reason => text()();
+
+  /// 這次判定的時間（台北牆鐘，診斷用）
+  DateTimeColumn get recordedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {market, symbol, exDate};
 }
 
 /// 月營收 Table

@@ -1046,12 +1046,13 @@ class TwseClient {
   /// TWT49U 回應 → 除權除息結果。依欄位名取值。
   ///
   /// 回傳 `[]`＝區間內沒有除權息；`null`＝回應不可信：stat 異常、回應的
-  /// `strDate`/`endDate` 與請求不符、缺必要欄位，或**任何一列**解析不了
-  /// （日期無效、代號空白、類別不明、「息」列金額缺漏、「權」「權息」列缺
-  /// 除權息前收盤價或減除股利參考價——這兩欄用來核對明細，見
-  /// [ExRightResult.matchesReference]）。不略過單列：這是
-  /// 回補歷史的來源，略過的配發之後不會再被抓到；整批拒收讓格式變動變成
-  /// 看得見的錯誤。
+  /// `strDate`/`endDate` 與請求不符、缺必要欄位（含除權息前收盤價、除權息
+  /// 參考價、減除股利參考價），或**任何一列**解析不了（日期無效、代號空白、
+  /// 類別不明、「息」列金額缺漏、「權」「權息」列缺除權息前收盤價或減除股利
+  /// 參考價——這兩欄用來核對明細，見 [ExRightResult.matchesReference]）。
+  /// 不略過單列：這是回補歷史的來源，略過的配發之後不會再被抓到；整批拒收
+  /// 讓格式變動變成看得見的錯誤。前收盤與除權息參考價單列缺值時照收、存
+  /// null：它們只供還原用，讀取端以完整度判斷，不讓一列拖垮整個市場的列表。
   ///
   /// 「權值+息值」是合計：「息」列即每股現金股利；「權」列可能是配股也可能
   /// 只是現金增資、「權息」列現金與配股混在一起，兩者的金額留 null，交給
@@ -1080,8 +1081,17 @@ class TwseClient {
     final valueCol = fields.indexOf('權值+息值');
     final kindCol = fields.indexOf('權/息');
     final closeCol = fields.indexOf('除權息前收盤價');
+    final referenceCol = fields.indexOf('除權息參考價');
     final adjustedCol = fields.indexOf('減除股利參考價');
-    final cols = [dateCol, codeCol, valueCol, kindCol, closeCol, adjustedCol];
+    final cols = [
+      dateCol,
+      codeCol,
+      valueCol,
+      kindCol,
+      closeCol,
+      referenceCol,
+      adjustedCol,
+    ];
     if (cols.any((i) => i < 0)) return null;
     final minLength = cols.reduce(max) + 1;
 
@@ -1092,6 +1102,7 @@ class TwseClient {
       final code = row[codeCol]?.toString().trim() ?? '';
       if (exDate == null || code.isEmpty) return null;
       final close = TwParseUtils.parseFormattedDouble(row[closeCol]);
+      final reference = TwParseUtils.parseFormattedDouble(row[referenceCol]);
       final adjusted = TwParseUtils.parseFormattedDouble(row[adjustedCol]);
       // 需查明細的列要拿這兩欄核對明細，缺了就無從確認
       final canVerify = close != null && adjusted != null;
@@ -1104,6 +1115,8 @@ class TwseClient {
             exDate: exDate,
             cashDividend: cash,
             stockSharesPerThousand: 0,
+            closeBefore: close,
+            referencePrice: reference,
           );
         case '權':
           if (!canVerify) return null;
@@ -1113,6 +1126,7 @@ class TwseClient {
             cashDividend: 0,
             stockSharesPerThousand: null,
             closeBefore: close,
+            referencePrice: reference,
             dividendAdjustedReference: adjusted,
           );
         case '權息':
@@ -1123,6 +1137,7 @@ class TwseClient {
             cashDividend: null,
             stockSharesPerThousand: null,
             closeBefore: close,
+            referencePrice: reference,
             dividendAdjustedReference: adjusted,
           );
         default:

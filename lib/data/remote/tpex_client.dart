@@ -745,7 +745,8 @@ class TpexClient {
   /// `date`（`YYYYMMDD~YYYYMMDD`）與請求不符、缺必要欄位、筆數與
   /// `totalCount` 不符（可能被分頁截斷，部分清單看起來會像完整的），或
   /// **任何一列**解析不了。不略過單列，理由同 TWSE
-  /// `TwseClient.parseExRightResults`。
+  /// `TwseClient.parseExRightResults`。前收盤與除權息參考價為必要欄位；
+  /// 單列缺值時照收、存 null（理由同 TWSE）。
   static List<ExRightResult>? parseExRightResults(
     Map<dynamic, dynamic> json, {
     required DateTime startDate,
@@ -771,7 +772,9 @@ class TpexClient {
     final codeCol = fields.indexOf('代號');
     final cashCol = fields.indexOf('現金股利');
     final sharesCol = fields.indexOf('每仟股無償配股');
-    final cols = [dateCol, codeCol, cashCol, sharesCol];
+    final closeCol = fields.indexOf('除權息前收盤價');
+    final referenceCol = fields.indexOf('除權息參考價');
+    final cols = [dateCol, codeCol, cashCol, sharesCol, closeCol, referenceCol];
     if (cols.any((i) => i < 0)) return null;
     final minLength = cols.reduce((a, b) => a > b ? a : b) + 1;
 
@@ -790,6 +793,8 @@ class TpexClient {
         exDate: exDate,
         cashDividend: cash,
         stockSharesPerThousand: shares,
+        closeBefore: TwParseUtils.parseFormattedDouble(row[closeCol]),
+        referencePrice: TwParseUtils.parseFormattedDouble(row[referenceCol]),
       );
     }
 

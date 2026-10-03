@@ -14,6 +14,7 @@ DividendMonthLedgerEntry _ledger(
   CalendarMonth month, {
   String skipped = '',
   DateTime? completedAt,
+  bool pricesRecorded = true,
 }) => DividendMonthLedgerEntry(
   market: market,
   year: month.year,
@@ -22,6 +23,7 @@ DividendMonthLedgerEntry _ledger(
   listedRows: 10,
   knownRows: 8,
   skippedSymbols: skipped,
+  pricesRecorded: pricesRecorded,
 );
 
 DividendMonthFailureEntry _failure(
@@ -96,6 +98,17 @@ void main() {
         isDividendMonthComplete(
           _ledger(MarketCode.twse, aug, skipped: '00950B,910322'),
           knownSymbols: {'2330', '910322'},
+          currentMonth: current,
+        ),
+        isFalse,
+      );
+    });
+
+    test('完成時尚未記錄價格（2026-10 以前的紀錄）→ 未完成（重開補價）', () {
+      expect(
+        isDividendMonthComplete(
+          _ledger(MarketCode.twse, aug, pricesRecorded: false),
+          knownSymbols: {'2330'},
           currentMonth: current,
         ),
         isFalse,

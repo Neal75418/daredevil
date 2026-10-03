@@ -27,8 +27,10 @@ export 'package:daredevil/data/database/app_database.drift.dart';
 export 'package:daredevil/data/database/dao/price_dao.dart' show PriceCoverage;
 export 'package:daredevil/data/database/dao/dividend_dao.dart'
     show
+        DividendListedPrice,
         DividendMonthLedgerEntryX,
         DividendMonthFailureEntryX,
+        DividendUnresolvedReason,
         encodeDividendSymbols;
 export 'package:daredevil/data/database/tables/stock_master.drift.dart';
 export 'package:daredevil/data/database/tables/daily_price.drift.dart';
@@ -106,6 +108,8 @@ import 'package:daredevil/data/database/dao/valuation_dao.dart';
     DividendDistribution,
     DividendMonthLedger,
     DividendMonthFailure,
+    DividendListing,
+    DividendUnresolved,
     // 融資融券資料（Phase 4）
     MarginTrading,
     // 風險控管資料（Killer Features）
@@ -224,6 +228,8 @@ class AppDatabase extends $AppDatabase
       await _ensureMarketDayFetchSchema();
       await _ensureDividendDistributionSchema();
       await _ensureDividendBackfillSchema();
+      await _ensureDividendPriceColumns();
+      await _ensureDividendFactsSchema();
       await ensurePriceAlertManagedByColumn();
       await _ensureRetiredSchemaDropped();
       await ensureInsiderTransferPk();
@@ -386,6 +392,54 @@ class AppDatabase extends $AppDatabase
   Future<void> _ensureDividendBackfillSchema() async {
     await Migrator(this).createTable(dividendMonthLedger);
     await Migrator(this).createTable(dividendMonthFailure);
+  }
+
+  /// 除權除息完整度事實兩張表（2026-10-03，additive）。
+  ///
+  /// 沿 [_ensureDividendBackfillSchema] 先例：**不 bump fingerprint**，也
+  /// **不加進 [_userInputTableNames]**——reset 時要與 dividend_distribution
+  /// 一起清，否則事實留著、資料沒了，會被讀成「完整而沒配息」。
+  Future<void> _ensureDividendFactsSchema() async {
+    await Migrator(this).createTable(dividendListing);
+    await Migrator(this).createTable(dividendUnresolved);
+  }
+
+  /// 股利配發表補前收盤與除權息參考價、完成紀錄補「已存價格」
+  /// （2026-10-03，additive）。
+  ///
+  /// 沿 [_ensureDealerSelfNetColumn] 先例：PRAGMA 檢查後 ALTER TABLE ADD
+  /// COLUMN，不 bump fingerprint。既有配發列補進來是 null、既有完成紀錄是
+  /// false：回補據此把那些月份重開一次、只打列表補價（見
+  /// `isDividendMonthComplete`）。
+  Future<void> _ensureDividendPriceColumns() async {
+    Future<Set<String>> columnsOf(String table) async => {
+      for (final row in await customSelect("PRAGMA table_info('$table')").get())
+        row.read<String>('name'),
+    };
+
+    final distribution = await columnsOf('dividend_distribution');
+    for (final column in const ['close_before', 'reference_price']) {
+      if (distribution.contains(column)) continue;
+      await customStatement(
+        'ALTER TABLE dividend_distribution ADD COLUMN $column REAL',
+      );
+      AppLogger.info(
+        'AppDatabase',
+        '既有 DB 補上 dividend_distribution.$column 欄（既有列為 null）',
+      );
+    }
+    if (!(await columnsOf(
+      'dividend_month_ledger',
+    )).contains('prices_recorded')) {
+      await customStatement(
+        'ALTER TABLE dividend_month_ledger ADD COLUMN prices_recorded '
+        'INTEGER NOT NULL DEFAULT 0 CHECK (prices_recorded IN (0, 1))',
+      );
+      AppLogger.info(
+        'AppDatabase',
+        '既有 DB 補上 dividend_month_ledger.prices_recorded 欄（既有紀錄為 false）',
+      );
+    }
   }
 
   /// `price_alert` 補 `managed_by` 欄（2026-08-16）。

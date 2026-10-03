@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:intl/intl.dart';
 
 import 'package:daredevil/core/constants/api_config.dart';
+import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/logger.dart';
@@ -10,7 +11,8 @@ import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 
 /// 已拆開現金與配股的除權除息列 → 股利配發表的寫入列（本月同步與歷史回補
-/// 共用）。列表拆不出、尚未補明細的列（[ExRightResult.needsDetail]）不可傳入。
+/// 共用），含列表的前收盤與除權息參考價（見 [_listedPrice]）。列表拆不出、
+/// 尚未補明細的列（[ExRightResult.needsDetail]）不可傳入。
 DividendDistributionCompanion dividendDistributionCompanion(
   ExRightResult row,
 ) => DividendDistributionCompanion.insert(
@@ -18,7 +20,23 @@ DividendDistributionCompanion dividendDistributionCompanion(
   exDate: row.exDate,
   cashDividend: row.cashDividend!,
   stockSharesPerThousand: row.stockSharesPerThousand!,
+  closeBefore: Value(_listedPrice(row.closeBefore)),
+  referencePrice: Value(_listedPrice(row.referencePrice)),
 );
+
+/// 列表上的前收盤與除權息參考價（已在庫列補價用，見
+/// `AppDatabase.updateDividendDistributionPrices`）
+DividendListedPrice dividendListedPrice(ExRightResult row) => (
+  symbol: row.symbol,
+  exDate: row.exDate,
+  closeBefore: _listedPrice(row.closeBefore),
+  referencePrice: _listedPrice(row.referencePrice),
+);
+
+/// 列表價格欄的存法：0 或負值當缺值存 null——還原因子是參考價 ÷ 前收盤，
+/// 0 會讓因子變成 0 或無限大，存 null 讓讀取端判為缺價
+double? _listedPrice(double? value) =>
+    value != null && value > 0 ? value : null;
 
 /// 已宣告股利 + 股東會 + 除權除息同步器
 ///
@@ -257,11 +275,22 @@ class DividendSyncer {
   /// 一般失敗（列表不可信、單列明細不可信）記進 errors 後繼續；
   /// [RateLimitException]／[NetworkException] 往上拋——前者由 UpdateService
   /// 中止本輪，後者記錯誤後續跑。
+  ///
+  /// 各市場列表成功後記錄完整度事實（DAO `recordDividendListing`）：明細被
+  /// 中斷也照記，未查的列以 pendingDetail 留在未解決清單；事實寫入失敗只進
+  /// errors。
+  ///
+  /// [dataDate]：本輪更新的資料日（`UpdateService` 的 `ctx.normalizedDate`）。
+  /// 列表日記 min(今天, [dataDate])——凌晨補跑時資料日是前一個交易日，
+  /// 不可多宣稱一天。省略時為今天。
   Future<DividendDistributionSyncResult> syncDistributions({
     required DateTime today,
     required int maxCalls,
+    DateTime? dataDate,
   }) async {
     final end = DateContext.normalize(today);
+    final dataEnd = dataDate == null ? end : DateContext.normalize(dataDate);
+    final listedThrough = dataEnd.isAfter(end) ? end : dataEnd;
     final monthStart = DateTime(end.year, end.month);
     final overlapStart = end.subtract(
       const Duration(days: ApiConfig.dividendSyncOverlapDays),
@@ -287,6 +316,16 @@ class DividendSyncer {
           for (final row in rows)
             if (knownSymbols.contains(row.symbol)) row,
         ]);
+        await _recordListing(
+          market: MarketCode.tpex,
+          listed: rows,
+          knownSymbols: knownSymbols,
+          from: start,
+          to: end,
+          listedThrough: listedThrough,
+          recordedAt: today,
+          errors: errors,
+        );
       } on RateLimitException {
         rethrow;
       } on NetworkException {
@@ -312,6 +351,10 @@ class DividendSyncer {
           for (final row in known)
             if (!row.needsDetail) row,
         ]);
+        await _db.updateDividendDistributionPrices([
+          for (final row in known)
+            if (row.needsDetail) dividendListedPrice(row),
+        ]);
 
         final processed = await _db.getDividendDistributionKeys(
           from: start,
@@ -323,39 +366,62 @@ class DividendSyncer {
                 !processed.contains((row.symbol, row.exDate)))
               row,
         ];
-        for (final row in pending) {
-          if (calls >= maxCalls) {
-            pendingDetails++;
-            continue;
-          }
-          await Future<void>.delayed(_detailCallDelay);
-          calls++;
-          try {
-            final detail = await _twse.getExRightDetail(row.symbol, row.exDate);
-            if (!row.matchesReference(detail)) {
-              errors.add(
-                'TWSE 除權除息明細 ${row.symbol} '
-                '${_dateFormat.format(row.exDate)}: 明細推算的參考價與列表不符'
-                '（查到的可能是別次除權息）',
-              );
+        final reasons = <(String, DateTime), DividendUnresolvedReason>{};
+        try {
+          for (final row in pending) {
+            if (calls >= maxCalls) {
+              pendingDetails++;
               continue;
             }
-            written += await _writeDistributions([row.withDetail(detail)]);
-          } on RateLimitException {
-            rethrow;
-          } on NetworkException {
-            rethrow;
-          } catch (e) {
-            AppLogger.warning(
-              'DividendSyncer',
-              'TWSE 除權除息明細失敗: ${row.symbol}',
-              e,
-            );
-            errors.add(
-              'TWSE 除權除息明細 ${row.symbol} '
-              '${_dateFormat.format(row.exDate)}: $e',
-            );
+            await Future<void>.delayed(_detailCallDelay);
+            calls++;
+            final key = (row.symbol, row.exDate);
+            try {
+              final detail = await _twse.getExRightDetail(
+                row.symbol,
+                row.exDate,
+              );
+              if (!row.matchesReference(detail)) {
+                reasons[key] = DividendUnresolvedReason.referenceMismatch;
+                errors.add(
+                  'TWSE 除權除息明細 ${row.symbol} '
+                  '${_dateFormat.format(row.exDate)}: 明細推算的參考價與列表不符'
+                  '（查到的可能是別次除權息）',
+                );
+                continue;
+              }
+              written += await _writeDistributions([row.withDetail(detail)]);
+            } on RateLimitException {
+              rethrow;
+            } on NetworkException {
+              rethrow;
+            } catch (e) {
+              reasons[key] = DividendUnresolvedReason.detailFailed;
+              AppLogger.warning(
+                'DividendSyncer',
+                'TWSE 除權除息明細失敗: ${row.symbol}',
+                e,
+              );
+              errors.add(
+                'TWSE 除權除息明細 ${row.symbol} '
+                '${_dateFormat.format(row.exDate)}: $e',
+              );
+            }
           }
+        } finally {
+          // 列表成功就記事實：明細被限流或斷線打斷也要記，未查的列以
+          // pendingDetail 留在未解決清單；本身失敗只進 errors，不蓋過例外
+          await _recordListing(
+            market: MarketCode.twse,
+            listed: rows,
+            knownSymbols: knownSymbols,
+            reasons: reasons,
+            from: start,
+            to: end,
+            listedThrough: listedThrough,
+            recordedAt: today,
+            errors: errors,
+          );
         }
       } on RateLimitException {
         rethrow;
@@ -381,6 +447,42 @@ class DividendSyncer {
       for (final row in rows) dividendDistributionCompanion(row),
     ]);
     return rows.length;
+  }
+
+  /// 記錄完整度事實；失敗只記 errors 與 warning，不往外拋（本月同步的
+  /// 失敗一律進 errors，不中斷其他市場）
+  Future<void> _recordListing({
+    required String market,
+    required List<ExRightResult> listed,
+    required Set<String> knownSymbols,
+    Map<(String, DateTime), DividendUnresolvedReason> reasons = const {},
+    required DateTime from,
+    required DateTime to,
+    required DateTime listedThrough,
+    required DateTime recordedAt,
+    required List<String> errors,
+  }) async {
+    try {
+      await _db.recordDividendListing(
+        market: market,
+        from: from,
+        to: to,
+        listedThrough: listedThrough,
+        listedKnownKeys: {
+          for (final r in listed)
+            if (knownSymbols.contains(r.symbol)) (r.symbol, r.exDate),
+        },
+        notInMasterKeys: {
+          for (final r in listed)
+            if (!knownSymbols.contains(r.symbol)) (r.symbol, r.exDate),
+        },
+        reasons: reasons,
+        recordedAt: recordedAt,
+      );
+    } catch (e) {
+      AppLogger.warning('DividendSyncer', '$market 除權除息完整度紀錄失敗', e);
+      errors.add('$market 除權除息完整度紀錄: $e');
+    }
   }
 
   /// 建立 DividendHistoryCompanion

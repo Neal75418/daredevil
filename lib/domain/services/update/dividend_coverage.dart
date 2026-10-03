@@ -20,13 +20,16 @@ typedef DividendMonthKey = ({String market, CalendarMonth month});
 
 /// 某（市場, 月）的完成紀錄是否仍涵蓋現況：有紀錄、月份早於本月、紀錄是
 /// 在該月結束之後才寫的（月中寫的只涵蓋到寫入當下，下個月起不能當成整月；
-/// 也涵蓋時鐘回撥）、當時略過的代號如今都不在 [knownSymbols]（在市主檔）內。
+/// 也涵蓋時鐘回撥）、當時略過的代號如今都不在 [knownSymbols]（在市主檔）內，
+/// 而且完成時已以列表記錄各列的前收盤與除權息參考價（2026-10 以前的紀錄
+/// 沒有，回補重開一次補價）。
 bool isDividendMonthComplete(
   DividendMonthLedgerEntry? entry, {
   required Set<String> knownSymbols,
   required CalendarMonth currentMonth,
 }) =>
     entry != null &&
+    entry.pricesRecorded &&
     entry.calendarMonth.isBefore(currentMonth) &&
     entry.calendarMonth.isBefore(CalendarMonth.of(entry.completedAt)) &&
     !entry.skippedSymbolSet.any(knownSymbols.contains);
@@ -65,19 +68,15 @@ enum DividendUnitAction {
   skipBackoff,
 }
 
-/// 除權除息歷史的完整度：回補排程、修復工具與讀取端共用的唯一定義
+/// 除權除息歷史的完整度：回補（排程與每輪摘要）與修復工具共用的唯一定義
 ///
 /// 「完整」指完成紀錄的事實仍成立（[isDividendMonthComplete]），不是表裡
 /// 有資料列。事實相對於現在的在市主檔：主檔新收進的代號會讓相關月份暫時
 /// 變成未完成，直到回補重做。
 ///
-/// 給第 3 段讀取端的注意事項：
-/// - 本月沒有完成紀錄，由每輪的本月同步 best effort 維護，**本月缺列不代表
-///   沒配息**；需要本月的確定性時，要另外記錄本月同步的狀態。
-/// - 查個股某段期間要看兩個市場：配發表沒有市場欄，而且有代號在期間內
-///   同時出現在兩個市場的列表。
-/// - 失敗紀錄的 failedSymbols 記著明細查不到的代號，可據此判斷「除了這些
-///   代號，這個月其餘都在庫」。
+/// 讀取端不用這裡的判定：逐檔完整度見 `DividendCompleteness`
+/// （`lib/domain/services/dividend_completeness.dart`），它另外看列表日與
+/// 未解決的列，兩個市場都查。
 class DividendCoverage {
   DividendCoverage._({
     required this.now,

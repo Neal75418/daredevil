@@ -41,13 +41,14 @@ List<String> _twseRow(
   String value,
   String kind, {
   String close = '10.00',
+  String reference = '9.50',
   String adjustedReference = '9.50',
 }) => [
   date,
   code,
   '名稱',
   close,
-  '9.50',
+  reference,
   value,
   kind,
   '11.00',
@@ -136,13 +137,15 @@ List<String> _tpexRow(
   String code,
   String kind,
   String cash,
-  String sharesPerThousand,
-) => [
+  String sharesPerThousand, {
+  String close = '10.00',
+  String reference = '9.50',
+}) => [
   date,
   code,
   '名稱         ',
-  '10.00',
-  '9.50',
+  close,
+  reference,
   '0.000000',
   '0.000000',
   '0.000000',
@@ -500,6 +503,130 @@ void main() {
     });
   });
 
+  group('列表帶出還原用的前收盤與除權息參考價（兩市場、所有列）', () {
+    test('上市息、權、權息列都帶前收盤與除權息參考價（含千分位）', () {
+      final rows = TwseClient.parseExRightResults(
+        _twseBody([
+          _twseRow(
+            '114年03月18日',
+            '2330',
+            '4.500020',
+            '息',
+            close: '1,000.00',
+            reference: '995.50',
+          ),
+          _twseRow(
+            '114年01月05日',
+            '4108',
+            '0.916328',
+            '權',
+            close: '25.20',
+            reference: '24.28',
+          ),
+          _twseRow(
+            '114年01月13日',
+            '2836',
+            '0.600000',
+            '權息',
+            close: '10.60',
+            reference: '10.00',
+          ),
+        ]),
+        startDate: start,
+        endDate: end,
+      )!;
+      expect(
+        [for (final r in rows) (r.closeBefore, r.referencePrice)],
+        [(1000.0, 995.5), (25.2, 24.28), (10.6, 10.0)],
+      );
+    });
+
+    test('上市欄位清單缺除權息參考價：回 null', () {
+      final body = _twseBody([_twseRow('114年03月18日', '2330', '4.500020', '息')]);
+      body['fields'] = [for (final f in _twseFields) f == '除權息參考價' ? '其他' : f];
+      expect(
+        TwseClient.parseExRightResults(body, startDate: start, endDate: end),
+        isNull,
+      );
+    });
+
+    test('上市單列缺值：照收、該欄為 null（不讓一列拖垮整個市場）', () {
+      final r = TwseClient.parseExRightResults(
+        _twseBody([
+          _twseRow(
+            '114年03月18日',
+            '2330',
+            '4.500020',
+            '息',
+            close: '--',
+            reference: '--',
+          ),
+        ]),
+        startDate: start,
+        endDate: end,
+      )!.single;
+      expect(r.cashDividend, 4.50002);
+      expect(r.closeBefore, isNull);
+      expect(r.referencePrice, isNull);
+    });
+
+    test('上櫃列帶前收盤與除權息參考價', () {
+      final r = TpexClient.parseExRightResults(
+        _tpexBody([
+          _tpexRow(
+            '114/06/18',
+            '6762',
+            '除權息',
+            '0.30000000',
+            '150.00000327',
+            close: '1,200.00',
+            reference: '1,043.22',
+          ),
+        ]),
+        startDate: start,
+        endDate: end,
+      )!.single;
+      expect(r.closeBefore, 1200);
+      expect(r.referencePrice, 1043.22);
+    });
+
+    test('上櫃欄位清單缺前收盤或除權息參考價：回 null', () {
+      for (final col in ['除權息前收盤價', '除權息參考價']) {
+        final body = _tpexBody([
+          _tpexRow('114/01/02', '6488', '除息', '3.00000000', '0.00000000'),
+        ]);
+        ((body['tables'] as List).first as Map)['fields'] = [
+          for (final f in _tpexFields) f == col ? '其他' : f,
+        ];
+        expect(
+          TpexClient.parseExRightResults(body, startDate: start, endDate: end),
+          isNull,
+          reason: col,
+        );
+      }
+    });
+
+    test('上櫃單列缺值：照收、該欄為 null', () {
+      final r = TpexClient.parseExRightResults(
+        _tpexBody([
+          _tpexRow(
+            '114/01/02',
+            '6488',
+            '除息',
+            '3.00000000',
+            '0.00000000',
+            close: '--',
+            reference: '--',
+          ),
+        ]),
+        startDate: start,
+        endDate: end,
+      )!.single;
+      expect(r.closeBefore, isNull);
+      expect(r.referencePrice, isNull);
+    });
+  });
+
   group('ExRightResult.withDetail', () {
     ExRightResult twse(String kind) => TwseClient.parseExRightResults(
       _twseBody([_twseRow('114年01月13日', '2836', '0.600000', kind)]),
@@ -516,6 +643,7 @@ void main() {
       expect(r.needsDetail, isFalse);
       expect(r.closeBefore, 10, reason: '核對欄位照原列保留');
       expect(r.dividendAdjustedReference, 9.5);
+      expect(r.referencePrice, 9.5, reason: '除權息參考價照原列保留');
     });
 
     test('權列補上明細：只有現金增資時金額皆 0', () {

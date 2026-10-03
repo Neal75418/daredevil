@@ -181,6 +181,7 @@ class DividendBackfiller {
       listed: rows,
       known: known,
     );
+    await _recordListing(run, key, listed: rows);
   }
 
   Future<void> _processTwse(
@@ -196,6 +197,29 @@ class DividendBackfiller {
       );
     });
     if (rows == null) return;
+    final reasons = <(String, DateTime), DividendUnresolvedReason>{};
+    try {
+      await _processTwseRows(run, key, rows, reasons, recheck: recheck);
+    } finally {
+      // 列表成功就記事實：預算、網路、限流中斷也要記，未查的列以
+      // pendingDetail 留在未解決清單。這裡的 DB 錯誤照常往外拋，並取代正在
+      // 往外傳的中斷：與限流同時發生時本輪記為系統性失敗、不翻限流旗標，
+      // 可接受（兩者都停掉本輪回補，下一輪照常重試）
+      await _recordListing(run, key, listed: rows, reasons: reasons);
+    }
+  }
+
+  /// 上市一個月列表之後的處理：息列寫入、已在庫列補價、權／權息列逐筆查
+  /// 明細與核對，最後記失敗或完成。[reasons] 收集明細失敗與核對不符的列
+  /// （給完整度事實的未解決原因）。
+  Future<void> _processTwseRows(
+    _Run run,
+    DividendMonthKey key,
+    List<ExRightResult> rows,
+    Map<(String, DateTime), DividendUnresolvedReason> reasons, {
+    required bool recheck,
+  }) async {
+    final month = key.month;
     final known = [
       for (final r in rows)
         if (run.knownSymbols.contains(r.symbol)) r,
@@ -203,6 +227,12 @@ class DividendBackfiller {
     await _db.upsertDividendDistributions([
       for (final r in known)
         if (!r.needsDetail) dividendDistributionCompanion(r),
+    ]);
+    // 明細已查過的權／權息列不重查，但以這次列表的值補上前收盤與參考價
+    // （2026-10 以前寫入的列沒有；不在庫的鍵不受影響，查明細時帶著寫入）
+    await _db.updateDividendDistributionPrices([
+      for (final r in known)
+        if (r.needsDetail) dividendListedPrice(r),
     ]);
 
     final processed = recheck
@@ -226,6 +256,8 @@ class DividendBackfiller {
             () => _twse!.getExRightDetail(row.symbol, row.exDate),
           );
         } on _GeneralFailure catch (e) {
+          reasons[(row.symbol, row.exDate)] =
+              DividendUnresolvedReason.detailFailed;
           failedSymbols.add(row.symbol);
           firstError ??= '明細 ${row.symbol}: ${e.cause}';
           if (run.marketStops.containsKey(key.market)) break;
@@ -235,6 +267,8 @@ class DividendBackfiller {
           // recheck 時 DB 可能有舊列（例如核對上線前寫入的）：刪掉，否則
           // 下一輪把它當成已處理、不查明細就記完成
           await _db.deleteDividendDistribution(row.symbol, row.exDate);
+          reasons[(row.symbol, row.exDate)] =
+              DividendUnresolvedReason.referenceMismatch;
           failedSymbols.add(row.symbol);
           firstError ??= '明細 ${row.symbol}: 推算的參考價與列表不符';
           _countFailure(run, key.market);
@@ -262,6 +296,29 @@ class DividendBackfiller {
     }
     await _complete(run, key, rows: const [], listed: rows, known: known);
   }
+
+  /// 記錄這個（市場, 月）的完整度事實：列到月底，未解決的列由 DB 現況推導
+  Future<void> _recordListing(
+    _Run run,
+    DividendMonthKey key, {
+    required List<ExRightResult> listed,
+    Map<(String, DateTime), DividendUnresolvedReason> reasons = const {},
+  }) => _db.recordDividendListing(
+    market: key.market,
+    from: key.month.firstDay,
+    to: key.month.lastDay,
+    listedThrough: key.month.lastDay,
+    listedKnownKeys: {
+      for (final r in listed)
+        if (run.knownSymbols.contains(r.symbol)) (r.symbol, r.exDate),
+    },
+    notInMasterKeys: {
+      for (final r in listed)
+        if (!run.knownSymbols.contains(r.symbol)) (r.symbol, r.exDate),
+    },
+    reasons: reasons,
+    recordedAt: run.now,
+  );
 
   Future<void> _recordDetailFailures(
     _Run run,

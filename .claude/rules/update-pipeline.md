@@ -208,9 +208,20 @@ TDCC holding、dividend、insider transfer、quarterly report。
   `tool/backfill_dividend_distributions.dart` 一次補完（不設上限、不理退避，
   共用同一個 `DividendBackfiller`；逐月呼叫，斷路器計數跨月累計，被斷路器或
   網路錯誤停掉的市場在之後的月份也不再處理）
-- ⚠️ 三張表（`dividend_distribution`、`dividend_month_ledger`、
-  `dividend_month_failure`）同生共死：fingerprint reset 一起清空；若之後加
-  保留期清理，三張表的規則必須一致——只刪配發資料而留下完成紀錄，缺洞會被
+- 配發表另存列表的**前收盤價與除權息參考價**（`close_before`、`reference_price`；
+  還原因子＝參考價 ÷ 前收盤，含現金增資）。完成紀錄的 `prices_recorded` 為 false
+  （2026-10 以前寫的）時回補重開該月一次、只打列表補價；明細已在庫的權／權息列以
+  `updateDividendDistributionPrices` 補價，不重查
+- **完整度事實**：本月同步與回補在列表成功後以一個 transaction 寫
+  `dividend_listing`（列表已同步到哪一天；本月同步記 min(今天, 資料日)，只能連續前進）
+  與 `dividend_unresolved`（列表上有、不在配發表的列與原因，由 DB 現況推導、範圍內
+  整批取代）。明細中斷（預算、網路、限流）也照記，未查的列為 `pendingDetail`；本月
+  同步的事實寫入失敗只進 errors。讀取端一律用 `DividendCompleteness`
+  （`lib/domain/services/dividend_completeness.dart`）：兩個市場都查，有效列表日把
+  完成紀錄算成列到月底
+- ⚠️ 五張表（`dividend_distribution`、`dividend_month_ledger`、`dividend_month_failure`、
+  `dividend_listing`、`dividend_unresolved`）同生共死：fingerprint reset 一起清空；若之後
+  加保留期清理，五張表的規則必須一致——只刪配發資料而留下完成紀錄或事實，缺洞會被
   當成已完成、永遠補不回來
 
 ### 3 Helpers
