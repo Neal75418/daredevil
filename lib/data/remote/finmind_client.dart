@@ -549,20 +549,6 @@ class FinMindClient {
     fromJson: FinMindRevenue.tryFromJson,
   );
 
-  /// 取得股利資料
-  ///
-  /// 資料集: TaiwanStockDividend
-  Future<List<FinMindDividend>> getDividends({
-    required String stockId,
-    String? startDate,
-  }) => _fetchDateRange(
-    dataset: 'TaiwanStockDividend',
-    stockId: stockId,
-    // 未指定時預設為 5 年前
-    startDate: startDate ?? '${DateTime.now().year - 5}-01-01',
-    fromJson: FinMindDividend.tryFromJson,
-  );
-
   /// 取得本益比/股價淨值比資料
   ///
   /// 資料集: TaiwanStockPER

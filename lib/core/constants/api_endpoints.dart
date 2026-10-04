@@ -202,11 +202,6 @@ abstract final class ApiEndpoints {
   static const String tpexStockInfo =
       '$tpexOpenApiBaseUrl/v1/mopsfin_t187ap03_O';
 
-  /// 上櫃已宣告股利 - OpenAPI（免費、無限制）
-  /// 回傳已宣告的除權息資料，含除息交易日、現金/股票股利
-  static const String tpexDeclaredDividend =
-      '$tpexOpenApiBaseUrl/v1/mopsfin_t187ap39_O';
-
   /// 上櫃股東會日程 - OpenAPI（免費、無限制）
   /// 回傳股東會開會日期、地點、是否改選董監、電子投票
   static const String tpexShareholderMeeting =

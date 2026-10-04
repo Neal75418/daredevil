@@ -163,39 +163,10 @@ class HoldingDistribution extends Table {
   Set<Column> get primaryKey => {symbol, date, level};
 }
 
-/// 股利歷史 Table
-///
-/// 儲存歷年現金股利、股票股利、除權息日期
-@DataClassName('DividendHistoryEntry')
-class DividendHistory extends Table {
-  /// 股票代碼
-  TextColumn get symbol =>
-      text().references(StockMaster, #symbol, onDelete: KeyAction.cascade)();
-
-  /// 股利所屬年度
-  IntColumn get year => integer()();
-
-  /// 現金股利（元）
-  RealColumn get cashDividend => real().withDefault(const Constant(0))();
-
-  /// 股票股利（元）
-  RealColumn get stockDividend => real().withDefault(const Constant(0))();
-
-  /// 除息日（格式: yyyy-MM-dd）
-  TextColumn get exDividendDate => text().nullable()();
-
-  /// 除權日（格式: yyyy-MM-dd）
-  TextColumn get exRightsDate => text().nullable()();
-
-  @override
-  Set<Column> get primaryKey => {symbol, year};
-}
-
 /// 股利配發 Table：一次除權息一列
 ///
 /// 來源為 TWSE 除權除息計算結果表（TWT49U／TWT49UDetail）與 TPEx
-/// exDailyQ，皆可回溯歷史、附除權息交易日。季配、半年配、月配各期分列
-/// （[DividendHistory] 以 (symbol, year) 為 PK，同年多次配息會互相覆蓋）。
+/// exDailyQ，皆可回溯歷史、附除權息交易日。季配、半年配、月配各期分列。
 ///
 /// 只有現金增資的除權不是股利，但也寫入（金額皆 0）：有這列＝這次除權息
 /// 已處理過，同步才不會對它重查 TWT49UDetail。畫面讀取端查詢（DAO 的

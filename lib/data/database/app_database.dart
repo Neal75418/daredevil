@@ -103,8 +103,7 @@ import 'package:daredevil/data/database/dao/valuation_dao.dart';
     // 基本面資料（Phase 3）
     MonthlyRevenue,
     StockValuation,
-    // 股利歷史
-    DividendHistory,
+    // 股利（除權除息配發與完整度事實）
     DividendDistribution,
     DividendMonthLedger,
     DividendMonthFailure,
@@ -527,7 +526,6 @@ class AppDatabase extends $AppDatabase
     'idx_day_trading_symbol',
     'idx_financial_data_symbol',
     'idx_holding_dist_symbol',
-    'idx_dividend_history_symbol',
     'idx_monthly_revenue_symbol',
     'idx_stock_valuation_symbol',
     'idx_margin_trading_symbol',
@@ -542,6 +540,8 @@ class AppDatabase extends $AppDatabase
     'idx_daily_institutional_symbol_date', // = PK,雙重冗餘
     // daily_recommendation 兩條已無須列管(2026-08-15 健檢:整張表 DROP,
     // 索引隨表消失;見 _ensureRetiredSchemaDropped)
+    // idx_dividend_history_symbol 2026-10 隨 dividend_history 退役(整張表
+    // DROP,索引隨表消失)
   ];
 
   /// Pre-launch idempotent 加欄：為既有 DB 補上 `rule_accuracy.distinct_dates`。
@@ -578,8 +578,14 @@ class AppDatabase extends $AppDatabase
   /// 殭屍表與 `insider_holding` 三個 production 永遠 NULL 的欄位,已自 schema
   /// 宣告移除;此路徑清掉既有 DB 的殘留。
   ///
+  /// 2026-10 加入 `dividend_history`：跟上面三張不同，它有資料（2026-10-04
+  /// live 3,557 列），但讀取端已全部改讀 `dividend_distribution`、同步也不再
+  /// 寫它，沒有人讀。更早編出的 GUI／CLI 在更新時仍會寫它，表刪掉後那一步
+  /// 記錯誤（`no such table`）；revert 這次移除也不會把表建回來。
+  ///
   /// 沿 [_ensureDealerSelfNetColumn] 先例:**不 bump fingerprint**——指紋變更
-  /// 會 wipe 全部非白名單表(59.7 萬列價格),而這裡刪的東西實測零價值。
+  /// 會 wipe 全部非白名單表(59.7 萬列價格),而這裡刪的東西都已沒有讀取者
+  /// (三張殭屍表與三欄實測為空)。
   ///
   /// **彩排實證**(2026-08-15,真實 DDL 跑 production 副本):三表各 0 列、
   /// 三欄非 NULL 列數 0、DDL 後六項基準指標(價格/自選/警示/事件/新聞/設定)
@@ -594,6 +600,7 @@ class AppDatabase extends $AppDatabase
         'daily_recommendation',
         'recommendation_validation',
         'screening_strategy_table',
+        'dividend_history',
       ]) {
         await customStatement('DROP TABLE IF EXISTS $table');
       }
@@ -759,6 +766,11 @@ class AppDatabase extends $AppDatabase
   ///
   /// 例外：純新增、不動既有表的 table 可比照 `_ensureQuarterlyReportSchema`
   /// 用 `Migrator.createTable` 補建而不 bump（2026-08-06 起的先例）。
+  ///
+  /// 例外：退役的表或欄位加進 [_ensureRetiredSchemaDropped] 就地 DROP 而不
+  /// bump（2026-08-15 起的先例）——bump 會 wipe 價格等全部非白名單表。退役的
+  /// 欄位須可為 NULL 或有預設值：清理是 fail-soft，DROP COLUMN 失敗時欄位會
+  /// 留著，之後不帶這欄的寫入不能因此失敗。
   ///
   /// 字串值是不透明的，只要跟前一個版本不同就會觸發 reset。建議用
   /// `<stage>-<feature>-<date>` 格式，方便看 git blame 追歷史。

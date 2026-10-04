@@ -43,8 +43,8 @@ mixin EventDaoMixin on $AppDatabase {
   }
 
   /// 批次新增事件(2026-08-01 smell 掃描 Tier 1:producers 重建動輒
-  /// 百餘筆,逐筆 await 是 N+1;比照 [DividendDaoMixin.insertDividendData]
-  /// 的 batch 慣例)
+  /// 百餘筆,逐筆 await 是 N+1;比照 DAO 既有的 batch 慣例,如
+  /// [DividendDaoMixin.upsertDividendDistributions])
   Future<void> insertStockEvents(List<StockEventCompanion> entries) async {
     if (entries.isEmpty) return;
     await batch((b) {

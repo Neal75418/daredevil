@@ -1116,47 +1116,6 @@ class TpexClient {
     }
   }
 
-  /// 取得上櫃已宣告股利
-  ///
-  /// 使用 TPEX OpenAPI (mopsfin_t187ap39_O)。
-  /// 回傳所有已宣告的除權息資料，含除息交易日、現金/股票股利。
-  Future<List<TpexDeclaredDividend>> getDeclaredDividends() {
-    return MarketClientMixin.executeRequest(_tag, '已宣告股利', () async {
-      const cacheKey = 'declaredDividend';
-      final cached = _cache.get(cacheKey) as List<TpexDeclaredDividend>?;
-      if (cached != null) return cached;
-
-      final response = await _dio.get(
-        ApiEndpoints.tpexDeclaredDividend,
-        options: Options(headers: {'Accept': 'application/json'}),
-      );
-
-      if (response.statusCode != 200) {
-        throw ApiException(
-          '$_tag OpenAPI error: ${response.statusCode}',
-          response.statusCode,
-        );
-      }
-
-      final data = response.data;
-      if (data is! List) {
-        AppLogger.warning(_tag, '已宣告股利: 非預期資料型別');
-        return [];
-      }
-
-      final results = <TpexDeclaredDividend>[];
-      for (final item in data) {
-        if (item is! Map<String, dynamic>) continue;
-        final parsed = TpexDeclaredDividend.tryFromJson(item);
-        if (parsed != null) results.add(parsed);
-      }
-
-      AppLogger.info(_tag, '已宣告股利: ${results.length} 筆');
-      _cache.put(cacheKey, results);
-      return results;
-    });
-  }
-
   /// 取得上櫃內部人股權轉讓申報資料
   ///
   /// 使用 TPEX OpenAPI (t187ap12_O)。

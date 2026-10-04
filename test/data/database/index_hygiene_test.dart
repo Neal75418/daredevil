@@ -66,7 +66,6 @@ void main() {
     'idx_day_trading_symbol': 'day_trading (symbol)',
     'idx_financial_data_symbol': 'financial_data (symbol)',
     'idx_holding_dist_symbol': 'holding_distribution (symbol)',
-    'idx_dividend_history_symbol': 'dividend_history (symbol)',
     'idx_monthly_revenue_symbol': 'monthly_revenue (symbol)',
     'idx_stock_valuation_symbol': 'stock_valuation (symbol)',
     'idx_margin_trading_symbol': 'margin_trading (symbol)',
@@ -79,6 +78,8 @@ void main() {
     'idx_daily_institutional_symbol_date': 'daily_institutional (symbol, date)',
     // (daily_recommendation 兩條已隨表退役刪除,2026-08-15 健檢:
     // 表被 DROP 時索引一併消失,fixture 無法也無需再建)
+    // (idx_dividend_history_symbol 2026-10 隨 dividend_history 退役刪除,
+    // 理由同上)
   };
 
   test('不變量:drop 清單與現行宣告索引零交集(分類錯誤即紅)', () async {

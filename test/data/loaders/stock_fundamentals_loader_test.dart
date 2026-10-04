@@ -456,7 +456,7 @@ void main() {
   // ==========================================
   //
   // 編碼標準:RateLimitException 必須 rethrow。限流是全域狀態——營收限流
-  // 了,後面股利/估值的 API call 也會限流,繼續 fallback 只是燒重試;吞掉
+  // 了,後面估值的 API call 也會限流,繼續 fallback 只是燒重試;吞掉
   // 則 UI 顯示「部分基本面資料暫無法取得」的誤導文案。rethrow 後 caller
   // (stock_detail_provider)既有 catch 會把真實限流文案寫進
   // fundamentalsError,不影響整頁其他區塊。

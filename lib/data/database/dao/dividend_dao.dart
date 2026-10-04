@@ -4,27 +4,8 @@ import 'package:daredevil/core/utils/calendar_month.dart';
 import 'package:daredevil/data/database/app_database.drift.dart';
 import 'package:daredevil/data/database/tables/market_data_tables.drift.dart';
 
-/// 股利歷史操作
+/// 股利操作：除權除息配發、逐月完成／失敗紀錄、完整度事實
 mixin DividendDaoMixin on $AppDatabase {
-  /// 取得股票的股利歷史（依年度降冪排序）
-  Future<List<DividendHistoryEntry>> getDividendHistory(String symbol) {
-    return (select(dividendHistory)
-          ..where((t) => t.symbol.equals(symbol))
-          ..orderBy([(t) => OrderingTerm.desc(t.year)]))
-        .get();
-  }
-
-  /// 批次新增股利資料
-  Future<void> insertDividendData(
-    List<DividendHistoryCompanion> entries,
-  ) async {
-    await batch((b) {
-      for (final entry in entries) {
-        b.insert(dividendHistory, entry, mode: InsertMode.insertOrReplace);
-      }
-    });
-  }
-
   /// 寫入除權除息（一次一列，含金額皆 0 的已處理列）。同一除息日重抓以
   /// 新值覆蓋。
   Future<void> upsertDividendDistributions(
@@ -373,25 +354,6 @@ mixin DividendDaoMixin on $AppDatabase {
   Expression<bool> _isDistribution($DividendDistributionTable t) =>
       t.cashDividend.isBiggerThanValue(0) |
       t.stockSharesPerThousand.isBiggerThanValue(0);
-
-  /// 批次取得多檔股票的股利歷史
-  Future<Map<String, List<DividendHistoryEntry>>> getDividendHistoryBatch(
-    List<String> symbols,
-  ) async {
-    if (symbols.isEmpty) return {};
-
-    final result =
-        await (select(dividendHistory)
-              ..where((t) => t.symbol.isIn(symbols))
-              ..orderBy([(t) => OrderingTerm.desc(t.year)]))
-            .get();
-
-    final map = <String, List<DividendHistoryEntry>>{};
-    for (final entry in result) {
-      map.putIfAbsent(entry.symbol, () => []).add(entry);
-    }
-    return map;
-  }
 }
 
 /// 失敗紀錄保存的錯誤訊息長度上限（完整錯誤進回補摘要，這裡只供診斷）

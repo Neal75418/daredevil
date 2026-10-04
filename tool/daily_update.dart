@@ -24,7 +24,7 @@
 // ## 環境變數
 //
 //   FINMIND_TOKEN  必填（沒設只能跑免費 TWSE 資料、新聞 / EPS / 月營收
-//                  / 股利等會 skip）。launchd 不讀 ~/.zshrc — plist 以
+//                  等會 skip）。launchd 不讀 ~/.zshrc — plist 以
 //                  `zsh -c 'source ~/.zshrc; …'` 顯式載入 rc 拿 token。
 //
 // ## DB 路徑

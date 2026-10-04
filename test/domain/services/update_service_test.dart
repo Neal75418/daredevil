@@ -784,7 +784,6 @@ void main() {
       ).thenAnswer((_) async => {});
       // 股利路徑成功（回空清單）
       when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
-      when(() => mockTpex.getDeclaredDividends()).thenAnswer((_) async => []);
       when(() => mockTpex.getShareholderMeetings()).thenAnswer((_) async => []);
       when(
         () => mockTpex.getExRightResults(
@@ -804,17 +803,16 @@ void main() {
       expect(result.errors, anyElement(contains('內部人轉讓')));
     });
 
-    test('股利 syncer 內部收集的錯誤應轉發到 result.errors', () async {
+    test('股東會同步內部收集的錯誤應轉發到 result.errors', () async {
       final mockTpex = MockTpexClient();
       when(
         () => mockTdcc.getAllHoldingDistribution(),
       ).thenAnswer((_) async => {});
       when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
-      // 股利來源 generic 失敗 → DividendSyncer 收進自身 result.errors（不 throw）
+      // 股東會來源 generic 失敗 → DividendSyncer 收進自身 result.errors（不 throw）
       when(
-        () => mockTpex.getDeclaredDividends(),
+        () => mockTpex.getShareholderMeetings(),
       ).thenThrow(Exception('payload broken'));
-      when(() => mockTpex.getShareholderMeetings()).thenAnswer((_) async => []);
       when(() => mockTpex.getInsiderTransfers()).thenAnswer((_) async => []);
       when(
         () => mockTpex.getExRightResults(
@@ -827,8 +825,8 @@ void main() {
       final result = await service.runDailyUpdate(forDate: tradingDay);
 
       expect(result.success, isTrue);
-      // DividendSyncResult.errors 必須被 caller 讀取並轉發，否則靜默
-      expect(result.errors, anyElement(contains('股利')));
+      // ShareholderMeetingSyncResult.errors 必須被 caller 讀取並轉發，否則靜默
+      expect(result.errors, anyElement(startsWith('股東會同步失敗')));
     });
 
     test('除權除息同步內部收集的錯誤應轉發到 result.errors', () async {
@@ -837,7 +835,6 @@ void main() {
         () => mockTdcc.getAllHoldingDistribution(),
       ).thenAnswer((_) async => {});
       when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
-      when(() => mockTpex.getDeclaredDividends()).thenAnswer((_) async => []);
       when(() => mockTpex.getShareholderMeetings()).thenAnswer((_) async => []);
       when(() => mockTpex.getInsiderTransfers()).thenAnswer((_) async => []);
       // 除權除息來源 generic 失敗 → syncDistributions 收進自身 errors（不 throw）
@@ -868,7 +865,6 @@ void main() {
         () => mockTdcc.getAllHoldingDistribution(),
       ).thenAnswer((_) async => {});
       when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
-      when(() => mockTpex.getDeclaredDividends()).thenAnswer((_) async => []);
       when(() => mockTpex.getShareholderMeetings()).thenAnswer((_) async => []);
       when(() => mockTpex.getInsiderTransfers()).thenAnswer((_) async => []);
       when(
@@ -886,14 +882,14 @@ void main() {
       expect(result.errors, anyElement(contains('除權除息同步失敗')));
     });
 
-    test('已宣告股利撞到限流：不再打除權除息', () async {
+    test('股東會撞到限流：不再打除權除息', () async {
       final mockTpex = MockTpexClient();
       when(
         () => mockTdcc.getAllHoldingDistribution(),
       ).thenAnswer((_) async => {});
       when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
       when(
-        () => mockTpex.getDeclaredDividends(),
+        () => mockTpex.getShareholderMeetings(),
       ).thenThrow(const RateLimitException('redirect loop'));
 
       final service = buildService(tpex: mockTpex);
@@ -913,7 +909,6 @@ void main() {
         () => mockTdcc.getAllHoldingDistribution(),
       ).thenAnswer((_) async => {});
       when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
-      when(() => mockTpex.getDeclaredDividends()).thenAnswer((_) async => []);
       when(() => mockTpex.getShareholderMeetings()).thenAnswer((_) async => []);
       when(
         () => mockTpex.getExRightResults(
@@ -929,16 +924,17 @@ void main() {
       expect(result.errors, anyElement(contains('除權除息同步中止')));
     });
 
-    test('已宣告股利拋網路錯誤：除權除息仍照常同步（兩者分開 try）', () async {
+    test('股東會拋網路錯誤：除權除息仍照常同步（兩者分開 try）', () async {
       final mockTpex = MockTpexClient();
       when(
         () => mockTdcc.getAllHoldingDistribution(),
       ).thenAnswer((_) async => {});
       when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
-      // sync() 對 NetworkException rethrow → UpdateService 記錯誤後繼續
+      // syncShareholderMeetings() 對 NetworkException rethrow → UpdateService
+      // 記錯誤後繼續
       when(
-        () => mockTpex.getDeclaredDividends(),
-      ).thenThrow(const NetworkException('t187ap45 timeout'));
+        () => mockTpex.getShareholderMeetings(),
+      ).thenThrow(const NetworkException('ap41 timeout'));
       when(() => mockTpex.getInsiderTransfers()).thenAnswer((_) async => []);
       when(
         () => mockTpex.getExRightResults(
@@ -950,7 +946,7 @@ void main() {
       final service = buildService(tpex: mockTpex);
       final result = await service.runDailyUpdate(forDate: tradingDay);
 
-      expect(result.errors, anyElement(contains('股利/股東會')));
+      expect(result.errors, anyElement(startsWith('股東會同步失敗')));
       verify(
         () => mockTpex.getExRightResults(
           startDate: any(named: 'startDate'),
@@ -1711,7 +1707,6 @@ void main() {
           to: any(named: 'to'),
         ),
       ).thenAnswer((_) async => {});
-      when(() => tpex.getDeclaredDividends()).thenAnswer((_) async => []);
       when(() => tpex.getShareholderMeetings()).thenAnswer((_) async => []);
       when(() => tpex.getInsiderTransfers()).thenAnswer((_) async => []);
       when(
@@ -2071,7 +2066,6 @@ void main() {
         ).thenAnswer((_) async => {});
         when(() => mockDb.getAllActiveStocks()).thenAnswer((_) async => []);
         stubDividendDb();
-        when(() => mockTpex.getDeclaredDividends()).thenAnswer((_) async => []);
         when(
           () => mockTpex.getShareholderMeetings(),
         ).thenAnswer((_) async => []);

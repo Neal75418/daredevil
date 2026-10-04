@@ -1,5 +1,5 @@
-// 個股頁股利摘要的載入：只讀 DB（配發表、完整度事實、股票名稱），不打
-// FinMind 股利 API；資料不完整是摘要裡的建置中，只有讀取失敗回 null
+// 個股頁股利摘要的載入：只讀 DB（配發表、完整度事實、股票名稱）；資料
+// 不完整是摘要裡的建置中，只有讀取失敗回 null
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -82,7 +82,7 @@ void main() {
     }
   }
 
-  test('配發表＋完整度事實 → 摘要；不打 FinMind 股利 API', () async {
+  test('配發表＋完整度事實 → 摘要', () async {
     await seedFacts();
     await db.upsertDividendDistributions([
       DividendDistributionCompanion.insert(
@@ -105,14 +105,6 @@ void main() {
     final average = summary.average as DividendAverageValue;
     expect(average.fromYear, 2025);
     expect(average.cash, 5);
-    // 兩種呼叫形狀都驗：mocktail 依具名參數的組合比對
-    verifyNever(() => finMind.getDividends(stockId: any(named: 'stockId')));
-    verifyNever(
-      () => finMind.getDividends(
-        stockId: any(named: 'stockId'),
-        startDate: any(named: 'startDate'),
-      ),
-    );
   });
 
   test('名稱帶 *：摘要不假設面額 10 元', () async {

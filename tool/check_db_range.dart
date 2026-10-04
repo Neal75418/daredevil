@@ -31,7 +31,6 @@ const _tableGroups = <String, List<String>>{
     'shareholding',
     'trading_warning',
     'financial_data',
-    'dividend_history',
     'insider_holding',
     'insider_transfer',
     'holding_distribution',

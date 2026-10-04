@@ -525,7 +525,6 @@ abstract final class DataRetentionPolicy {
     'price_alert': _keepAll,
     'pinned_thesis': _keepAll,
     'monthly_revenue': _keepAll, // 歷史最高營收讀全部（`revenue_dao.dart:322-337`）
-    'dividend_history': _keepAll,
     'insider_transfer': _keepAll,
     'portfolio_position': _keepAll,
     'portfolio_transaction': _keepAll,

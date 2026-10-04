@@ -11,6 +11,9 @@
 // 上線前彩排(真實 production 副本,2026-08-15):DDL 0.03 秒、六項基準
 // 指標逐項一致、integrity_check ok;完整 beforeOpen 走一遍後價格
 // 597,539 列全數存活。本測試把該保證固化成迴歸守門。
+//
+// 2026-10：舊股利表 dividend_history 加入退役清單——讀取端已全部改讀
+// dividend_distribution，同步也不再寫它。
 import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNull;
@@ -30,7 +33,8 @@ void main() {
 
   tearDown(() => tempDir.deleteSync(recursive: true));
 
-  /// 模擬「退役前的既有 DB」:三張表 + insider 三欄都還在
+  /// 模擬「退役前的既有 DB」:三張表 + insider 三欄 + 舊股利表都還在,另有
+  /// 使用者與 derived 資料各一份、股利配發一列
   Future<void> buildLegacyDb() async {
     final db = AppDatabase(NativeDatabase(dbFile));
     await db.customSelect('SELECT 1').get();
@@ -90,6 +94,28 @@ void main() {
             insiderRatio: const Value(12.3),
           ),
         );
+    // 退役前的舊股利表一列 + 五張股利表之一的一列,驗證刪舊表不波及新表
+    await db.customStatement(
+      'CREATE TABLE IF NOT EXISTS dividend_history ('
+      'symbol TEXT NOT NULL REFERENCES stock_master (symbol) '
+      'ON DELETE CASCADE, year INTEGER NOT NULL, '
+      'cash_dividend REAL NOT NULL DEFAULT 0, '
+      'stock_dividend REAL NOT NULL DEFAULT 0, '
+      'ex_dividend_date TEXT, ex_rights_date TEXT, '
+      'PRIMARY KEY (symbol, year))',
+    );
+    await db.customStatement(
+      'INSERT INTO dividend_history (symbol, year, cash_dividend) '
+      "VALUES ('2330', 2025, 18.0)",
+    );
+    await db.upsertDividendDistributions([
+      DividendDistributionCompanion.insert(
+        symbol: '2330',
+        exDate: DateTime(2026, 9, 16),
+        cashDividend: 7,
+        stockSharesPerThousand: 0,
+      ),
+    ]);
     await db.close();
   }
 
@@ -118,6 +144,29 @@ void main() {
     expect(tables, isNot(contains('daily_recommendation')));
     expect(tables, isNot(contains('recommendation_validation')));
     expect(tables, isNot(contains('screening_strategy_table')));
+    await db.close();
+  });
+
+  test('🚨 既有 DB 重開：舊股利表 dividend_history 清除，股利配發表不動', () async {
+    await buildLegacyDb();
+
+    final db = AppDatabase(NativeDatabase(dbFile));
+    await db.customSelect('SELECT 1').get();
+
+    expect(await tableNames(db), isNot(contains('dividend_history')));
+    expect(await db.getDividendDistributions('2330'), hasLength(1));
+    await db.close();
+  });
+
+  test('新裝機：schema 不再建 dividend_history', () async {
+    final db = AppDatabase(NativeDatabase(dbFile));
+    await db.customSelect('SELECT 1').get();
+
+    expect(await tableNames(db), isNot(contains('dividend_history')));
+    expect(
+      db.allTables.map((t) => t.actualTableName),
+      isNot(contains('dividend_history')),
+    );
     await db.close();
   });
 
@@ -171,6 +220,7 @@ void main() {
       final db = AppDatabase(NativeDatabase(dbFile));
       await db.customSelect('SELECT 1').get();
       expect(await tableNames(db), isNot(contains('daily_recommendation')));
+      expect(await tableNames(db), isNot(contains('dividend_history')));
       await db.close();
     }
   });

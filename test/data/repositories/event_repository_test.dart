@@ -340,9 +340,9 @@ void main() {
   });
 
   // syncDividendEvents 的行為測試已隨 2026-08-01 換源重寫搬遷至
-  // event_repository_exright_test.dart(資料源由 dividend_history 改為
+  // event_repository_exright_test.dart(資料源由舊股利表改為
   // TWSE/TPEx 除權息預告表,舊測試斷言的是已移除的 watchlist-scoped
-  // dividend_history 讀取行為)。
+  // 舊股利表讀取行為)。
   group('syncDividendEvents(換源後)', () {
     test('client 未注入回零、不動既有事件', () async {
       final result = await repository.syncDividendEvents();

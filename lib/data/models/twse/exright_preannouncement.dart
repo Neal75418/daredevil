@@ -5,8 +5,8 @@ import 'package:daredevil/core/utils/tw_parse_utils.dart';
 /// 兩端點欄位名不同但語意同構：民國緊湊日期＋代碼＋類別（TWSE：息/權/權息；
 /// TPEx：除息/除權/除權息——「含息/權字」的判定對兩者皆成立）。
 /// 這是行事曆除權息事件的**唯一資料源**：大宗「已宣告股利」只帶金額不帶
-/// 日期，dividend_history 的 (symbol, year) 主鍵也裝不下季配息一年多個
-/// 除息日（見 EventRepository.syncDividendEvents）。
+/// 日期；除權除息配發表（dividend_distribution）只有已發生的除權息，
+/// 沒有預告（見 EventRepository.syncDividendEvents）。
 class ExRightPreannouncement {
   const ExRightPreannouncement({
     required this.symbol,

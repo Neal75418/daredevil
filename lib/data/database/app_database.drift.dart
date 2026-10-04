@@ -53,8 +53,6 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
   late final i7.$StockValuationTable stockValuation = i7.$StockValuationTable(
     this,
   );
-  late final i7.$DividendHistoryTable dividendHistory = i7
-      .$DividendHistoryTable(this);
   late final i7.$DividendDistributionTable dividendDistribution = i7
       .$DividendDistributionTable(this);
   late final i7.$DividendMonthLedgerTable dividendMonthLedger = i7
@@ -113,7 +111,6 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
     holdingDistribution,
     monthlyRevenue,
     stockValuation,
-    dividendHistory,
     dividendDistribution,
     dividendMonthLedger,
     dividendMonthFailure,
@@ -278,13 +275,6 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
         'stock_master',
         limitUpdateKind: i0.UpdateKind.delete,
       ),
-      result: [i0.TableUpdate('dividend_history', kind: i0.UpdateKind.delete)],
-    ),
-    i0.WritePropagation(
-      on: i0.TableUpdateQuery.onTableName(
-        'stock_master',
-        limitUpdateKind: i0.UpdateKind.delete,
-      ),
       result: [
         i0.TableUpdate('dividend_distribution', kind: i0.UpdateKind.delete),
       ],
@@ -393,8 +383,6 @@ class $AppDatabaseManager {
       i7.$$MonthlyRevenueTableTableManager(_db, _db.monthlyRevenue);
   i7.$$StockValuationTableTableManager get stockValuation =>
       i7.$$StockValuationTableTableManager(_db, _db.stockValuation);
-  i7.$$DividendHistoryTableTableManager get dividendHistory =>
-      i7.$$DividendHistoryTableTableManager(_db, _db.dividendHistory);
   i7.$$DividendDistributionTableTableManager get dividendDistribution =>
       i7.$$DividendDistributionTableTableManager(_db, _db.dividendDistribution);
   i7.$$DividendMonthLedgerTableTableManager get dividendMonthLedger =>

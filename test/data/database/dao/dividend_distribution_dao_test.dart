@@ -1,6 +1,6 @@
 // dividend_distribution：一次除權息一列（PK = symbol + 除息日）
 //
-// 舊表 dividend_history 以 (symbol, year) 為 PK、insertOrReplace 寫入，
+// 舊的股利表（2026-10 已移除）以 (symbol, year) 為 PK、insertOrReplace 寫入，
 // 季配股同一年的多次配息互相覆蓋，只留最後一期。
 import 'package:flutter_test/flutter_test.dart';
 

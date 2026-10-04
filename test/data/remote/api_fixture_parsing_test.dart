@@ -251,17 +251,6 @@ void main() {
       expect(first.dividendYear, greaterThanOrEqualTo(2025));
     });
 
-    test('TPEx 已宣告股利 OpenAPI 解析', () async {
-      stubGet(jsonDecode(_fixture('tpex_declared_dividend.json')));
-      final client = TpexClient(dio: mockDio);
-
-      final dividends = await client.getDeclaredDividends();
-
-      expect(dividends, isNotEmpty);
-      expect(dividends.first.symbol, '1240');
-      expect(dividends.first.companyName, '茂生農經');
-    });
-
     test('TPEx 內部人轉讓解析', () async {
       stubGet(jsonDecode(_fixture('tpex_insider_transfer.json')));
       final client = TpexClient(dio: mockDio);

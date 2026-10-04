@@ -589,27 +589,25 @@ class UpdateService {
     if (ctx.rateLimitedAbort) return;
     if (_dividendSyncer != null) {
       try {
-        final divResult = await _dividendSyncer.sync();
-        if (divResult.dividendsUpserted > 0 ||
-            divResult.meetingEventsCreated > 0) {
+        final meetingResult = await _dividendSyncer.syncShareholderMeetings();
+        if (meetingResult.meetingEventsCreated > 0) {
           AppLogger.info(
             'UpdateService',
-            '股利同步: ${divResult.dividendsUpserted} 筆股利, '
-                '${divResult.meetingEventsCreated} 筆股東會',
+            '股東會同步: ${meetingResult.meetingEventsCreated} 筆',
           );
         }
         // DividendSyncer 內部以 per-source catch 收集 generic 失敗，
         // 不 throw — 必須讀取 errors 轉發，否則對使用者靜默
-        for (final err in divResult.errors) {
-          ctx.result.errors.add('股利/股東會同步失敗: $err');
+        for (final err in meetingResult.errors) {
+          ctx.result.errors.add('股東會同步失敗: $err');
         }
       } on RateLimitException catch (e) {
         ctx.rateLimitedAbort = true;
-        AppLogger.warning('UpdateService', '股利/股東會同步失敗 (rate limit)', e);
-        ctx.result.recordError('股利/股東會同步失敗 (rate limit): $e', e);
+        AppLogger.warning('UpdateService', '股東會同步失敗 (rate limit)', e);
+        ctx.result.recordError('股東會同步失敗 (rate limit): $e', e);
       } catch (e) {
-        AppLogger.warning('UpdateService', '股利/股東會同步失敗', e);
-        ctx.result.recordError('股利/股東會同步失敗: $e', e);
+        AppLogger.warning('UpdateService', '股東會同步失敗', e);
+        ctx.result.recordError('股東會同步失敗: $e', e);
       }
     }
 

@@ -150,7 +150,7 @@ class StockFundamentalsLoader {
         );
         return revenueData;
       } on RateLimitException {
-        // 限流是全域狀態:後續股利/估值的 API call 也會限流,fallback 只是
+        // 限流是全域狀態:後續估值的 API call 也會限流,fallback 只是
         // 燒重試、吞掉則 UI 顯誤導文案。rethrow 讓 caller 顯示真實原因。
         rethrow;
       } catch (apiError) {

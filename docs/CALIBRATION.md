@@ -63,8 +63,9 @@ n=11,742）；那是資料變了，不是時間到了。
 > 重跑前先決定：接受這個變化，或先在校準 DB 跑 `tool/backfill_dividend_distributions.dart`，並改
 > `ReplayCalibrator`：餵給規則的價格先截成生產的 `RuleParams.historyRequiredDays`（400 日曆天）窗——現在
 > 餵的是 `prices.sublist(0, i + 1)` 全歷史，窗口首日早於回補起點會讓 `priceContext` 一律 incomplete——
-> 再以 `DividendCompleteness.priceContext` 建股利情境（`test/tools/scoring_snapshot.dart` 的 52 週回放
-> 兩件都有做）。回補只到今年往前 5 年的 1 月，最早約一年的回放日仍會是 incomplete。
+> 再以 `DividendCompleteness.priceContext` 建股利情境（生產的評分批次就是這樣做：`BatchDataLoader` 讀
+> 400 日曆天的價格窗，`BatchDataBuilder.buildDividendContexts` 以窗首日到評分日建情境）。回補只到今年往前
+> 5 年的 1 月，最早約一年的回放日仍會是 incomplete。
 >
 > 決定時一併考慮：現行的 35 分本身是在回放餵全歷史的定義下校準的（52 週極值取自整段歷史，不是生產的
 > 400 日曆天窗）。

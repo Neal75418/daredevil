@@ -31,7 +31,7 @@ StockMasterEntry _stock(String symbol) => StockMasterEntry(
 
 /// syncDividendEvents 換源重寫(2026-08-01):TWSE/TPEx 除權息預告表直建
 /// 事件。驗收案例=2886 兆豐金 2026-08-13 除息 1.75(與其停券預告
-/// 8/7-8/12 因果成對;原功能因 dividend_history 無日期而自上線空轉)。
+/// 8/7-8/12 因果成對;原功能因舊股利表無日期而自上線空轉)。
 void main() {
   setUpAll(() {
     registerFallbackValue(FakeStockEventCompanion());

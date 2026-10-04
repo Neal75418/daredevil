@@ -63,28 +63,6 @@ PortfolioTransactionEntry createTestPortfolioTransaction({
 }
 
 // ==========================================
-// DividendHistoryEntry
-// ==========================================
-
-DividendHistoryEntry createTestDividendHistory({
-  String symbol = 'TEST',
-  required int year,
-  double cashDividend = 3.0,
-  double stockDividend = 0,
-  String? exDividendDate,
-  String? exRightsDate,
-}) {
-  return DividendHistoryEntry(
-    symbol: symbol,
-    year: year,
-    cashDividend: cashDividend,
-    stockDividend: stockDividend,
-    exDividendDate: exDividendDate,
-    exRightsDate: exRightsDate,
-  );
-}
-
-// ==========================================
 // StockMasterEntry
 // ==========================================
 

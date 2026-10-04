@@ -612,7 +612,7 @@ class FundamentalSyncResult {
 
   /// 內部以 per-call catch 收集的 generic 失敗（不 throw）。
   /// caller 必須讀取並轉發到 UpdateResult，否則對使用者靜默
-  /// （與 DividendSyncResult.errors 同 pattern）。
+  /// （與 ShareholderMeetingSyncResult.errors 同 pattern）。
   final List<String> errors;
 
   bool get revenueCached => revenueCount == null;

@@ -3,9 +3,11 @@ import 'package:drift/drift.dart';
 /// 使用者自訂事件 / 系統自動事件 Table
 ///
 /// 事件類型：
-/// - EX_DIVIDEND: 除息日（自動從 DividendHistory 匯入）
-/// - EX_RIGHTS: 除權日（自動從 DividendHistory 匯入）
-/// - SHAREHOLDER_MEETING: 股東會（自動從股利行事曆匯入）
+/// - EX_DIVIDEND: 除息日（自動從除權除息預告表匯入，見
+///   EventRepository.syncDividendEvents）
+/// - EX_RIGHTS: 除權日（同上）
+/// - SHAREHOLDER_MEETING: 股東會（DividendSyncer.syncShareholderMeetings：
+///   上市取自 TWSE 已宣告股利，上櫃取自 TPEx 股東會資料）
 /// - EARNINGS: 法說會（自動從已存重大訊息公告解析，見
 ///   EventRepository.syncInvestorConferenceEvents）
 /// - CUSTOM: 使用者自訂備忘
