@@ -825,8 +825,10 @@ void main() {
       final result = await service.runDailyUpdate(forDate: tradingDay);
 
       expect(result.success, isTrue);
-      // ShareholderMeetingSyncResult.errors 必須被 caller 讀取並轉發，否則靜默
-      expect(result.errors, anyElement(startsWith('股東會同步失敗')));
+      // ShareholderMeetingSyncResult.errors 必須被 caller 讀取並轉發，否則靜默。
+      // 要帶 syncer 的來源標籤：syncer 若改成往外拋，UpdateService 的 catch
+      // 也會記「股東會同步失敗」，但沒有「TPEX 股東會」
+      expect(result.errors, anyElement(startsWith('股東會同步失敗: TPEX 股東會')));
     });
 
     test('除權除息同步內部收集的錯誤應轉發到 result.errors', () async {
