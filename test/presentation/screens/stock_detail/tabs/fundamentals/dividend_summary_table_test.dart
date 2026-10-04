@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/theme/color_contrast.dart';
 import 'package:daredevil/domain/services/dividend_summary.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/fundamentals/dividend_summary_table.dart';
 
@@ -30,6 +31,21 @@ DividendSummary _summary({
   average: average,
   trailingYield: const TrailingYieldNone(),
 );
+
+/// [text] 實際承載的對比：文字色對它所在那一列的底色。今年那列（第 0 列）
+/// 是半透明疊色，要先疊在卡片上；透明列看到的是卡片本身
+double _contrastOnRow(Element text) {
+  final card = Theme.of(text).cardTheme.color!;
+  final row = text.findAncestorWidgetOfExactType<Container>()!;
+  final fill = (row.decoration! as BoxDecoration).color;
+  final background = switch (fill) {
+    null => card,
+    final c when c.a == 0 => card,
+    final c when c.a == 1 => c,
+    final c => ColorContrast.compositeOver(c.withValues(alpha: 1), card, c.a),
+  };
+  return ColorContrast.ratio((text.widget as Text).style!.color!, background);
+}
 
 void main() {
   setUpAll(() async {
@@ -203,4 +219,76 @@ void main() {
     await pump(tester, _summary(), showROCYear: true);
     expect(find.text('2026 (民115)'), findsOneWidget);
   });
+
+  for (final brightness in Brightness.values) {
+    testWidgets('🚨 次要文字（截至、次數、狀態）在今年那列的疊色與一般列上都至少 4.5:1'
+        '（${brightness.name}）', (tester) async {
+      tester.view.physicalSize = const Size(5000, 4000);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      Future<void> check(DividendSummary summary, List<String> keys) async {
+        await tester.pumpWidget(
+          buildTestApp(
+            DividendSummaryTable(summary: summary, showROCYear: false),
+            brightness: brightness,
+          ),
+        );
+        for (final key in keys) {
+          final elements = find.text(key).evaluate().toList();
+          expect(elements, isNotEmpty, reason: key);
+          for (final e in elements) {
+            final ratio = _contrastOnRow(e);
+            expect(
+              ratio,
+              greaterThanOrEqualTo(4.5),
+              reason: '$key：${ratio.toStringAsFixed(2)}:1',
+            );
+          }
+        }
+      }
+
+      // 次數：第 0 列（疊色）、第 1 列（透明＝卡片）、第 2 列（surface）
+      await check(
+        _summary(
+          current: const DividendYearRow(
+            year: 2026,
+            status: DividendYearStatus.paid,
+            cash: 1.6,
+            cashCount: 2,
+          ),
+          pastYears: [
+            for (var y = 2025; y >= 2024; y--)
+              DividendYearRow(
+                year: y,
+                status: DividendYearStatus.paid,
+                cash: 3,
+                cashCount: 2,
+              ),
+            for (var y = 2023; y >= 2021; y--)
+              DividendYearRow(year: y, status: DividendYearStatus.noRecord),
+          ],
+        ),
+        ['stockDetail.dividendAsOf', 'stockDetail.dividendCashCount'],
+      );
+      // 狀態：今年（疊色）、一般列、平均列
+      await check(
+        _summary(
+          pastYears: const [
+            DividendYearRow(year: 2025, status: DividendYearStatus.none),
+            DividendYearRow(year: 2024, status: DividendYearStatus.noRecord),
+            DividendYearRow(year: 2023, status: DividendYearStatus.building),
+            DividendYearRow(year: 2022, status: DividendYearStatus.noRecord),
+            DividendYearRow(year: 2021, status: DividendYearStatus.noRecord),
+          ],
+          average: const DividendAverageBuilding(),
+        ),
+        [
+          'stockDetail.dividendStatusNotYet',
+          'stockDetail.dividendStatusNone',
+          'stockDetail.dividendStatusNoRecord',
+          'stockDetail.dividendStatusBuilding',
+        ],
+      );
+    });
+  }
 }

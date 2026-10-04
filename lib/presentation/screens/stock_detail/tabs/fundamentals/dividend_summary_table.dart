@@ -57,7 +57,11 @@ class DividendSummaryTable extends StatelessWidget {
                   flex: 2,
                   child: _yearCell(context, row, isCurrent: index == 0),
                 ),
-                ..._rowCells(context, row),
+                ..._rowCells(
+                  context,
+                  row,
+                  secondary: _secondaryColor(context, highlighted: index == 0),
+                ),
               ]),
             if (average != null) ...[
               const Divider(height: DesignTokens.spacing16),
@@ -99,14 +103,29 @@ class DividendSummaryTable extends StatelessWidget {
               namedArgs: {'date': '${end.month}/${end.day}'},
             ),
             style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.outline,
+              color: _secondaryColor(context, highlighted: isCurrent),
             ),
           ),
       ],
     );
   }
 
-  List<Widget> _rowCells(BuildContext context, DividendYearRow row) {
+  /// 次要文字（截至、次數、狀態）的顏色。一般列用 onSurfaceVariant；今年那列
+  /// （第 0 列）底下有 primary 的半透明疊色，onSurfaceVariant 疊上去在兩個
+  /// 主題都不到 4.5:1，改用 onSurface
+  static Color _secondaryColor(
+    BuildContext context, {
+    required bool highlighted,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return highlighted ? scheme.onSurface : scheme.onSurfaceVariant;
+  }
+
+  List<Widget> _rowCells(
+    BuildContext context,
+    DividendYearRow row, {
+    required Color secondary,
+  }) {
     final status = switch (row.status) {
       DividendYearStatus.paid => null,
       DividendYearStatus.none => 'stockDetail.dividendStatusNone'.tr(),
@@ -114,12 +133,15 @@ class DividendSummaryTable extends StatelessWidget {
       DividendYearStatus.notYet => 'stockDetail.dividendStatusNotYet'.tr(),
       DividendYearStatus.building => 'stockDetail.dividendStatusBuilding'.tr(),
     };
-    if (status != null) return [_statusCell(context, status)];
+    if (status != null) {
+      return [_statusCell(context, status, color: secondary)];
+    }
     return _amountCells(
       context,
       cash: row.cash,
       stockShares: row.stockShares,
       cashCount: row.cashCount,
+      secondary: secondary,
     );
   }
 
@@ -149,28 +171,39 @@ class DividendSummaryTable extends StatelessWidget {
               style: labelStyle,
             ),
           ),
-          ..._amountCells(context, cash: cash, stockShares: stockShares),
+          ..._amountCells(
+            context,
+            cash: cash,
+            stockShares: stockShares,
+            secondary: _secondaryColor(context, highlighted: false),
+          ),
         ],
       DividendAverageBuilding() => [
         Expanded(
           flex: 2,
           child: Text('stockDetail.dividendAverage'.tr(), style: labelStyle),
         ),
-        _statusCell(context, 'stockDetail.dividendStatusBuilding'.tr()),
+        _statusCell(
+          context,
+          'stockDetail.dividendStatusBuilding'.tr(),
+          color: _secondaryColor(context, highlighted: false),
+        ),
       ],
     };
   }
 
-  Widget _statusCell(BuildContext context, String text) {
+  Widget _statusCell(
+    BuildContext context,
+    String text, {
+    required Color color,
+  }) {
     final theme = Theme.of(context);
     return Expanded(
       flex: 6,
       child: Text(
         text,
         textAlign: TextAlign.end,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
+        style: theme.textTheme.bodySmall?.copyWith(color: color),
       ),
     );
   }
@@ -179,6 +212,7 @@ class DividendSummaryTable extends StatelessWidget {
     BuildContext context, {
     required double cash,
     required double stockShares,
+    required Color secondary,
     int cashCount = 0,
   }) {
     final theme = Theme.of(context);
@@ -205,9 +239,7 @@ class DividendSummaryTable extends StatelessWidget {
                 'stockDetail.dividendCashCount'.tr(
                   namedArgs: {'count': '$cashCount'},
                 ),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),
+                style: theme.textTheme.labelSmall?.copyWith(color: secondary),
               ),
           ],
         ),
