@@ -507,6 +507,106 @@ void main() {
       expect(state.loading.isLoadingFundamentals, isFalse);
       expect(state.error, isNull);
     });
+
+    /// 營收（6 個月）、EPS、估值都有：頁首錯誤只會來自股利
+    void stubFundamentalsReads({Exception? dividendError}) {
+      when(
+        () => mockDb.getValuationHistory(
+          _testSymbol,
+          startDate: any(named: 'startDate'),
+        ),
+      ).thenAnswer(
+        (_) async => [
+          StockValuationEntry(
+            symbol: _testSymbol,
+            date: _defaultDate,
+            per: 20,
+            pbr: 5,
+            dividendYield: 2,
+          ),
+        ],
+      );
+      when(
+        () => mockDb.getMonthlyRevenueHistory(
+          _testSymbol,
+          startDate: any(named: 'startDate'),
+        ),
+      ).thenAnswer(
+        (_) async => [
+          for (var m = 1; m <= 6; m++)
+            MonthlyRevenueEntry(
+              symbol: _testSymbol,
+              date: DateTime(2025, m + 1, 10),
+              revenueYear: 2025,
+              revenueMonth: m,
+              revenue: 1e9,
+            ),
+        ],
+      );
+      when(() => mockDb.getEPSHistory(_testSymbol)).thenAnswer(
+        (_) async => [
+          FinancialDataEntry(
+            symbol: _testSymbol,
+            date: DateTime(2025, 11, 14),
+            statementType: 'INCOME',
+            dataType: 'EPS',
+            value: 5,
+          ),
+        ],
+      );
+      when(
+        () => mockDb.getLatestQuarterMetrics(_testSymbol),
+      ).thenAnswer((_) async => {'ROE': 20.0});
+      when(
+        () => mockDb.getDividendDistributions(_testSymbol),
+      ).thenAnswer((_) async => []);
+      if (dividendError != null) {
+        when(() => mockDb.getDividendListings()).thenThrow(dividendError);
+      } else {
+        when(() => mockDb.getDividendListings()).thenAnswer((_) async => []);
+      }
+      when(
+        () => mockDb.getDividendMonthLedgerEntries(),
+      ).thenAnswer((_) async => []);
+      when(() => mockDb.getDividendUnresolved()).thenAnswer((_) async => []);
+      when(
+        () => mockDb.getDividendMissingPriceKeys(),
+      ).thenAnswer((_) async => <(String, DateTime)>{});
+    }
+
+    test('🚨 股利資料建置中（新安裝、尚無完整度事實）：頁首不出現錯誤', () async {
+      setupLoadDataMocks();
+      stubFundamentalsReads();
+
+      final notifier = container.read(
+        stockDetailProvider(_testSymbol).notifier,
+      );
+      await notifier.loadData();
+      await notifier.loadFundamentals();
+
+      final state = container.read(stockDetailProvider(_testSymbol));
+      expect(state.fundamentals.dividendSummary!.allBuilding, isTrue);
+      expect(state.fundamentalsError, isNull);
+    });
+
+    test('股利讀取失敗：頁首錯誤含「股利」（可重試）', () async {
+      setupLoadDataMocks();
+      stubFundamentalsReads(dividendError: Exception('db locked'));
+
+      final notifier = container.read(
+        stockDetailProvider(_testSymbol).notifier,
+      );
+      await notifier.loadData();
+      await notifier.loadFundamentals();
+
+      final state = container.read(stockDetailProvider(_testSymbol));
+      expect(state.fundamentals.dividendSummary, isNull);
+      expect(state.fundamentalsError, contains('股利'));
+
+      // 有錯誤就不跳過：再呼叫一次會重讀
+      await notifier.loadFundamentals();
+      verify(() => mockDb.getDividendListings()).called(2);
+    });
   });
 
   // ==========================================

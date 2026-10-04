@@ -2,6 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/utils/calendar_month.dart';
+import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/portfolio_repository.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
@@ -14,6 +17,11 @@ import 'package:daredevil/presentation/providers/providers.dart';
 class MockAppDatabase extends Mock implements AppDatabase {}
 
 class MockPortfolioRepository extends Mock implements PortfolioRepository {}
+
+class _FixedClock implements AppClock {
+  @override
+  DateTime now() => DateTime(2026, 10, 2, 21, 30);
+}
 
 // ==========================================
 // Test Helpers
@@ -105,6 +113,8 @@ void main() {
     });
   });
 
+  setUpAll(() => registerFallbackValue(DateTime(2026)));
+
   late MockAppDatabase mockDb;
   late MockPortfolioRepository mockRepo;
   late ProviderContainer container;
@@ -117,6 +127,7 @@ void main() {
       overrides: [
         databaseProvider.overrideWithValue(mockDb),
         portfolioRepositoryProvider.overrideWithValue(mockRepo),
+        appClockProvider.overrideWithValue(_FixedClock()),
       ],
     );
   });
@@ -401,6 +412,116 @@ void main() {
   });
 
   group('PortfolioNotifier', () {
+    void stubPositions(
+      List<PortfolioPositionEntry> positions, {
+      required double close,
+    }) {
+      when(
+        () => mockDb.getPortfolioPositions(),
+      ).thenAnswer((_) async => positions);
+      when(() => mockDb.getStocksBatch(any())).thenAnswer(
+        (_) async => {
+          for (final p in positions) p.symbol: createStock(symbol: p.symbol),
+        },
+      );
+      when(() => mockDb.getLatestPricesBatch(any())).thenAnswer(
+        (_) async => {
+          for (final p in positions)
+            p.symbol: createPrice(symbol: p.symbol, close: close),
+        },
+      );
+      when(
+        () => mockDb.getAllPortfolioTransactions(),
+      ).thenAnswer((_) async => []);
+    }
+
+    /// 兩市場 2021-01～2026-09 完成、10 月列到 10/2（_FixedClock 的今天）
+    List<DividendListingEntry> fullListings() => [
+      for (final market in [MarketCode.twse, MarketCode.tpex])
+        DividendListingEntry(
+          market: market,
+          year: 2026,
+          month: 10,
+          listedThrough: DateTime(2026, 10, 2),
+        ),
+    ];
+
+    List<DividendMonthLedgerEntry> fullLedger() => [
+      for (final market in [MarketCode.twse, MarketCode.tpex])
+        for (final m in CalendarMonth.descending(
+          from: const CalendarMonth(2021, 1),
+          to: const CalendarMonth(2026, 9),
+        ))
+          DividendMonthLedgerEntry(
+            market: market,
+            year: m.year,
+            month: m.month,
+            completedAt: DateTime(2026, 10, 1),
+            listedRows: 1,
+            knownRows: 1,
+            skippedSymbols: '',
+            pricesRecorded: true,
+          ),
+    ];
+
+    /// 2330 近一年只有 2026-09-16 一次除息：近一年殖利率＝7 ÷ 2385
+    final distributions2330 = {
+      '2330': [
+        DividendDistributionEntry(
+          symbol: '2330',
+          exDate: DateTime(2026, 9, 16),
+          cashDividend: 7,
+          stockSharesPerThousand: 0,
+          closeBefore: 2385,
+          referencePrice: 2378,
+        ),
+      ],
+    };
+
+    StockValuationEntry valuation2330({
+      required DateTime date,
+      double? dividendYield = 2.0,
+    }) => StockValuationEntry(
+      symbol: '2330',
+      date: date,
+      per: 20,
+      pbr: 5,
+      dividendYield: dividendYield,
+    );
+
+    /// 股利分析的讀取：完整度事實、配發表、官方估值與估值日收盤
+    void stubDividendReads({
+      List<DividendListingEntry> listings = const [],
+      List<DividendMonthLedgerEntry> ledger = const [],
+      Map<String, List<DividendDistributionEntry>> distributions = const {},
+      Map<String, StockValuationEntry> valuations = const {},
+      Map<(String, DateTime), DailyPriceEntry> pricesOnDate = const {},
+    }) {
+      when(
+        () => mockDb.getDividendListings(),
+      ).thenAnswer((_) async => listings);
+      when(
+        () => mockDb.getDividendMonthLedgerEntries(),
+      ).thenAnswer((_) async => ledger);
+      when(() => mockDb.getDividendUnresolved()).thenAnswer((_) async => []);
+      when(
+        () => mockDb.getDividendMissingPriceKeys(),
+      ).thenAnswer((_) async => <(String, DateTime)>{});
+      when(
+        () => mockDb.getDividendDistributionsBatch(any()),
+      ).thenAnswer((_) async => distributions);
+      when(
+        () => mockDb.getLatestValuationsBatch(any()),
+      ).thenAnswer((_) async => valuations);
+      when(() => mockDb.getPriceOnDate(any(), any())).thenAnswer(
+        (inv) async =>
+            pricesOnDate[(
+              inv.positionalArguments[0] as String,
+              inv.positionalArguments[1] as DateTime,
+            )],
+      );
+    }
+
     test('initial state is empty', () {
       final state = container.read(portfolioProvider);
 
@@ -443,9 +564,7 @@ void main() {
         () => mockDb.getAllPortfolioTransactions(),
       ).thenAnswer((_) async => []);
 
-      when(
-        () => mockDb.getDividendHistoryBatch(any()),
-      ).thenAnswer((_) async => {});
+      stubDividendReads();
 
       final notifier = container.read(portfolioProvider.notifier);
       await notifier.loadPositions();
@@ -588,6 +707,242 @@ void main() {
       await notifier.deleteTransaction(42, '2330');
 
       verify(() => mockRepo.deleteTransaction(42, '2330')).called(1);
+    });
+
+    test('股利分析：官方殖利率 × 估值日收盤（不是最新收盤）', () async {
+      stubPositions([
+        createPosition(id: 1, symbol: '2330', quantity: 1000, avgCost: 500),
+      ], close: 1200);
+      stubDividendReads(
+        valuations: {
+          '2330': StockValuationEntry(
+            symbol: '2330',
+            date: DateTime(2026, 9, 30),
+            per: 20,
+            pbr: 5,
+            dividendYield: 2.0,
+          ),
+        },
+        pricesOnDate: {
+          ('2330', DateTime(2026, 9, 30)): createPrice(
+            symbol: '2330',
+            close: 1000,
+          ),
+        },
+      );
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      final info = container
+          .read(portfolioProvider)
+          .dividendAnalysis!
+          .stockDividends
+          .single;
+      expect(info.estimatedDividendPerShare, closeTo(20, 1e-9));
+    });
+
+    test('股利分析：估值日沒有收盤→改走近一年殖利率 × 最新收盤', () async {
+      stubPositions([
+        createPosition(id: 1, symbol: '2330', quantity: 1000, avgCost: 500),
+      ], close: 1200);
+      stubDividendReads(
+        listings: fullListings(),
+        ledger: fullLedger(),
+        distributions: distributions2330,
+        valuations: {'2330': valuation2330(date: DateTime(2026, 9, 30))},
+      );
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      final info = container
+          .read(portfolioProvider)
+          .dividendAnalysis!
+          .stockDividends
+          .single;
+      expect(info.estimatedDividendPerShare, closeTo(7 / 2385 * 1200, 1e-9));
+    });
+
+    test('股利分析：官方估值的殖利率是空的→改走近一年殖利率', () async {
+      stubPositions([
+        createPosition(id: 1, symbol: '2330', quantity: 1000, avgCost: 500),
+      ], close: 1200);
+      stubDividendReads(
+        listings: fullListings(),
+        ledger: fullLedger(),
+        distributions: distributions2330,
+        valuations: {
+          '2330': valuation2330(
+            date: DateTime(2026, 9, 30),
+            dividendYield: null,
+          ),
+        },
+        pricesOnDate: {
+          ('2330', DateTime(2026, 9, 30)): createPrice(
+            symbol: '2330',
+            close: 1000,
+          ),
+        },
+      );
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      final info = container
+          .read(portfolioProvider)
+          .dividendAnalysis!
+          .stockDividends
+          .single;
+      expect(info.estimatedDividendPerShare, closeTo(7 / 2385 * 1200, 1e-9));
+    });
+
+    test('🚨 股利分析：過時的官方估值（早於 30 天）不用→改走近一年殖利率', () async {
+      // 上櫃估值只同步自選與候選股，持股可能停在很久以前的一筆；中間若有
+      // 分割，舊的每股股利 × 現在的股數會放大好幾倍
+      stubPositions([
+        createPosition(id: 1, symbol: '2330', quantity: 1000, avgCost: 500),
+      ], close: 1200);
+      stubDividendReads(
+        listings: fullListings(),
+        ledger: fullLedger(),
+        distributions: distributions2330,
+        valuations: {'2330': valuation2330(date: DateTime(2026, 8, 1))},
+        pricesOnDate: {
+          ('2330', DateTime(2026, 8, 1)): createPrice(
+            symbol: '2330',
+            close: 1000,
+          ),
+        },
+      );
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      final info = container
+          .read(portfolioProvider)
+          .dividendAnalysis!
+          .stockDividends
+          .single;
+      expect(info.estimatedDividendPerShare, closeTo(7 / 2385 * 1200, 1e-9));
+    });
+
+    test('股利分析：官方估值的新鮮度下限是 30 天（與個股頁同一個）', () async {
+      // _FixedClock＝10/2 21:30，下限＝9/2 21:30：9/3 的估值用、9/2 的不用
+      // （常數是 29 天時 9/3 也不用、31 天時 9/2 也會用，兩邊都會紅）
+      stubPositions([
+        createPosition(id: 1, symbol: '2330', quantity: 1000, avgCost: 500),
+        createPosition(id: 2, symbol: '2317', quantity: 1000, avgCost: 100),
+      ], close: 1200);
+      stubDividendReads(
+        listings: fullListings(),
+        ledger: fullLedger(),
+        distributions: distributions2330,
+        valuations: {
+          '2330': valuation2330(date: DateTime(2026, 9, 3)),
+          '2317': StockValuationEntry(
+            symbol: '2317',
+            date: DateTime(2026, 9, 2),
+            per: 12,
+            pbr: 1.5,
+            dividendYield: 2.0,
+          ),
+        },
+        pricesOnDate: {
+          ('2330', DateTime(2026, 9, 3)): createPrice(
+            symbol: '2330',
+            close: 1000,
+          ),
+          ('2317', DateTime(2026, 9, 2)): createPrice(
+            symbol: '2317',
+            close: 200,
+          ),
+        },
+      );
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      final perShare = {
+        for (final s
+            in container
+                .read(portfolioProvider)
+                .dividendAnalysis!
+                .stockDividends)
+          s.symbol: s.estimatedDividendPerShare,
+      };
+      // 2330：官方 2% × 1000；2317：過時→近一年殖利率，近 400 天完整且沒有除息＝0
+      expect(perShare['2330'], closeTo(20, 1e-9));
+      expect(perShare['2317'], 0);
+    });
+
+    test('🚨 股利分析：完整度事實全空（新安裝）→走近一年殖利率的持股建置中、合計 null', () async {
+      stubPositions([
+        createPosition(id: 1, symbol: '0050', quantity: 1000, avgCost: 100),
+      ], close: 112.8);
+      stubDividendReads();
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      final state = container.read(portfolioProvider);
+      expect(state.error, isNull);
+      final analysis = state.dividendAnalysis!;
+      expect(analysis.stockDividends.single.estimatedDividendPerShare, isNull);
+      expect(analysis.totalExpectedDividend, isNull);
+    });
+
+    test('股利分析：先讀完整度事實、再讀配發列（與個股頁同一個順序）', () async {
+      stubPositions([
+        createPosition(id: 1, symbol: '0050', quantity: 1000, avgCost: 100),
+      ], close: 112.8);
+      stubDividendReads();
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      verifyInOrder([
+        () => mockDb.getDividendListings(),
+        () => mockDb.getDividendMonthLedgerEntries(),
+        () => mockDb.getDividendUnresolved(),
+        () => mockDb.getDividendMissingPriceKeys(),
+        () => mockDb.getDividendDistributionsBatch(any()),
+      ]);
+    });
+
+    test('股利分析：ETF 以配發表算近一年殖利率 × 最新收盤', () async {
+      stubPositions([
+        createPosition(id: 1, symbol: '0050', quantity: 1000, avgCost: 100),
+      ], close: 112.8);
+      stubDividendReads(
+        listings: fullListings(),
+        ledger: fullLedger(),
+        distributions: {
+          '0050': [
+            DividendDistributionEntry(
+              symbol: '0050',
+              exDate: DateTime(2026, 7, 21),
+              cashDividend: 0.6,
+              stockSharesPerThousand: 0,
+              closeBefore: 99.2,
+              referencePrice: 98.6,
+            ),
+            DividendDistributionEntry(
+              symbol: '0050',
+              exDate: DateTime(2026, 1, 22),
+              cashDividend: 1.0,
+              stockSharesPerThousand: 0,
+              closeBefore: 71.85,
+              referencePrice: 70.85,
+            ),
+          ],
+        },
+      );
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      final info = container
+          .read(portfolioProvider)
+          .dividendAnalysis!
+          .stockDividends
+          .single;
+      expect(
+        info.estimatedDividendPerShare,
+        closeTo((0.6 / 99.2 + 1.0 / 71.85) * 112.8, 1e-9),
+      );
     });
   });
 }

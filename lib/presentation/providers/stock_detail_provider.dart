@@ -311,7 +311,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
     // 若有 fundamentalsError 表示上次部分失敗，允許重試
     final hasSomeData =
         state.fundamentals.revenueHistory.isNotEmpty ||
-        state.fundamentals.dividendHistory.isNotEmpty;
+        state.fundamentals.dividendSummary != null;
     if (hasSomeData && state.fundamentalsError == null) return;
 
     state = state.copyWith(
@@ -326,10 +326,12 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
       // 檢查是否所有資料源都有拿到資料
       // loadAll() 內部 catch 不會 rethrow，會回傳空資料
       // 若有缺漏項目則標記 fundamentalsError 讓下次允許重試
+      // 股利資料不完整是摘要裡的「建置中」，不是缺漏：只有讀取失敗（null）
+      // 才列入，避免頁首紅字與無效的重試
       final missingParts = <String>[
         if (result.revenueData.isEmpty) '營收',
         if (result.epsData.isEmpty) '每股盈餘',
-        if (result.dividendData.isEmpty) '股利',
+        if (result.dividendSummary == null) '股利',
         if (result.latestPER == null) '估值',
       ];
       final partialError = missingParts.isNotEmpty
@@ -338,7 +340,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
 
       state = state.copyWith(
         revenueHistory: result.revenueData,
-        dividendHistory: result.dividendData,
+        dividendSummary: result.dividendSummary,
         latestPER: result.latestPER,
         epsHistory: result.epsData,
         latestQuarterMetrics: result.quarterMetrics,

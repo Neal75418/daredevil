@@ -70,27 +70,27 @@ class DividendAnalysisCard extends StatelessWidget {
               Expanded(
                 child: _SummaryItem(
                   label: 'portfolio.expectedDividend'.tr(),
-                  value:
-                      'NT\$${LocalizedNumberFormat.compact(analysis.totalExpectedDividend, Localizations.localeOf(context))}',
+                  value: switch (analysis.totalExpectedDividend) {
+                    final total? =>
+                      'NT\$${LocalizedNumberFormat.compact(total, Localizations.localeOf(context))}',
+                    null => 'portfolio.dividendBuilding'.tr(),
+                  },
                   subValue: 'portfolio.yearly'.tr(),
                   theme: theme,
                 ),
               ),
               Expanded(
-                child: _SummaryItem(
-                  label: 'portfolio.yieldOnCost'.tr(),
-                  value: '${analysis.portfolioYieldOnCost.toStringAsFixed(2)}%',
-                  valueColor: _getYieldColor(analysis.portfolioYieldOnCost),
-                  theme: theme,
+                child: _yieldItem(
+                  'portfolio.yieldOnCost'.tr(),
+                  analysis.portfolioYieldOnCost,
+                  theme,
                 ),
               ),
               Expanded(
-                child: _SummaryItem(
-                  label: 'portfolio.yieldOnMarket'.tr(),
-                  value:
-                      '${analysis.portfolioYieldOnMarket.toStringAsFixed(2)}%',
-                  valueColor: _getYieldColor(analysis.portfolioYieldOnMarket),
-                  theme: theme,
+                child: _yieldItem(
+                  'portfolio.yieldOnMarket'.tr(),
+                  analysis.portfolioYieldOnMarket,
+                  theme,
                 ),
               ),
             ],
@@ -117,6 +117,16 @@ class DividendAnalysisCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _yieldItem(String label, double? yield_, ThemeData theme) =>
+      _SummaryItem(
+        label: label,
+        value: yield_ == null
+            ? 'portfolio.dividendBuilding'.tr()
+            : '${yield_.toStringAsFixed(2)}%',
+        valueColor: yield_ == null ? null : _getYieldColor(yield_),
+        theme: theme,
+      );
 }
 
 class _SummaryItem extends StatelessWidget {
@@ -204,8 +214,10 @@ class _StockDividendRow extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: DesignTokens.spacing4),
-                _TrendIcon(trend: info.trend),
+                if (info.trend case final trend?) ...[
+                  const SizedBox(width: DesignTokens.spacing4),
+                  _TrendIcon(trend: trend),
+                ],
               ],
             ),
           ),
@@ -217,10 +229,13 @@ class _StockDividendRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  AppNumberFormat.currency(
-                    info.estimatedDividendPerShare,
-                    decimals: 2,
-                  ),
+                  switch (info.estimatedDividendPerShare) {
+                    final perShare? => AppNumberFormat.currency(
+                      perShare,
+                      decimals: 2,
+                    ),
+                    null => 'portfolio.dividendBuilding'.tr(),
+                  },
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w500,
                   ),
@@ -243,7 +258,11 @@ class _StockDividendRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  'NT\$${LocalizedNumberFormat.compact(info.expectedYearlyAmount, Localizations.localeOf(context))}',
+                  switch (info.expectedYearlyAmount) {
+                    final amount? =>
+                      'NT\$${LocalizedNumberFormat.compact(amount, Localizations.localeOf(context))}',
+                    null => '—',
+                  },
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: AppTheme.upColor,
@@ -267,10 +286,16 @@ class _StockDividendRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${info.personalYield.toStringAsFixed(1)}%',
+                  switch (info.personalYield) {
+                    final y? => '${y.toStringAsFixed(1)}%',
+                    null => '—',
+                  },
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: _getYieldColor(info.personalYield),
+                    color: switch (info.personalYield) {
+                      final y? => _getYieldColor(y),
+                      null => null,
+                    },
                   ),
                 ),
                 Text(

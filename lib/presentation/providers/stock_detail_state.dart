@@ -4,6 +4,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/core/constants/chip_strength.dart';
 import 'package:daredevil/domain/models/stock_summary.dart';
+import 'package:daredevil/domain/services/dividend_summary.dart';
 
 // ==================================================
 // 子狀態類別
@@ -49,28 +50,30 @@ class StockPriceState {
 class FundamentalsState {
   const FundamentalsState({
     this.revenueHistory = const [],
-    this.dividendHistory = const [],
+    this.dividendSummary,
     this.latestPER,
     this.latestQuarterMetrics = const {},
     this.epsHistory = const [],
   });
 
   final List<FinMindRevenue> revenueHistory;
-  final List<FinMindDividend> dividendHistory;
+
+  /// 股利摘要；null＝尚未載入或讀取失敗（資料不完整是摘要裡的建置中）
+  final DividendSummary? dividendSummary;
   final FinMindPER? latestPER;
   final Map<String, double> latestQuarterMetrics;
   final List<FinancialDataEntry> epsHistory;
 
   FundamentalsState copyWith({
     List<FinMindRevenue>? revenueHistory,
-    List<FinMindDividend>? dividendHistory,
+    DividendSummary? dividendSummary,
     FinMindPER? latestPER,
     Map<String, double>? latestQuarterMetrics,
     List<FinancialDataEntry>? epsHistory,
   }) {
     return FundamentalsState(
       revenueHistory: revenueHistory ?? this.revenueHistory,
-      dividendHistory: dividendHistory ?? this.dividendHistory,
+      dividendSummary: dividendSummary ?? this.dividendSummary,
       latestPER: latestPER ?? this.latestPER,
       latestQuarterMetrics: latestQuarterMetrics ?? this.latestQuarterMetrics,
       epsHistory: epsHistory ?? this.epsHistory,
@@ -217,7 +220,7 @@ class StockDetailState {
     DailyAnalysisEntry? analysis,
     // 基本面欄位
     List<FinMindRevenue>? revenueHistory,
-    List<FinMindDividend>? dividendHistory,
+    DividendSummary? dividendSummary,
     FinMindPER? latestPER,
     Map<String, double>? latestQuarterMetrics,
     List<FinancialDataEntry>? epsHistory,
@@ -256,7 +259,7 @@ class StockDetailState {
 
     final needsFundamentalsUpdate =
         revenueHistory != null ||
-        dividendHistory != null ||
+        dividendSummary != null ||
         latestPER != null ||
         latestQuarterMetrics != null ||
         epsHistory != null;
@@ -289,7 +292,7 @@ class StockDetailState {
       fundamentals: needsFundamentalsUpdate
           ? fundamentals.copyWith(
               revenueHistory: revenueHistory,
-              dividendHistory: dividendHistory,
+              dividendSummary: dividendSummary,
               latestPER: latestPER,
               latestQuarterMetrics: latestQuarterMetrics,
               epsHistory: epsHistory,

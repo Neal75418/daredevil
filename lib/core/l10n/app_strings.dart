@@ -238,14 +238,6 @@ class S {
   static String get marketTPEx => 'market.tpex'.tr();
 
   // ==================================================
-  // 基本面
-  // ==================================================
-  static String dividendYearAverage(int years) =>
-      'fundamental.dividendYearAverage'.tr(
-        namedArgs: {'years': years.toString()},
-      );
-
-  // ==================================================
   // 時間與日期
   // ==================================================
   static String dateFormat(DateTime dt) {

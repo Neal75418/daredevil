@@ -156,5 +156,53 @@ void main() {
       expect(find.text('2304'), findsOneWidget);
       expect(find.text('2305'), findsNothing);
     });
+
+    testWidgets('🚨 合計建置中：三個總覽值都顯示建置中', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          DividendAnalysisCard(
+            analysis: DividendAnalysis(
+              totalExpectedDividend: null,
+              portfolioYieldOnCost: null,
+              portfolioYieldOnMarket: null,
+              stockDividends: [createStockInfo()],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('portfolio.dividendBuilding'), findsNWidgets(3));
+    });
+
+    testWidgets('單檔建置中：每股顯示建置中、預期與殖利率「—」、不顯示趨勢', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          const DividendAnalysisCard(
+            analysis: DividendAnalysis(
+              totalExpectedDividend: null,
+              portfolioYieldOnCost: null,
+              portfolioYieldOnMarket: null,
+              stockDividends: [
+                StockDividendInfo(
+                  symbol: '0050',
+                  estimatedDividendPerShare: null,
+                  expectedYearlyAmount: null,
+                  personalYield: null,
+                  trend: null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('portfolio.dividendBuilding'), findsNWidgets(4));
+      expect(find.text('—'), findsNWidgets(2));
+      expect(find.byIcon(Icons.trending_up), findsNothing);
+      expect(find.byIcon(Icons.trending_flat), findsNothing);
+      expect(find.byIcon(Icons.trending_down), findsNothing);
+    });
   });
 }

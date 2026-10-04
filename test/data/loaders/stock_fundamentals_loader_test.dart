@@ -108,9 +108,6 @@ void main() {
         ),
       ).thenAnswer((_) async => <MonthlyRevenueEntry>[]);
       when(
-        () => mockDb.getDividendHistory(any()),
-      ).thenAnswer((_) async => <DividendHistoryEntry>[]);
-      when(
         () => mockDb.getEPSHistory(any()),
       ).thenAnswer((_) async => <FinancialDataEntry>[]);
     });
@@ -207,9 +204,6 @@ void main() {
           endDate: any(named: 'endDate'),
         ),
       ).thenAnswer((_) async => <FinMindPER>[]);
-      when(
-        () => mockDb.getDividendHistory(any()),
-      ).thenAnswer((_) async => <DividendHistoryEntry>[]);
       when(
         () => mockDb.getEPSHistory(any()),
       ).thenAnswer((_) async => <FinancialDataEntry>[]);
@@ -348,9 +342,6 @@ void main() {
           endDate: any(named: 'endDate'),
         ),
       ).thenAnswer((_) async => <FinMindRevenue>[]);
-      when(
-        () => mockDb.getDividendHistory(any()),
-      ).thenAnswer((_) async => <DividendHistoryEntry>[]);
     });
 
     test('🚨 ROE 走 DAO 的唯一口徑,不得自己用「單季×4÷期末權益」', () async {
@@ -478,14 +469,8 @@ void main() {
         ),
       ).thenAnswer((_) async => [createValuation()]);
       when(
-        () => mockDb.getDividendHistory(any()),
-      ).thenAnswer((_) async => <DividendHistoryEntry>[]);
-      when(
         () => mockDb.getEPSHistory(any()),
       ).thenAnswer((_) async => <FinancialDataEntry>[]);
-      when(
-        () => mockFinMind.getDividends(stockId: any(named: 'stockId')),
-      ).thenAnswer((_) async => <FinMindDividend>[]);
     });
 
     test('營收 API 限流:rethrow 而非 fallback 吞掉', () async {
@@ -501,26 +486,6 @@ void main() {
           startDate: any(named: 'startDate'),
           endDate: any(named: 'endDate'),
         ),
-      ).thenThrow(const RateLimitException());
-
-      await expectLater(
-        loader.loadAll('2330'),
-        throwsA(isA<RateLimitException>()),
-      );
-    });
-
-    test('股利 API 限流:rethrow', () async {
-      when(
-        () => mockDb.getMonthlyRevenueHistory(
-          any(),
-          startDate: any(named: 'startDate'),
-        ),
-      ).thenAnswer(
-        (_) async =>
-            List.generate(6, (i) => createRevenue(revenueMonth: i + 1)),
-      );
-      when(
-        () => mockFinMind.getDividends(stockId: any(named: 'stockId')),
       ).thenThrow(const RateLimitException());
 
       await expectLater(

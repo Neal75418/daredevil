@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/sentinel.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/portfolio_repository.dart';
+import 'package:daredevil/domain/services/dividend_completeness.dart';
+import 'package:daredevil/domain/services/dividend_summary.dart';
 import 'package:daredevil/domain/services/dividend_intelligence_service.dart';
 import 'package:daredevil/domain/services/portfolio_analytics_service.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
@@ -281,12 +284,11 @@ class PortfolioNotifier extends Notifier<PortfolioState> {
         stocksMap: stocksMap,
       );
 
-      // 取得股利歷史並計算股利分析
-      final dividendHistories = await _db.getDividendHistoryBatch(symbols);
-      final dividendAnalysis = _dividendService.analyzeDividends(
-        positions: positions,
-        dividendHistories: dividendHistories,
-        currentPrices: currentPrices,
+      final dividendAnalysis = await _analyzeDividends(
+        positions,
+        symbols,
+        stocksMap,
+        currentPrices,
       );
 
       state = state.copyWith(
@@ -299,6 +301,52 @@ class PortfolioNotifier extends Notifier<PortfolioState> {
       AppLogger.warning('PortfolioNotifier', '載入持倉資料失敗', e);
       state = state.copyWith(isLoading: false, error: ErrorDisplay.message(e));
     }
+  }
+
+  /// 股利分析：配發表與完整度事實建每檔的股利摘要，官方估值配上估值日的收盤。
+  /// 先讀事實、再讀配發列（理由同個股頁的 `StockFundamentalsLoader`）
+  Future<DividendAnalysis> _analyzeDividends(
+    List<PortfolioPositionEntry> positions,
+    List<String> symbols,
+    Map<String, StockMasterEntry> stocksMap,
+    Map<String, double> currentPrices,
+  ) async {
+    final now = ref.read(appClockProvider).now();
+    final completeness = await loadDividendCompleteness(_db, now: now);
+    final distributions = await _db.getDividendDistributionsBatch(symbols);
+    final valuations = await _db.getLatestValuationsBatch(symbols);
+    // 與個股頁同一個新鮮度下限：上櫃估值只同步自選與候選股，持股可能停在很久
+    // 以前的一筆（中間若分割，舊的每股股利 × 現在的股數會放大好幾倍）。過時或
+    // 殖利率空白的估值不用，改走近一年殖利率
+    final valuationFrom = now.subtract(
+      const Duration(days: DataFreshness.valuationDbLookbackDays),
+    );
+    final officialYields = <String, OfficialYield>{};
+    for (final MapEntry(key: symbol, value: valuation) in valuations.entries) {
+      final yieldPercent = valuation.dividendYield;
+      if (yieldPercent == null || valuation.date.isBefore(valuationFrom)) {
+        continue;
+      }
+      // 官方殖利率＝每股股利 ÷ 估值日收盤：乘回同一天的收盤才是交易所用的股利
+      final close = (await _db.getPriceOnDate(symbol, valuation.date))?.close;
+      if (close != null) {
+        officialYields[symbol] = (yieldPercent: yieldPercent, close: close);
+      }
+    }
+    return _dividendService.analyzeDividends(
+      positions: positions,
+      summaries: {
+        for (final symbol in symbols)
+          symbol: DividendSummary.compute(
+            symbol: symbol,
+            name: stocksMap[symbol]?.name,
+            rows: distributions[symbol] ?? const [],
+            completeness: completeness,
+          ),
+      },
+      officialYields: officialYields,
+      currentPrices: currentPrices,
+    );
   }
 
   /// 重載持倉並檢查是否成功

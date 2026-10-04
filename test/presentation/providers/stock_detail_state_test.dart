@@ -54,7 +54,7 @@ void main() {
     test('default values', () {
       const state = FundamentalsState();
       expect(state.revenueHistory, isEmpty);
-      expect(state.dividendHistory, isEmpty);
+      expect(state.dividendSummary, isNull);
       expect(state.latestPER, isNull);
       expect(state.latestQuarterMetrics, isEmpty);
       expect(state.epsHistory, isEmpty);

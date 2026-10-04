@@ -301,7 +301,8 @@ abstract final class ApiConfig {
   static const int dividendSyncOverlapDays = 7;
 
   /// 除權除息歷史回補的深度：今年往前這麼多個完整年度的 1 月起。個股頁
-  /// 股利表顯示最近 5 年，其他讀取端最多用 2–3 年。
+  /// 股利表的年數直接用這個值（`DividendSummary`：更早的年度沒有回補，列出
+  /// 也只會是建置中），其他讀取端最多用 2–3 年。
   static const int dividendBackfillYears = 5;
 
   /// 某市場在市主檔少於此檔數時，該市場本輪不回補：主檔空或殘缺（新裝機、

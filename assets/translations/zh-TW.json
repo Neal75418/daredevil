@@ -490,11 +490,24 @@
     "netMargin": "淨利率",
     "roe": "ROE",
     "dividendHistory": "股利紀錄",
-    "dividendComingSoon": "無股利資料",
-    "dividendYear": "年度",
+    "dividendYear": "除息年度",
     "cashDividend": "現金股利",
     "stockDividend": "股票股利",
     "totalDividend": "合計",
+    "dividendAverage": "平均",
+    "dividendAverageFull": "近 {years} 年平均",
+    "dividendAverageSince": "{year} 起 {years} 年平均",
+    "dividendAsOf": "截至 {date}",
+    "dividendCashCount": "{count} 次",
+    "dividendSharesPerThousand": "每千股 {shares} 股",
+    "dividendStatusNone": "無除權息",
+    "dividendStatusNoRecord": "無除權息紀錄",
+    "dividendStatusNotYet": "尚未除息",
+    "dividendStatusBuilding": "建置中",
+    "dividendBuilding": "股利資料建置中",
+    "dividendUnavailable": "暫無法取得股利資料",
+    "trailingYieldLabel": "近一年殖利率",
+    "trailingYieldNone": "無配息",
     "perLabel": "本益比",
     "pbrLabel": "股價淨值比",
     "yield": "殖利率",
@@ -768,9 +781,6 @@
     "priceChart": "價格走勢圖",
     "trendChart": "趨勢圖",
     "distributionChart": "報酬分布圖"
-  },
-  "fundamental": {
-    "dividendYearAverage": "{years}年平均: "
   },
   "settings": {
     "title": "設定",
@@ -1395,6 +1405,7 @@
     "perShare": "每股",
     "expected": "預期",
     "yield": "殖利率",
+    "dividendBuilding": "建置中",
     "unpricedWarning": "{count} 檔缺當日價,以成本價計"
   },
   "calendar": {

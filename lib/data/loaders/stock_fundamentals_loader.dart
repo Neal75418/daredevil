@@ -1,7 +1,3 @@
-import 'dart:async';
-
-import 'package:drift/drift.dart';
-
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/clock.dart';
@@ -10,11 +6,15 @@ import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/mappers/finmind_model_mapper.dart';
+import 'package:daredevil/domain/services/dividend_completeness.dart';
+import 'package:daredevil/domain/services/dividend_summary.dart';
 
 /// 基本面資料的載入結果
 typedef FundamentalsResult = ({
   List<FinMindRevenue> revenueData,
-  List<FinMindDividend> dividendData,
+
+  /// 股利摘要；null＝讀取失敗（資料不完整是摘要裡的建置中，不是 null）
+  DividendSummary? dividendSummary,
   FinMindPER? latestPER,
   List<FinancialDataEntry> epsData,
   Map<String, double> quarterMetrics,
@@ -22,8 +22,9 @@ typedef FundamentalsResult = ({
 
 /// 基本面資料載入器
 ///
-/// 負責從 DB 和 FinMind API 載入營收、股利、估值、EPS 等基本面資料。
-/// 純資料取得邏輯，不管理 UI 狀態。
+/// 負責載入營收、股利、估值、EPS 等基本面資料：營收與估值在 DB 不足時改打
+/// FinMind；股利只讀 DB（除權除息配發表與完整度事實）。純資料取得邏輯，不
+/// 管理 UI 狀態。
 ///
 /// **錯誤契約**:[RateLimitException] 一律 rethrow(限流是全域狀態,
 /// fallback 只會燒重試、吞掉會讓 UI 顯示誤導文案);其餘 API 錯誤走
@@ -60,8 +61,8 @@ class StockFundamentalsLoader {
       revenueStartDate: revenueStartDate,
     );
 
-    // 3. 股利歷史：優先從 DB 取得，無資料則從 API 取得並存入 DB
-    final dividendData = await _loadDividendHistory(symbol);
+    // 3. 股利摘要：只讀配發表與完整度事實
+    final dividendSummary = await _loadDividendSummary(symbol, today);
 
     // 4. EPS 歷史與季度財務指標（含 ROE 計算）
     final (:epsData, :quarterMetrics) = await _loadFinancialStatements(symbol);
@@ -71,7 +72,7 @@ class StockFundamentalsLoader {
 
     return (
       revenueData: revenueData,
-      dividendData: dividendData,
+      dividendSummary: dividendSummary,
       latestPER: latestPER,
       epsData: epsData,
       quarterMetrics: quarterMetrics,
@@ -176,71 +177,32 @@ class StockFundamentalsLoader {
     return [];
   }
 
-  /// 載入股利歷史
+  /// 載入股利摘要：只讀 DB（完整度事實、股票名稱、配發表）。資料不完整的
+  /// 年度在摘要裡是「建置中」，不是錯誤；只有讀取失敗回傳 null，頁首才提示
+  /// 「股利」並可重試
   ///
-  /// 優先從 DB 取得，無資料則從 FinMind API 取得並背景寫入 DB。
-  Future<List<FinMindDividend>> _loadDividendHistory(String symbol) async {
+  /// 先讀事實、再讀配發列：一般更新只新增或取代列（會刪在庫列的只有修復
+  /// 工具的 `--recheck`），事實讀取當下已在庫的列，之後一定讀得到；中間新
+  /// 寫入的列只會多讀到（顯示終點之後的照樣濾掉）。反過來先讀列，會讀到
+  /// 「事實說完整、列卻還沒讀到」
+  Future<DividendSummary?> _loadDividendSummary(
+    String symbol,
+    DateTime today,
+  ) async {
     try {
-      final dbDividends = await _db.getDividendHistory(symbol);
-      if (dbDividends.isNotEmpty) {
-        AppLogger.debug(
-          'StockFundamentalsLoader',
-          '$symbol: 使用 DB 股利歷史 (${dbDividends.length} 筆)',
-        );
-        return dbDividends
-            .map(
-              (d) => FinMindDividend(
-                stockId: d.symbol,
-                year: d.year,
-                cashDividend: d.cashDividend,
-                stockDividend: d.stockDividend,
-                exDividendDate: d.exDividendDate,
-                exRightsDate: d.exRightsDate,
-              ),
-            )
-            .toList();
-      }
-
-      // DB 無資料，從 API 取得並存入 DB
-      final apiData = await _finMind.getDividends(stockId: symbol);
-      if (apiData.isNotEmpty) {
-        // 背景寫入 DB（不阻塞 UI）
-        unawaited(
-          _db
-              .insertDividendData(
-                apiData
-                    .map(
-                      (d) => DividendHistoryCompanion.insert(
-                        symbol: symbol,
-                        year: d.year,
-                        cashDividend: Value(d.cashDividend),
-                        stockDividend: Value(d.stockDividend),
-                        exDividendDate: Value(d.exDividendDate),
-                        exRightsDate: Value(d.exRightsDate),
-                      ),
-                    )
-                    .toList(),
-              )
-              .catchError((e) {
-                AppLogger.warning(
-                  'StockFundamentalsLoader',
-                  '$symbol: 背景寫入股利失敗',
-                  e,
-                );
-              }),
-        );
-        AppLogger.debug(
-          'StockFundamentalsLoader',
-          '$symbol: 從 API 取得股利歷史 (${apiData.length} 筆) 並存入 DB',
-        );
-        return apiData;
-      }
-    } on RateLimitException {
-      rethrow;
+      final completeness = await loadDividendCompleteness(_db, now: today);
+      final stock = await _db.getStock(symbol);
+      final rows = await _db.getDividendDistributions(symbol);
+      return DividendSummary.compute(
+        symbol: symbol,
+        name: stock?.name,
+        rows: rows,
+        completeness: completeness,
+      );
     } catch (e) {
-      AppLogger.warning('StockFundamentalsLoader', '$symbol: 取得股利歷史失敗', e);
+      AppLogger.warning('StockFundamentalsLoader', '$symbol: 讀取股利資料失敗', e);
+      return null;
     }
-    return [];
   }
 
   /// 載入 EPS 歷史與季度財務指標（含 ROE 計算）

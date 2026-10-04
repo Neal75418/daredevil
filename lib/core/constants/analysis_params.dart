@@ -47,13 +47,18 @@ abstract final class AnalysisParams {
   /// （嚴格 5.5）。摘要側 4.0 較寬鬆，覆蓋台股平均 4-6% 的合理區間。
   static const double dividendYieldSummaryLabelThreshold = 4.0;
 
-  /// 預期年度股利的回溯**年度**窗口(2026-08-15 數值稽核)。
-  ///
-  /// 舊實作用 `history.take(3)` 取「最近 3 筆」——但實測 dividend_history
-  /// 的年度分布有大空洞(2021–2024 幾乎無資料),**745 檔的完整歷史只有
-  /// 2018–2020**,於是六到八年前的配息被當成「最近三年平均」餵進殖利率。
-  /// 改以年度過濾:只採計 `year >= 今年 - dividendLookbackYears`。
-  static const int dividendLookbackYears = 3;
+  /// 近一年殖利率的事件窗：以最近一次除息日為終點，往前這麼多天內（含）的
+  /// 除息。2026-10-01 以 54 檔 2024–2025 固定頻率 ETF 逐日回測配息次數：
+  /// 350 天誤差 0.05%、355 天 0.98%、365 天 28%
+  static const int trailingYieldWindowDays = 350;
+
+  /// 近一年殖利率：最近一次除息早於顯示終點這麼多天以上，視為近一年無配息
+  /// （固定年配相鄰間隔 352–377 天；在市 ETF 超過 400 天者均已停止配息）
+  static const int trailingYieldStaleDays = 400;
+
+  /// 投資組合的股利趨勢：最近兩個完整年度的現金股利變化超過這個百分比，
+  /// 才算增加或減少
+  static const double dividendTrendChangePercent = 10.0;
 
   /// 營收年增率顯著變動門檻（正負皆適用）
   static const double revenueYoySignificantThreshold = 20.0;

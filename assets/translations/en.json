@@ -490,11 +490,24 @@
     "netMargin": "Net Margin",
     "roe": "ROE",
     "dividendHistory": "Dividend History",
-    "dividendComingSoon": "No dividend data",
-    "dividendYear": "Year",
+    "dividendYear": "Ex-div Year",
     "cashDividend": "Cash",
     "stockDividend": "Stock",
     "totalDividend": "Total",
+    "dividendAverage": "Average",
+    "dividendAverageFull": "{years}Y average",
+    "dividendAverageSince": "{years}Y average since {year}",
+    "dividendAsOf": "As of {date}",
+    "dividendCashCount": "{count} payouts",
+    "dividendSharesPerThousand": "{shares} sh per 1,000",
+    "dividendStatusNone": "None",
+    "dividendStatusNoRecord": "No record",
+    "dividendStatusNotYet": "Not yet",
+    "dividendStatusBuilding": "Building",
+    "dividendBuilding": "Dividend data is being built",
+    "dividendUnavailable": "Dividend data unavailable",
+    "trailingYieldLabel": "Trailing 1Y yield",
+    "trailingYieldNone": "None",
     "perLabel": "P/E Ratio",
     "pbrLabel": "P/B Ratio",
     "yield": "Yield",
@@ -768,9 +781,6 @@
     "priceChart": "Price chart",
     "trendChart": "Trend chart",
     "distributionChart": "Return distribution chart"
-  },
-  "fundamental": {
-    "dividendYearAverage": "{years}Y Avg: "
   },
   "settings": {
     "title": "Settings",
@@ -1395,6 +1405,7 @@
     "perShare": "per share",
     "expected": "expected",
     "yield": "yield",
+    "dividendBuilding": "Building",
     "unpricedWarning": "{count} positions unpriced; valued at cost"
   },
   "calendar": {

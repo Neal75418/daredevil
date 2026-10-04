@@ -1,579 +1,257 @@
-import 'package:daredevil/core/utils/clock.dart';
-import 'package:daredevil/data/database/app_database.dart';
-import 'package:daredevil/domain/services/dividend_intelligence_service.dart';
+// 投資組合股利分析：預估年股利＝官方殖利率 × 同一天收盤價，其餘（ETF、無
+// 估值）＝近一年殖利率 × 最新收盤價；趨勢比最近兩個完整年度的現金股利。
+// 資料建置中一律 null（畫面顯示建置中），不加部分總和
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:daredevil/domain/services/dividend_intelligence_service.dart';
+import 'package:daredevil/domain/services/dividend_summary.dart';
 
 import '../../helpers/portfolio_data_builders.dart';
 
-class _FakeClock implements AppClock {
-  @override
-  DateTime now() => DateTime(2025, 6, 15);
-}
+/// [pastCash]：去年起往前的現金股利，null＝建置中
+DividendSummary _summary({
+  TrailingYield trailing = const TrailingYieldBuilding(),
+  List<double?> pastCash = const [null, null, null, null, null],
+  List<double> pastShares = const [0, 0, 0, 0, 0],
+}) => DividendSummary(
+  displayEnd: DateTime(2026, 10, 2),
+  parValueTen: true,
+  current: const DividendYearRow(year: 2026, status: DividendYearStatus.notYet),
+  pastYears: [
+    for (final (i, cash) in pastCash.indexed)
+      cash == null
+          ? DividendYearRow(year: 2025 - i, status: DividendYearStatus.building)
+          : DividendYearRow(
+              year: 2025 - i,
+              status: cash > 0 || pastShares[i] > 0
+                  ? DividendYearStatus.paid
+                  : DividendYearStatus.none,
+              cash: cash,
+              stockShares: pastShares[i],
+            ),
+  ],
+  average: null,
+  trailingYield: trailing,
+);
 
-/// 稽核測試用:固定在 2026-08-15(對齊 production 觀察到的資料窗口)
-class _Clock2026 implements AppClock {
-  @override
-  DateTime now() => DateTime(2026, 8, 15);
+const _svc = DividendIntelligenceService();
+
+StockDividendInfo _single({
+  OfficialYield? official,
+  DividendSummary? summary,
+  double? latestClose,
+  double avgCost = 50,
+}) {
+  final result = _svc.analyzeDividends(
+    positions: [
+      createTestPortfolioPosition(
+        symbol: '1111',
+        quantity: 1000,
+        avgCost: avgCost,
+      ),
+    ],
+    summaries: {'1111': ?summary},
+    officialYields: {'1111': ?official},
+    currentPrices: {'1111': ?latestClose},
+  );
+  return result.stockDividends.single;
 }
 
 void main() {
-  group('股利口徑(2026-08-15 數值稽核)', () {
-    DividendHistoryEntry div(int year, double cash, [double stock = 0]) =>
-        DividendHistoryEntry(
-          symbol: '1111',
-          year: year,
-          cashDividend: cash,
-          stockDividend: stock,
-        );
-
-    test('🚨 「最近三年」必須用年度過濾,不是 take(3) 取最近三筆', () {
-      // 實測:745 檔的完整歷史只有 2018-2020,take(3) 會拿六到八年前的
-      // 配息當「最近三年平均」餵進殖利率
-      final svc = DividendIntelligenceService(clock: _Clock2026());
-      final result = svc.analyzeDividends(
-        positions: [
-          createTestPortfolioPosition(
-            symbol: '1111',
-            quantity: 1000,
-            avgCost: 50.0,
-          ),
-        ],
-        dividendHistories: {
-          '1111': [div(2020, 6.0), div(2019, 6.0), div(2018, 6.0)],
-        },
-        currentPrices: {'1111': 60},
+  group('預估年股利（每股）', () {
+    test('🚨 有官方估值：官方殖利率 × 同一天收盤價，不是最新收盤', () {
+      final info = _single(
+        official: (yieldPercent: 2.0, close: 500),
+        summary: _summary(trailing: const TrailingYieldValue(0.05)),
+        latestClose: 600,
       );
-      expect(
-        result.stockDividends.first.estimatedDividendPerShare,
-        0,
-        reason: '2018-2020 全部超出「最近三年」(2023-2026)窗口,應視為無可用基期',
-      );
+      expect(info.estimatedDividendPerShare, closeTo(10, 1e-9));
+      expect(info.expectedYearlyAmount, closeTo(10000, 1e-6));
     });
 
-    test('🚨 現金與股票股利不得相加(面額 vs 市價,單位不同)', () {
-      final svc = DividendIntelligenceService(clock: _Clock2026());
-      final result = svc.analyzeDividends(
-        positions: [
-          createTestPortfolioPosition(
-            symbol: '1111',
-            quantity: 1000,
-            avgCost: 50.0,
-          ),
-        ],
-        dividendHistories: {
-          '1111': [div(2025, 10.0, 20.0)], // 現金 10 元 + 股票 20 元(=配 2 股)
-        },
-        currentPrices: {'1111': 60},
+    test('有官方估值時，近一年殖利率建置中也不影響', () {
+      final info = _single(
+        official: (yieldPercent: 2.0, close: 500),
+        summary: _summary(),
+        latestClose: 600,
       );
-      expect(
-        result.stockDividends.first.estimatedDividendPerShare,
-        10.0,
-        reason: '殖利率的標準定義是現金殖利率;股票股利是面額元不可直接相加',
-      );
+      expect(info.estimatedDividendPerShare, closeTo(10, 1e-9));
     });
 
-    test('當年度已建列但金額為 0(尚未宣告)→ 退回平均而非回傳 0', () {
-      final svc = DividendIntelligenceService(clock: _Clock2026());
-      final result = svc.analyzeDividends(
-        positions: [
-          createTestPortfolioPosition(
-            symbol: '1111',
-            quantity: 1000,
-            avgCost: 50.0,
-          ),
-        ],
-        dividendHistories: {
-          '1111': [div(2026, 0.0), div(2025, 8.0), div(2024, 8.0)],
-        },
-        currentPrices: {'1111': 60},
+    test('沒有官方估值（ETF、無估值）：近一年殖利率 × 最新收盤價', () {
+      final info = _single(
+        summary: _summary(trailing: const TrailingYieldValue(0.04)),
+        latestClose: 50,
+      );
+      expect(info.estimatedDividendPerShare, closeTo(2, 1e-9));
+    });
+
+    test('🚨 近一年無配息：預估 0（不是建置中）', () {
+      final info = _single(
+        summary: _summary(trailing: const TrailingYieldNone()),
+        latestClose: 50,
+      );
+      expect(info.estimatedDividendPerShare, 0);
+      expect(info.expectedYearlyAmount, 0);
+      expect(info.personalYield, 0);
+    });
+
+    test('近一年殖利率建置中、沒有最新收盤、沒有摘要：null', () {
+      expect(
+        _single(summary: _summary(), latestClose: 50).estimatedDividendPerShare,
+        isNull,
       );
       expect(
-        result.stockDividends.first.estimatedDividendPerShare,
-        closeTo(8.0, 0.01),
-        reason: '0 是「還沒宣告」不是「決定不配」',
+        _single(
+          summary: _summary(trailing: const TrailingYieldValue(0.04)),
+        ).estimatedDividendPerShare,
+        isNull,
       );
+      expect(_single(latestClose: 50).estimatedDividendPerShare, isNull);
+    });
+
+    test('個人殖利率＝預估金額 ÷ 成本', () {
+      final info = _single(
+        official: (yieldPercent: 2.0, close: 500),
+        avgCost: 400,
+      );
+      expect(info.personalYield, closeTo(2.5, 1e-9)); // 10 ÷ 400
     });
   });
 
-  final service = DividendIntelligenceService(clock: _FakeClock());
-  const currentYear = 2025;
-
-  // ==========================================
-  // analyzeDividends
-  // ==========================================
-  group('analyzeDividends', () {
-    test('returns empty for empty positions', () {
-      final result = service.analyzeDividends(
-        positions: [],
-        dividendHistories: {},
-        currentPrices: {},
-      );
-
-      expect(result.totalExpectedDividend, equals(0));
-      expect(result.stockDividends, isEmpty);
-    });
-
-    test('skips positions with quantity <= 0', () {
-      final positions = [
-        createTestPortfolioPosition(symbol: 'A', quantity: 0),
-        createTestPortfolioPosition(symbol: 'B', quantity: -10),
-      ];
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: {},
-        currentPrices: {},
-      );
-
-      expect(result.stockDividends, isEmpty);
-      expect(result.totalExpectedDividend, equals(0));
-    });
-
-    test('calculates personal yield correctly', () {
-      final positions = [
-        createTestPortfolioPosition(
-          symbol: '2330',
-          quantity: 1000,
-          avgCost: 500.0,
-        ),
-      ];
-      final histories = {
-        '2330': [
-          createTestDividendHistory(
-            symbol: '2330',
-            year: currentYear,
-            cashDividend: 15.0,
-            stockDividend: 0,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'2330': 600.0},
-      );
-
-      expect(result.stockDividends.length, equals(1));
-      final info = result.stockDividends.first;
-      // personalYield = (15 * 1000) / (500 * 1000) * 100 = 3.0%
-      expect(info.personalYield, closeTo(3.0, 0.01));
-      // marketYield = (15 * 1000) / (600 * 1000) * 100 = 2.5%
-      expect(info.expectedYearlyAmount, equals(15000.0));
-    });
-
-    test('uses avgCost as fallback when currentPrice missing', () {
-      final positions = [
-        createTestPortfolioPosition(
-          symbol: '2330',
-          quantity: 1000,
-          avgCost: 500.0,
-        ),
-      ];
-      final histories = {
-        '2330': [
-          createTestDividendHistory(
-            symbol: '2330',
-            year: currentYear,
-            cashDividend: 10.0,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {}, // no current price
-      );
-
-      // 沒有現價時以平均成本（500）估市值：市值殖利率＝成本殖利率＝
-      // 10 × 1000 ÷ (500 × 1000) × 100 = 2%。原本這裡只取值不斷言
-      expect(result.stockDividends.first.symbol, '2330');
-      expect(result.portfolioYieldOnMarket, closeTo(2.0, 0.01));
-      expect(result.portfolioYieldOnMarket, result.portfolioYieldOnCost);
-    });
-
-    test('calculates portfolio yields correctly', () {
-      final positions = [
-        createTestPortfolioPosition(
-          id: 1,
-          symbol: 'A',
-          quantity: 1000,
-          avgCost: 100.0,
-        ),
-        createTestPortfolioPosition(
-          id: 2,
-          symbol: 'B',
-          quantity: 500,
-          avgCost: 200.0,
-        ),
-      ];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
+  group('組合合計', () {
+    test('全部有預估：加總與兩種殖利率', () {
+      final result = _svc.analyzeDividends(
+        positions: [
+          createTestPortfolioPosition(
+            id: 1,
             symbol: 'A',
-            year: currentYear,
-            cashDividend: 5.0,
+            quantity: 1000,
+            avgCost: 100,
           ),
-        ],
-        'B': [
-          createTestDividendHistory(
+          createTestPortfolioPosition(
+            id: 2,
             symbol: 'B',
-            year: currentYear,
-            cashDividend: 10.0,
+            quantity: 2000,
+            avgCost: 50,
           ),
         ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 120.0, 'B': 220.0},
+        summaries: {'B': _summary(trailing: const TrailingYieldValue(0.05))},
+        officialYields: {'A': (yieldPercent: 4.0, close: 125)},
+        currentPrices: {'A': 125, 'B': 40},
       );
-
-      // totalExpected = 5*1000 + 10*500 = 10000
-      expect(result.totalExpectedDividend, equals(10000.0));
-      // totalCost = 100*1000 + 200*500 = 200000
-      expect(result.portfolioYieldOnCost, closeTo(5.0, 0.01));
-      // totalMarket = 120*1000 + 220*500 = 230000
-      expect(
-        result.portfolioYieldOnMarket,
-        closeTo(10000.0 / 230000 * 100, 0.01),
-      );
+      // A：4% × 125＝5 元 × 1000＝5000；B：5% × 40＝2 元 × 2000＝4000
+      expect(result.totalExpectedDividend, closeTo(9000, 1e-6));
+      expect(result.portfolioYieldOnCost, closeTo(4.5, 1e-9)); // ÷ 200,000
+      expect(result.portfolioYieldOnMarket, closeTo(9000 / 205000 * 100, 1e-9));
     });
 
-    test('sorts stockDividends by expectedYearlyAmount descending', () {
-      final positions = [
-        createTestPortfolioPosition(id: 1, symbol: 'A', quantity: 100),
-        createTestPortfolioPosition(id: 2, symbol: 'B', quantity: 1000),
-      ];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
+    test('🚨 任一持股建置中：合計與兩種殖利率都是 null（不加部分總和）', () {
+      final result = _svc.analyzeDividends(
+        positions: [
+          createTestPortfolioPosition(
+            id: 1,
             symbol: 'A',
-            year: currentYear,
-            cashDividend: 5.0,
+            quantity: 1000,
+            avgCost: 100,
+          ),
+          createTestPortfolioPosition(
+            id: 2,
+            symbol: '0050',
+            quantity: 1000,
+            avgCost: 100,
           ),
         ],
-        'B': [
-          createTestDividendHistory(
-            symbol: 'B',
-            year: currentYear,
-            cashDividend: 5.0,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 100.0, 'B': 100.0},
+        summaries: {'0050': _summary()},
+        officialYields: {'A': (yieldPercent: 4.0, close: 125)},
+        currentPrices: {'A': 125, '0050': 110},
       );
-
-      // B has more shares → higher expected amount
-      expect(result.stockDividends.first.symbol, equals('B'));
-      expect(result.stockDividends.last.symbol, equals('A'));
+      expect(result.totalExpectedDividend, isNull);
+      expect(result.portfolioYieldOnCost, isNull);
+      expect(result.portfolioYieldOnMarket, isNull);
+      expect(
+        result.stockDividends.first.expectedYearlyAmount,
+        closeTo(5000, 1e-6),
+      );
     });
 
-    test('handles position with no dividend history', () {
-      final positions = [
-        createTestPortfolioPosition(symbol: '2330', quantity: 1000),
-      ];
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: {}, // no history
-        currentPrices: {'2330': 100.0},
+    test('依預估金額由大到小，建置中排最後', () {
+      final result = _svc.analyzeDividends(
+        positions: [
+          createTestPortfolioPosition(id: 1, symbol: 'X'),
+          createTestPortfolioPosition(id: 2, symbol: 'S'),
+          createTestPortfolioPosition(id: 3, symbol: 'L'),
+        ],
+        summaries: {'X': _summary()},
+        officialYields: {
+          'S': (yieldPercent: 1.0, close: 100),
+          'L': (yieldPercent: 5.0, close: 100),
+        },
+        currentPrices: const {},
       );
+      expect(result.stockDividends.map((s) => s.symbol), ['L', 'S', 'X']);
+    });
 
-      expect(result.stockDividends.length, equals(1));
-      expect(result.stockDividends.first.estimatedDividendPerShare, equals(0));
-      expect(result.stockDividends.first.expectedYearlyAmount, equals(0));
+    test('已出清的持股（數量 0）不列入', () {
+      final result = _svc.analyzeDividends(
+        positions: [createTestPortfolioPosition(symbol: 'A', quantity: 0)],
+        summaries: const {},
+        officialYields: const {},
+        currentPrices: const {},
+      );
+      expect(result.stockDividends, isEmpty);
+      expect(result.totalExpectedDividend, 0);
+    });
+
+    test('沒有持股：empty', () {
+      final result = _svc.analyzeDividends(
+        positions: const [],
+        summaries: const {},
+        officialYields: const {},
+        currentPrices: const {},
+      );
+      expect(result, same(DividendAnalysis.empty));
     });
   });
 
-  // ==========================================
-  // _estimateAnnualDividend (via analyzeDividends)
-  // ==========================================
-  group('estimateAnnualDividend', () {
-    test('uses current year data when available', () {
-      final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear,
-            cashDividend: 8.0,
-            stockDividend: 2.0,
-          ),
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 1,
-            cashDividend: 5.0,
-          ),
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 2,
-            cashDividend: 4.0,
-          ),
-        ],
-      };
+  group('趨勢（最近兩個完整年度的現金股利）', () {
+    DividendTrend? trend(
+      List<double?> pastCash, {
+      List<double> pastShares = const [0, 0, 0, 0, 0],
+    }) => _single(
+      summary: _summary(pastCash: pastCash, pastShares: pastShares),
+    ).trend;
 
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 100.0},
-      );
+    test('現金增加超過 10%：增加；減少超過 10%：減少；其餘持平', () {
+      expect(trend([1.125, 1, 0, 0, 0]), DividendTrend.increasing);
+      expect(trend([1.09375, 1, 0, 0, 0]), DividendTrend.stable);
+      expect(trend([0.875, 1, 0, 0, 0]), DividendTrend.decreasing);
+      expect(trend([0.90625, 1, 0, 0, 0]), DividendTrend.stable);
+    });
 
-      // 2026-08-15 數值稽核更正:原斷言 8+2=10(現金加股票)。股票股利
-      // 的單位是**面額元**(配 2 元 = 每股配 0.2 股),與現金元不同幣值,
-      // 相加無意義;殖利率的標準定義即現金殖利率,且交易所給的
-      // stock_valuation.dividend_yield 也是純現金——兩者現在口徑一致。
+    test('只比現金、不看配股（面額不一定 10 元）', () {
       expect(
-        result.stockDividends.first.estimatedDividendPerShare,
-        equals(8.0),
-        reason: '只採計當年度現金股利 8.0,不加股票股利 2.0',
+        trend([1, 1, 0, 0, 0], pastShares: [100, 0, 0, 0, 0]),
+        DividendTrend.stable,
       );
     });
 
-    test('uses 3-year average when no current year data', () {
-      final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 1,
-            cashDividend: 6.0,
-          ),
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 2,
-            cashDividend: 4.0,
-          ),
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 3,
-            cashDividend: 5.0,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 100.0},
-      );
-
-      // Average of 3 years: (6+4+5)/3 = 5.0
-      expect(
-        result.stockDividends.first.estimatedDividendPerShare,
-        equals(5.0),
-      );
+    test('前年沒有配發：去年有就是增加，都沒有就是持平', () {
+      expect(trend([1, 0, 0, 0, 0]), DividendTrend.increasing);
+      expect(trend([0, 0, 0, 0, 0]), DividendTrend.stable);
     });
 
-    test('uses single year when only 1 year available', () {
-      final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 1,
-            cashDividend: 7.0,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 100.0},
-      );
-
-      expect(
-        result.stockDividends.first.estimatedDividendPerShare,
-        equals(7.0),
-      );
+    test('🚨 任一年建置中：不顯示趨勢（null）', () {
+      expect(trend([null, 1, 0, 0, 0]), isNull);
+      expect(trend([1, null, 0, 0, 0]), isNull);
     });
 
-    test('股票股利不計入預期股利(面額元 ≠ 現金元,2026-08-15 更正)', () {
-      final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 1,
-            cashDividend: 3.0,
-            stockDividend: 1.5,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 100.0},
-      );
-
-      expect(
-        result.stockDividends.first.estimatedDividendPerShare,
-        equals(3.0),
-        reason: '現金 3.0;股票股利 1.5 是面額元(每股配 0.15 股),不相加',
-      );
+    test('只看去年與前年：更早的年度不影響', () {
+      expect(trend([1, 1, null, 9, 9]), DividendTrend.stable);
     });
 
-    test('returns 0 for empty history', () {
-      final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: {'A': []},
-        currentPrices: {'A': 100.0},
-      );
-
-      expect(result.stockDividends.first.estimatedDividendPerShare, equals(0));
-    });
-  });
-
-  // ==========================================
-  // _analyzeTrend (via analyzeDividends)
-  // ==========================================
-  group('analyzeTrend', () {
-    test('returns increasing when change > 10%', () {
-      final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 1,
-            cashDividend: 6.0,
-          ),
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 2,
-            cashDividend: 5.0,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 100.0},
-      );
-
-      // (6-5)/5 * 100 = 20% > 10%
-      expect(
-        result.stockDividends.first.trend,
-        equals(DividendTrend.increasing),
-      );
-    });
-
-    test('returns decreasing when change < -10%', () {
-      final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 1,
-            cashDividend: 4.0,
-          ),
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 2,
-            cashDividend: 5.0,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 100.0},
-      );
-
-      // (4-5)/5 * 100 = -20% < -10%
-      expect(
-        result.stockDividends.first.trend,
-        equals(DividendTrend.decreasing),
-      );
-    });
-
-    test('returns stable when change between -10% and 10%', () {
-      final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 1,
-            cashDividend: 5.2,
-          ),
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 2,
-            cashDividend: 5.0,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 100.0},
-      );
-
-      // (5.2-5)/5 * 100 = 4% → stable
-      expect(result.stockDividends.first.trend, equals(DividendTrend.stable));
-    });
-
-    test('returns stable with < 2 entries', () {
-      final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 1,
-            cashDividend: 5.0,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 100.0},
-      );
-
-      expect(result.stockDividends.first.trend, equals(DividendTrend.stable));
-    });
-
-    test('returns increasing when previous total is 0', () {
-      final positions = [createTestPortfolioPosition(symbol: 'A', quantity: 1)];
-      final histories = {
-        'A': [
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 1,
-            cashDividend: 3.0,
-          ),
-          createTestDividendHistory(
-            symbol: 'A',
-            year: currentYear - 2,
-            cashDividend: 0,
-            stockDividend: 0,
-          ),
-        ],
-      };
-
-      final result = service.analyzeDividends(
-        positions: positions,
-        dividendHistories: histories,
-        currentPrices: {'A': 100.0},
-      );
-
-      expect(
-        result.stockDividends.first.trend,
-        equals(DividendTrend.increasing),
-      );
+    test('沒有摘要：不顯示趨勢', () {
+      expect(_single(official: (yieldPercent: 2.0, close: 500)).trend, isNull);
     });
   });
 }

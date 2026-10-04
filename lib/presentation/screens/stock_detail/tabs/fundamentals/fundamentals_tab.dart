@@ -2,13 +2,15 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:daredevil/core/constants/stock_patterns.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
+import 'package:daredevil/domain/services/dividend_summary.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/providers/stock_detail_provider.dart';
 import 'package:daredevil/presentation/widgets/section_header.dart';
 
-import 'package:daredevil/presentation/screens/stock_detail/tabs/fundamentals/dividend_table.dart';
+import 'package:daredevil/presentation/screens/stock_detail/tabs/fundamentals/dividend_summary_table.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/fundamentals/eps_table.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/fundamentals/fundamentals_helpers.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/fundamentals/profitability_card.dart';
@@ -166,14 +168,15 @@ class _FundamentalsTabState extends ConsumerState<FundamentalsTab> {
 
           if (isLoadingFundamentals)
             buildLoadingState(context)
-          else if (fundamentals.dividendHistory.isEmpty &&
-              fundamentalsError == null)
-            buildEmptyState(context, 'stockDetail.dividendComingSoon'.tr())
-          else
-            DividendTable(
-              dividends: fundamentals.dividendHistory,
-              showROCYear: showROCYear,
-            ),
+          else if (fundamentals.dividendSummary case final summary?)
+            summary.allBuilding
+                ? buildEmptyState(context, 'stockDetail.dividendBuilding'.tr())
+                : DividendSummaryTable(
+                    summary: summary,
+                    showROCYear: showROCYear,
+                  )
+          else if (fundamentalsError != null)
+            buildEmptyState(context, 'stockDetail.dividendUnavailable'.tr()),
         ],
       ),
     );
@@ -212,18 +215,40 @@ class _FundamentalsTabState extends ConsumerState<FundamentalsTab> {
           ),
         ),
         const SizedBox(width: DesignTokens.spacing8),
-        Expanded(
-          child: MetricCard(
-            label: 'stockDetail.yield'.tr(),
-            value: per != null && per.dividendYield > 0
-                ? '${per.dividendYield.toStringAsFixed(2)}%'
-                : '-',
-            icon: Icons.percent,
-            accentColor: _kYieldColor(brightness),
-            subtitle: 'stockDetail.yieldLabel'.tr(),
-          ),
-        ),
+        Expanded(child: _buildYieldCard(fundamentals, brightness)),
       ],
+    );
+  }
+
+  /// 殖利率卡：一般股票用官方估值；ETF 沒有官方估值，改顯示近一年殖利率
+  Widget _buildYieldCard(
+    FundamentalsState fundamentals,
+    Brightness brightness,
+  ) {
+    if (!StockPatterns.isEtfCode(widget.symbol)) {
+      final per = fundamentals.latestPER;
+      return MetricCard(
+        label: 'stockDetail.yield'.tr(),
+        value: per != null && per.dividendYield > 0
+            ? '${per.dividendYield.toStringAsFixed(2)}%'
+            : '-',
+        icon: Icons.percent,
+        accentColor: _kYieldColor(brightness),
+        subtitle: 'stockDetail.yieldLabel'.tr(),
+      );
+    }
+    return MetricCard(
+      label: 'stockDetail.yield'.tr(),
+      value: switch (fundamentals.dividendSummary?.trailingYield) {
+        TrailingYieldValue(:final ratio) =>
+          '${(ratio * 100).toStringAsFixed(2)}%',
+        TrailingYieldNone() => 'stockDetail.trailingYieldNone'.tr(),
+        TrailingYieldBuilding() => 'stockDetail.dividendStatusBuilding'.tr(),
+        null => '-',
+      },
+      icon: Icons.percent,
+      accentColor: _kYieldColor(brightness),
+      subtitle: 'stockDetail.trailingYieldLabel'.tr(),
     );
   }
 }
