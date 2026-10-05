@@ -1,9 +1,10 @@
 /// 盤中即時報價(TWSE MIS `getStockInfo.jsp`,2026-08-08)。
 ///
 /// 這支 API 的欄位名極短且**無成交時價格欄是 `'-'`**——盤前、冷門股、
-/// 剛開盤那幾秒都會遇到。價格取用順序 z(成交)→ pz(試撮)→ 最佳一檔買賣
-/// 的中價(只有一側時取該側);都沒有就不回傳這檔,不回 0(0 會讓所有
-/// 「跌破」提醒瞬間觸發),也不退回開盤價(理由見 [parseResponse] 內註解)。
+/// 剛開盤那幾秒都會遇到。價格取用順序 z(成交)→ pz(試撮)→ 漲跌停鎖住時
+/// 的漲跌停價(見 [_lockedPrice])→ 最佳一檔買賣的中價(只有一側時取該
+/// 側);都沒有就不回傳這檔,不回 0(0 會讓所有「跌破」提醒瞬間觸發),也
+/// 不退回開盤價(理由見 [parseResponse] 內註解)。
 class IntradayQuote {
   const IntradayQuote({
     required this.symbol,
@@ -15,6 +16,10 @@ class IntradayQuote {
     this.low,
     this.volume,
     this.time,
+    this.limitUp,
+    this.limitDown,
+    required this.hasBid,
+    required this.hasAsk,
   });
 
   final String symbol;
@@ -32,6 +37,21 @@ class IntradayQuote {
 
   /// 報價時刻(HH:mm:ss)
   final String? time;
+
+  /// 漲停價、跌停價(`u`／`w`);指數沒有這兩欄,為 null
+  final double? limitUp;
+  final double? limitDown;
+
+  /// 買方、賣方五檔是否有任何正數價位(首格 0 是市價委託,不算)
+  final bool hasBid;
+  final bool hasAsk;
+
+  /// 鎖漲停:價格等於漲停價且沒有賣單(不論當輪有無成交)
+  bool get isLimitUpLocked => limitUp != null && price == limitUp && !hasAsk;
+
+  /// 鎖跌停:價格等於跌停價且沒有買單
+  bool get isLimitDownLocked =>
+      limitDown != null && price == limitDown && !hasBid;
 
   double get changePercent =>
       previousClose > 0 ? (price / previousClose - 1) * 100 : 0;
@@ -64,7 +84,10 @@ class IntradayQuote {
       // 沒有(盤前、暫停交易)就視為無報價,不要猜:漏一輪(5 分鐘後
       // 再查)遠比觸發錯誤安全。
       final price =
-          _num(row['z']) ?? _num(row['pz']) ?? _midOrSide(row['b'], row['a']);
+          _num(row['z']) ??
+          _num(row['pz']) ??
+          _lockedPrice(row) ??
+          _midOrSide(row['b'], row['a']);
       if (price == null) continue;
 
       result[symbol] = IntradayQuote(
@@ -77,9 +100,36 @@ class IntradayQuote {
         low: _num(row['l']),
         volume: int.tryParse(row['v']?.toString() ?? ''),
         time: row['t']?.toString(),
+        limitUp: _num(row['u']),
+        limitDown: _num(row['w']),
+        hasBid: _firstPositive(row['b']) != null,
+        hasAsk: _firstPositive(row['a']) != null,
       );
     }
     return result;
+  }
+
+  /// 漲跌停鎖住、當輪沒有成交時的價格;不是鎖住就回 null 交給五檔中價。
+  ///
+  /// 🚨 2026-10-05 實測(12:13,加權大漲逾千點):川湖、台光電、聯茂漲停
+  /// 鎖住,z、pz 都是 '-',買方五檔是 `0.0000_13355.0000_…`(首格 0 是
+  /// 市價委託,第二格才是漲停價),賣方 '-'。[_midOrSide] 只看首格 → 判為
+  /// 無報價、整檔丟掉。z 只在快照剛好碰到成交時有值,所以鎖住期間只有
+  /// 那幾輪拿得到價格;成交稀少的鎖跌停股,「跌破」可能整段鎖住期間都
+  /// 不響(鎖漲停的「突破」同理)。
+  ///
+  /// 只認「買方第一個正數價位**等於漲停價**、賣方沒有任何正數價位」
+  /// (跌停為鏡像)。不把「第一個正數」一律當價格:無賣單、有市價買單、
+  /// 外加一筆遠低的限價買單時,那筆限價不是現在的市場,當價格會讓
+  /// 「跌破」誤觸發。其餘情況維持 [_midOrSide] 原行為。
+  static double? _lockedPrice(Map<dynamic, dynamic> row) {
+    final limitUp = _num(row['u']);
+    final limitDown = _num(row['w']);
+    final bid = _firstPositive(row['b']);
+    final ask = _firstPositive(row['a']);
+    if (limitUp != null && ask == null && bid == limitUp) return limitUp;
+    if (limitDown != null && bid == null && ask == limitDown) return limitDown;
+    return null;
   }
 
   /// 買賣五檔取中價;只有單邊就用那一邊,兩邊皆無回 null。
@@ -97,6 +147,15 @@ class IntradayQuote {
     final ask = best(askField);
     if (bid != null && ask != null) return (bid + ask) / 2;
     return bid ?? ask;
+  }
+
+  /// 五檔欄位裡第一個正數價位;首格 0(市價委託)與 '-' 都跳過
+  static double? _firstPositive(Object? field) {
+    for (final part in (field?.toString() ?? '').split('_')) {
+      final v = _num(part);
+      if (v != null) return v;
+    }
+    return null;
   }
 
   /// MIS 用 `'-'` 表示「無此值」,parse 失敗與非正數一律當缺值

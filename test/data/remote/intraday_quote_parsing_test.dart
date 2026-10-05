@@ -121,4 +121,213 @@ void main() {
     final q = IntradayQuote.parseResponse(raw)['2330']!;
     expect(q.changePercent, closeTo((2370 / 2365 - 1) * 100, 1e-9));
   });
+
+  /// 漲跌停鎖住(2026-10-05 實測)。
+  ///
+  /// fixture 的每一列是 2026-10-05 12:13 MIS 回應的原始資料(當天加權指數
+  /// 盤中大漲逾千點);當時分三次批次請求共 58 列,這裡只收 12 列——兩個
+  /// 指數、當天的漲跌停焦點股、幾檔權值股,涵蓋鎖住無成交、鎖住有成交、
+  /// 一般成交、五檔中價、指數各種情況。外層 rtcode 等欄位是合併後重組的。
+  /// 完整 58 列的新舊比對已於 2026-10-06 做過一次(其餘 55 列逐列相同)。
+  ///
+  /// 鎖漲停且當輪沒有成交時 z、pz 都是 '-',買方五檔第一格是 0(市價委託)、
+  /// 第二格才是漲停價,賣方 '-'——修正前取第一格 0 判為無報價、整檔丟掉。
+  ///
+  /// `_legacy_prices.json` 是**修正前**的解析器(commit e82c082f)跑同一份
+  /// fixture 的輸出,格式 `{代號: 價格或 null}`,2026-10-06 產出後凍結。
+  /// **不可用現行程式重新產生**——那會變成自己比自己,證明不了「修正只改
+  /// 鎖住的列」。
+  group('漲跌停鎖住', () {
+    Map<String, dynamic> load(String name) =>
+        jsonDecode(File('test/fixtures/$name').readAsStringSync())
+            as Map<String, dynamic>;
+    final locked = load('twse_mis_intraday_limit_locked_20261005.json');
+    final legacy = load(
+      'twse_mis_intraday_limit_locked_20261005_legacy_prices.json',
+    );
+
+    test('🚨 鎖漲停、當輪沒有成交 → 取漲停價(修正前整檔被丟掉)', () {
+      final q = IntradayQuote.parseResponse(locked);
+      expect(legacy.keys.toSet(), q.keys.toSet());
+      expect(
+        {
+          for (final e in legacy.entries)
+            if (e.value == null) e.key,
+        },
+        {'2059', '2383', '6213'},
+      );
+      for (final (symbol, limit) in const [
+        ('2059', 13355.0), // 川湖
+        ('2383', 5700.0), // 台光電
+        ('6213', 751.0), // 聯茂
+      ]) {
+        expect(q[symbol]?.price, limit, reason: symbol);
+      }
+    });
+
+    test('🚨 其餘 9 列的價格與修正前逐列相同', () {
+      final q = IntradayQuote.parseResponse(locked);
+      final others = legacy.entries.where((e) => e.value != null).toList();
+      expect(others, hasLength(9));
+      for (final e in others) {
+        expect(q[e.key]?.price, e.value, reason: e.key);
+      }
+      expect(q, hasLength(12));
+    });
+
+    test('鎖住標記:價格等於漲停價且沒有賣單(不論當輪有無成交)', () {
+      final q = IntradayQuote.parseResponse(locked);
+      final up = {
+        for (final e in q.entries)
+          if (e.value.isLimitUpLocked) e.key,
+      };
+      final down = {
+        for (final e in q.entries)
+          if (e.value.isLimitDownLocked) e.key,
+      };
+      // 南亞、萬潤、台燿當輪有成交(z = 漲停價),同樣是鎖住
+      expect(up, {'1303', '2059', '2383', '6187', '6213', '6274'});
+      // 倉和:成交價 = 跌停價、沒有買單
+      expect(down, {'6538'});
+      expect(q['2383']!.limitUp, 5700.0);
+      expect(q['6538']!.limitDown, 335.5);
+    });
+
+    test('指數列沒有漲跌停價,不判鎖住', () {
+      final q = IntradayQuote.parseResponse({
+        'rtcode': '0000',
+        'msgArray': [
+          {'c': 't00', 'z': '49647.94', 'y': '48475.74'},
+        ],
+      });
+      expect(q['t00']!.limitUp, isNull);
+      expect(q['t00']!.isLimitUpLocked, isFalse);
+      expect(q['t00']!.isLimitDownLocked, isFalse);
+    });
+
+    test('鎖跌停、當輪沒有成交 → 取跌停價(合成資料:鏡像漲停實測)', () {
+      final q = IntradayQuote.parseResponse({
+        'rtcode': '0000',
+        'msgArray': [
+          {
+            'c': '6538',
+            'z': '-',
+            'pz': '-',
+            'y': '372.5',
+            'u': '409.5',
+            'w': '335.5',
+            'b': '-',
+            'a': '0.0000_335.5000_336.0000_',
+          },
+        ],
+      });
+      expect(q['6538']?.price, 335.5);
+      expect(q['6538']!.isLimitDownLocked, isTrue);
+    });
+
+    test('🚨 首格 0 但第一個正數不是漲停價 → 維持無報價,不誤當成價格', () {
+      // 合成:無賣單、有市價買單、外加一筆遠低的限價買單。若把「第一個正數」
+      // 一律當價格,會得到 46,掛在 47 的「跌破」提醒就被誤觸發——但市場
+      // 其實是有人市價搶買
+      final q = IntradayQuote.parseResponse({
+        'rtcode': '0000',
+        'msgArray': [
+          {
+            'c': '9998',
+            'z': '-',
+            'pz': '-',
+            'y': '50.0',
+            'u': '55.0',
+            'w': '45.0',
+            'b': '0.0000_46.0000_',
+            'a': '-',
+          },
+        ],
+      });
+      expect(q.containsKey('9998'), isFalse);
+    });
+
+    test('首格 0 但第一個正數不是跌停價 → 維持無報價(賣方鏡像)', () {
+      // 合成:無買單、有市價賣單、外加一筆遠高的限價賣單
+      final q = IntradayQuote.parseResponse({
+        'rtcode': '0000',
+        'msgArray': [
+          {
+            'c': '9997',
+            'z': '-',
+            'pz': '-',
+            'y': '50.0',
+            'u': '55.0',
+            'w': '45.0',
+            'b': '-',
+            'a': '0.0000_54.0000_',
+          },
+        ],
+      });
+      expect(q.containsKey('9997'), isFalse);
+    });
+
+    test('不算鎖住:漲跌停價上還有對手單,或價格不在漲跌停價', () {
+      // 合成。每列都有成交價 z,只驗鎖住標記
+      final q = IntradayQuote.parseResponse({
+        'rtcode': '0000',
+        'msgArray': [
+          // 成交在漲停價、但還有賣單(打開漲停)
+          {
+            'c': 'u1',
+            'z': '55.0',
+            'y': '50.0',
+            'u': '55.0',
+            'w': '45.0',
+            'b': '54.9000_',
+            'a': '55.0000_',
+          },
+          // 沒有賣單、但成交價低於漲停價
+          {
+            'c': 'u2',
+            'z': '54.0',
+            'y': '50.0',
+            'u': '55.0',
+            'w': '45.0',
+            'b': '53.9000_',
+            'a': '-',
+          },
+          // 成交在漲停價、賣方首格是市價委託 0、第二格才是正數:仍有賣單
+          {
+            'c': 'u3',
+            'z': '55.0',
+            'y': '50.0',
+            'u': '55.0',
+            'w': '45.0',
+            'b': '-',
+            'a': '0.0000_55.0000_',
+          },
+          // 成交在跌停價、但還有買單(打開跌停)
+          {
+            'c': 'd1',
+            'z': '45.0',
+            'y': '50.0',
+            'u': '55.0',
+            'w': '45.0',
+            'b': '45.0000_',
+            'a': '45.1000_',
+          },
+          // 沒有買單、但成交價高於跌停價
+          {
+            'c': 'd2',
+            'z': '46.0',
+            'y': '50.0',
+            'u': '55.0',
+            'w': '45.0',
+            'b': '-',
+            'a': '46.1000_',
+          },
+        ],
+      });
+      for (final s in const ['u1', 'u2', 'u3', 'd1', 'd2']) {
+        expect(q[s]!.isLimitUpLocked, isFalse, reason: s);
+        expect(q[s]!.isLimitDownLocked, isFalse, reason: s);
+      }
+    });
+  });
 }

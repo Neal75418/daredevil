@@ -50,7 +50,14 @@ void main() {
   );
 
   IntradayQuote quote(String s, double price, {double prev = 183.5}) =>
-      IntradayQuote(symbol: s, name: '測試$s', price: price, previousClose: prev);
+      IntradayQuote(
+        symbol: s,
+        name: '測試$s',
+        price: price,
+        previousClose: prev,
+        hasBid: true,
+        hasAsk: true,
+      );
 
   setUp(() {
     db = MockDb();
@@ -89,6 +96,40 @@ void main() {
 
     expect((await monitor.check()).fired, isEmpty);
     verifyNever(() => db.claimAlertTrigger(any(), now: any(named: 'now')));
+  });
+
+  test('🚨 鎖跌停、當輪沒有成交 → 跌破照常觸發(修正前拿不到價格)', () async {
+    // 2026-10-05 實測:漲停鎖住且當輪沒有成交時 z、pz 都是 '-'、買方五檔
+    // 首格 0(市價委託);跌停鎖住是鏡像。修正前解析把這類列整檔丟掉,
+    // 鎖住期間只有剛好碰到成交的那幾輪拿得到價格——偏偏是最需要提醒的
+    // 時候。下面這列是合成資料(鏡像實測漲停列),報價走真的
+    // parseResponse,不手刻 IntradayQuote
+    when(
+      () => db.getActiveAlerts(),
+    ).thenAnswer((_) async => [alert(target: 340.0)]);
+    final parsed = IntradayQuote.parseResponse({
+      'rtcode': '0000',
+      'msgArray': [
+        {
+          'c': '3231',
+          'n': '測試3231',
+          'z': '-',
+          'pz': '-',
+          'y': '372.5',
+          'u': '409.5',
+          'w': '335.5',
+          'b': '-',
+          'a': '0.0000_335.5000_336.0000_',
+        },
+      ],
+    });
+    when(
+      () => client.fetchQuotes(any()),
+    ).thenAnswer((_) async => (quotes: parsed, errors: const <String>[]));
+
+    final fired = (await monitor.check()).fired;
+
+    expect(fired.single.quote.price, 335.5);
   });
 
   test('🚨 向上型:突破才觸發', () async {
