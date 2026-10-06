@@ -330,4 +330,105 @@ void main() {
       }
     });
   });
+
+  /// 盤中即時報價(2026-10-06):顯示需要報價日期、價格來源與最後一筆成交。
+  /// `price` 的取值規則不變(盤中提醒沿用),新欄位只供顯示。
+  group('報價日期、價格來源、最後成交', () {
+    Map<String, dynamic> load(String name) =>
+        jsonDecode(File('test/fixtures/$name').readAsStringSync())
+            as Map<String, dynamic>;
+    final noon = IntradayQuote.parseResponse(
+      load('twse_mis_intraday_limit_locked_20261005.json'),
+    );
+
+    test('🚨 當輪無成交 → 價格照舊取五檔中價,另帶最後一筆成交(12:13 的 2330)', () {
+      final q = noon['2330']!;
+      expect(q.price, 2562.5, reason: 'price 規則不變(盤中提醒用它比價)');
+      expect(q.priceSource, QuotePriceSource.book);
+      expect(q.lastTradePrice, 2560.0);
+      expect(q.lastTradeTime, '12:13:25');
+      expect(q.date, DateTime(2026, 10, 5));
+    });
+
+    test('價格來源:成交、鎖住;指數列沒有 trade', () {
+      expect(
+        noon['1303']!.priceSource,
+        QuotePriceSource.trade,
+        reason: 'z=286(同時鎖漲停,鎖住標記另算)',
+      );
+      expect(noon['2059']!.priceSource, QuotePriceSource.locked);
+      expect(noon['2059']!.lastTradePrice, 13355.0);
+      expect(noon['2059']!.lastTradeTime, '11:43:31');
+      expect(noon['t00']!.priceSource, QuotePriceSource.trade);
+      expect(noon['t00']!.lastTradePrice, isNull);
+      expect(noon['t00']!.lastTradeTime, isNull);
+    });
+
+    test('收盤後的回應(2026-08-07)沒有 trade → 最後成交為 null', () {
+      final q = IntradayQuote.parseResponse(load('twse_mis_intraday.json'));
+      for (final s in const ['2330', '3231', '6538']) {
+        expect(q[s]!.lastTradePrice, isNull, reason: s);
+        expect(q[s]!.lastTradeTime, isNull, reason: s);
+        expect(q[s]!.date, DateTime(2026, 8, 7), reason: s);
+        expect(q[s]!.priceSource, QuotePriceSource.trade, reason: s);
+      }
+    });
+
+    test('只有試撮價 → trial;收盤集合競價首格 0、pz 為 - → 五檔,最後成交另帶', () {
+      final q = IntradayQuote.parseResponse({
+        'rtcode': '0000',
+        'msgArray': [
+          {
+            'c': 'p1',
+            'z': '-',
+            'pz': '101.5000',
+            'y': '100.0000',
+            'd': '20261006',
+            't': '13:26:05',
+          },
+          {
+            'c': 'p2',
+            'z': '-',
+            'pz': '-',
+            'y': '100.0000',
+            'u': '110.0000',
+            'w': '90.0000',
+            'b': '0.0000_100.5000_',
+            'a': '101.0000_',
+            'd': '20261006',
+            't': '13:27:05',
+            'trade': {'t': '13:24:58', 'z': '100.5000'},
+          },
+        ],
+      });
+      expect(q['p1']!.priceSource, QuotePriceSource.trial);
+      expect(q['p1']!.price, 101.5);
+      expect(q['p2']!.priceSource, QuotePriceSource.book);
+      expect(q['p2']!.price, 101.0, reason: '首格 0 視為缺值、只剩賣方(原規則)');
+      expect(q['p2']!.lastTradePrice, 100.5);
+      expect(q['p2']!.lastTradeTime, '13:24:58');
+    });
+
+    test('d 缺漏或格式不符 → date 為 null;trade.z 為 - 或 trade 不是物件 → 最後成交為 null', () {
+      final q = IntradayQuote.parseResponse({
+        'rtcode': '0000',
+        'msgArray': [
+          {'c': 'x1', 'z': '10', 'y': '10'},
+          {
+            'c': 'x2',
+            'z': '10',
+            'y': '10',
+            'd': '2026105',
+            'trade': {'t': '10:00:00', 'z': '-'},
+          },
+          {'c': 'x3', 'z': '10', 'y': '10', 'd': '20261306', 'trade': '10.0'},
+        ],
+      });
+      for (final s in const ['x1', 'x2', 'x3']) {
+        expect(q[s]!.date, isNull, reason: s);
+        expect(q[s]!.lastTradePrice, isNull, reason: s);
+        expect(q[s]!.lastTradeTime, isNull, reason: s);
+      }
+    });
+  });
 }

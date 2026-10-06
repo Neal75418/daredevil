@@ -112,4 +112,52 @@ void main() {
       expect(calls, containsAll(['reload', 'start']));
     });
   });
+
+  group('即時報價可見性', () {
+    late List<bool> visible;
+
+    setUp(() {
+      visible = [];
+      c = AppLifecycleCoordinator(
+        staleAfter: const Duration(minutes: 30),
+        reload: () {},
+        flushBudget: () async {},
+        stopIntraday: () {},
+        startIntraday: () {},
+        onAppVisibilityChanged: visible.add,
+      );
+    });
+
+    test('resumed、inactive 看得到;hidden、paused、detached 看不到', () {
+      for (final (state, expected) in const [
+        (AppLifecycleState.resumed, true),
+        (AppLifecycleState.inactive, true),
+        (AppLifecycleState.hidden, false),
+        (AppLifecycleState.paused, false),
+        (AppLifecycleState.detached, false),
+      ]) {
+        visible.clear();
+        go(state);
+        expect(visible, [expected], reason: state.name);
+      }
+    });
+
+    test('🚨 macOS 視窗失焦但看得到(inactive)→ 繼續更新', () {
+      go(AppLifecycleState.inactive);
+      expect(visible, [true]);
+    });
+
+    test('🚨 macOS 啟動先 hidden 再 resumed → 看得到', () {
+      go(AppLifecycleState.hidden);
+      go(AppLifecycleState.resumed);
+      expect(visible, [false, true]);
+    });
+
+    test('🚨 resumed → hidden → resumed 也正確', () {
+      go(AppLifecycleState.resumed);
+      go(AppLifecycleState.hidden);
+      go(AppLifecycleState.resumed);
+      expect(visible, [true, false, true]);
+    });
+  });
 }

@@ -1,3 +1,18 @@
+/// [IntradayQuote.price] 取自哪個欄位(盤中即時報價判斷顯示來源與收盤報價用)
+enum QuotePriceSource {
+  /// 當輪成交價 `z`
+  trade,
+
+  /// 漲跌停鎖住、當輪沒有成交:取漲跌停價(見 `_lockedPrice`)
+  locked,
+
+  /// 試撮價 `pz`
+  trial,
+
+  /// 最佳一檔買賣中價或單邊
+  book,
+}
+
 /// 盤中即時報價(TWSE MIS `getStockInfo.jsp`,2026-08-08)。
 ///
 /// 這支 API 的欄位名極短且**無成交時價格欄是 `'-'`**——盤前、冷門股、
@@ -11,11 +26,15 @@ class IntradayQuote {
     required this.name,
     required this.price,
     required this.previousClose,
+    required this.priceSource,
     this.open,
     this.high,
     this.low,
     this.volume,
     this.time,
+    this.date,
+    this.lastTradePrice,
+    this.lastTradeTime,
     this.limitUp,
     this.limitDown,
     required this.hasBid,
@@ -37,6 +56,20 @@ class IntradayQuote {
 
   /// 報價時刻(HH:mm:ss)
   final String? time;
+
+  /// [price] 的來源
+  final QuotePriceSource priceSource;
+
+  /// 報價日期(`d`,yyyyMMdd);格式不符為 null。即時報價只有等於今天才可顯示
+  final DateTime? date;
+
+  /// 最後一筆成交價與時間(`trade.z`／`trade.t`,非官方欄位)。
+  ///
+  /// 當輪 `z='-'` 時仍記著最後一筆成交(2026-10-05 12:13 實測:2330 當輪
+  /// z='-'、trade.z=2560 @ 12:13:25)。**只供顯示**,不參與 [price]——盤中
+  /// 提醒的比價維持原規則。指數列與收盤後的回應沒有這個物件,為 null。
+  final double? lastTradePrice;
+  final String? lastTradeTime;
 
   /// 漲停價、跌停價(`u`／`w`);指數沒有這兩欄,為 null
   final double? limitUp;
@@ -83,12 +116,26 @@ class IntradayQuote {
       // 正解是用**買賣五檔的中價**——那才是「現在的市場」。真的連五檔都
       // 沒有(盤前、暫停交易)就視為無報價,不要猜:漏一輪(5 分鐘後
       // 再查)遠比觸發錯誤安全。
-      final price =
-          _num(row['z']) ??
-          _num(row['pz']) ??
-          _lockedPrice(row) ??
-          _midOrSide(row['b'], row['a']);
+      final (price, priceSource) = switch ((
+        _num(row['z']),
+        _num(row['pz']),
+        _lockedPrice(row),
+      )) {
+        (final z?, _, _) => (z, QuotePriceSource.trade),
+        (_, final pz?, _) => (pz, QuotePriceSource.trial),
+        (_, _, final locked?) => (locked, QuotePriceSource.locked),
+        _ => (_midOrSide(row['b'], row['a']), QuotePriceSource.book),
+      };
       if (price == null) continue;
+
+      // 最後一筆成交(非官方的 trade 物件):只供顯示,不參與 price
+      final (lastTradePrice, lastTradeTime) = switch (row['trade']) {
+        final Map<dynamic, dynamic> t when _num(t['z']) != null => (
+          _num(t['z']),
+          t['t']?.toString(),
+        ),
+        _ => (null, null),
+      };
 
       result[symbol] = IntradayQuote(
         symbol: symbol,
@@ -100,6 +147,10 @@ class IntradayQuote {
         low: _num(row['l']),
         volume: int.tryParse(row['v']?.toString() ?? ''),
         time: row['t']?.toString(),
+        priceSource: priceSource,
+        date: _date(row['d']),
+        lastTradePrice: lastTradePrice,
+        lastTradeTime: lastTradeTime,
         limitUp: _num(row['u']),
         limitDown: _num(row['w']),
         hasBid: _firstPositive(row['b']) != null,
@@ -164,5 +215,17 @@ class IntradayQuote {
     if (s.isEmpty || s == '-') return null;
     final d = double.tryParse(s);
     return (d != null && d > 0) ? d : null;
+  }
+
+  /// `d`(yyyyMMdd)→ 當天午夜;格式不符回 null
+  static DateTime? _date(Object? v) {
+    final s = v?.toString().trim() ?? '';
+    if (s.length != 8) return null;
+    final y = int.tryParse(s.substring(0, 4));
+    final m = int.tryParse(s.substring(4, 6));
+    final d = int.tryParse(s.substring(6));
+    if (y == null || m == null || d == null) return null;
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    return DateTime(y, m, d);
   }
 }

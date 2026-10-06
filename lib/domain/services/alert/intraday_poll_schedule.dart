@@ -1,3 +1,4 @@
+import 'package:daredevil/core/constants/market_session.dart';
 import 'package:daredevil/core/constants/rule_params_alert.dart';
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 
@@ -18,15 +19,13 @@ import 'package:daredevil/core/utils/taiwan_calendar.dart';
 /// 每 5 分鐘掃全部自選會噴出一堆「跌破又收復」的假警報,一週後使用者
 /// 就會關掉通知——那才是真正的錯過。
 abstract final class IntradayPollSchedule {
-  /// 台股連續交易時段:09:00 開盤 ~ 13:30 收盤(含尾盤集合競價)
-  static const int _openMinutes = 9 * 60;
-  static const int _closeMinutes = 13 * 60 + 30;
-
-  /// [now] 是否落在可輪詢的盤中時段(交易日 + 交易時間)
+  /// [now] 是否落在可輪詢的盤中時段(交易日 + 交易時間)。13:30 那一分鐘
+  /// 也算;盤中即時報價則以 13:30 起為收盤後(`LiveQuoteSchedule.phaseAt`)。
   static bool isMarketHours(DateTime now) {
     if (!TaiwanCalendar.isTradingDay(now)) return false;
     final minutes = now.hour * 60 + now.minute;
-    return minutes >= _openMinutes && minutes <= _closeMinutes;
+    return minutes >= MarketSession.openMinutes &&
+        minutes <= MarketSession.closeMinutes;
   }
 
   /// 下一次輪詢間隔;null=此刻不需要主動輪詢(交給決策時刻)

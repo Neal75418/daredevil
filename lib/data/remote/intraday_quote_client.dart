@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:meta/meta.dart';
 
 import 'package:daredevil/core/constants/api_endpoints.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
@@ -13,17 +14,54 @@ typedef QuoteFetchResult = ({
   List<String> errors,
 });
 
+/// 一輪報價抓取的逐批明細(盤中即時報價用,2026-10-06)。
+///
+/// 每個送出的代號恰好落在 [respondedSymbols] 或 [failedSymbols] 其中之一:
+/// - **有回應**:HTTP 200、`rtcode` 為 `0000`、`msgArray` 有列。列可能全被
+///   解析丟掉(例如暫停交易),那仍算有回應——報價中心據此區分「證交所
+///   今天尚無報價」與「網路斷了」。
+/// - **失敗**:網路錯誤、非 200、無法解碼、`rtcode` 非 `0000`、`msgArray`
+///   沒有列。
+class QuoteBatchReport {
+  const QuoteBatchReport({
+    required this.quotes,
+    required this.errors,
+    required this.respondedSymbols,
+    required this.failedSymbols,
+  });
+
+  final Map<String, IntradayQuote> quotes;
+
+  /// 例外造成的批次失敗摘要(同 [QuoteFetchResult] 的 errors);`rtcode`
+  /// 非 `0000`、沒有列、無法解碼不產生字串,只計入 [failedSymbols]
+  final List<String> errors;
+  final Set<String> respondedSymbols;
+  final Set<String> failedSymbols;
+}
+
 /// 盤中即時報價 client(TWSE MIS,2026-08-08)。
 ///
 /// **不快取**:這支的存在理由就是即時性,快取等於自我否定。
 /// 分批送出(單次上限 [ApiEndpoints.misBatchSize] 檔),任何一批失敗
 /// 不影響其他批——盤中提醒缺一檔比整批沒有好。
 class IntradayQuoteClient {
-  IntradayQuoteClient({Dio? dio})
-    : _dio = dio ?? MarketClientMixin.createDio(ApiEndpoints.twseMisIntraday);
+  IntradayQuoteClient({Dio? dio, bool logBatchErrors = true})
+    : _dio = dio ?? MarketClientMixin.createDio(ApiEndpoints.twseMisIntraday),
+      _logBatchErrors = logBatchErrors;
 
   static const String _tag = 'MIS';
   final Dio _dio;
+
+  /// 單批失敗是否記 `AppLogger.warning`。盤中即時報價每 15 秒一輪,失敗改
+  /// 由報價中心統一記(一段連續失敗只記開始與恢復),所以傳 false;盤中
+  /// 提醒與 CLI 維持預設。
+  final bool _logBatchErrors;
+
+  @visibleForTesting
+  Dio get dio => _dio;
+
+  @visibleForTesting
+  bool get logsBatchErrors => _logBatchErrors;
 
   /// [markets] 為 symbol → 市場別(`TWSE`/`TPEx`),決定 `tse_`/`otc_` 前綴。
   /// 猜錯前綴會回不到報價(2026-08-07 實測:大量 3167 是上市不是上櫃)。
@@ -44,46 +82,106 @@ class IntradayQuoteClient {
     final result = <String, IntradayQuote>{};
     final errors = <String>[];
 
-    for (var i = 0; i < symbols.length; i += ApiEndpoints.misBatchSize) {
-      final batch = symbols.skip(i).take(ApiEndpoints.misBatchSize);
-      final exCh = batch
-          .map((s) => '${markets[s] == MarketCode.twse ? 'tse' : 'otc'}_$s.tw')
-          .join('|');
+    for (final batch in _batches(symbols)) {
       try {
-        final response = await _dio.get(
-          ApiEndpoints.twseMisIntraday,
-          queryParameters: {'ex_ch': exCh, 'json': 1, 'delay': 0},
-          // 一律取原始字串自行解碼(2026-08-08 code review):讓 Dio 解析
-          // 有兩個坑——①MIS 回應前綴帶空行,json 模式會解析失敗;②限流
-          // 時回 HTML,若 Dio 先拋解析錯,就會被下面的 catch 吞成「這批
-          // 失敗」而繼續猛打。交給 decodeResponseData 才看得出是限流。
-          options: Options(responseType: ResponseType.plain),
-        );
-        if (response.statusCode != 200) {
-          throw ApiException(
-            '$_tag error: ${response.statusCode}',
-            response.statusCode,
-          );
-        }
-        // MIS 回應前面帶一串空行,Dio 的 responseType.json 因此解析失敗
-        // 退回 String(2026-08-08 實測)——走專案既有的統一解碼 helper,
-        // 它同時處理 String 情況與限流時的 HTML 回應。
-        final data = MarketClientMixin.decodeResponseData(
-          response.data,
-          _tag,
-          '盤中報價',
-        );
+        final data = await _requestBatch(batch, markets);
         if (data != null) result.addAll(IntradayQuote.parseResponse(data));
       } on RateLimitException {
         rethrow;
       } catch (e) {
         // 單批失敗不影響其他批:盤中缺一檔報價 > 整批沒有
-        AppLogger.warning(_tag, '盤中報價批次失敗(${batch.length} 檔)', e);
+        _warnBatchFailed(batch.length, e);
         errors.add(_describeError(e));
       }
     }
     AppLogger.debug(_tag, '盤中報價: ${result.length}/${symbols.length} 檔');
     return (quotes: result, errors: errors);
+  }
+
+  /// 同 [fetchQuotes],另回報每個代號所在的批次有沒有回應(見
+  /// [QuoteBatchReport])。限流照樣拋 [RateLimitException]。
+  ///
+  /// 解析不包在 try 內:解析拋例外是程式錯誤、不是網路狀況,往上拋給報價
+  /// 中心記 error;[fetchQuotes] 為維持盤中提醒的行為,仍把它當成該批失敗。
+  Future<QuoteBatchReport> fetchQuotesDetailed(
+    Map<String, String> markets,
+  ) async {
+    final quotes = <String, IntradayQuote>{};
+    final errors = <String>[];
+    final responded = <String>{};
+    final failed = <String>{};
+
+    for (final batch in _batches(markets.keys.toList())) {
+      Map<String, dynamic>? data;
+      try {
+        data = await _requestBatch(batch, markets);
+      } on RateLimitException {
+        rethrow;
+      } catch (e) {
+        _warnBatchFailed(batch.length, e);
+        errors.add(_describeError(e));
+        failed.addAll(batch);
+        continue;
+      }
+      final rows = data?['msgArray'];
+      if (data == null ||
+          data['rtcode'] != '0000' ||
+          rows is! List ||
+          rows.isEmpty) {
+        failed.addAll(batch);
+        continue;
+      }
+      responded.addAll(batch);
+      quotes.addAll(IntradayQuote.parseResponse(data));
+    }
+    return QuoteBatchReport(
+      quotes: quotes,
+      errors: errors,
+      respondedSymbols: responded,
+      failedSymbols: failed,
+    );
+  }
+
+  /// 送出一批(≤ [ApiEndpoints.misBatchSize] 檔)並解碼:無法解碼回 null,
+  /// 限流拋 [RateLimitException],非 200 拋 [ApiException]
+  Future<Map<String, dynamic>?> _requestBatch(
+    List<String> batch,
+    Map<String, String> markets,
+  ) async {
+    final exCh = batch
+        .map((s) => '${markets[s] == MarketCode.twse ? 'tse' : 'otc'}_$s.tw')
+        .join('|');
+    final response = await _dio.get(
+      ApiEndpoints.twseMisIntraday,
+      queryParameters: {'ex_ch': exCh, 'json': 1, 'delay': 0},
+      // 一律取原始字串自行解碼(2026-08-08 code review):讓 Dio 解析
+      // 有兩個坑——①MIS 回應前綴帶空行,json 模式會解析失敗;②限流
+      // 時回 HTML,若 Dio 先拋解析錯,就會被下面的 catch 吞成「這批
+      // 失敗」而繼續猛打。交給 decodeResponseData 才看得出是限流。
+      options: Options(responseType: ResponseType.plain),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(
+        '$_tag error: ${response.statusCode}',
+        response.statusCode,
+      );
+    }
+    // MIS 回應前面帶一串空行,Dio 的 responseType.json 因此解析失敗
+    // 退回 String(2026-08-08 實測)——走專案既有的統一解碼 helper,
+    // 它同時處理 String 情況與限流時的 HTML 回應。
+    return MarketClientMixin.decodeResponseData(response.data, _tag, '盤中報價');
+  }
+
+  static Iterable<List<String>> _batches(List<String> symbols) sync* {
+    for (var i = 0; i < symbols.length; i += ApiEndpoints.misBatchSize) {
+      yield symbols.skip(i).take(ApiEndpoints.misBatchSize).toList();
+    }
+  }
+
+  void _warnBatchFailed(int size, Object e) {
+    if (_logBatchErrors) {
+      AppLogger.warning(_tag, '盤中報價批次失敗($size 檔)', e);
+    }
   }
 
   /// 錯誤 → 「型別+訊息」一行摘要(進 CLI 日誌,型別是診斷的第一線索)

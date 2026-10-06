@@ -23,6 +23,7 @@ import 'package:daredevil/core/services/notification_service.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/presentation/providers/intraday_monitor_provider.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/providers/today_provider.dart';
@@ -251,6 +252,8 @@ class _DaredevilAppState extends ConsumerState<DaredevilApp>
         }),
     stopIntraday: () => ref.read(intradayMonitorProvider.notifier).stop(),
     startIntraday: () => ref.read(intradayMonitorProvider.notifier).start(),
+    onAppVisibilityChanged: (visible) =>
+        ref.read(liveQuoteCenterProvider.notifier).setAppVisible(visible),
   );
 
   @override

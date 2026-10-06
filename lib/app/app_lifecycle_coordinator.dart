@@ -6,7 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:daredevil/app/foreground_reload_policy.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
 
-/// App 生命週期的副作用：回前景重載、配額落盤、盤中輪詢啟停。
+/// App 生命週期的副作用：回前景重載、配額落盤、盤中輪詢啟停、即時報價的可見性。
 ///
 /// 從 main 的 State 抽出來是為了能測：這段曾在 macOS 上兩度失效——回前景
 /// 不重載、配額從不落盤——兩者都只綁 `paused`，而 macOS 不會進 `paused`
@@ -18,12 +18,19 @@ class AppLifecycleCoordinator {
     required this.flushBudget,
     required this.stopIntraday,
     required this.startIntraday,
+    this.onAppVisibilityChanged,
   }) : _reloadPolicy = ForegroundReloadPolicy(staleAfter: staleAfter);
 
   final VoidCallback reload;
   final Future<void> Function() flushBudget;
   final VoidCallback stopIntraday;
   final VoidCallback startIntraday;
+
+  /// App 看不看得到(盤中即時報價用):resumed、inactive 看得到;hidden、
+  /// paused、detached 看不到。macOS 視窗失焦但看得到(例如放在第二個螢幕)
+  /// 是 inactive,要繼續更新;最小化、被遮住、Cmd+H 是 hidden。
+  /// 和盤中提醒不同:提醒只在 paused 停。
+  final ValueChanged<bool>? onAppVisibilityChanged;
   final ForegroundReloadPolicy _reloadPolicy;
 
   /// 盤中輪詢是否因 paused 停過（只有停過才在 resumed 重啟：macOS 失焦、
@@ -50,6 +57,10 @@ class AppLifecycleCoordinator {
       _intradayStopped = false;
       startIntraday();
     }
+
+    onAppVisibilityChanged?.call(
+      state == AppLifecycleState.resumed || state == AppLifecycleState.inactive,
+    );
   }
 
   /// 桌面結束 App（macOS Cmd+Q）。engine 會等這裡回覆才真的結束，

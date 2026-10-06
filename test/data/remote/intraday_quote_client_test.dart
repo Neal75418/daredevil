@@ -4,8 +4,11 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
+import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/remote/intraday_quote_client.dart';
+import 'package:daredevil/data/remote/market_client_mixin.dart';
 
 /// 盤中報價 client 的 HTTP 行為(2026-08-08 code review 補測)。
 ///
@@ -166,6 +169,124 @@ void main() {
     final adapter = _FakeAdapter((_, _) => '\n\n\n\n${_misBody(['2330'])}');
     final r = await clientWith(adapter).fetchQuotes({'2330': 'TWSE'});
     expect(r.quotes['2330']?.price, 100.0);
+  });
+
+  group('fetchQuotesDetailed(盤中即時報價)', () {
+    final forty = {for (var i = 0; i < 40; i++) '${2000 + i}': 'TWSE'};
+
+    test('🚨 逐批回報:成功批的代號算有回應,網路失敗批的代號算失敗', () async {
+      final adapter = _FakeAdapter((i, _) {
+        if (i == 0) throw const FakeSocketException('batch 0 down');
+        return _misBody(['2035']);
+      });
+      final r = await clientWith(adapter).fetchQuotesDetailed(forty);
+
+      expect(r.failedSymbols, {for (var i = 0; i < 35; i++) '${2000 + i}'});
+      expect(r.respondedSymbols, {for (var i = 35; i < 40; i++) '${2000 + i}'});
+      expect(r.errors, hasLength(1));
+      expect(r.quotes.keys, ['2035']);
+    });
+
+    test('🚨 rtcode 非 0000、msgArray 沒有列、無法解碼 → 該批失敗,不產生 errors 字串', () async {
+      for (final body in const [
+        '{"rtcode":"5000","msgArray":[]}',
+        // rtcode 非 0000 但帶列:不可因為「有列」就算有回應
+        '{"rtcode":"5000","msgArray":[{"c":"2330","z":"100.0","y":"99.0"}]}',
+        '{"rtcode":"0000","msgArray":[]}',
+        '{"rtcode":"0000"}',
+        'not json',
+      ]) {
+        final r = await clientWith(
+          _FakeAdapter((_, _) => body),
+        ).fetchQuotesDetailed({'2330': 'TWSE'});
+        expect(r.failedSymbols, {'2330'}, reason: body);
+        expect(r.respondedSymbols, isEmpty, reason: body);
+        expect(r.errors, isEmpty, reason: body);
+      }
+    });
+
+    test('🚨 有回應但列全被解析丟掉(暫停交易)→ 仍算有回應', () async {
+      final adapter = _FakeAdapter(
+        (_, _) => jsonEncode({
+          'rtcode': '0000',
+          'msgArray': [
+            {'c': '2330', 'z': '-', 'pz': '-'},
+          ],
+        }),
+      );
+      final r = await clientWith(adapter).fetchQuotesDetailed({'2330': 'TWSE'});
+      expect(r.respondedSymbols, {'2330'});
+      expect(r.failedSymbols, isEmpty);
+      expect(r.quotes, isEmpty);
+    });
+
+    test('限流照樣往上拋', () async {
+      final adapter = _FakeAdapter((_, _) => '<!doctype html><html></html>');
+      await expectLater(
+        clientWith(adapter).fetchQuotesDetailed({'2330': 'TWSE'}),
+        throwsA(isA<RateLimitException>()),
+      );
+    });
+
+    test('空輸入 → 不打 API', () async {
+      final adapter = _FakeAdapter((_, _) => _misBody(const []));
+      final r = await clientWith(adapter).fetchQuotesDetailed(const {});
+      expect(r.quotes, isEmpty);
+      expect(adapter.requests, isEmpty);
+    });
+  });
+
+  group('逐批 warning(即時報價關掉,盤中提醒與 CLI 維持)', () {
+    late List<String> crumbs;
+    setUp(() {
+      crumbs = [];
+      AppLogger.setSentryDelegates(
+        breadcrumb: (message, category, level, data) => crumbs.add(message),
+      );
+    });
+    tearDown(() => AppLogger.setSentryDelegates());
+
+    test('🚨 logBatchErrors: false → 批次失敗不記 warning', () async {
+      final adapter = _FakeAdapter(
+        (_, _) => throw const FakeSocketException('down'),
+      );
+      final client = IntradayQuoteClient(
+        dio: Dio()..httpClientAdapter = adapter,
+        logBatchErrors: false,
+      );
+      await client.fetchQuotes({'2330': 'TWSE'});
+      await client.fetchQuotesDetailed({'2330': 'TWSE'});
+      expect(crumbs, isEmpty);
+    });
+
+    test('預設照記(盤中提醒與 CLI 不變)', () async {
+      final adapter = _FakeAdapter(
+        (_, _) => throw const FakeSocketException('down'),
+      );
+      await clientWith(adapter).fetchQuotes({'2330': 'TWSE'});
+      expect(crumbs, hasLength(1));
+      expect(crumbs.single, contains('盤中報價批次失敗'));
+    });
+  });
+
+  test('createDio 可傳短逾時;不傳維持 ApiConfig(盤中提醒與 CLI 不變)', () {
+    final quick = MarketClientMixin.createDio(
+      'https://example.invalid',
+      connectTimeout: const Duration(seconds: 5),
+      receiveTimeout: const Duration(seconds: 8),
+    );
+    expect(quick.options.connectTimeout, const Duration(seconds: 5));
+    expect(quick.options.receiveTimeout, const Duration(seconds: 8));
+
+    final normal = MarketClientMixin.createDio('https://example.invalid');
+    expect(
+      normal.options.connectTimeout,
+      const Duration(seconds: ApiConfig.twseConnectTimeoutSec),
+    );
+    expect(
+      normal.options.receiveTimeout,
+      const Duration(seconds: ApiConfig.twseReceiveTimeoutSec),
+    );
   });
 }
 

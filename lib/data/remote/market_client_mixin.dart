@@ -20,17 +20,22 @@ abstract final class MarketClientMixin {
 
   /// 建立市場 API 用的 [Dio] 實例。
   ///
-  /// 兩個市場共用相同的超時、Header 與回應類型設定。
-  static Dio createDio(String baseUrl) {
+  /// 兩個市場共用相同的超時、Header 與回應類型設定;盤中即時報價另傳
+  /// 短逾時(見 `LiveQuoteParams`)。
+  static Dio createDio(
+    String baseUrl, {
+    Duration connectTimeout = const Duration(
+      seconds: ApiConfig.twseConnectTimeoutSec,
+    ),
+    Duration receiveTimeout = const Duration(
+      seconds: ApiConfig.twseReceiveTimeoutSec,
+    ),
+  }) {
     return Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(
-          seconds: ApiConfig.twseConnectTimeoutSec,
-        ),
-        receiveTimeout: const Duration(
-          seconds: ApiConfig.twseReceiveTimeoutSec,
-        ),
+        connectTimeout: connectTimeout,
+        receiveTimeout: receiveTimeout,
         headers: {
           'Accept': 'application/json',
           'User-Agent':

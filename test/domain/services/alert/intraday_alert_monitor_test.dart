@@ -55,6 +55,7 @@ void main() {
         name: '測試$s',
         price: price,
         previousClose: prev,
+        priceSource: QuotePriceSource.trade,
         hasBid: true,
         hasAsk: true,
       );
