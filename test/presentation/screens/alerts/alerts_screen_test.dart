@@ -3,6 +3,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/theme/color_contrast.dart';
+import 'package:daredevil/core/utils/clock.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
@@ -87,6 +92,8 @@ void main() {
   Widget buildTestWidget({
     PriceAlertState? alertState,
     Brightness brightness = Brightness.light,
+    _LiveCenter? liveCenter,
+    DateTime? now,
   }) {
     final state = alertState ?? const PriceAlertState();
     return buildProviderTestApp(
@@ -97,8 +104,10 @@ void main() {
           n.initialState = state;
           return n;
         }),
+        if (now != null) appClockProvider.overrideWithValue(_Clock(now)),
       ],
       brightness: brightness,
+      liveQuoteCenter: liveCenter == null ? null : () => liveCenter,
     );
   }
 
@@ -596,4 +605,148 @@ void main() {
       });
     }
   });
+
+  group('距現價多少(2026-10-06,路線圖第 2 項)', () {
+    final morning = DateTime(2026, 10, 6, 10, 15);
+    // 2330 跌破 885:盤後收 880 已越過;即時 890 還沒——用了即時才顯示距離
+    final state = PriceAlertState(
+      alerts: [
+        createAlert(
+          id: 1,
+          symbol: '2330',
+          alertType: 'BELOW',
+          targetValue: 885,
+        ),
+        createAlert(id: 2, symbol: '2317', isActive: false),
+        createAlert(
+          id: 3,
+          symbol: '2454',
+          alertType: 'CHANGE_PCT',
+          targetValue: 5,
+        ),
+        createAlert(
+          id: 4,
+          symbol: '1101',
+          triggeredAt: DateTime(2026, 10, 6, 9, 30),
+        ),
+        createAlert(id: 5, symbol: '9999', alertType: 'BELOW', targetValue: 10),
+      ],
+      stockNames: const {'2330': '台積電'},
+      stockMarkets: const {
+        '2330': 'TWSE',
+        '2317': 'TWSE',
+        '2454': 'TWSE',
+        '1101': 'TWSE',
+      },
+      latestPrices: {
+        '2330': DailyPriceEntry(
+          symbol: '2330',
+          date: DateTime(2026, 10, 5),
+          close: 880,
+          priceChange: -5,
+        ),
+      },
+    );
+    _LiveCenter live(double price) => _LiveCenter(
+      LiveQuoteState(
+        entries: {
+          '2330': LiveQuoteEntry(
+            symbol: '2330',
+            date: DateTime(2026, 10, 6),
+            price: price,
+            displaySource: LiveDisplaySource.trade,
+            previousClose: 880,
+            quoteTime: '10:14:50',
+            isClosingQuote: false,
+          ),
+        },
+      ),
+    );
+
+    testWidgets('🚨 只登記有啟用中、未觸發價位提醒且知道市場別的股票', (tester) async {
+      widenViewport(tester);
+      final center = live(890);
+      await tester.pumpWidget(
+        buildTestWidget(alertState: state, liveCenter: center, now: morning),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        {
+          for (final entries in center.registered.values)
+            for (final r in entries) r.symbol,
+        },
+        {'2330'},
+        reason: '2317 停用、2454 不是價位型、1101 已觸發、9999 不知道市場別',
+      );
+    });
+
+    testWidgets('🚨 距離用即時價;頁首顯示報價狀態', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(alertState: state, liveCenter: live(890), now: morning),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('alert.distanceFromPrice'), findsOneWidget);
+      expect(find.text('alert.reached'), findsNothing);
+      expect(find.text('liveQuote.quoteTime'), findsOneWidget);
+    });
+
+    testWidgets('沒有即時 → 用盤後最新一筆(已越過 → 已達到)', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(buildTestWidget(alertState: state, now: morning));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('alert.reached'), findsOneWidget);
+    });
+
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      testWidgets('🚨 距離灰字 $brightness:對卡片實際底色 ≥ 4.5', (tester) async {
+        widenViewport(tester);
+        await tester.pumpWidget(
+          buildTestWidget(
+            alertState: state,
+            liveCenter: live(890),
+            now: morning,
+            brightness: brightness,
+          ),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        final finder = find.text('alert.distanceFromPrice');
+        final color = tester.widget<Text>(finder).style!.color!;
+        final card = tester.widget<Material>(
+          find.ancestor(of: finder, matching: find.byType(Material)).first,
+        );
+        expect(
+          ColorContrast.ratio(color, card.color!),
+          greaterThanOrEqualTo(4.5),
+        );
+      });
+    }
+  });
+}
+
+class _Clock implements AppClock {
+  _Clock(this.value);
+  final DateTime value;
+  @override
+  DateTime now() => value;
+}
+
+/// 記錄登記、不發請求的報價中心
+class _LiveCenter extends LiveQuoteCenter {
+  _LiveCenter(this.initial);
+  final LiveQuoteState initial;
+  final registered = <Object, List<LiveQuoteRegistration>>{};
+
+  @override
+  LiveQuoteState build() => initial;
+
+  @override
+  void register(Object owner, List<LiveQuoteRegistration> entries) =>
+      registered[owner] = entries;
+
+  @override
+  void unregister(Object owner) => registered.remove(owner);
+
+  @override
+  void setAppVisible(bool visible) {}
 }

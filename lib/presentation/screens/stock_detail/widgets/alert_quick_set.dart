@@ -6,6 +6,7 @@ import 'package:daredevil/core/utils/taiwan_time.dart';
 import 'package:daredevil/domain/services/alert/intraday_poll_schedule.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/services/alert/alert_target_calculator.dart';
+import 'package:daredevil/presentation/widgets/alert_distance_text.dart';
 
 /// 快捷提醒鈕(2026-08-07)。
 ///
@@ -23,6 +24,7 @@ class AlertQuickSet extends StatelessWidget {
     this.currentPrice,
     this.existingTargets = const {},
     this.now,
+    this.priceIsToday = false,
   });
 
   /// 日線(依日期升冪,最後一筆最新)
@@ -32,8 +34,13 @@ class AlertQuickSet extends StatelessWidget {
 
   /// 現價;給定時用來停用「條件已成立」的種類——設了會立刻觸發一次
   /// 就結束,是純噪音(2026-08-07 實機:緯創 183.5 已在 5MA 189.4 之下、
-  /// 月線 166.3 之上,兩顆按鈕形同陷阱)。null=不臆測,全部可點。
+  /// 月線 166.3 之上,兩顆按鈕形同陷阱)。也用來顯示各價位距現價多少 %
+  /// (2026-10-06)。null=不臆測,全部可點、不顯示距離。
   final double? currentPrice;
+
+  /// [currentPrice] 是今天的價格(盤中即時報價或今天的收盤)。盤中為 true 時
+  /// 「已成立」的判斷就是準的,不顯示「以昨收判斷」的警語。
+  final bool priceIsToday;
 
   /// 本檔已存在的提醒目標價。命中者停用——同一顆點兩次會建出兩筆一模
   /// 一樣的提醒(2026-08-08 實機重現),而兩筆都會各叫一次。
@@ -94,6 +101,16 @@ class AlertQuickSet extends StatelessWidget {
     return t.isUpward ? p >= t.price : p <= t.price;
   }
 
+  /// 「 · -2.1%」:距現價多少;沒有現價時為空字串
+  String _distance(AlertTarget t) {
+    final text = AlertDistanceText.percent(
+      upward: t.isUpward,
+      target: t.price,
+      price: currentPrice,
+    );
+    return text == null ? '' : ' · $text';
+  }
+
   @override
   Widget build(BuildContext context) {
     final targets = AlertTargetCalculator.compute(bars);
@@ -114,11 +131,11 @@ class AlertQuickSet extends StatelessWidget {
         // 盤中設提醒時,一個已經跌破的價位看起來仍可點,點下去會在 5 分鐘
         // 內立刻觸發、把一次性提醒燒掉。
         //
-        // 刻意**不**讓 UI 去抓即時報價來修正:MIS 的限流是伺服器端按 IP
-        // 算的,而 launchd 的盤中檢查(55 次/交易日)靠同一個額度活著——
-        // 為了讓守門更準而消耗它,等於讓被守的東西更脆弱。標示限制即可,
-        // 而 v3.4 的流程本來就是「條件單前一晚寫好」。
-        if (_isMarketHours) ...[
+        // 當初刻意**不**為這排按鈕去抓即時報價:MIS 的限流是伺服器端按 IP
+        // 算的,launchd 的盤中檢查靠同一個額度活著。2026-10-06 起個股頁本來
+        // 就在抓這一檔的即時報價(報價中心),呼叫端把它傳進 [currentPrice]
+        // 不多花請求;拿不到今天的價格時才顯示這行警語。
+        if (_isMarketHours && !priceIsToday) ...[
           const SizedBox(height: DesignTokens.spacing4),
           Text(
             key: staleWarningKey,
@@ -159,7 +176,8 @@ class AlertQuickSet extends StatelessWidget {
                                   '${t.price.toStringAsFixed(2)} · '
                                   '${'alert.quickSet.alreadyMet'.tr()}'
                             : '${'alert.quickSet.${kind.name}'.tr()} '
-                                  '${t.price.toStringAsFixed(2)}',
+                                  '${t.price.toStringAsFixed(2)}'
+                                  '${_distance(t)}',
                       ),
                       // 條件已成立 → 停用。標籤仍顯示,讓這排按鈕同時
                       // 是「現價相對各條線在哪」的狀態讀數。

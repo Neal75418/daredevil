@@ -226,8 +226,8 @@ void main() {
     // 對今天盤中一無所知。盤中設提醒時,一個已經跌破的價位看起來仍可
     // 點,點下去會在 5 分鐘內立刻觸發、把一次性提醒燒掉。
     //
-    // 刻意不讓 UI 抓即時報價修正:MIS 限流按 IP 算,launchd 的盤中檢查
-    // (55 次/交易日)靠同一個額度活著。標示限制即可。
+    // 沒有今天的價格時才標示限制。2026-10-06 起個股頁把報價中心已在抓的
+    // 即時價傳進來(priceIsToday),不多花 MIS 額度(見下方「距現價多少」)。
     testWidgets('盤中 → 顯示「以昨收判斷」警語', (tester) async {
       widen(tester);
       await tester.pumpWidget(
@@ -264,6 +264,47 @@ void main() {
           AlertQuickSet(
             bars: bars(30),
             now: DateTime(2026, 8, 8, 10, 30), // 週六同一時刻
+            onSelected: (_, _) {},
+          ),
+        ),
+      );
+      expect(find.byKey(AlertQuickSet.staleWarningKey), findsNothing);
+    });
+  });
+
+  group('距現價多少(2026-10-06,路線圖第 2 項)', () {
+    testWidgets('🚨 尚未成立的種類在價位後面顯示距現價 %', (tester) async {
+      widen(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          AlertQuickSet(
+            bars: bars(30), // 5MA = 127
+            currentPrice: 130,
+            onSelected: (_, _) {},
+          ),
+        ),
+      );
+      // (127 − 130) ÷ 130 = −2.31%
+      expect(find.textContaining('127.00 · -2.3%'), findsOneWidget);
+    });
+
+    testWidgets('沒有現價 → 不顯示距離', (tester) async {
+      widen(tester);
+      await tester.pumpWidget(
+        buildTestApp(AlertQuickSet(bars: bars(30), onSelected: (_, _) {})),
+      );
+      expect(find.textContaining('%'), findsNothing);
+    });
+
+    testWidgets('🚨 盤中有今天的價格(即時報價)→ 不顯示「以昨收判斷」', (tester) async {
+      widen(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          AlertQuickSet(
+            bars: bars(30),
+            currentPrice: 130,
+            priceIsToday: true,
+            now: DateTime(2026, 8, 10, 10, 30),
             onSelected: (_, _) {},
           ),
         ),

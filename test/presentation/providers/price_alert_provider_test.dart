@@ -6,6 +6,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 
 // ==========================================
@@ -209,6 +210,61 @@ void main() {
       final state = container.read(priceAlertProvider);
       expect(state.unmonitorableSymbols, {'9999', '1234'});
       expect(state.stockNames, {'2330': '測試2330', '1234': '測試1234'});
+    });
+
+    test('🚨 一併載入市場別與最新一筆價格(提醒頁顯示距現價、登記即時報價用)', () async {
+      when(
+        () => mockDb.getAllAlerts(),
+      ).thenAnswer((_) async => [createAlert(id: 1, symbol: '6488')]);
+      when(() => mockDb.getStock('6488')).thenAnswer(
+        (_) async => StockMasterEntry(
+          symbol: '6488',
+          name: '環球晶',
+          market: 'TPEx',
+          industry: '半導體業',
+          isActive: true,
+          updatedAt: _now,
+        ),
+      );
+      final price = DailyPriceEntry(
+        symbol: '6488',
+        date: DateTime(2026, 10, 5),
+        close: 420,
+        priceChange: 5,
+      );
+      when(
+        () => mockDb.getLatestPricesBatch(['6488']),
+      ).thenAnswer((_) async => {'6488': price});
+
+      await container.read(priceAlertProvider.notifier).loadAlerts();
+
+      final state = container.read(priceAlertProvider);
+      expect(state.stockMarkets, {'6488': 'TPEx'});
+      expect(state.latestPrices['6488'], same(price));
+    });
+
+    test('🚨 每日更新完成後重讀(提醒頁的現價快照不可停在前一個交易日)', () async {
+      when(() => mockDb.getAllAlerts()).thenAnswer((_) async => []);
+      container.read(priceAlertProvider);
+      container.read(dataUpdateEpochProvider.notifier).bump();
+      await Future<void>.delayed(Duration.zero);
+      verify(() => mockDb.getAllAlerts()).called(1);
+    });
+
+    test('價格查詢失敗不影響提醒清單(純裝飾)', () async {
+      when(
+        () => mockDb.getAllAlerts(),
+      ).thenAnswer((_) async => [createAlert(id: 1, symbol: '2330')]);
+      when(
+        () => mockDb.getLatestPricesBatch(any()),
+      ).thenThrow(Exception('DB error'));
+
+      await container.read(priceAlertProvider.notifier).loadAlerts();
+
+      final state = container.read(priceAlertProvider);
+      expect(state.alerts, hasLength(1));
+      expect(state.error, isNull);
+      expect(state.latestPrices, isEmpty);
     });
   });
 

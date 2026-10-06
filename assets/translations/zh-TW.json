@@ -986,7 +986,9 @@
     "unmonitorable": "不在主檔,無法監控",
     "revenueYoyThreshold": "營收年增門檻",
     "dividendYieldThreshold": "殖利率門檻",
-    "peThreshold": "本益比門檻"
+    "peThreshold": "本益比門檻",
+    "distanceFromPrice": "距現價 {percent}",
+    "reached": "已達到"
   },
   "notification": {
     "title": "通知設定",

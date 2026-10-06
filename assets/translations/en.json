@@ -986,7 +986,9 @@
     "unmonitorable": "Not in stock master; cannot monitor",
     "revenueYoyThreshold": "Revenue YoY Threshold",
     "dividendYieldThreshold": "Dividend Yield Threshold",
-    "peThreshold": "P/E Threshold"
+    "peThreshold": "P/E Threshold",
+    "distanceFromPrice": "{percent} from current price",
+    "reached": "Reached"
   },
   "notification": {
     "title": "Notification Settings",

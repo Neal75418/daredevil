@@ -10,6 +10,7 @@ import 'package:daredevil/core/utils/sentinel.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/services/alert/trailing_ma_alert_service.dart';
 import 'package:daredevil/domain/services/alert_evaluation_service.dart';
+import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 
 /// 警示類型列舉
@@ -247,6 +248,8 @@ class PriceAlertState {
     this.alerts = const [],
     this.stockNames = const {},
     this.unmonitorableSymbols = const {},
+    this.stockMarkets = const {},
+    this.latestPrices = const {},
     this.isLoading = false,
     this.error,
   });
@@ -264,6 +267,13 @@ class PriceAlertState {
   /// 訊號放在提醒清單上,不放日誌。判準與 monitor 的 getAllActiveStocks
   /// 等價:無 row 或 isActive=false。
   final Set<String> unmonitorableSymbols;
+
+  /// 代碼 → 市場別(`TWSE`/`TPEx`)。提醒頁登記即時報價用;查不到不登記
+  final Map<String, String> stockMarkets;
+
+  /// 代碼 → 最新一筆價格。提醒頁顯示距現價多少用(盤後;盤中由即時報價
+  /// 取代,見 `alertLivePriceProvider`)。純裝飾,查不到就不顯示
+  final Map<String, DailyPriceEntry> latestPrices;
   final bool isLoading;
   final String? error;
 
@@ -271,6 +281,8 @@ class PriceAlertState {
     List<PriceAlertEntry>? alerts,
     Map<String, String>? stockNames,
     Set<String>? unmonitorableSymbols,
+    Map<String, String>? stockMarkets,
+    Map<String, DailyPriceEntry>? latestPrices,
     bool? isLoading,
     Object? error = sentinel,
   }) {
@@ -278,6 +290,8 @@ class PriceAlertState {
       alerts: alerts ?? this.alerts,
       stockNames: stockNames ?? this.stockNames,
       unmonitorableSymbols: unmonitorableSymbols ?? this.unmonitorableSymbols,
+      stockMarkets: stockMarkets ?? this.stockMarkets,
+      latestPrices: latestPrices ?? this.latestPrices,
       isLoading: isLoading ?? this.isLoading,
       error: error == sentinel ? this.error : error as String?,
     );
@@ -301,6 +315,10 @@ class PriceAlertNotifier extends Notifier<PriceAlertState> {
   PriceAlertState build() {
     _db = ref.watch(databaseProvider);
     _pendingToggles = {};
+    // 每日更新完成後重讀(同自選頁):提醒頁的距現價以最新一筆盤後價為正式
+    // 資料,盤後評估觸發的提醒狀態也要跟著更新;否則頁面開著過夜,距離會用
+    // 前一個交易日的價格算
+    ref.listen(dataUpdateEpochProvider, (_, _) => loadAlerts());
     return const PriceAlertState();
   }
 
@@ -318,10 +336,14 @@ class PriceAlertNotifier extends Notifier<PriceAlertState> {
       // getAllActiveStocks 查不到 ⟺ 這檔的提醒永遠不會觸發。兩個判準必須
       // 同源,否則 UI 說可監控、monitor 說查無此檔會漂移。
       final unmonitorable = <String>{};
+      final markets = <String, String>{};
       try {
         for (final sym in alerts.map((a) => a.symbol).toSet()) {
           final stock = await _db.getStock(sym);
-          if (stock != null) names[sym] = stock.name;
+          if (stock != null) {
+            names[sym] = stock.name;
+            markets[sym] = stock.market;
+          }
           if (stock == null || !stock.isActive) unmonitorable.add(sym);
         }
       } catch (e) {
@@ -329,10 +351,21 @@ class PriceAlertNotifier extends Notifier<PriceAlertState> {
         // 不誤標(標了使用者會去刪提醒,誤標的代價比漏標高)
         AppLogger.warning('PriceAlertNotifier', '查詢股票名稱失敗,清單只顯示代碼', e);
       }
+      // 最新一筆價格(距現價多少用):同樣是裝飾,失敗只是不顯示距離
+      var latestPrices = const <String, DailyPriceEntry>{};
+      try {
+        latestPrices = await _db.getLatestPricesBatch(
+          alerts.map((a) => a.symbol).toSet().toList(),
+        );
+      } catch (e) {
+        AppLogger.warning('PriceAlertNotifier', '查詢最新價格失敗,不顯示距現價', e);
+      }
       state = state.copyWith(
         alerts: alerts,
         stockNames: names,
         unmonitorableSymbols: unmonitorable,
+        stockMarkets: markets,
+        latestPrices: latestPrices,
         isLoading: false,
       );
     } catch (e) {

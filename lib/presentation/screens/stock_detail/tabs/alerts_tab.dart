@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:daredevil/domain/services/live_quote/live_quote_merge.dart';
+import 'package:daredevil/presentation/providers/live_price_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/widgets/alert_distance_text.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
 import 'package:daredevil/data/database/app_database.dart';
@@ -39,11 +43,10 @@ class _AlertsTabState extends ConsumerState<AlertsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final currentPrice = ref.watch(
-      stockDetailProvider(
-        widget.symbol,
-      ).select((s) => s.price.latestPrice?.close),
-    );
+    // 現價跟個股頁頁首同一個來源(盤中即時、收盤後今日收盤、否則盤後);
+    // 個股頁已在抓這一檔的即時報價,這裡沿用、不多發請求
+    final merged = ref.watch(stockDetailLivePriceProvider(widget.symbol));
+    final currentPrice = merged.price;
     final priceHistory = ref.watch(
       stockDetailProvider(widget.symbol).select((s) => s.price.priceHistory),
     );
@@ -71,6 +74,8 @@ class _AlertsTabState extends ConsumerState<AlertsTab> {
           AlertQuickSet(
             bars: AlertQuickSet.toOhlc(priceHistory),
             currentPrice: currentPrice,
+            priceIsToday: merged.kind != MergedPriceKind.fallback,
+            now: ref.read(appClockProvider).now(),
             // 已存在的目標價 → 該種類停用,避免建出一模一樣的第二筆
             existingTargets: {
               // 必須帶方向:同一個價位可以同時是「跌破」與「突破」兩種
@@ -129,7 +134,9 @@ class _AlertsTabState extends ConsumerState<AlertsTab> {
                   ],
                 ),
               ),
-            ...stockAlerts.map((alert) => _buildAlertCard(context, ref, alert)),
+            ...stockAlerts.map(
+              (alert) => _buildAlertCard(context, ref, alert, currentPrice),
+            ),
           ],
 
           const SizedBox(height: DesignTokens.spacing16),
@@ -138,7 +145,7 @@ class _AlertsTabState extends ConsumerState<AlertsTab> {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: () => _showAddAlertDialog(context, ref, currentPrice),
+              onPressed: () => _showAddAlertDialog(context, ref),
               icon: const Icon(Icons.add),
               label: Text('alert.create'.tr()),
             ),
@@ -317,6 +324,7 @@ class _AlertsTabState extends ConsumerState<AlertsTab> {
     BuildContext context,
     WidgetRef ref,
     PriceAlertEntry alert,
+    double? currentPrice,
   ) {
     final theme = Theme.of(context);
     final alertType =
@@ -405,9 +413,7 @@ class _AlertsTabState extends ConsumerState<AlertsTab> {
               color: alert.isActive ? null : theme.colorScheme.outline,
             ),
           ),
-          subtitle: alert.note?.isNotEmpty == true
-              ? Text(alert.note!, style: theme.textTheme.bodySmall)
-              : null,
+          subtitle: _buildAlertSubtitle(theme, alert, currentPrice),
           trailing: Switch(
             value: alert.isActive,
             onChanged: (value) {
@@ -421,18 +427,39 @@ class _AlertsTabState extends ConsumerState<AlertsTab> {
     );
   }
 
-  void _showAddAlertDialog(
-    BuildContext context,
-    WidgetRef ref,
+  /// 備註＋距現價多少(只在啟用中、未觸發的價位提醒;中性灰字)
+  Widget? _buildAlertSubtitle(
+    ThemeData theme,
+    PriceAlertEntry alert,
     double? currentPrice,
   ) {
+    final note = alert.note;
+    final distance = AlertDistanceText.forAlert(alert, currentPrice);
+    if ((note == null || note.isEmpty) && distance == null) return null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (note != null && note.isNotEmpty)
+          Text(note, style: theme.textTheme.bodySmall),
+        if (distance != null)
+          Text(
+            distance,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showAddAlertDialog(BuildContext context, WidgetRef ref) {
     showAppBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => _AddAlertSheet(
         symbol: widget.symbol,
-        currentPrice: currentPrice,
         onCreated: () {
           ref.read(priceAlertProvider.notifier).loadAlerts();
         },
@@ -443,14 +470,9 @@ class _AlertsTabState extends ConsumerState<AlertsTab> {
 
 /// 新增到價提醒 Bottom Sheet
 class _AddAlertSheet extends ConsumerStatefulWidget {
-  const _AddAlertSheet({
-    required this.symbol,
-    required this.currentPrice,
-    required this.onCreated,
-  });
+  const _AddAlertSheet({required this.symbol, required this.onCreated});
 
   final String symbol;
-  final double? currentPrice;
   final VoidCallback onCreated;
 
   @override
@@ -513,7 +535,10 @@ class _AddAlertSheetState extends ConsumerState<_AddAlertSheet> {
           const SizedBox(height: DesignTokens.spacing8),
 
           // Current price info
-          if (widget.currentPrice case final currentPrice?)
+          // 跟頁首、分頁現價卡同一個來源,面板開著時也隨每輪報價更新
+          // (面板不是不透明頁面,底下的個股頁照樣在抓這一檔)
+          if (ref.watch(stockDetailLivePriceProvider(widget.symbol)).price
+              case final currentPrice?)
             Container(
               padding: const EdgeInsets.all(DesignTokens.spacing12),
               decoration: BoxDecoration(

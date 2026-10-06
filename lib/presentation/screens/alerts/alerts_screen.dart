@@ -11,9 +11,13 @@ import 'package:daredevil/core/utils/responsive_helper.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/widgets/alert_type_icon.dart';
 import 'package:daredevil/presentation/widgets/pinned_thesis_section.dart';
+import 'package:daredevil/presentation/providers/alert_live_provider.dart';
+import 'package:daredevil/presentation/providers/live_price_provider.dart';
 import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/widgets/alert_distance_text.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
+import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
 import 'package:daredevil/presentation/widgets/price_alert_dialog.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
@@ -41,6 +45,8 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(priceAlertProvider);
     final theme = Theme.of(context);
+    // 登記的「是否已有今天正式資料」跟現在有關:跨過午夜等邊界時重算
+    ref.watch(liveQuoteBoundaryProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -57,11 +63,36 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
       ),
       // 論點失效 section（出場層 Phase 2）置頂：與價格警示獨立的資料源，
       // 價格警示空/載入中也要能看到失效通知；空狀態自身零噪音。
-      body: Column(
-        children: [
-          const PinnedThesisSection(invalidatedOnly: true),
-          Expanded(child: _buildAlertBody(state, theme)),
-        ],
+      // 距現價多少(2026-10-06):畫面開著時登記有價位提醒的股票,關掉就停
+      body: LiveQuoteScope(
+        registrations: alertRegistrations(
+          state,
+          ref.read(appClockProvider).now(),
+        ),
+        child: Column(
+          children: [
+            const PinnedThesisSection(invalidatedOnly: true),
+            Consumer(
+              builder: (context, ref, _) {
+                final status = ref.watch(alertsLiveHeaderProvider);
+                if (status == null) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      status,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            Expanded(child: _buildAlertBody(state, theme)),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddAlertDialog(context),
@@ -359,6 +390,22 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+            // 距現價多少(只在啟用中、未觸發的價位提醒;中性灰字)
+            Consumer(
+              builder: (context, ref, _) {
+                final distance = AlertDistanceText.forAlert(
+                  alert,
+                  ref.watch(alertLivePriceProvider(alert.symbol)).price,
+                );
+                if (distance == null) return const SizedBox.shrink();
+                return Text(
+                  distance,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                );
+              },
+            ),
             Row(
               children: [
                 Container(

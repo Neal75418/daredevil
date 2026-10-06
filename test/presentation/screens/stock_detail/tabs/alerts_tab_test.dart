@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/core/theme/color_contrast.dart';
+import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/screens/stock_detail/widgets/alert_quick_set.dart';
 import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 import 'package:daredevil/presentation/providers/stock_detail_provider.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/alerts_tab.dart';
@@ -96,6 +102,8 @@ void main() {
     StockDetailState? stockState,
     PriceAlertState? alertState,
     Brightness brightness = Brightness.light,
+    _FixedCenter? liveCenter,
+    DateTime? now,
   }) {
     final stock = stockState ?? const StockDetailState();
     final alert = alertState ?? const PriceAlertState();
@@ -112,8 +120,10 @@ void main() {
           n.initialState = alert;
           return n;
         }),
+        if (now != null) appClockProvider.overrideWithValue(_Clock(now)),
       ],
       brightness: brightness,
+      liveQuoteCenter: liveCenter == null ? null : () => liveCenter,
     );
   }
 
@@ -376,4 +386,195 @@ void main() {
       expect(listTile.subtitle, isNull);
     });
   });
+
+  group('距現價多少(2026-10-06,路線圖第 2 項)', () {
+    final morning = DateTime(2026, 10, 6, 10, 15);
+    // 30 根日線(5MA 等快捷鈕才算得出來);最後一筆 10/5 收 880
+    final history = [
+      for (var i = 0; i < 30; i++)
+        DailyPriceEntry(
+          symbol: '2330',
+          date: DateTime(2026, 8, 25).add(Duration(days: i)),
+          open: 870,
+          high: 885,
+          low: 865,
+          close: i == 29 ? 880 : 870,
+          volume: 1000,
+        ),
+    ];
+    final stockState = StockDetailState(
+      price: StockPriceState(
+        latestPrice: DailyPriceEntry(
+          symbol: '2330',
+          date: DateTime(2026, 10, 5),
+          close: 880,
+          priceChange: -5,
+        ),
+        priceHistory: history,
+      ),
+    );
+    _FixedCenter live(double price) => _FixedCenter(
+      LiveQuoteState(
+        entries: {
+          '2330': LiveQuoteEntry(
+            symbol: '2330',
+            date: DateTime(2026, 10, 6),
+            price: price,
+            displaySource: LiveDisplaySource.trade,
+            previousClose: 880,
+            quoteTime: '10:14:50',
+            isClosingQuote: false,
+          ),
+        },
+      ),
+    );
+
+    testWidgets('🚨 現價與距離用即時價(個股頁已在抓這一檔,不多發請求)', (tester) async {
+      widenViewport(tester);
+      // 跌破 885:盤後收 880 已越過,即時 890 還沒——用了即時才會顯示距離
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: stockState,
+          alertState: PriceAlertState(
+            alerts: [createAlert(alertType: 'BELOW', targetValue: 885)],
+          ),
+          liveCenter: live(890),
+          now: morning,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.textContaining('890.00'), findsWidgets);
+      expect(find.text('alert.distanceFromPrice'), findsOneWidget);
+      expect(find.text('alert.reached'), findsNothing);
+    });
+
+    testWidgets('現價已越過目標 → 已達到', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: stockState,
+          alertState: PriceAlertState(
+            alerts: [createAlert(alertType: 'BELOW', targetValue: 885)],
+          ),
+          now: morning,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('alert.reached'), findsOneWidget);
+    });
+
+    testWidgets('🚨 盤中有即時價 → 快捷鈕不顯示「以昨收判斷」;沒有才顯示', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: stockState,
+          liveCenter: live(890),
+          now: morning,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(AlertQuickSet.staleWarningKey), findsNothing);
+    });
+
+    testWidgets('盤中沒有今天的價格 → 顯示「以昨收判斷」', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(stockState: stockState, now: morning),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(AlertQuickSet.staleWarningKey), findsOneWidget);
+    });
+
+    testWidgets('🚨 新增提醒面板的「目前價格」跟著即時價更新(與頁首同一個數字)', (tester) async {
+      widenViewport(tester);
+      final center = live(890);
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: stockState,
+          liveCenter: center,
+          now: morning,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('alert.create').first);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      center.emit(
+        LiveQuoteState(
+          entries: {
+            '2330': LiveQuoteEntry(
+              symbol: '2330',
+              date: DateTime(2026, 10, 6),
+              price: 895,
+              displaySource: LiveDisplaySource.trade,
+              previousClose: 880,
+              quoteTime: '10:15:05',
+              isClosingQuote: false,
+            ),
+          },
+        ),
+      );
+      await tester.pump();
+      expect(find.textContaining('890.00'), findsNothing);
+      expect(
+        find.textContaining('895.00'),
+        findsNWidgets(2),
+        reason: '分頁現價卡＋面板',
+      );
+    });
+
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      testWidgets('🚨 距離灰字 $brightness:對卡片實際底色 ≥ 4.5', (tester) async {
+        widenViewport(tester);
+        await tester.pumpWidget(
+          buildTestWidget(
+            stockState: stockState,
+            alertState: PriceAlertState(
+              alerts: [createAlert(alertType: 'BELOW', targetValue: 885)],
+            ),
+            liveCenter: live(890),
+            now: morning,
+            brightness: brightness,
+          ),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        final finder = find.text('alert.distanceFromPrice');
+        final color = tester.widget<Text>(finder).style!.color!;
+        final card = tester.widget<Material>(
+          find.ancestor(of: finder, matching: find.byType(Material)).first,
+        );
+        expect(
+          ColorContrast.ratio(color, card.color!),
+          greaterThanOrEqualTo(4.5),
+        );
+      });
+    }
+  });
+}
+
+class _Clock implements AppClock {
+  _Clock(this.value);
+  final DateTime value;
+  @override
+  DateTime now() => value;
+}
+
+class _FixedCenter extends LiveQuoteCenter {
+  _FixedCenter(this.initial);
+  final LiveQuoteState initial;
+
+  @override
+  LiveQuoteState build() => initial;
+
+  @override
+  void register(Object owner, List<LiveQuoteRegistration> entries) {}
+
+  @override
+  void unregister(Object owner) {}
+
+  @override
+  void setAppVisible(bool visible) {}
+
+  void emit(LiveQuoteState s) => state = s;
 }
