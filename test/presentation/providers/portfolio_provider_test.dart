@@ -130,6 +130,9 @@ void main() {
         appClockProvider.overrideWithValue(_FixedClock()),
       ],
     );
+    when(
+      () => mockDb.getRecentPrices(any(), count: any(named: 'count')),
+    ).thenAnswer((_) async => const []);
   });
 
   tearDown(() {
@@ -257,6 +260,26 @@ void main() {
       );
 
       expect(pos.costBasis, 500000);
+    });
+    test('copyWithPrice:只換現價,其他欄位(含價格日期、價差)不變', () {
+      final p = PortfolioPositionData(
+        symbol: '2330',
+        market: 'TWSE',
+        quantity: 1000,
+        avgCost: 500,
+        realizedPnl: 10,
+        totalDividendReceived: 5,
+        currentPrice: 600,
+        priceDate: DateTime(2026, 10, 5),
+        priceChangeAmount: 6,
+      );
+      final live = p.copyWithPrice(612);
+      expect(live.currentPrice, 612);
+      expect(live.unrealizedPnl, closeTo(112000, 1e-6));
+      expect(live.priceDate, DateTime(2026, 10, 5));
+      expect(live.priceChangeAmount, 6);
+      expect(live.market, 'TWSE');
+      expect(live.realizedPnl, 10);
     });
   });
 
@@ -408,6 +431,30 @@ void main() {
       // Explicitly passing null should clear it
       final state2 = original.copyWith(error: null);
       expect(state2.error, isNull);
+    });
+    test('positionOf 與 priceDate(在倉持股價格日期的最大值)', () {
+      PortfolioPositionData p(String s, DateTime? d, {double qty = 1}) =>
+          PortfolioPositionData(
+            symbol: s,
+            quantity: qty,
+            avgCost: 1,
+            realizedPnl: 0,
+            totalDividendReceived: 0,
+            currentPrice: 1,
+            priceDate: d,
+          );
+      final state = PortfolioState(
+        positions: [
+          p('A', DateTime(2026, 10, 5)),
+          p('B', DateTime(2026, 10, 6)),
+          p('C', DateTime(2026, 10, 7), qty: 0),
+          p('D', null),
+        ],
+      );
+      expect(state.positionOf('B')!.symbol, 'B');
+      expect(state.positionOf('X'), isNull);
+      expect(state.priceDate, DateTime(2026, 10, 6));
+      expect(const PortfolioState().priceDate, isNull);
     });
   });
 
@@ -579,6 +626,122 @@ void main() {
       expect(state.positions[0].quantity, 1000);
     });
 
+    test('🚨 載入時帶出價格那一筆的日期與漲跌價差(判斷是不是今天、今日損益的昨收)', () async {
+      final positions = [
+        createPosition(id: 1, symbol: '2330', quantity: 1000, avgCost: 500),
+      ];
+      when(
+        () => mockDb.getPortfolioPositions(),
+      ).thenAnswer((_) async => positions);
+      when(
+        () => mockDb.getStocksBatch(any()),
+      ).thenAnswer((_) async => {'2330': createStock(symbol: '2330')});
+      when(() => mockDb.getLatestPricesBatch(any())).thenAnswer(
+        (_) async => {
+          '2330': DailyPriceEntry(
+            symbol: '2330',
+            date: DateTime(2026, 10, 5),
+            close: 600,
+            priceChange: 6,
+          ),
+        },
+      );
+      when(
+        () => mockDb.getAllPortfolioTransactions(),
+      ).thenAnswer((_) async => []);
+      stubDividendReads();
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      final p = container.read(portfolioProvider).positions.single;
+      expect(p.priceDate, DateTime(2026, 10, 5));
+      expect(p.priceChangeAmount, 6);
+      verifyNever(
+        () => mockDb.getRecentPrices(any(), count: any(named: 'count')),
+      );
+    });
+
+    test('前一筆的日期不早於最新那一筆 → 不推回價差', () async {
+      final positions = [
+        createPosition(id: 1, symbol: '6488', quantity: 100, avgCost: 400),
+      ];
+      when(
+        () => mockDb.getPortfolioPositions(),
+      ).thenAnswer((_) async => positions);
+      when(() => mockDb.getStocksBatch(any())).thenAnswer(
+        (_) async => {'6488': createStock(symbol: '6488', market: 'TPEx')},
+      );
+      final latest = DailyPriceEntry(
+        symbol: '6488',
+        date: DateTime(2026, 10, 5),
+        close: 420,
+      );
+      when(
+        () => mockDb.getLatestPricesBatch(any()),
+      ).thenAnswer((_) async => {'6488': latest});
+      when(() => mockDb.getRecentPrices('6488', count: 2)).thenAnswer(
+        (_) async => [
+          latest,
+          DailyPriceEntry(
+            symbol: '6488',
+            date: DateTime(2026, 10, 5),
+            close: 410,
+          ),
+        ],
+      );
+      when(
+        () => mockDb.getAllPortfolioTransactions(),
+      ).thenAnswer((_) async => []);
+      stubDividendReads();
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      expect(
+        container.read(portfolioProvider).positions.single.priceChangeAmount,
+        isNull,
+      );
+    });
+
+    test('🚨 交易所價差缺(例如上櫃單檔走 FinMind 寫入)→ 以前一筆收盤推回價差', () async {
+      final positions = [
+        createPosition(id: 1, symbol: '6488', quantity: 100, avgCost: 400),
+      ];
+      when(
+        () => mockDb.getPortfolioPositions(),
+      ).thenAnswer((_) async => positions);
+      when(() => mockDb.getStocksBatch(any())).thenAnswer(
+        (_) async => {'6488': createStock(symbol: '6488', market: 'TPEx')},
+      );
+      final latest = DailyPriceEntry(
+        symbol: '6488',
+        date: DateTime(2026, 10, 5),
+        close: 420,
+      );
+      when(
+        () => mockDb.getLatestPricesBatch(any()),
+      ).thenAnswer((_) async => {'6488': latest});
+      when(() => mockDb.getRecentPrices('6488', count: 2)).thenAnswer(
+        (_) async => [
+          latest,
+          DailyPriceEntry(
+            symbol: '6488',
+            date: DateTime(2026, 10, 2),
+            close: 410,
+          ),
+        ],
+      );
+      when(
+        () => mockDb.getAllPortfolioTransactions(),
+      ).thenAnswer((_) async => []);
+      stubDividendReads();
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      expect(
+        container.read(portfolioProvider).positions.single.priceChangeAmount,
+        10,
+      );
+    });
     test('loadPositions handles error gracefully', () async {
       when(
         () => mockDb.getPortfolioPositions(),

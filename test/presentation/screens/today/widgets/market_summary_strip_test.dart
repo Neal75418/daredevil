@@ -10,6 +10,7 @@ import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/data/models/twse/twse_market_index.dart';
+import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/screens/today/widgets/market_summary_strip.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_overview_selectors.dart';
@@ -69,6 +70,7 @@ void main() {
     VoidCallback? onTap,
     VoidCallback? onRetry,
     double width = 390,
+    MarketLiveIndices? live,
   }) async {
     tester.view.physicalSize = Size(width, 844);
     tester.view.devicePixelRatio = 1;
@@ -92,6 +94,7 @@ void main() {
                   state: state,
                   onTap: onTap ?? () {},
                   onRetry: onRetry ?? () {},
+                  live: live,
                 ),
               ),
             ),
@@ -332,6 +335,59 @@ void main() {
       await pump(tester, const MarketOverviewState());
       expect(find.byType(Card), findsNothing);
       expect(find.byType(ShimmerContainer), findsNothing);
+    });
+  });
+
+  group('盤中即時報價', () {
+    final liveTwse = MarketLiveIndices(
+      byMarket: {
+        MarketCode.twse: MarketIndexLive(
+          index: TwseMarketIndex(
+            date: DateTime(2026, 9, 25),
+            name: MarketIndexNames.taiex,
+            close: 48524.6,
+            change: 500,
+            changePercent: 1.04,
+          ),
+          isLive: true,
+        ),
+      },
+      statusText: '報價時間 10:15:30',
+    );
+
+    testWidgets('🚨 有即時指數 → 顯示即時點數與漲跌;沒即時的那個照舊', (tester) async {
+      await pump(tester, _withData, live: liveTwse);
+      expect(find.text('加權 48,524.60 +1.04%'), findsOneWidget);
+      expect(find.text('櫃買 285.30 +0.10%'), findsOneWidget);
+    });
+
+    testWidgets('報價狀態接在指數那一行', (tester) async {
+      await pump(tester, _withData, live: liveTwse);
+      expect(find.text('報價時間 10:15:30'), findsOneWidget);
+    });
+
+    testWidgets('🚨 有指數用即時 → 情緒與漲跌家數標盤後資料的日期', (tester) async {
+      final withDate = _withData.copyWith(dataDate: DateTime(2026, 9, 24));
+      await pump(tester, withDate, live: liveTwse);
+      expect(find.text('${sentimentGroup(withDate)} (9/24)'), findsOneWidget);
+      expect(find.text('漲 408 跌 667 (9/24)'), findsOneWidget);
+    });
+
+    testWidgets('沒有指數用即時 → 不標日期(維持現狀)', (tester) async {
+      final withDate = _withData.copyWith(dataDate: DateTime(2026, 9, 24));
+      await pump(tester, withDate, live: const MarketLiveIndices());
+      expect(find.text(sentimentGroup(withDate)), findsOneWidget);
+      expect(find.text('漲 408 跌 667'), findsOneWidget);
+    });
+
+    testWidgets('🚨 備援值被即時取代 → 不掛「非即時」', (tester) async {
+      final stale = MarketOverviewState(
+        indices: _withData.indices,
+        indexStaleNames: {MarketIndexNames.taiex},
+        advanceDeclineByMarket: _withData.advanceDeclineByMarket,
+      );
+      await pump(tester, stale, live: liveTwse);
+      expect(find.textContaining('非即時'), findsNothing);
     });
   });
 }

@@ -1421,7 +1421,11 @@
     "expected": "expected",
     "yield": "yield",
     "dividendBuilding": "Building",
-    "unpricedWarning": "{count} positions unpriced; valued at cost"
+    "unpricedWarning": "{count} positions unpriced; valued at cost",
+    "todayPnl": "Today's P&L (vs. prev. close)",
+    "todayPnlMissing": "{count} without quote not included",
+    "todayPnlNonClosing": "Includes non-closing quotes",
+    "postMarketAsOf": "Performance, allocation and dividends as of {date} close"
   },
   "calendar": {
     "title": "Event Calendar",

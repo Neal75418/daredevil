@@ -5,7 +5,7 @@ import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
-import 'package:daredevil/data/models/twse/twse_market_index.dart';
+import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_overview_selectors.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
@@ -23,11 +23,15 @@ class MarketSummaryStrip extends StatelessWidget {
     required this.state,
     required this.onTap,
     required this.onRetry,
+    this.live,
   });
 
   final MarketOverviewState state;
   final VoidCallback onTap;
   final VoidCallback onRetry;
+
+  /// 盤中即時報價(今日頁傳入);null = 盤後行為
+  final MarketLiveIndices? live;
 
   static const _placeholder = '—';
   static const _outerPadding = EdgeInsets.symmetric(
@@ -61,6 +65,9 @@ class MarketSummaryStrip extends StatelessWidget {
         : WarningColors.warning;
     final failed = state.failedSections.length;
     final separator = ExcludeSemantics(child: Text('・', style: muted));
+    // 指數用即時報價時,情緒與漲跌家數仍是盤後(前一交易日):標日期,
+    // 避免看成今天的
+    final postMarketDate = (live?.anyLive ?? false) ? state.dataDate : null;
 
     return Padding(
       padding: _outerPadding,
@@ -90,7 +97,7 @@ class MarketSummaryStrip extends StatelessWidget {
                             _indexGroup(
                               context,
                               'marketOverview.summary.taiex'.tr(),
-                              heroIndexOf(state, MarketCode.twse),
+                              MarketCode.twse,
                               muted: muted,
                               strong: strong,
                               warningColor: warningColor,
@@ -99,11 +106,13 @@ class MarketSummaryStrip extends StatelessWidget {
                             _indexGroup(
                               context,
                               'marketOverview.summary.tpex'.tr(),
-                              heroIndexOf(state, MarketCode.tpex),
+                              MarketCode.tpex,
                               muted: muted,
                               strong: strong,
                               warningColor: warningColor,
                             ),
+                            if (live?.statusText case final status?)
+                              Text(status, style: muted),
                           ],
                         ),
                         const SizedBox(height: DesignTokens.spacing4),
@@ -112,12 +121,21 @@ class MarketSummaryStrip extends StatelessWidget {
                           runSpacing: DesignTokens.spacing2,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            _sentimentGroup(muted: muted, strong: strong),
+                            _sentimentGroup(
+                              muted: muted,
+                              strong: strong,
+                              dateLabel: postMarketDate,
+                            ),
                             separator,
                             _breadthGroup(
                               context,
                               muted: muted,
                               strong: strong,
+                              dateLabel: postMarketDate == null
+                                  ? null
+                                  : state.advanceDeclineStaleDates[MarketCode
+                                            .twse] ??
+                                        postMarketDate,
                             ),
                           ],
                         ),
@@ -183,15 +201,18 @@ class MarketSummaryStrip extends StatelessWidget {
     );
   }
 
-  /// 「加權 48,024.60 -0.28%」＋（備援值時）「非即時(9/24)」
+  /// 「加權 48,024.60 -0.28%」＋（備援值時）「非即時(9/24)」。有即時報價
+  /// 時顯示即時點數,不掛「非即時」
   Widget _indexGroup(
     BuildContext context,
     String label,
-    TwseMarketIndex? index, {
+    String market, {
     required TextStyle? muted,
     required TextStyle? strong,
     required Color warningColor,
   }) {
+    final shown = live?.byMarket[market];
+    final index = shown?.index ?? heroIndexOf(state, market);
     if (index == null) {
       return Text.rich(
         TextSpan(
@@ -202,7 +223,8 @@ class MarketSummaryStrip extends StatelessWidget {
         ),
       );
     }
-    final isStale = state.indexStaleNames.contains(index.name);
+    final isStale =
+        !(shown?.isLive ?? false) && state.indexStaleNames.contains(index.name);
     return Text.rich(
       TextSpan(
         children: [
@@ -235,6 +257,7 @@ class MarketSummaryStrip extends StatelessWidget {
   Widget _sentimentGroup({
     required TextStyle? muted,
     required TextStyle? strong,
+    DateTime? dateLabel,
   }) {
     final sentiment = computeMarketSentiment(state, MarketCode.twse);
     final prefix =
@@ -252,6 +275,11 @@ class MarketSummaryStrip extends StatelessWidget {
               style: muted,
             ),
           ],
+          if (dateLabel != null)
+            TextSpan(
+              text: ' (${dateLabel.month}/${dateLabel.day})',
+              style: muted,
+            ),
         ],
       ),
     );
@@ -262,6 +290,7 @@ class MarketSummaryStrip extends StatelessWidget {
     BuildContext context, {
     required TextStyle? muted,
     required TextStyle? strong,
+    DateTime? dateLabel,
   }) {
     final ad = state.advanceDeclineByMarket[MarketCode.twse];
     final hasAd = ad != null && ad.total > 0;
@@ -288,6 +317,11 @@ class MarketSummaryStrip extends StatelessWidget {
                 ? strong?.copyWith(color: context.priceColor(-1))
                 : strong,
           ),
+          if (dateLabel != null)
+            TextSpan(
+              text: ' (${dateLabel.month}/${dateLabel.day})',
+              style: muted,
+            ),
         ],
       ),
     );

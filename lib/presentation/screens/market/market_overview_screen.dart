@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/presentation/providers/live_price_provider.dart';
+import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_dashboard.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
@@ -18,18 +22,29 @@ class MarketOverviewScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(marketOverviewProvider);
     final notifier = ref.read(marketOverviewProvider.notifier);
+    // 登記的「是否已有今天正式資料」跟現在有關:跨過午夜等邊界時重算
+    ref.watch(liveQuoteBoundaryProvider);
+    final live = ref.watch(marketLiveIndicesProvider);
     return Scaffold(
       appBar: AppBar(title: Text('marketOverview.title'.tr())),
-      body: ThemedRefreshIndicator(
-        onRefresh: notifier.loadData,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(child: _content(context, state, notifier)),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: DesignTokens.spacing24),
-            ),
-          ],
+      body: LiveQuoteScope(
+        registrations: marketIndexRegistrations(
+          state,
+          ref.read(appClockProvider).now(),
+        ),
+        child: ThemedRefreshIndicator(
+          onRefresh: notifier.loadData,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: _content(context, state, notifier, live),
+              ),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: DesignTokens.spacing24),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -39,6 +54,7 @@ class MarketOverviewScreen extends ConsumerWidget {
     BuildContext context,
     MarketOverviewState state,
     MarketOverviewNotifier notifier,
+    MarketLiveIndices live,
   ) {
     if (!state.hasData && !state.isLoading) {
       if (state.error != null) {
@@ -70,6 +86,6 @@ class MarketOverviewScreen extends ConsumerWidget {
         ),
       );
     }
-    return MarketDashboard(state: state);
+    return MarketDashboard(state: state, live: live);
   }
 }

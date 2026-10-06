@@ -89,9 +89,10 @@ class LiveCardCaption {
 /// 即時報價的頁首狀態與卡片標示規則(spec §7「共通」)
 abstract final class LiveQuoteStatusRule {
   /// 頁首狀態,依序取第一個成立的:
+  /// 0. 畫面上全部用今天的正式資料 → null(沒有即時數字可描述);
   /// 1. 報價暫停(限流優先於網路);
   /// 2. 證交所今天尚無報價(最近一輪有回應、但全部不是今天,且沒有卡片用今天
-  ///    的即時報價;第一輪回應前不顯示);
+  ///    的即時報價或正式資料;第一輪回應前不顯示);
   /// 3. 有卡片用即時報價:盤中為 [intradayTime];收盤後全是收盤報價為
   ///    「今日收盤」,否則「最後報價」取最舊的那筆時間;
   /// 4. 都沒有 → null。
@@ -100,6 +101,13 @@ abstract final class LiveQuoteStatusRule {
     required Iterable<MergedPrice> merged,
     required String? intradayTime,
   }) {
+    final all = merged.toList();
+    // 報價中心的狀態是全 App 共用的(例如別的畫面那檔暫停交易,讓最近一輪
+    // 「尚無報價」),畫面上全部是今天的正式資料時不能拿來描述這個畫面
+    if (all.isNotEmpty &&
+        all.every((m) => m.kind == MergedPriceKind.official)) {
+      return null;
+    }
     final until = state.rateLimitedUntil;
     if (until != null) {
       return LiveHeaderStatus(LiveHeaderKind.pausedRateLimit, hm(until));
@@ -112,12 +120,15 @@ abstract final class LiveQuoteStatusRule {
       );
     }
     final live = [
-      for (final m in merged)
+      for (final m in all)
         if (m.kind == MergedPriceKind.live) m,
     ];
-    // 只在沒有卡片用今天的即時報價時才說「尚無報價」:收盤後逐檔抓,最近一輪
-    // 可能只剩一檔(例如暫停交易、列被丟掉),其他卡片早已顯示今天的收盤報價
-    if (state.latestResponseHadToday == false && live.isEmpty) {
+    // 只在沒有卡片顯示今天的價格(即時或正式資料)時才說「尚無報價」:收盤後
+    // 逐檔抓,最近一輪可能只剩一檔(例如暫停交易、列被丟掉),其他卡片早已
+    // 顯示今天的收盤
+    final anyToday =
+        live.isNotEmpty || all.any((m) => m.kind == MergedPriceKind.official);
+    if (state.latestResponseHadToday == false && !anyToday) {
       return const LiveHeaderStatus(LiveHeaderKind.noQuotesToday);
     }
     if (live.isEmpty) return null;

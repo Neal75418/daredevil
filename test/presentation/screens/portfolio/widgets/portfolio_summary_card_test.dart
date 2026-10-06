@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/domain/services/live_quote/today_pnl.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
 import 'package:daredevil/presentation/screens/portfolio/widgets/portfolio_summary_card.dart';
 
@@ -128,6 +129,62 @@ void main() {
       expect(find.text('-0'), findsNothing);
       final pnl = tester.widget<Text>(find.text('0'));
       expect(pnl.style?.color, AppTheme.lightTheme.colorScheme.onSurface);
+    });
+  });
+
+  group('今日損益(以昨收計)', () {
+    const summary = PortfolioSummary(
+      totalMarketValue: 1000000,
+      totalCostBasis: 900000,
+      totalUnrealizedPnl: 100000,
+      totalRealizedPnl: 0,
+      totalDividends: 0,
+      positionCount: 2,
+    );
+
+    testWidgets('有今日損益 → 顯示一列', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(
+          const PortfolioSummaryCard(
+            summary: summary,
+            todayPnl: TodayPnl(
+              amount: 12000,
+              missingCount: 0,
+              includesNonClosing: false,
+            ),
+          ),
+        ),
+      );
+      expect(find.text('portfolio.todayPnl'), findsOneWidget);
+      expect(find.text('portfolio.todayPnlMissing'), findsNothing);
+      expect(find.text('portfolio.todayPnlNonClosing'), findsNothing);
+    });
+
+    testWidgets('🚨 有未計入的持股與非收盤報價 → 兩個標示都在', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(
+          const PortfolioSummaryCard(
+            summary: summary,
+            todayPnl: TodayPnl(
+              amount: 12000,
+              missingCount: 1,
+              includesNonClosing: true,
+            ),
+          ),
+        ),
+      );
+      expect(find.textContaining('portfolio.todayPnlMissing'), findsOneWidget);
+      expect(
+        find.textContaining('portfolio.todayPnlNonClosing'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('沒有今日損益(非交易日、盤前)→ 不顯示', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(const PortfolioSummaryCard(summary: summary)),
+      );
+      expect(find.text('portfolio.todayPnl'), findsNothing);
     });
   });
 }

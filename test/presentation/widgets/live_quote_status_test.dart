@@ -136,6 +136,35 @@ void main() {
       );
     });
 
+    test('🚨 全部用今天的正式資料 → 不顯示(即使最近一輪「尚無報價」或中心暫停)', () {
+      // 報價中心的旗標全 App 共用:例如別的畫面那檔暫停交易,最近一輪列被丟掉
+      expect(
+        header(const LiveQuoteState(latestResponseHadToday: false), [
+          official(afterClose),
+        ]),
+        isNull,
+      );
+      expect(
+        header(const LiveQuoteState(stalled: true), [official(afterClose)]),
+        isNull,
+      );
+    });
+
+    test('🚨 有今天正式資料、另一檔暫停交易(列被丟掉)→ 不寫「尚無報價」(那檔卡片標無報價)', () {
+      final halted = LiveQuoteMerge.merge(
+        official: OfficialPrice(date: DateTime(2026, 10, 5), close: 100),
+        live: null,
+        now: afterClose,
+      );
+      expect(
+        header(const LiveQuoteState(latestResponseHadToday: false), [
+          official(afterClose),
+          halted,
+        ]),
+        isNull,
+      );
+    });
+
     test('全部用正式資料 → 不顯示', () {
       expect(
         header(const LiveQuoteState(latestResponseHadToday: true), [

@@ -4,6 +4,7 @@ import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/sentinel.dart';
+import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/portfolio_repository.dart';
 import 'package:daredevil/domain/services/dividend_completeness.dart';
@@ -50,6 +51,8 @@ class PortfolioPositionData {
     required this.realizedPnl,
     required this.totalDividendReceived,
     this.currentPrice,
+    this.priceDate,
+    this.priceChangeAmount,
   });
 
   final String symbol;
@@ -60,6 +63,28 @@ class PortfolioPositionData {
   final double realizedPnl;
   final double totalDividendReceived;
   final double? currentPrice;
+
+  /// 現價那一筆的日期(合併規則據此判斷是不是今天的正式資料)
+  final DateTime? priceDate;
+
+  /// 交易所漲跌價差(金額);昨收 = 現價 − 價差(除權息日即為參考價)。
+  /// 交易所沒給時以前一筆收盤推回;都沒有為 null
+  final double? priceChangeAmount;
+
+  /// 只換現價(盤中即時報價用);其他欄位不變。市值、未實現損益隨之以新
+  /// 價格計算
+  PortfolioPositionData copyWithPrice(double? price) => PortfolioPositionData(
+    symbol: symbol,
+    stockName: stockName,
+    market: market,
+    quantity: quantity,
+    avgCost: avgCost,
+    realizedPnl: realizedPnl,
+    totalDividendReceived: totalDividendReceived,
+    currentPrice: price,
+    priceDate: priceDate,
+    priceChangeAmount: priceChangeAmount,
+  );
 
   /// 市值
   double get marketValue => quantity * (currentPrice ?? avgCost);
@@ -140,6 +165,25 @@ class PortfolioState {
   final DividendAnalysis? dividendAnalysis;
   final bool isLoading;
   final String? error;
+
+  /// 依代號找持股;沒有回 null
+  PortfolioPositionData? positionOf(String symbol) {
+    for (final p in positions) {
+      if (p.symbol == symbol) return p;
+    }
+    return null;
+  }
+
+  /// 在倉持股價格日期的最大值(績效、配置、股利的資料日期);沒有為 null
+  DateTime? get priceDate {
+    DateTime? latest;
+    for (final p in positions) {
+      final d = p.priceDate;
+      if (p.quantity <= 0 || d == null) continue;
+      if (latest == null || d.isAfter(latest)) latest = d;
+    }
+    return latest;
+  }
 
   PortfolioSummary get summary {
     if (positions.isEmpty) return PortfolioSummary.empty;
@@ -247,6 +291,11 @@ class PortfolioNotifier extends Notifier<PortfolioState> {
       final stocksMap = <String, StockMasterEntry>{};
       final currentPrices = <String, double>{};
 
+      // 交易所漲跌價差缺(例如上櫃單檔改走 FinMind 寫入)時,以前一筆收盤
+      // 推回價差:今日損益要「收盤 − 價差」當昨收
+      final previousCloses = await _previousCloses(pricesResult);
+      if (!_active) return;
+
       final List<PortfolioPositionData> positionData = [];
       for (final pos in positions) {
         final stock = stocksResult[pos.symbol];
@@ -269,6 +318,13 @@ class PortfolioNotifier extends Notifier<PortfolioState> {
             realizedPnl: pos.realizedPnl,
             totalDividendReceived: pos.totalDividendReceived,
             currentPrice: price?.close,
+            priceDate: price?.date,
+            priceChangeAmount:
+                price?.priceChange ??
+                switch ((price?.close, previousCloses[pos.symbol])) {
+                  (final close?, final previous?) => close - previous,
+                  _ => null,
+                },
           ),
         );
       }
@@ -301,6 +357,28 @@ class PortfolioNotifier extends Notifier<PortfolioState> {
       AppLogger.warning('PortfolioNotifier', '載入持倉資料失敗', e);
       state = state.copyWith(isLoading: false, error: ErrorDisplay.message(e));
     }
+  }
+
+  /// 價差缺的持股:取資料庫裡前一筆收盤(代號 → 收盤)。前一筆的日期要早於
+  /// 最新那一筆,否則不算
+  Future<Map<String, double>> _previousCloses(
+    Map<String, DailyPriceEntry> latest,
+  ) async {
+    final missing = [
+      for (final MapEntry(key: symbol, value: price) in latest.entries)
+        if (price.close != null && price.priceChange == null) symbol,
+    ];
+    final recents = await Future.wait([
+      for (final symbol in missing) _db.getRecentPrices(symbol, count: 2),
+    ]);
+    return {
+      for (var i = 0; i < missing.length; i++)
+        if (recents[i] case [final first, final second, ...]
+            when second.close != null &&
+                second.date.isBefore(first.date) &&
+                DateContext.isSameDay(first.date, latest[missing[i]]!.date))
+          missing[i]: second.close!,
+    };
   }
 
   /// 股利分析：配發表與完整度事實建每檔的股利摘要，官方估值配上估值日的收盤。

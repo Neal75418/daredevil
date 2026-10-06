@@ -1421,7 +1421,11 @@
     "expected": "預期",
     "yield": "殖利率",
     "dividendBuilding": "建置中",
-    "unpricedWarning": "{count} 檔缺當日價,以成本價計"
+    "unpricedWarning": "{count} 檔缺當日價,以成本價計",
+    "todayPnl": "今日損益（以昨收計）",
+    "todayPnlMissing": "{count} 檔無報價未計入",
+    "todayPnlNonClosing": "含未收盤報價",
+    "postMarketAsOf": "績效、配置與股利以 {date} 收盤計"
   },
   "calendar": {
     "title": "事件行事曆",

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/theme/color_contrast.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
 import 'package:daredevil/presentation/screens/portfolio/widgets/position_card.dart';
 
@@ -113,5 +116,98 @@ void main() {
 
       expect(find.byType(PositionCard), findsOneWidget);
     });
+  });
+
+  group('盤中即時報價', () {
+    PortfolioPositionData p() => const PortfolioPositionData(
+      symbol: '2330',
+      stockName: '台積電',
+      quantity: 1000,
+      avgCost: 500,
+      realizedPnl: 0,
+      totalDividendReceived: 0,
+      currentPrice: 612,
+    );
+
+    testWidgets('例外標示顯示在卡片上', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(
+          PositionCard(
+            position: p(),
+            live: const PositionCardLive(caption: 'liveQuote.cardPaused'),
+            onTap: () {},
+          ),
+        ),
+      );
+      expect(find.text('liveQuote.cardPaused'), findsOneWidget);
+    });
+
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      testWidgets('🚨 現價閃色最濃時 $brightness:對卡片實際底色 ≥ 4.5', (tester) async {
+        Widget card(int id) => buildTestApp(
+          PositionCard(
+            position: p(),
+            live: PositionCardLive(flash: LiveQuoteFlash(id: id, up: false)),
+            onTap: () {},
+          ),
+          brightness: brightness,
+        );
+        await tester.pumpWidget(card(1));
+        await tester.pumpWidget(card(2));
+        await tester.pump();
+
+        final tint =
+            (tester
+                        .widget<DecoratedBox>(find.byKey(PriceFlash.tintKey))
+                        .decoration
+                    as BoxDecoration)
+                .color!;
+        final cardColor = Theme.of(
+          tester.element(find.byKey(PriceFlash.tintKey)),
+        ).colorScheme.surfaceContainerLow;
+        final text = tester
+            .widget<RichText>(
+              find.descendant(
+                of: find.byKey(PriceFlash.tintKey),
+                matching: find.byType(RichText),
+              ),
+            )
+            .text
+            .style!
+            .color!;
+        expect(
+          ColorContrast.ratio(
+            text,
+            ColorContrast.compositeOver(
+              tint.withValues(alpha: 1),
+              cardColor,
+              tint.a,
+            ),
+          ),
+          greaterThanOrEqualTo(4.5),
+        );
+      });
+
+      testWidgets('🚨 例外標示灰字 $brightness:對卡片實際底色 ≥ 4.5', (tester) async {
+        await tester.pumpWidget(
+          buildTestApp(
+            PositionCard(
+              position: p(),
+              live: const PositionCardLive(caption: 'liveQuote.cardPaused'),
+              onTap: () {},
+            ),
+            brightness: brightness,
+          ),
+        );
+        final text = tester
+            .widget<Text>(find.text('liveQuote.cardPaused'))
+            .style!
+            .color!;
+        final cardColor = Theme.of(
+          tester.element(find.text('liveQuote.cardPaused')),
+        ).colorScheme.surfaceContainerLow;
+        expect(ColorContrast.ratio(text, cardColor), greaterThanOrEqualTo(4.5));
+      });
+    }
   });
 }

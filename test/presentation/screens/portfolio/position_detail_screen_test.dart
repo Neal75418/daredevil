@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/utils/clock.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
 import 'package:daredevil/presentation/screens/portfolio/position_detail_screen.dart';
@@ -69,6 +74,9 @@ PortfolioPositionData createPosition({
   double realizedPnl = 0,
   double totalDividendReceived = 0,
   double? currentPrice = 600.0,
+  String? market = MarketCode.twse,
+  DateTime? priceDate,
+  double? priceChangeAmount,
 }) {
   return PortfolioPositionData(
     symbol: symbol,
@@ -78,6 +86,9 @@ PortfolioPositionData createPosition({
     realizedPnl: realizedPnl,
     totalDividendReceived: totalDividendReceived,
     currentPrice: currentPrice,
+    market: market,
+    priceDate: priceDate,
+    priceChangeAmount: priceChangeAmount,
   );
 }
 
@@ -100,6 +111,8 @@ void main() {
     List<PortfolioTransactionEntry>? txList,
     Brightness brightness = Brightness.light,
     String symbol = '2330',
+    _LiveCenter? liveCenter,
+    DateTime? now,
   }) {
     final state = portfolioState ?? const PortfolioState();
     final transactions = txList ?? [];
@@ -114,8 +127,10 @@ void main() {
         positionTransactionsProvider.overrideWith(
           (ref, symbol) async => transactions,
         ),
+        if (now != null) appClockProvider.overrideWithValue(_Clock(now)),
       ],
       brightness: brightness,
+      liveQuoteCenter: liveCenter == null ? null : () => liveCenter,
     );
   }
 
@@ -397,4 +412,82 @@ void main() {
       expect(find.text('50000'), findsOneWidget);
     });
   });
+
+  group('盤中即時報價', () {
+    final morning = DateTime(2026, 10, 6, 10, 15);
+
+    testWidgets('🚨 登記這一檔;現價、市值、未實現損益用即時價,並顯示報價狀態', (tester) async {
+      final center = _LiveCenter(
+        LiveQuoteState(
+          entries: {
+            '2330': LiveQuoteEntry(
+              symbol: '2330',
+              date: DateTime(2026, 10, 6),
+              price: 612,
+              displaySource: LiveDisplaySource.trade,
+              previousClose: 600,
+              quoteTime: '10:14:50',
+              isClosingQuote: false,
+            ),
+          },
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          portfolioState: PortfolioState(
+            positions: [
+              createPosition(
+                quantity: 1000,
+                avgCost: 500,
+                currentPrice: 600,
+                priceDate: DateTime(2026, 10, 5),
+                priceChangeAmount: 6,
+              ),
+            ],
+          ),
+          liveCenter: center,
+          now: morning,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(center.registered.values.single, const [
+        LiveQuoteRegistration(symbol: '2330', market: MarketCode.twse),
+      ]);
+      expect(find.textContaining('612'), findsWidgets);
+      expect(
+        find.text('+112000'),
+        findsOneWidget,
+        reason: '(612 − 500) × 1000',
+      );
+      expect(find.text('liveQuote.quoteTime'), findsOneWidget);
+    });
+  });
+}
+
+class _Clock implements AppClock {
+  _Clock(this.value);
+  final DateTime value;
+  @override
+  DateTime now() => value;
+}
+
+/// 記錄登記、不發請求的報價中心
+class _LiveCenter extends LiveQuoteCenter {
+  _LiveCenter(this.initial);
+  final LiveQuoteState initial;
+  final registered = <Object, List<LiveQuoteRegistration>>{};
+
+  @override
+  LiveQuoteState build() => initial;
+
+  @override
+  void register(Object owner, List<LiveQuoteRegistration> entries) =>
+      registered[owner] = entries;
+
+  @override
+  void unregister(Object owner) => registered.remove(owner);
+
+  @override
+  void setAppVisible(bool visible) {}
 }

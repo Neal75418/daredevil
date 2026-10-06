@@ -1,3 +1,5 @@
+import 'package:daredevil/core/constants/market_codes.dart';
+
 /// 盤中即時報價參數(2026-10-05 設計,值見設計文件的參數表)
 abstract final class LiveQuoteParams {
   /// 盤中輪詢間隔(批數 > 2 時由 `LiveQuoteSchedule.pollInterval` 拉長)
@@ -57,4 +59,8 @@ abstract final class LiveQuoteParams {
   /// 大盤指數在 MIS 的代號(市場別硬對應,不查主檔)
   static const String twseIndexSymbol = 't00';
   static const String tpexIndexSymbol = 'o00';
+
+  /// 市場別 → 大盤指數的 MIS 代號(上市 t00、上櫃 o00)
+  static String indexSymbolOf(String market) =>
+      market == MarketCode.twse ? twseIndexSymbol : tpexIndexSymbol;
 }

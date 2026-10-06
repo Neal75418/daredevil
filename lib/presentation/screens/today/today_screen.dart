@@ -42,6 +42,9 @@ import 'package:daredevil/presentation/widgets/section_header.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/providers/pinned_thesis_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/providers/live_price_provider.dart';
+import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
+import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
 import 'package:daredevil/presentation/screens/today/widgets/data_stale_banner.dart';
 import 'package:daredevil/presentation/screens/today/widgets/history_building_banner.dart';
 import 'package:daredevil/presentation/providers/history_coverage_provider.dart';
@@ -850,12 +853,25 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         // 4.5 屏、訊號要捲到第 6 屏；完整內容搬到 /market。
         SliverToBoxAdapter(
           child: Consumer(
-            builder: (context, ref, _) => MarketSummaryStrip(
-              state: ref.watch(marketOverviewProvider),
-              onTap: () => context.push(AppRoutes.market),
-              onRetry: () =>
-                  ref.read(marketOverviewProvider.notifier).loadData(),
-            ),
+            builder: (context, ref, _) {
+              final market = ref.watch(marketOverviewProvider);
+              // 登記的「是否已有今天正式資料」跟現在有關:跨過午夜等邊界時重算
+              ref.watch(liveQuoteBoundaryProvider);
+              return LiveQuoteScope(
+                // 只登記兩個指數;訊號卡片維持盤後、不登記(spec §7)
+                registrations: marketIndexRegistrations(
+                  market,
+                  ref.read(appClockProvider).now(),
+                ),
+                child: MarketSummaryStrip(
+                  state: market,
+                  live: ref.watch(marketLiveIndicesProvider),
+                  onTap: () => context.push(AppRoutes.market),
+                  onRetry: () =>
+                      ref.read(marketOverviewProvider.notifier).loadData(),
+                ),
+              );
+            },
           ),
         ),
 

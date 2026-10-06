@@ -5,6 +5,8 @@ import 'package:daredevil/core/constants/market_index_names.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/domain/services/market_reading_service.dart';
 import 'package:daredevil/domain/services/technical_indicator_service.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/mini_trend_chart.dart';
@@ -28,11 +30,23 @@ class HeroIndexSection extends StatelessWidget {
     this.totalReturnHistory = const [],
     this.reserveBadgeSpace = false,
     this.isStale = false,
+    this.flash,
+    this.flashEnabled = true,
+    this.statusText,
   });
 
   /// 此指數為 DB 備援補值(非即時)——盤中 API 掛掉的回退(靜默稽核 #3)。
   /// true 時名稱旁掛「非即時」角標並帶資料日期,昨收不得偽裝即時值。
   final bool isStale;
+
+  /// 盤中即時報價的閃色事件(點數變動時底色閃一下);null = 不閃
+  final LiveQuoteFlash? flash;
+
+  /// 設定頁「價格閃色」
+  final bool flashEnabled;
+
+  /// 這個指數的報價狀態(已翻譯;點數下方一行小字);null = 不顯示
+  final String? statusText;
 
   final TwseMarketIndex index;
   final List<double> historyData;
@@ -142,11 +156,18 @@ class HeroIndexSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(
-                    formatter.format(index.close),
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                  PriceFlash(
+                    // 以指數名稱為 key:手機版切換上市/上櫃時沿用同一個位置,
+                    // 沒有 key 會把另一個指數的閃色事件當成變動重播
+                    key: ValueKey(index.name),
+                    flash: flash,
+                    enabled: flashEnabled,
+                    child: Text(
+                      formatter.format(index.close),
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ),
                   const SizedBox(width: DesignTokens.spacing12),
@@ -160,6 +181,17 @@ class HeroIndexSection extends StatelessWidget {
                   ),
                 ],
               ),
+
+              if (statusText case final status?)
+                Padding(
+                  padding: const EdgeInsets.only(top: DesignTokens.spacing4),
+                  child: Text(
+                    status,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
 
               // 大盤位階（均線乖離）— 緊湊單行，位於大數字與走勢圖之間
               ..._buildStageRow(context, theme),

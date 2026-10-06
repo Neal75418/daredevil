@@ -4,6 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/data/models/twse/twse_market_index.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
+import 'package:daredevil/presentation/widgets/price_flash.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/domain/services/market_reading_service.dart';
+import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
+import 'package:daredevil/presentation/widgets/market_dashboard/hero_index_section.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_dashboard.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_reading_line.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/sentiment_gauge_section.dart';
@@ -472,6 +477,155 @@ void main() {
       await tester.pumpWidget(buildTestApp(MarketDashboard(state: state)));
       await tester.pump(const Duration(seconds: 1));
       expect(find.text('marketOverview.chipAnomaly.partialFail'), findsNothing);
+    });
+  });
+
+  group('盤中即時報價', () {
+    // 盤後:指數微漲、家數偏多;即時:指數大跌——判讀若誤用即時會換句子
+    final state = MarketOverviewState(
+      indices: [
+        TwseMarketIndex(
+          date: DateTime(2026, 10, 5),
+          name: MarketIndexNames.taiex,
+          close: 20000,
+          change: 40,
+          changePercent: 0.2,
+        ),
+      ],
+      advanceDeclineByMarket: const {
+        MarketCode.twse: AdvanceDecline(
+          advance: 800,
+          decline: 200,
+          unchanged: 50,
+        ),
+      },
+    );
+    final live = MarketLiveIndices(
+      byMarket: {
+        MarketCode.twse: MarketIndexLive(
+          index: TwseMarketIndex(
+            date: DateTime(2026, 10, 6),
+            name: MarketIndexNames.taiex,
+            close: 19400,
+            change: -600,
+            changePercent: -3.0,
+          ),
+          isLive: true,
+          statusText: 'liveQuote.quoteTime',
+        ),
+      },
+    );
+
+    List<String> readings(WidgetTester tester) => [
+      for (final line in tester.widgetList<MarketReadingLine>(
+        find.byType(MarketReadingLine),
+      ))
+        '${line.reading?.messageKey}|${line.reading?.tone}|${line.reading?.args}',
+    ];
+
+    testWidgets('🚨 Hero 用即時點數;判讀文字仍用盤後指數漲跌幅(與沒有即時時完全相同)', (tester) async {
+      // 前提:即時與盤後的漲跌幅會讓綜合判讀換句子,這條測試才有鑑別力
+      MarketReading synthesis(double pct) =>
+          MarketReadingService.interpretCompositeSynthesis(
+            market: MarketCode.twse,
+            indexChangePercent: pct,
+            advance: 800,
+            decline: 200,
+            unchanged: 50,
+            institutionalTotalNet: 0,
+          );
+      expect(
+        synthesis(-3.0).messageKey,
+        isNot(synthesis(0.2).messageKey),
+        reason: '前提:fixture 要讓判讀對漲跌幅敏感',
+      );
+
+      tester.view.physicalSize = const Size(5000, 4000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(buildTestApp(MarketDashboard(state: state)));
+      await tester.pump(const Duration(seconds: 1));
+      final postMarket = readings(tester);
+      expect(postMarket, isNotEmpty, reason: '前提:有判讀文字');
+
+      await tester.pumpWidget(
+        buildTestApp(MarketDashboard(state: state, live: live)),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        tester
+            .widget<HeroIndexSection>(find.byType(HeroIndexSection).first)
+            .index
+            .close,
+        19400,
+      );
+      expect(readings(tester), postMarket);
+    });
+
+    testWidgets('🚨 手機版切換上市/上櫃 → 不把另一個指數帶著的閃色事件當成變動重播', (tester) async {
+      // 手機版(< 1024);測試的 .tr() 回 key、比中文長,太窄時標頭的分頁鈕被擠出畫面
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      MarketIndexLive liveIndex(String name, double close, int flashId) =>
+          MarketIndexLive(
+            index: TwseMarketIndex(
+              date: DateTime(2026, 10, 6),
+              name: name,
+              close: close,
+              change: 10,
+              changePercent: 0.1,
+            ),
+            isLive: true,
+            flash: LiveQuoteFlash(id: flashId, up: true),
+          );
+      final both = MarketOverviewState(
+        indices: [
+          TwseMarketIndex(
+            date: DateTime(2026, 10, 5),
+            name: MarketIndexNames.taiex,
+            close: 20000,
+            change: 40,
+            changePercent: 0.2,
+          ),
+          TwseMarketIndex(
+            date: DateTime(2026, 10, 5),
+            name: MarketIndexNames.tpexIndex,
+            close: 300,
+            change: 1,
+            changePercent: 0.3,
+          ),
+        ],
+      );
+      final live = MarketLiveIndices(
+        byMarket: {
+          MarketCode.twse: liveIndex(MarketIndexNames.taiex, 20010, 1),
+          MarketCode.tpex: liveIndex(MarketIndexNames.tpexIndex, 301, 2),
+        },
+      );
+      Color? tint() =>
+          (tester
+                      .widget<DecoratedBox>(find.byKey(PriceFlash.tintKey))
+                      .decoration
+                  as BoxDecoration)
+              .color;
+
+      await tester.pumpWidget(
+        buildTestApp(MarketDashboard(state: both, live: live)),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(tint(), isNull, reason: '第一次建立不補閃');
+
+      expect(find.text('20,010.00'), findsOneWidget, reason: '前提:顯示加權');
+      await tester.tap(find.text('marketOverview.tpex'));
+      await tester.pump();
+      expect(find.text('301.00'), findsOneWidget, reason: '前提:已切到上櫃');
+      expect(tint(), isNull, reason: '切到上櫃:櫃買的事件不是使用者看到的變動');
+
+      await tester.tap(find.text('marketOverview.twse'));
+      await tester.pump();
+      expect(tint(), isNull, reason: '切回上市:已看過的事件不再閃');
     });
   });
 }

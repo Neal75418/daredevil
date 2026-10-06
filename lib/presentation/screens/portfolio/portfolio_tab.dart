@@ -4,6 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:daredevil/domain/services/live_quote/live_quote_merge.dart';
+import 'package:daredevil/presentation/providers/live_price_provider.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
+import 'package:daredevil/presentation/providers/portfolio_live_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/providers/settings_provider.dart';
+import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
+import 'package:daredevil/presentation/widgets/live_quote_status.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
@@ -41,6 +49,8 @@ class _PortfolioTabState extends ConsumerState<PortfolioTab> {
   Widget build(BuildContext context) {
     final state = ref.watch(portfolioProvider);
     final theme = Theme.of(context);
+    // 登記的「是否已有今天正式資料」跟現在有關:跨過午夜等邊界時重算
+    ref.watch(liveQuoteBoundaryProvider);
 
     if (state.isLoading && state.positions.isEmpty) {
       return const GenericListShimmer(itemCount: 4);
@@ -59,162 +69,245 @@ class _PortfolioTabState extends ConsumerState<PortfolioTab> {
       return _buildEmpty(theme);
     }
 
-    return Stack(
-      children: [
-        RefreshIndicator(
-          onRefresh: () => ref.read(portfolioProvider.notifier).loadPositions(),
-          child: CustomScrollView(
-            slivers: [
-              // Refresh 失敗時顯示 MaterialBanner
-              if (state.error != null)
-                SliverToBoxAdapter(
-                  child: MaterialBanner(
-                    content: Text(state.error!),
-                    leading: Icon(
-                      Icons.error_outline,
-                      color: theme.colorScheme.error,
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => ref
-                            .read(portfolioProvider.notifier)
-                            .loadPositions(),
-                        child: Text('common.retry'.tr()),
+    return LiveQuoteScope(
+      registrations: portfolioRegistrations(
+        state.positions,
+        ref.read(appClockProvider).now(),
+      ),
+      child: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: () =>
+                ref.read(portfolioProvider.notifier).loadPositions(),
+            child: CustomScrollView(
+              slivers: [
+                // Refresh 失敗時顯示 MaterialBanner
+                if (state.error != null)
+                  SliverToBoxAdapter(
+                    child: MaterialBanner(
+                      content: Text(state.error!),
+                      leading: Icon(
+                        Icons.error_outline,
+                        color: theme.colorScheme.error,
                       ),
-                      TextButton(
-                        onPressed: () =>
-                            ref.read(portfolioProvider.notifier).clearError(),
-                        child: Text('common.dismiss'.tr()),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // 頂部間距
-              const SliverPadding(padding: EdgeInsets.only(top: 16)),
-
-              // 總覽卡片
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                sliver: SliverToBoxAdapter(
-                  child: PortfolioSummaryCard(summary: state.summary),
-                ),
-              ),
-
-              // 績效指標卡片
-              if (state.performance != null)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: PerformanceCard(performance: state.performance!),
-                  ),
-                ),
-
-              // 配置圓餅圖
-              if (state.allocationMap.isNotEmpty)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: Semantics(
-                      label: S.accessibilityAllocationPieChart(
-                        state.allocationMap.length,
-                      ),
-                      image: true,
-                      child: AllocationPieChart(
-                        allocationMap: state.allocationMap,
-                      ),
-                    ),
-                  ),
-                ),
-
-              // 產業配置
-              if (state.performance != null &&
-                  state.performance!.industryAllocation.isNotEmpty)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: IndustryAllocationCard(
-                      allocation: state.performance!.industryAllocation,
-                    ),
-                  ),
-                ),
-
-              // 股利分析
-              if (state.dividendAnalysis != null &&
-                  state.dividendAnalysis!.stockDividends.isNotEmpty)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                  sliver: SliverToBoxAdapter(
-                    child: DividendAnalysisCard(
-                      analysis: state.dividendAnalysis!,
-                    ),
-                  ),
-                ),
-
-              // 持倉列表標題
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                sliver: SliverToBoxAdapter(
-                  child: Row(
-                    children: [
-                      Text(
-                        'portfolio.positions'.tr(),
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
+                      actions: [
+                        TextButton(
+                          onPressed: () => ref
+                              .read(portfolioProvider.notifier)
+                              .loadPositions(),
+                          child: Text('common.retry'.tr()),
                         ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        'portfolio.positionCount'.tr(
-                          namedArgs: {
-                            'count': state.summary.positionCount.toString(),
-                          },
+                        TextButton(
+                          onPressed: () =>
+                              ref.read(portfolioProvider.notifier).clearError(),
+                          child: Text('common.dismiss'.tr()),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // 頂部間距
+                const SliverPadding(padding: EdgeInsets.only(top: 16)),
+
+                // 總覽卡片
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverToBoxAdapter(
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final live = ref.watch(portfolioLiveProvider);
+                        return PortfolioSummaryCard(
+                          summary: live.summary,
+                          todayPnl: live.todayPnl,
+                        );
+                      },
+                    ),
+                  ),
+                ),
+
+                // 績效、配置、股利維持盤後:標資料日期(spec §7)
+                if (state.priceDate case final date?)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: Text(
+                        'portfolio.postMarketAsOf'.tr(
+                          namedArgs: {'date': '${date.month}/${date.day}'},
                         ),
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.outline,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                    ],
+                    ),
+                  ),
+
+                // 績效指標卡片
+                if (state.performance != null)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: PerformanceCard(performance: state.performance!),
+                    ),
+                  ),
+
+                // 配置圓餅圖
+                if (state.allocationMap.isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: Semantics(
+                        label: S.accessibilityAllocationPieChart(
+                          state.allocationMap.length,
+                        ),
+                        image: true,
+                        child: AllocationPieChart(
+                          allocationMap: state.allocationMap,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // 產業配置
+                if (state.performance != null &&
+                    state.performance!.industryAllocation.isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: IndustryAllocationCard(
+                        allocation: state.performance!.industryAllocation,
+                      ),
+                    ),
+                  ),
+
+                // 股利分析
+                if (state.dividendAnalysis != null &&
+                    state.dividendAnalysis!.stockDividends.isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    sliver: SliverToBoxAdapter(
+                      child: DividendAnalysisCard(
+                        analysis: state.dividendAnalysis!,
+                      ),
+                    ),
+                  ),
+
+                // 持倉列表標題
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: Row(
+                      children: [
+                        Text(
+                          'portfolio.positions'.tr(),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Expanded(
+                          child: Consumer(
+                            builder: (context, ref, _) {
+                              final status = ref.watch(
+                                portfolioLiveProvider.select((l) => l.status),
+                              );
+                              if (status == null) {
+                                return const SizedBox.shrink();
+                              }
+                              return Text(
+                                status,
+                                textAlign: TextAlign.end,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'portfolio.positionCount'.tr(
+                            namedArgs: {
+                              'count': state.summary.positionCount.toString(),
+                            },
+                          ),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
-              // 持倉卡片（懶加載）
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-                sliver: SliverList.builder(
-                  itemCount: state.positions.length,
-                  itemBuilder: (_, i) {
-                    final position = state.positions[i];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: PositionCard(
-                        position: position,
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          context.push(
-                            AppRoutes.positionDetail(position.symbol),
-                          );
-                        },
-                      ),
-                    );
-                  },
+                // 持倉卡片（懶加載）
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                  sliver: SliverList.builder(
+                    itemCount: state.positions.length,
+                    itemBuilder: (_, i) {
+                      final position = state.positions[i];
+                      return Padding(
+                        // 以代號為 key:清單重排時不把別檔的閃色狀態套到這一列
+                        key: ValueKey(position.symbol),
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Consumer(
+                          builder: (context, ref, _) {
+                            final merged = ref.watch(
+                              portfolioLivePriceProvider(position.symbol),
+                            );
+                            final status = ref.watch(
+                              liveQuoteCenterProvider.select(
+                                (s) => s.symbolStatus[position.symbol],
+                              ),
+                            );
+                            final flashOn = ref.watch(
+                              settingsProvider.select((s) => s.priceFlash),
+                            );
+                            return PositionCard(
+                              position: merged == null
+                                  ? position
+                                  : position.copyWithPrice(merged.price),
+                              live: merged == null
+                                  ? null
+                                  : PositionCardLive(
+                                      flash: merged.kind == MergedPriceKind.live
+                                          ? merged.live?.flash
+                                          : null,
+                                      flashEnabled: flashOn,
+                                      caption: LiveQuoteStatusRule.card(
+                                        status: status,
+                                        merged: merged,
+                                      )?.text(),
+                                    ),
+                              onTap: () {
+                                HapticFeedback.lightImpact();
+                                context.push(
+                                  AppRoutes.positionDetail(position.symbol),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
 
-        // 浮動按鈕
-        Positioned(
-          right: 16,
-          bottom: 16 + MediaQuery.of(context).padding.bottom,
-          child: FloatingActionButton(
-            onPressed: _showAddTransaction,
-            child: const Icon(Icons.add),
+          // 浮動按鈕
+          Positioned(
+            right: 16,
+            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            child: FloatingActionButton(
+              onPressed: _showAddTransaction,
+              child: const Icon(Icons.add),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

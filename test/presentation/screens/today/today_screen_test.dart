@@ -22,6 +22,8 @@ import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/utils/clock.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
 import 'package:daredevil/domain/services/update_service.dart';
 import 'package:daredevil/domain/services/update/history_coverage.dart';
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
@@ -202,6 +204,7 @@ void main() {
     GoRouter? router,
     List<Override> extraOverrides = const [],
     Widget Function(Widget screen)? wrap,
+    _LiveCenter? liveCenter,
   }) {
     final today = todayState ?? const TodayState();
     final watchlist = watchlistState ?? WatchlistState();
@@ -249,6 +252,7 @@ void main() {
       ],
       brightness: brightness,
       router: router,
+      liveQuoteCenter: liveCenter == null ? null : () => liveCenter,
     );
   }
 
@@ -1604,4 +1608,93 @@ void main() {
       });
     }
   });
+
+  group('盤中即時報價(大盤列)', () {
+    final market = MarketOverviewState(
+      indices: [
+        TwseMarketIndex(
+          date: DateTime(2026, 10, 5),
+          name: MarketIndexNames.taiex,
+          close: 20000,
+          change: 100,
+          changePercent: 0.5,
+        ),
+      ],
+      advanceDeclineByMarket: const {
+        MarketCode.twse: AdvanceDecline(
+          advance: 500,
+          decline: 400,
+          unchanged: 100,
+        ),
+      },
+    );
+
+    testWidgets('🚨 只登記兩個指數;訊號卡片不登記(維持盤後)', (tester) async {
+      widenViewport(tester);
+      final center = _LiveCenter(const LiveQuoteState());
+      await tester.pumpWidget(
+        buildTestWidget(
+          marketState: market,
+          liveCenter: center,
+          modeRecommendations: (ref, mode) =>
+              SynchronousFuture([rec('2330'), rec('2317')]),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      final symbols = {
+        for (final entries in center.registered.values)
+          for (final r in entries) r.symbol,
+      };
+      expect(symbols, {'t00', 'o00'});
+    });
+
+    testWidgets('有即時指數 → 大盤列顯示即時點數', (tester) async {
+      widenViewport(tester);
+      final center = _LiveCenter(
+        LiveQuoteState(
+          entries: {
+            't00': LiveQuoteEntry(
+              symbol: 't00',
+              date: DateTime(2026, 10, 6),
+              price: 20200,
+              displaySource: LiveDisplaySource.trade,
+              previousClose: 20000,
+              quoteTime: '10:14:55',
+              isClosingQuote: false,
+            ),
+          },
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          marketState: market,
+          liveCenter: center,
+          clock: _FixedClock(DateTime(2026, 10, 6, 10, 15)),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.textContaining('20,200.00'), findsOneWidget);
+    });
+  });
+}
+
+/// 記錄登記、不發請求的報價中心
+class _LiveCenter extends LiveQuoteCenter {
+  _LiveCenter(this.initial);
+  final LiveQuoteState initial;
+  final registered = <Object, List<LiveQuoteRegistration>>{};
+
+  @override
+  LiveQuoteState build() => initial;
+
+  @override
+  void register(Object owner, List<LiveQuoteRegistration> entries) =>
+      registered[owner] = entries;
+
+  @override
+  void unregister(Object owner) => registered.remove(owner);
+
+  @override
+  void setAppVisible(bool visible) {}
 }

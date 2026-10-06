@@ -9,6 +9,16 @@ import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/domain/services/live_quote/live_quote_merge.dart';
+import 'package:daredevil/presentation/providers/live_price_provider.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
+import 'package:daredevil/presentation/providers/portfolio_live_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/providers/settings_provider.dart';
+import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
+import 'package:daredevil/presentation/widgets/live_quote_status.dart';
+import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
 import 'package:daredevil/presentation/screens/portfolio/widgets/add_transaction_sheet.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
@@ -28,6 +38,24 @@ class PositionDetailScreen extends ConsumerWidget {
 
     final position = portfolioState.positions.where((p) => p.symbol == symbol);
     final pos = position.isNotEmpty ? position.first : null;
+    // 登記的「是否已有今天正式資料」跟現在有關:跨過午夜等邊界時重算
+    ref.watch(liveQuoteBoundaryProvider);
+    final merged = ref.watch(portfolioLivePriceProvider(symbol));
+    final center = ref.watch(liveQuoteCenterProvider);
+    final flashOn = ref.watch(settingsProvider.select((s) => s.priceFlash));
+    final livePos = pos == null || merged == null
+        ? pos
+        : pos.copyWithPrice(merged.price);
+    final liveFlash = merged?.kind == MergedPriceKind.live
+        ? merged?.live?.flash
+        : null;
+    final statusText = merged == null || merged.kind == MergedPriceKind.official
+        ? null
+        : LiveQuoteStatusRule.header(
+            state: center,
+            merged: [merged],
+            intradayTime: merged.quoteTime,
+          )?.text();
 
     return Scaffold(
       appBar: AppBar(
@@ -35,52 +63,63 @@ class PositionDetailScreen extends ConsumerWidget {
           pos != null ? '${pos.symbol} ${pos.stockName ?? ""}' : symbol,
         ),
       ),
-      body: pos == null
-          ? Center(child: Text('portfolio.noPositions'.tr()))
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // 持倉資訊卡片
-                _buildPositionSummary(theme, pos),
-                const SizedBox(height: 24),
-
-                // 交易紀錄標題
-                Text(
-                  'portfolio.transactionHistory'.tr(),
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
+      body: LiveQuoteScope(
+        registrations: pos == null
+            ? const []
+            : portfolioRegistrations([pos], ref.read(appClockProvider).now()),
+        child: pos == null
+            ? Center(child: Text('portfolio.noPositions'.tr()))
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // 持倉資訊卡片
+                  _buildPositionSummary(
+                    theme,
+                    livePos!,
+                    flash: liveFlash,
+                    flashEnabled: flashOn,
+                    statusText: statusText,
                   ),
-                ),
-                const SizedBox(height: 8),
+                  const SizedBox(height: 24),
 
-                // 交易紀錄列表
-                transactionsAsync.when(
-                  data: (txList) =>
-                      _buildTransactionList(context, ref, theme, txList),
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        Text(
-                          ErrorDisplay.message(e),
-                          style: TextStyle(color: theme.colorScheme.error),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton.icon(
-                          onPressed: () => ref.invalidate(
-                            positionTransactionsProvider(symbol),
-                          ),
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: Text('common.retry'.tr()),
-                        ),
-                      ],
+                  // 交易紀錄標題
+                  Text(
+                    'portfolio.transactionHistory'.tr(),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(height: 8),
+
+                  // 交易紀錄列表
+                  transactionsAsync.when(
+                    data: (txList) =>
+                        _buildTransactionList(context, ref, theme, txList),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Text(
+                            ErrorDisplay.message(e),
+                            style: TextStyle(color: theme.colorScheme.error),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: () => ref.invalidate(
+                              positionTransactionsProvider(symbol),
+                            ),
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: Text('common.retry'.tr()),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           showAppBottomSheet(
@@ -95,7 +134,13 @@ class PositionDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPositionSummary(ThemeData theme, PortfolioPositionData pos) {
+  Widget _buildPositionSummary(
+    ThemeData theme,
+    PortfolioPositionData pos, {
+    LiveQuoteFlash? flash,
+    bool flashEnabled = true,
+    String? statusText,
+  }) {
     // 依顯示精度捨入後判方向：平盤/微負值→中性色、不帶 +，與數字一致。
     final roundedPnl = AppNumberFormat.roundForDisplay(pos.unrealizedPnl, 0);
     // 已實現損益同樣依顯示精度（0 位）捨入後判方向——未賣出的持股
@@ -137,9 +182,24 @@ class PositionDetailScreen extends ConsumerWidget {
                   decimals: 1,
                 ),
                 theme: theme,
+                flash: flash,
+                flashEnabled: flashEnabled,
               ),
             ],
           ),
+          if (statusText != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  statusText,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
           const Divider(height: 24),
           Row(
             children: [
@@ -384,12 +444,18 @@ class _InfoTile extends StatelessWidget {
     required this.value,
     required this.theme,
     this.valueColor,
+    this.flash,
+    this.flashEnabled = true,
   });
 
   final String label;
   final String value;
   final ThemeData theme;
   final Color? valueColor;
+
+  /// 現價的閃色事件(只有現價那一格傳)
+  final LiveQuoteFlash? flash;
+  final bool flashEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -405,11 +471,15 @@ class _InfoTile extends StatelessWidget {
               ),
             ),
           if (label.isNotEmpty) const SizedBox(height: 2),
-          Text(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: valueColor,
+          PriceFlash(
+            flash: flash,
+            enabled: flashEnabled,
+            child: Text(
+              value,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: valueColor,
+              ),
             ),
           ),
         ],

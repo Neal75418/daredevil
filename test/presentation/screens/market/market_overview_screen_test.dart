@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/utils/clock.dart';
+import 'package:daredevil/data/models/twse/twse_market_index.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/widgets/market_dashboard/hero_index_section.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/screens/market/market_overview_screen.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_dashboard.dart';
@@ -123,4 +129,94 @@ void main() {
       findsOneWidget,
     );
   });
+
+  group('盤中即時報價', () {
+    testWidgets('🚨 登記兩個指數;Hero 顯示即時點數', (tester) async {
+      tester.view.physicalSize = const Size(5000, 4000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final state = MarketOverviewState(
+        indices: [
+          TwseMarketIndex(
+            date: DateTime(2026, 10, 5),
+            name: MarketIndexNames.taiex,
+            close: 20000,
+            change: 100,
+            changePercent: 0.5,
+          ),
+        ],
+        advanceDeclineByMarket: _withData.advanceDeclineByMarket,
+      );
+      final center = _LiveCenter(
+        LiveQuoteState(
+          entries: {
+            't00': LiveQuoteEntry(
+              symbol: 't00',
+              date: DateTime(2026, 10, 6),
+              price: 20200,
+              displaySource: LiveDisplaySource.trade,
+              previousClose: 20000,
+              quoteTime: '10:14:55',
+              isClosingQuote: false,
+            ),
+          },
+        ),
+      );
+      await tester.pumpWidget(
+        buildProviderTestApp(
+          const MarketOverviewScreen(),
+          overrides: [
+            marketOverviewProvider.overrideWith(() => _FakeMarket(state)),
+            appClockProvider.overrideWithValue(
+              _Clock(DateTime(2026, 10, 6, 10, 15)),
+            ),
+          ],
+          liveQuoteCenter: () => center,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(
+        {
+          for (final entries in center.registered.values)
+            for (final r in entries) r.symbol,
+        },
+        {'t00', 'o00'},
+      );
+      expect(
+        tester
+            .widget<HeroIndexSection>(find.byType(HeroIndexSection).first)
+            .index
+            .close,
+        20200,
+      );
+    });
+  });
+}
+
+class _Clock implements AppClock {
+  _Clock(this.value);
+  final DateTime value;
+  @override
+  DateTime now() => value;
+}
+
+/// 記錄登記、不發請求的報價中心
+class _LiveCenter extends LiveQuoteCenter {
+  _LiveCenter(this.initial);
+  final LiveQuoteState initial;
+  final registered = <Object, List<LiveQuoteRegistration>>{};
+
+  @override
+  LiveQuoteState build() => initial;
+
+  @override
+  void register(Object owner, List<LiveQuoteRegistration> entries) =>
+      registered[owner] = entries;
+
+  @override
+  void unregister(Object owner) => registered.remove(owner);
+
+  @override
+  void setAppVisible(bool visible) {}
 }

@@ -1,7 +1,11 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/data/remote/twse_client.dart';
+import 'package:daredevil/core/constants/market_index_names.dart';
+import 'package:daredevil/core/theme/color_contrast.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/hero_index_section.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/mini_trend_chart.dart';
 
@@ -283,5 +287,70 @@ void main() {
       );
       expect(find.text('marketOverview.indexStale'), findsNothing);
     });
+  });
+
+  group('盤中即時報價', () {
+    final idx = TwseMarketIndex(
+      date: DateTime(2026, 10, 6),
+      name: MarketIndexNames.taiex,
+      close: 20200,
+      change: 200,
+      changePercent: 1.0,
+    );
+
+    testWidgets('報價狀態顯示在點數下方', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(
+          HeroIndexSection(index: idx, statusText: 'liveQuote.quoteTime'),
+        ),
+      );
+      expect(find.text('liveQuote.quoteTime'), findsOneWidget);
+    });
+
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      testWidgets('🚨 點數閃色最濃時 $brightness:對 Hero 卡實際底色 ≥ 4.5', (tester) async {
+        Widget hero(int id) => buildTestApp(
+          HeroIndexSection(
+            index: idx,
+            flash: LiveQuoteFlash(id: id, up: true),
+          ),
+          brightness: brightness,
+        );
+        await tester.pumpWidget(hero(1));
+        await tester.pumpWidget(hero(2));
+        await tester.pump();
+
+        final tint =
+            (tester
+                        .widget<DecoratedBox>(find.byKey(PriceFlash.tintKey))
+                        .decoration
+                    as BoxDecoration)
+                .color!;
+        final cardColor = Theme.of(
+          tester.element(find.byKey(PriceFlash.tintKey)),
+        ).colorScheme.surfaceContainerLowest;
+        final text = tester
+            .widget<RichText>(
+              find.descendant(
+                of: find.byKey(PriceFlash.tintKey),
+                matching: find.byType(RichText),
+              ),
+            )
+            .text
+            .style!
+            .color!;
+        expect(
+          ColorContrast.ratio(
+            text,
+            ColorContrast.compositeOver(
+              tint.withValues(alpha: 1),
+              cardColor,
+              tint.a,
+            ),
+          ),
+          greaterThanOrEqualTo(4.5),
+        );
+      });
+    }
   });
 }

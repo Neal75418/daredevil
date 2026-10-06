@@ -5,14 +5,18 @@ import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/core/utils/localized_number_format.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
+import 'package:daredevil/domain/services/live_quote/today_pnl.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 
 /// 投資組合總覽卡片
 class PortfolioSummaryCard extends StatelessWidget {
-  const PortfolioSummaryCard({super.key, required this.summary});
+  const PortfolioSummaryCard({super.key, required this.summary, this.todayPnl});
 
   final PortfolioSummary summary;
+
+  /// 今日損益(以昨收計);null = 不顯示(非交易日、盤前或盤後行為)
+  final TodayPnl? todayPnl;
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +78,8 @@ class PortfolioSummaryCard extends StatelessWidget {
               ),
             ],
           ),
+          if (todayPnl case final today?)
+            ..._buildTodayPnl(theme, locale, today),
           // 缺價警示(靜默稽核 #5):缺當日價的持股以成本價計值、未實現
           // 損益恰為 0——上方的總市值/總損益因此偏樂觀,必須說出來
           if (summary.unpricedCount > 0) ...[
@@ -132,6 +138,51 @@ class PortfolioSummaryCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  List<Widget> _buildTodayPnl(ThemeData theme, Locale locale, TodayPnl today) {
+    final rounded = AppNumberFormat.roundForDisplay(today.amount, 0);
+    final color = rounded == 0
+        ? theme.colorScheme.onSurface
+        : (rounded > 0 ? AppTheme.upColor : AppTheme.downColor);
+    final notes = [
+      if (today.includesNonClosing) 'portfolio.todayPnlNonClosing'.tr(),
+      if (today.missingCount > 0)
+        'portfolio.todayPnlMissing'.tr(
+          namedArgs: {'count': '${today.missingCount}'},
+        ),
+    ];
+    return [
+      const SizedBox(height: DesignTokens.spacing4),
+      Row(
+        children: [
+          Text(
+            'portfolio.todayPnl'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+          const SizedBox(width: DesignTokens.spacing8),
+          Text(
+            '${rounded > 0 ? "+" : ""}NT\$${_formatNumber(today.amount, locale)}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+      if (notes.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: DesignTokens.spacing2),
+          child: Text(
+            notes.join('・'),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+    ];
   }
 
   String _formatNumber(double value, Locale locale) =>

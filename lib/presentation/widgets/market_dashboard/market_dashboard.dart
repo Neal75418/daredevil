@@ -7,6 +7,7 @@ import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/theme/breakpoints.dart';
+import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/advance_decline_gauge.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/breadth_trend_row.dart';
@@ -32,9 +33,12 @@ import 'package:daredevil/domain/services/market_sentiment_service.dart';
 /// MarketOverviewCard。
 /// 支援上市/上櫃市場切換，手機使用 Tab，平板/桌面並排顯示。
 class MarketDashboard extends StatefulWidget {
-  const MarketDashboard({super.key, required this.state});
+  const MarketDashboard({super.key, required this.state, this.live});
 
   final MarketOverviewState state;
+
+  /// 盤中即時報價:只用在 Hero 卡的點數(判讀文字照舊讀 [state],spec §7)
+  final MarketLiveIndices? live;
 
   @override
   State<MarketDashboard> createState() => _MarketDashboardState();
@@ -359,10 +363,16 @@ class _MarketDashboardState extends State<MarketDashboard> {
           .toList();
 
       if (taiex.isNotEmpty) {
+        final shown = widget.live?.byMarket[MarketCode.twse];
         sections.add(
           HeroIndexSection(
-            index: taiex.first,
-            isStale: widget.state.indexStaleNames.contains(taiex.first.name),
+            index: shown?.index ?? taiex.first,
+            isStale:
+                !(shown?.isLive ?? false) &&
+                widget.state.indexStaleNames.contains(taiex.first.name),
+            flash: shown?.flash,
+            flashEnabled: shown?.flashEnabled ?? true,
+            statusText: shown?.statusText,
             historyData: widget.state.indexHistory[taiex.first.name] ?? [],
             stageHistory:
                 widget.state.indexStageHistory[taiex.first.name] ?? [],
@@ -393,10 +403,16 @@ class _MarketDashboardState extends State<MarketDashboard> {
           .toList();
 
       if (tpexIdx.isNotEmpty) {
+        final shown = widget.live?.byMarket[MarketCode.tpex];
         sections.add(
           HeroIndexSection(
-            index: tpexIdx.first,
-            isStale: widget.state.indexStaleNames.contains(tpexIdx.first.name),
+            index: shown?.index ?? tpexIdx.first,
+            isStale:
+                !(shown?.isLive ?? false) &&
+                widget.state.indexStaleNames.contains(tpexIdx.first.name),
+            flash: shown?.flash,
+            flashEnabled: shown?.flashEnabled ?? true,
+            statusText: shown?.statusText,
             historyData:
                 widget.state.indexHistory[MarketIndexNames.tpexIndex] ?? [],
             stageHistory:
@@ -660,6 +676,8 @@ class _MarketDashboardState extends State<MarketDashboard> {
 
     // 綜合判讀（top-level，緊接 Hero 指數，位於欄位最上方）
     final synthesis = _buildCompositeSynthesisLine(market);
+    // 盤中即時報價:只取代 Hero 的點數(綜合判讀照舊用盤後,見上一行)
+    final shown = widget.live?.byMarket[market];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -675,8 +693,13 @@ class _MarketDashboardState extends State<MarketDashboard> {
         const SizedBox(height: DesignTokens.spacing12),
         if (heroIdx.isNotEmpty)
           HeroIndexSection(
-            index: heroIdx.first,
-            isStale: widget.state.indexStaleNames.contains(heroIdx.first.name),
+            index: shown?.index ?? heroIdx.first,
+            isStale:
+                !(shown?.isLive ?? false) &&
+                widget.state.indexStaleNames.contains(heroIdx.first.name),
+            flash: shown?.flash,
+            flashEnabled: shown?.flashEnabled ?? true,
+            statusText: shown?.statusText,
             historyData: widget.state.indexHistory[heroName] ?? [],
             stageHistory: widget.state.indexStageHistory[heroName] ?? [],
             totalReturnHistory: market == MarketCode.twse
