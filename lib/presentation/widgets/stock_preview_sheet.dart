@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/constants/score_tier.dart';
@@ -43,25 +44,34 @@ class StockPreviewData {
 /// 顯示股票預覽 bottom sheet
 ///
 /// [onMoveToGroup] 非 null 時顯示「移到分組」動作（自選股清單長按才提供）。
+///
+/// [liveData] 非 null 時,預覽依它每次重建時的結果顯示(自選長按:套與卡片
+/// 相同的合併規則並隨每輪即時報價更新);null 時為開啟當下的快照(掃描、
+/// 今日訊號)。
 Future<void> showStockPreviewSheet({
   required BuildContext context,
   required StockPreviewData data,
   VoidCallback? onViewDetails,
   VoidCallback? onToggleWatchlist,
   VoidCallback? onMoveToGroup,
+  StockPreviewData Function(WidgetRef ref)? liveData,
 }) {
   HapticFeedback.mediumImpact();
+
+  Widget sheet(StockPreviewData d) => StockPreviewSheet(
+    data: d,
+    onViewDetails: onViewDetails,
+    onToggleWatchlist: onToggleWatchlist,
+    onMoveToGroup: onMoveToGroup,
+  );
 
   return showAppBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (context) => StockPreviewSheet(
-      data: data,
-      onViewDetails: onViewDetails,
-      onToggleWatchlist: onToggleWatchlist,
-      onMoveToGroup: onMoveToGroup,
-    ),
+    builder: (context) => liveData == null
+        ? sheet(data)
+        : Consumer(builder: (context, ref, _) => sheet(liveData(ref))),
   );
 }
 

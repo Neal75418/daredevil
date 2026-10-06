@@ -601,7 +601,20 @@
     "down": "下跌",
     "neutral": "持平",
     "limitUp": "漲停",
-    "limitDown": "跌停"
+    "limitDown": "跌停",
+    "limitUpLocked": "漲停鎖",
+    "limitDownLocked": "跌停鎖"
+  },
+  "liveQuote": {
+    "pausedRateLimit": "報價暫停（證交所限流，{time} 再試）",
+    "pausedNetwork": "報價暫停（網路）・最後更新 {time}",
+    "pausedNetworkNoTime": "報價暫停（網路）",
+    "noQuotesToday": "證交所今天尚無報價",
+    "quoteTime": "報價時間 {time}",
+    "closingPending": "今日收盤・待盤後更新",
+    "lastQuote": "最後報價 {time}",
+    "cardPaused": "報價暫停",
+    "cardNoQuote": "無報價"
   },
   "reasons": {
     "label": "觸發訊號",
@@ -833,6 +846,8 @@
     "limitAlertsDesc": "自選股觸及漲跌停時顯示標記",
     "showROCYear": "民國年顯示",
     "showROCYearDesc": "在財報頁面使用民國年格式",
+    "priceFlash": "價格閃色",
+    "priceFlashDesc": "即時報價變動時，現價底色閃一下",
     "cacheDuration": "API 快取時間",
     "cacheDurationDesc": "已查詢的資料會暫存，減少重複呼叫 API",
     "selectCacheDuration": "選擇快取時間",

@@ -15,6 +15,7 @@ const _keyInsiderNotifications = 'settings_insider_notifications';
 const _keyDisposalUrgentAlerts = 'settings_disposal_urgent_alerts';
 const _keyLimitAlerts = 'settings_limit_alerts';
 const _keyShowROCYear = 'settings_show_roc_year';
+const _keyPriceFlash = 'settings_price_flash';
 const _keyCacheDurationMinutes = 'settings_cache_duration_minutes';
 const _keyAutoUpdateEnabled = 'settings_auto_update_enabled';
 
@@ -54,6 +55,7 @@ class SettingsState {
     this.disposalUrgentAlerts = true,
     this.limitAlerts = true,
     this.showROCYear = true,
+    this.priceFlash = true,
     this.cacheDurationMinutes = 30,
     this.autoUpdateEnabled = false,
   });
@@ -76,6 +78,9 @@ class SettingsState {
   /// 財報頁面使用民國年顯示
   final bool showROCYear;
 
+  /// 盤中即時報價變動時,現價底色閃一下
+  final bool priceFlash;
+
   /// API 快取存活時間（分鐘）
   final int cacheDurationMinutes;
 
@@ -90,6 +95,7 @@ class SettingsState {
     bool? disposalUrgentAlerts,
     bool? limitAlerts,
     bool? showROCYear,
+    bool? priceFlash,
     int? cacheDurationMinutes,
     bool? autoUpdateEnabled,
   }) {
@@ -101,6 +107,7 @@ class SettingsState {
       disposalUrgentAlerts: disposalUrgentAlerts ?? this.disposalUrgentAlerts,
       limitAlerts: limitAlerts ?? this.limitAlerts,
       showROCYear: showROCYear ?? this.showROCYear,
+      priceFlash: priceFlash ?? this.priceFlash,
       cacheDurationMinutes: cacheDurationMinutes ?? this.cacheDurationMinutes,
       autoUpdateEnabled: autoUpdateEnabled ?? this.autoUpdateEnabled,
     );
@@ -146,6 +153,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
           prefs.getBool(_keyDisposalUrgentAlerts) ?? true;
       final limitAlerts = prefs.getBool(_keyLimitAlerts) ?? true;
       final showROCYear = prefs.getBool(_keyShowROCYear) ?? true;
+      final priceFlash = prefs.getBool(_keyPriceFlash) ?? true;
       final cacheDurationMinutes = prefs.getInt(_keyCacheDurationMinutes) ?? 30;
       final autoUpdateEnabled = prefs.getBool(_keyAutoUpdateEnabled) ?? false;
 
@@ -157,6 +165,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
         disposalUrgentAlerts: disposalUrgentAlerts,
         limitAlerts: limitAlerts,
         showROCYear: showROCYear,
+        priceFlash: priceFlash,
         cacheDurationMinutes: cacheDurationMinutes,
         autoUpdateEnabled: autoUpdateEnabled,
       );
@@ -216,6 +225,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       );
       await prefs.setBool(_keyLimitAlerts, snapshot.limitAlerts);
       await prefs.setBool(_keyShowROCYear, snapshot.showROCYear);
+      await prefs.setBool(_keyPriceFlash, snapshot.priceFlash);
       await prefs.setInt(
         _keyCacheDurationMinutes,
         snapshot.cacheDurationMinutes,
@@ -273,6 +283,13 @@ class SettingsNotifier extends Notifier<SettingsState> {
     state = state.copyWith(showROCYear: value);
     _saveSettings();
     AppLogger.debug('SettingsNotifier', '民國年顯示: $value');
+  }
+
+  /// 設定價格閃色
+  void setPriceFlash(bool value) {
+    state = state.copyWith(priceFlash: value);
+    _saveSettings();
+    AppLogger.debug('SettingsNotifier', '價格閃色: $value');
   }
 
   /// 設定快取時間（分鐘）

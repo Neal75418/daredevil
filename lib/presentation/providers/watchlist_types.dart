@@ -1,6 +1,8 @@
 import 'package:easy_localization/easy_localization.dart';
 
 import 'package:daredevil/core/constants/rule_enums.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/domain/services/live_quote/live_quote_merge.dart';
 import 'package:daredevil/presentation/widgets/warning_badge.dart';
 
 // ==================================================
@@ -83,6 +85,8 @@ class WatchlistItemData {
     this.warningType,
     this.groupId,
     this.groupName,
+    this.priceDate,
+    this.priceChangeAmount,
   });
 
   final String symbol;
@@ -107,6 +111,29 @@ class WatchlistItemData {
 
   /// 所屬自訂分組名稱（null 代表未分組）
   final String? groupName;
+
+  /// 價格那一筆的日期(批次載入綁分析日期的那一筆;新增/復原時為最新一筆)。
+  /// 合併規則據此判斷畫面上是不是今天的正式資料
+  final DateTime? priceDate;
+
+  /// 交易所漲跌價差(金額,不是百分比);昨收 = 收盤 − 價差
+  final double? priceChangeAmount;
+
+  /// 依合併規則決定這一列要顯示的價格(見 `LiveQuoteMerge`)
+  MergedPrice mergedWith(LiveQuoteEntry? live, DateTime now) =>
+      LiveQuoteMerge.merge(
+        official: OfficialPrice(
+          date: priceDate,
+          close: latestClose,
+          priceChange: priceChangeAmount,
+        ),
+        live: live,
+        now: now,
+      );
+
+  /// 要顯示的漲跌幅:用即時報價時以 MIS 昨收計,否則沿用盤後算好的 [priceChange]
+  double? changePercentWith(MergedPrice merged) =>
+      merged.kind == MergedPriceKind.live ? merged.changePercent : priceChange;
 
   /// 取得狀態分類
   WatchlistStatus get status {
@@ -151,6 +178,8 @@ class WatchlistItemData {
       warningType: warningType,
       groupId: clearGroup ? null : (groupId ?? this.groupId),
       groupName: clearGroup ? null : (groupName ?? this.groupName),
+      priceDate: priceDate,
+      priceChangeAmount: priceChangeAmount,
     );
   }
 }

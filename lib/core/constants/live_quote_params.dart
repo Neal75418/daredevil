@@ -50,6 +50,10 @@ abstract final class LiveQuoteParams {
   /// 閃色淡出(第 2 段畫面使用)
   static const Duration flashFade = Duration(milliseconds: 600);
 
+  /// 閃色底色最濃時的透明度。現價數字是一般文字色(不是紅綠),疊在 20% 的
+  /// 紅綠底上兩種主題對比都遠高於 4.5(`stock_card_test` 的閃色對比度測試)
+  static const double flashTintAlpha = 0.2;
+
   /// 大盤指數在 MIS 的代號(市場別硬對應,不查主檔)
   static const String twseIndexSymbol = 't00';
   static const String tpexIndexSymbol = 'o00';

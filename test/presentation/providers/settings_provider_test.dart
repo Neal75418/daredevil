@@ -61,6 +61,7 @@ void main() {
       expect(state.disposalUrgentAlerts, isTrue);
       expect(state.limitAlerts, isTrue);
       expect(state.showROCYear, isTrue);
+      expect(state.priceFlash, isTrue);
       expect(state.cacheDurationMinutes, 30);
       expect(state.autoUpdateEnabled, isFalse);
     });
@@ -122,6 +123,7 @@ void main() {
         'settings_locale': 'en',
         'settings_show_warning_badges': false,
         'settings_cache_duration_minutes': 60,
+        'settings_price_flash': false,
       });
 
       final container2 = ProviderContainer();
@@ -138,6 +140,7 @@ void main() {
       expect(state.locale, AppLocale.en);
       expect(state.showWarningBadges, isFalse);
       expect(state.cacheDurationMinutes, 60);
+      expect(state.priceFlash, isFalse);
     });
 
     test('setThemeMode changes theme', () async {
@@ -189,6 +192,21 @@ void main() {
       notifier.setShowROCYear(false);
 
       expect(container.read(settingsProvider).showROCYear, isFalse);
+    });
+
+    test('setPriceFlash changes value', () {
+      final notifier = container.read(settingsProvider.notifier);
+      notifier.setPriceFlash(false);
+      expect(container.read(settingsProvider).priceFlash, isFalse);
+    });
+
+    test('🚨 setPriceFlash 寫入 SharedPreferences(重開 App 仍是關)', () async {
+      container.read(settingsProvider.notifier).setPriceFlash(false);
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('settings_price_flash'), isFalse);
     });
 
     test('setCacheDurationMinutes changes value', () {

@@ -114,6 +114,14 @@ class SettingsScreen extends ConsumerWidget {
               'settings.showROCYear'.tr(),
               (v) => ref.read(settingsProvider.notifier).setShowROCYear(v),
             ),
+            _buildFeatureTile(
+              context,
+              settings.priceFlash,
+              Icons.flash_on_rounded,
+              Colors.amber,
+              'settings.priceFlash'.tr(),
+              (v) => ref.read(settingsProvider.notifier).setPriceFlash(v),
+            ),
             _buildCacheDurationTile(context, ref, theme, settings),
           ]),
 

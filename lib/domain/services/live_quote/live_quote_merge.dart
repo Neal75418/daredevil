@@ -23,6 +23,16 @@ class OfficialPrice {
 
   /// 交易所漲跌價差;昨收 = 收盤 − 價差(除權息日即為參考價)
   final double? priceChange;
+
+  @override
+  bool operator ==(Object other) =>
+      other is OfficialPrice &&
+      other.date == date &&
+      other.close == close &&
+      other.priceChange == priceChange;
+
+  @override
+  int get hashCode => Object.hash(date, close, priceChange);
 }
 
 enum MergedPriceKind {
@@ -70,6 +80,14 @@ class MergedPrice {
   final LiveQuoteEntry? live;
 
   String? get quoteTime => live?.quoteTime;
+
+  /// 以 [previousClose] 計的漲跌幅(%);沒有昨收為 null
+  double? get changePercent {
+    final p = price;
+    final prev = previousClose;
+    if (p == null || prev == null || prev <= 0) return null;
+    return (p / prev - 1) * 100;
+  }
 }
 
 /// 顯示合併規則(純函式,2026-10-06)。

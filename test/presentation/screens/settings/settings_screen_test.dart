@@ -54,6 +54,9 @@ class FakeSettingsNotifier extends SettingsNotifier {
   void setShowROCYear(bool value) {}
 
   @override
+  void setPriceFlash(bool value) {}
+
+  @override
   void setCacheDurationMinutes(int minutes) {}
 
   @override
@@ -211,6 +214,15 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       expect(find.byIcon(Icons.calendar_month_rounded), findsOneWidget);
+    });
+
+    testWidgets('shows price flash switch', (tester) async {
+      widenViewport(tester);
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byIcon(Icons.flash_on_rounded), findsOneWidget);
     });
 
     testWidgets('shows dark theme icon when dark mode selected', (

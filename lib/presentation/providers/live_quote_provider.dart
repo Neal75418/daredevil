@@ -67,7 +67,8 @@ class LiveQuoteState {
   /// 報價暫停(網路):計時中,距上一次有回應的一輪超過門檻
   final bool stalled;
 
-  /// 報價暫停(證交所限流):到這個時刻後試探;試探完成前不清
+  /// 報價暫停(證交所限流):到這個時刻後試探;試探完成前不清。排程已沒有
+  /// 要抓的(例如收盤後都已有正式資料)或換日時為 null
   final DateTime? rateLimitedUntil;
 
   /// 上一次有回應的一輪(頁首「最後更新」)
@@ -137,6 +138,9 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
   Duration _unresponsive = Duration.zero;
   bool _stalled = false;
   int _failuresSinceStall = 0;
+
+  /// 排程還有沒有要抓的;沒有時(例如收盤後都已有正式資料)不對外顯示限流
+  bool _pending = false;
 
   DateTime? _rateLimitedUntil;
   bool _probing = false;
@@ -226,20 +230,22 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
 
   Future<void> _step() async {
     final now = _now();
-    if (_book.rollDay(now)) {
-      // App 開著過夜:昨天的暫停計時不帶到今天,過夜那段也不算
-      _unresponsive = Duration.zero;
-      _lastCountedTick = null;
-      _publish();
-    }
+    if (_rollDay(now)) _publish();
     final phase = LiveQuoteSchedule.phaseAt(now);
     final afterClose = phase == MarketPhase.afterClose;
     final plan = _plan(phase, now);
-    _countStall(now, pending: plan.pending, afterClose: afterClose);
+    final until = _rateLimitedUntil;
+    final rateLimited = until != null && now.isBefore(until);
+    // 限流暫停期間不計網路暫停:頁首已顯示限流,兩者同時為真時畫面不知該說哪一個
+    _countStall(
+      now,
+      pending: rateLimited ? 0 : plan.pending,
+      afterClose: afterClose,
+    );
+    _setPending(plan.pending > 0);
 
     if (_inFlight) return; // 上一個請求還沒回來:跳過,不疊加
-    final until = _rateLimitedUntil;
-    if (until != null && now.isBefore(until)) return;
+    if (rateLimited) return;
     final current = _round;
     if (current != null && current.version != _registrationVersion) {
       // 登記變了:已拿到的批次照常套用,剩下的不送,下一拍依新的登記重新規劃
@@ -343,6 +349,27 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
     return now.difference(last) >= interval;
   }
 
+  /// 換日(App 開著過夜):清掉記帳本與所有跟「今天」有關的狀態,回傳是否換了日。
+  /// `_step` 與 `_finishRound` 都先呼叫——請求跨午夜時,回應可能比下一拍早到,
+  /// 換日不能只靠 `_step`
+  bool _rollDay(DateTime now) {
+    if (!_book.rollDay(now)) return false;
+    _unresponsive = Duration.zero;
+    _lastCountedTick = null;
+    _stalled = false;
+    _failuresSinceStall = 0;
+    _rateLimitedUntil = null;
+    _probing = false;
+    _lastRespondedAt = null;
+    return true;
+  }
+
+  void _setPending(bool pending) {
+    if (pending == _pending) return;
+    _pending = pending;
+    _publish();
+  }
+
   void _countStall(
     DateTime now, {
     required int pending,
@@ -405,6 +432,7 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
   }
 
   void _finishRound(_Round round, DateTime now) {
+    _rollDay(now);
     final outcome = _book.apply(
       round.report,
       requested: round.requested,
@@ -469,7 +497,7 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
       entries: _book.entries,
       symbolStatus: _book.symbolStatus,
       stalled: _stalled,
-      rateLimitedUntil: _rateLimitedUntil,
+      rateLimitedUntil: _pending ? _rateLimitedUntil : null,
       lastRespondedAt: _lastRespondedAt,
       latestResponseHadToday: _book.latestResponseHadToday,
       latestQuoteTime: _book.latestQuoteTime,

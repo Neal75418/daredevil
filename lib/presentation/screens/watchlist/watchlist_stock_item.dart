@@ -8,6 +8,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
+import 'package:daredevil/presentation/screens/watchlist/watchlist_live_view.dart';
 import 'package:daredevil/presentation/widgets/stock_card.dart';
 
 /// 自選股列表項目（含左右滑動操作）
@@ -24,9 +25,13 @@ class WatchlistStockItem extends StatelessWidget {
     required this.onView,
     required this.onRemove,
     required this.onLongPress,
+    this.live,
   });
 
   final WatchlistItemData item;
+
+  /// 盤中即時報價的顯示結果;null = 盤後行為
+  final WatchlistLiveView? live;
   final int index;
   final bool showLimitMarkers;
 
@@ -108,19 +113,21 @@ class WatchlistStockItem extends StatelessWidget {
   }
 
   StockCard _buildCard() {
+    final live = this.live;
     return StockCard(
       symbol: item.symbol,
       stockName: item.stockName,
       market: item.market,
-      latestClose: item.latestClose,
-      priceChange: item.priceChange,
+      latestClose: live == null ? item.latestClose : live.price,
+      priceChange: live == null ? item.priceChange : live.changePercent,
       score: item.score,
       reasons: item.reasons,
       trendState: item.trendState,
       isInWatchlist: true,
-      recentPrices: item.recentPrices,
+      recentPrices: live == null ? item.recentPrices : live.recentPrices,
       warningType: item.warningType,
       showLimitMarkers: showLimitMarkers,
+      live: live?.card,
       onTap: onView,
       onLongPress: onLongPress,
       onWatchlistTap: () {
@@ -143,9 +150,13 @@ class WatchlistStockGridItem extends StatelessWidget {
     required this.onView,
     required this.onRemove,
     required this.onLongPress,
+    this.live,
   });
 
   final WatchlistItemData item;
+
+  /// 盤中即時報價的顯示結果;null = 盤後行為
+  final WatchlistLiveView? live;
   final int index;
   final bool showLimitMarkers;
   final VoidCallback onView;
@@ -154,20 +165,25 @@ class WatchlistStockGridItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final live = this.live;
     final card = RepaintBoundary(
+      // 以代號為 key(同清單模式的 Slidable):格狀依位置沿用元件,沒有 key 時
+      // 重排/搜尋/增刪會把別檔的閃色狀態套到這一格,重播本輪的閃色
+      key: ValueKey(item.symbol),
       child: StockCard(
         symbol: item.symbol,
         stockName: item.stockName,
         market: item.market,
-        latestClose: item.latestClose,
-        priceChange: item.priceChange,
+        latestClose: live == null ? item.latestClose : live.price,
+        priceChange: live == null ? item.priceChange : live.changePercent,
         score: item.score,
         reasons: item.reasons,
         trendState: item.trendState,
         isInWatchlist: true,
-        recentPrices: item.recentPrices,
+        recentPrices: live == null ? item.recentPrices : live.recentPrices,
         warningType: item.warningType,
         showLimitMarkers: showLimitMarkers,
+        live: live?.card,
         onTap: onView,
         onLongPress: onLongPress,
         onWatchlistTap: () {

@@ -6,6 +6,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:daredevil/core/constants/api_endpoints.dart';
+import 'package:daredevil/core/utils/date_context.dart';
+import 'package:daredevil/domain/services/live_quote/live_quote_schedule.dart';
+import 'package:daredevil/presentation/providers/live_price_provider.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/screens/watchlist/watchlist_live_view.dart';
+import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
+import 'package:daredevil/presentation/widgets/live_quote_status.dart';
 import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/constants/api_config.dart';
@@ -41,6 +50,15 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
   Timer? _searchDebounce;
   bool _isSearching = false;
 
+  // 依漲跌幅排序時:畫面變為可見後,第一輪即時資料完成時重排一次
+  // (spec §7「自選清單排序」)。可見性看 TickerMode(切分頁、推頁返回)
+  bool _visible = false;
+  bool _awaitingLiveRound = false;
+  DateTime? _respondedAtWhenShown;
+
+  // 上次變為不可見的時刻;還沒顯示過為 null
+  DateTime? _hiddenAt;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +66,88 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
     Future.microtask(() => ref.read(watchlistProvider.notifier).loadData());
     // 加入滾動監聽器（無限滾動）
     _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = TickerMode.of(context);
+    if (visible && !_visible) _onBecameVisible();
+    if (!visible && _visible) _hiddenAt = ref.read(appClockProvider).now();
+    _visible = visible;
+  }
+
+  void _onBecameVisible() {
+    final respondedAt = ref.read(liveQuoteCenterProvider).lastRespondedAt;
+    final count = ref.read(watchlistProvider).items.length;
+    final batches =
+        (count + ApiEndpoints.misBatchSize - 1) ~/ ApiEndpoints.misBatchSize;
+    final now = ref.read(appClockProvider).now();
+    final interval = LiveQuoteSchedule.pollInterval(batches);
+    final hiddenAt = _hiddenAt;
+    // 「已有夠新的報價」看的是這些自選股:報價中心最近有回應還不夠——那可能
+    // 是別的畫面登記的股票(例如在個股頁待了幾分鐘,中心只抓那一檔)。只在
+    // 這個畫面離開不超過一個輪詢間隔時才算;第一次進入一律等第一輪
+    final fresh =
+        respondedAt != null &&
+        hiddenAt != null &&
+        now.difference(respondedAt) <= interval &&
+        now.difference(hiddenAt) <= interval;
+    if (fresh) {
+      // 已有不超過一個輪詢間隔的報價:先用它排(build 期間不可改 provider)
+      _awaitingLiveRound = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.read(watchlistProvider.notifier).resortWithLive();
+      });
+    } else {
+      _awaitingLiveRound = true;
+      _respondedAtWhenShown = respondedAt;
+    }
+  }
+
+  List<LiveQuoteRegistration> _registrations(List<WatchlistItemData> items) {
+    final now = ref.read(appClockProvider).now();
+    return [
+      for (final item in items)
+        if (item.market case final market?)
+          LiveQuoteRegistration(
+            symbol: item.symbol,
+            market: market,
+            hasOfficialToday:
+                item.priceDate != null &&
+                DateContext.isSameDay(item.priceDate!, now),
+          ),
+    ];
+  }
+
+  /// 一列自選:依合併規則算出即時顯示結果再交給 [build]
+  Widget _withLive(
+    WatchlistItemData item,
+    Widget Function(WatchlistLiveView? live) build,
+  ) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final merged = ref.watch(watchlistLivePriceProvider(item.symbol));
+        if (merged == null) return build(null);
+        final status = ref.watch(
+          liveQuoteCenterProvider.select((s) => s.symbolStatus[item.symbol]),
+        );
+        final flashEnabled = ref.watch(
+          settingsProvider.select((s) => s.priceFlash),
+        );
+        return build(
+          WatchlistLiveView.of(
+            item: item,
+            merged: merged,
+            flashEnabled: flashEnabled,
+            caption: LiveQuoteStatusRule.card(
+              status: status,
+              merged: merged,
+            )?.text(),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -157,6 +257,24 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
         symbol: item.symbol,
         currentGroupId: item.groupId,
       ),
+      liveData: (ref) {
+        final current =
+            ref.watch(watchlistProvider.select((s) => s.itemOf(item.symbol))) ??
+            item;
+        final merged = ref.watch(watchlistLivePriceProvider(item.symbol));
+        return StockPreviewData(
+          symbol: current.symbol,
+          stockName: current.stockName,
+          latestClose: merged == null ? current.latestClose : merged.price,
+          priceChange: merged == null
+              ? current.priceChange
+              : current.changePercentWith(merged),
+          score: current.score,
+          trendState: current.trendState,
+          reasons: current.reasons,
+          isInWatchlist: true,
+        );
+      },
     );
   }
 
@@ -174,6 +292,20 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(watchlistProvider);
+    // 登記的「是否已有今天正式資料」跟現在有關:跨過午夜等邊界時重算
+    ref.watch(liveQuoteBoundaryProvider);
+    ref.listen(liveQuoteCenterProvider.select((s) => s.lastRespondedAt), (
+      _,
+      next,
+    ) {
+      if (!_awaitingLiveRound ||
+          next == null ||
+          next == _respondedAtWhenShown) {
+        return;
+      }
+      _awaitingLiveRound = false;
+      ref.read(watchlistProvider.notifier).resortWithLive();
+    });
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -371,84 +503,108 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
                 onAdd: () => showAddStockDialog(context: context, ref: ref),
               ),
             )
-          : Column(
-              children: [
-                // Refresh 失敗時顯示 MaterialBanner
-                if (state.error != null)
-                  MaterialBanner(
-                    content: Text(state.error!),
-                    leading: Icon(
-                      Icons.error_outline,
-                      color: theme.colorScheme.error,
+          : LiveQuoteScope(
+              registrations: _registrations(state.items),
+              child: Column(
+                children: [
+                  // Refresh 失敗時顯示 MaterialBanner
+                  if (state.error != null)
+                    MaterialBanner(
+                      content: Text(state.error!),
+                      leading: Icon(
+                        Icons.error_outline,
+                        color: theme.colorScheme.error,
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: _onRefresh,
+                          child: Text('common.retry'.tr()),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              ref.read(watchlistProvider.notifier).clearError(),
+                          child: Text('common.dismiss'.tr()),
+                        ),
+                      ],
                     ),
-                    actions: [
-                      TextButton(
-                        onPressed: _onRefresh,
-                        child: Text('common.retry'.tr()),
-                      ),
-                      TextButton(
-                        onPressed: () =>
-                            ref.read(watchlistProvider.notifier).clearError(),
-                        child: Text('common.dismiss'.tr()),
-                      ),
-                    ],
-                  ),
-                // 股票數量
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        'watchlist.stockCount'.tr(
-                          namedArgs: {
-                            'count': state.filteredItems.length.toString(),
-                          },
-                        ),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      if (state.searchQuery.isNotEmpty) ...[
-                        const SizedBox(width: DesignTokens.spacing8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: DesignTokens.spacing8,
-                            vertical: DesignTokens.spacing2,
+                  // 股票數量
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          'watchlist.stockCount'.tr(
+                            namedArgs: {
+                              'count': state.filteredItems.length.toString(),
+                            },
                           ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.secondaryContainer,
-                            borderRadius: BorderRadius.circular(
-                              DesignTokens.radiusLg,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        if (state.searchQuery.isNotEmpty) ...[
+                          const SizedBox(width: DesignTokens.spacing8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: DesignTokens.spacing8,
+                              vertical: DesignTokens.spacing2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.secondaryContainer,
+                              borderRadius: BorderRadius.circular(
+                                DesignTokens.radiusLg,
+                              ),
+                            ),
+                            child: Text(
+                              'watchlist.searching'.tr(),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSecondaryContainer,
+                              ),
                             ),
                           ),
-                          child: Text(
-                            'watchlist.searching'.tr(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSecondaryContainer,
-                            ),
+                        ],
+                        Expanded(
+                          child: Consumer(
+                            builder: (context, ref, _) {
+                              final status = ref.watch(
+                                watchlistLiveHeaderProvider,
+                              );
+                              if (status == null) {
+                                return const SizedBox.shrink();
+                              }
+                              return Text(
+                                status.text(),
+                                textAlign: TextAlign.end,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                // 股票列表
-                Expanded(
-                  child: state.filteredItems.isEmpty
-                      ? Center(
-                          child: Text(
-                            'watchlist.noMatching'.tr(),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                  // 股票列表
+                  Expanded(
+                    child: state.filteredItems.isEmpty
+                        ? Center(
+                            child: Text(
+                              'watchlist.noMatching'.tr(),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                        )
-                      : _buildListContent(state),
-                ),
-              ],
+                          )
+                        : _buildListContent(state),
+                  ),
+                ],
+              ),
             ),
     );
   }
@@ -513,13 +669,17 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
 
         final item = items[index];
         return RepaintBoundary(
-          child: WatchlistStockItem(
-            item: item,
-            index: index,
-            showLimitMarkers: showLimitMarkers,
-            onView: () => _openStockDetail(item.symbol),
-            onRemove: () => _removeFromWatchlist(item.symbol),
-            onLongPress: () => _showStockPreview(item),
+          child: _withLive(
+            item,
+            (live) => WatchlistStockItem(
+              item: item,
+              index: index,
+              showLimitMarkers: showLimitMarkers,
+              live: live,
+              onView: () => _openStockDetail(item.symbol),
+              onRemove: () => _removeFromWatchlist(item.symbol),
+              onLongPress: () => _showStockPreview(item),
+            ),
           ),
         );
       },
@@ -552,13 +712,17 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
         }
         final item = items[index];
         return RepaintBoundary(
-          child: WatchlistStockGridItem(
-            item: item,
-            index: index,
-            showLimitMarkers: showLimitMarkers,
-            onView: () => _openStockDetail(item.symbol),
-            onRemove: () => _removeFromWatchlist(item.symbol),
-            onLongPress: () => _showStockPreview(item),
+          child: _withLive(
+            item,
+            (live) => WatchlistStockGridItem(
+              item: item,
+              index: index,
+              showLimitMarkers: showLimitMarkers,
+              live: live,
+              onView: () => _openStockDetail(item.symbol),
+              onRemove: () => _removeFromWatchlist(item.symbol),
+              onLongPress: () => _showStockPreview(item),
+            ),
           ),
         );
       },
@@ -603,13 +767,17 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
               itemCount: grouped[group]!.length,
               itemBuilder: (_, i) {
                 final item = grouped[group]![i];
-                return WatchlistStockItem(
-                  item: item,
-                  index: i,
-                  showLimitMarkers: showLimitMarkers,
-                  onView: () => _openStockDetail(item.symbol),
-                  onRemove: () => _removeFromWatchlist(item.symbol),
-                  onLongPress: () => _showStockPreview(item),
+                return _withLive(
+                  item,
+                  (live) => WatchlistStockItem(
+                    item: item,
+                    index: i,
+                    showLimitMarkers: showLimitMarkers,
+                    live: live,
+                    onView: () => _openStockDetail(item.symbol),
+                    onRemove: () => _removeFromWatchlist(item.symbol),
+                    onLongPress: () => _showStockPreview(item),
+                  ),
                 );
               },
             ),
@@ -642,13 +810,17 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
               itemCount: entry.value.length,
               itemBuilder: (_, i) {
                 final item = entry.value[i];
-                return WatchlistStockItem(
-                  item: item,
-                  index: i,
-                  showLimitMarkers: showLimitMarkers,
-                  onView: () => _openStockDetail(item.symbol),
-                  onRemove: () => _removeFromWatchlist(item.symbol),
-                  onLongPress: () => _showStockPreview(item),
+                return _withLive(
+                  item,
+                  (live) => WatchlistStockItem(
+                    item: item,
+                    index: i,
+                    showLimitMarkers: showLimitMarkers,
+                    live: live,
+                    onView: () => _openStockDetail(item.symbol),
+                    onRemove: () => _removeFromWatchlist(item.symbol),
+                    onLongPress: () => _showStockPreview(item),
+                  ),
                 );
               },
             ),

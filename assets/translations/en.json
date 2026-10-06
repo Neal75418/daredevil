@@ -601,7 +601,20 @@
     "down": "Down",
     "neutral": "Unchanged",
     "limitUp": "Limit Up",
-    "limitDown": "Limit Down"
+    "limitDown": "Limit Down",
+    "limitUpLocked": "Locked Limit Up",
+    "limitDownLocked": "Locked Limit Down"
+  },
+  "liveQuote": {
+    "pausedRateLimit": "Quotes paused (exchange rate limit, retrying at {time})",
+    "pausedNetwork": "Quotes paused (network) · last update {time}",
+    "pausedNetworkNoTime": "Quotes paused (network)",
+    "noQuotesToday": "No quotes from the exchange yet today",
+    "quoteTime": "Quoted at {time}",
+    "closingPending": "Today's close · after-hours data pending",
+    "lastQuote": "Last quote {time}",
+    "cardPaused": "Quote paused",
+    "cardNoQuote": "No quote"
   },
   "reasons": {
     "label": "Triggered Signals",
@@ -833,6 +846,8 @@
     "limitAlertsDesc": "Show markers when watchlist stocks hit daily limit",
     "showROCYear": "ROC Year Display",
     "showROCYearDesc": "Use ROC calendar year in fundamentals tab",
+    "priceFlash": "Price Flash",
+    "priceFlashDesc": "Briefly tint the price when a live quote changes",
     "cacheDuration": "API Cache Duration",
     "cacheDurationDesc": "Caches fetched data to reduce repeated API calls",
     "selectCacheDuration": "Select Cache Duration",

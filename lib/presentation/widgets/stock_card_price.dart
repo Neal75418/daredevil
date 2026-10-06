@@ -5,6 +5,8 @@ import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
 import 'package:daredevil/core/utils/price_limit.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/widgets/price_flash.dart';
 
 /// 股票卡片的價格區塊 Widget
 ///
@@ -15,18 +17,28 @@ class StockCardPriceSection extends StatelessWidget {
     super.key,
     this.latestClose,
     this.priceChange,
-    this.showLimitMarkers = true,
+    this.limitStatus = PriceLimitStatus.none,
     required this.priceColor,
     this.compact = false,
+    this.flash,
+    this.flashEnabled = true,
   });
 
   final double? latestClose;
   final double? priceChange;
-  final bool showLimitMarkers;
+
+  /// 漲跌停狀態(由 StockCard 以 `PriceLimit.statusOf` 算好傳入;本元件不自行推算)
+  final PriceLimitStatus limitStatus;
   final Color priceColor;
 
   /// 緊湊模式：縮小字體、省略絕對漲跌金額，僅顯示百分比
   final bool compact;
+
+  /// 本輪閃色事件(盤中即時報價;見 [PriceFlash])
+  final LiveQuoteFlash? flash;
+
+  /// 設定頁「價格閃色」
+  final bool flashEnabled;
 
   /// 從收盤價與漲跌幅百分比反算絕對漲跌金額
   double? get _absoluteChange {
@@ -48,8 +60,8 @@ class StockCardPriceSection extends StatelessWidget {
         : AppNumberFormat.roundForDisplay(priceChange!, 2);
     final isPositive = (displayedChange ?? 0) > 0;
     final isNeutral = displayedChange == null || displayedChange == 0;
-    final isLimitUp = showLimitMarkers && PriceLimit.isLimitUp(priceChange);
-    final isLimitDown = showLimitMarkers && PriceLimit.isLimitDown(priceChange);
+    final isLimitUp = limitStatus.isUp;
+    final isLimitDown = limitStatus.isDown;
     final absChange = _absoluteChange;
 
     return Column(
@@ -57,15 +69,19 @@ class StockCardPriceSection extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (latestClose != null)
-          Text(
-            latestClose!.toStringAsFixed(2),
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w800,
-              fontSize: compact
-                  ? DesignTokens.fontSizeMd
-                  : DesignTokens.fontSizeXl,
-              letterSpacing: 0.5,
-              fontFamily: 'RobotoMono',
+          PriceFlash(
+            flash: flash,
+            enabled: flashEnabled,
+            child: Text(
+              latestClose!.toStringAsFixed(2),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                fontSize: compact
+                    ? DesignTokens.fontSizeMd
+                    : DesignTokens.fontSizeXl,
+                letterSpacing: 0.5,
+                fontFamily: 'RobotoMono',
+              ),
             ),
           ),
         if (priceChange != null) ...[

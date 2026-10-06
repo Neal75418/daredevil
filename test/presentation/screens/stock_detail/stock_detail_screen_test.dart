@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/utils/clock.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
+import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
@@ -123,6 +130,9 @@ void main() {
     SettingsState? settingsState,
     Brightness brightness = Brightness.light,
     List<String> browsingContext = const [],
+    _LiveCenter? liveCenter,
+    DateTime? now,
+    AppClock? clock,
   }) {
     final stock = stockState ?? const StockDetailState();
     final alert = alertState ?? const PriceAlertState();
@@ -151,8 +161,13 @@ void main() {
         stockBrowsingContextProvider.overrideWith(
           () => _FixedBrowsingContext(browsingContext),
         ),
+        if (clock != null)
+          appClockProvider.overrideWithValue(clock)
+        else if (now != null)
+          appClockProvider.overrideWithValue(_Clock(now)),
       ],
       brightness: brightness,
+      liveQuoteCenter: liveCenter == null ? null : () => liveCenter,
     );
   }
 
@@ -363,6 +378,211 @@ void main() {
       }
     }
   });
+
+  group('盤中即時報價', () {
+    final morning = DateTime(2026, 10, 6, 10, 15);
+    final content = StockDetailState(
+      price: StockPriceState(
+        stock: StockMasterEntry(
+          symbol: '2330',
+          name: '台積電',
+          market: 'TWSE',
+          isActive: true,
+          updatedAt: DateTime(2026, 10, 5),
+        ),
+        latestPrice: DailyPriceEntry(
+          symbol: '2330',
+          date: DateTime(2026, 10, 5),
+          close: 100,
+          priceChange: -1,
+        ),
+      ),
+      dataDate: DateTime(2026, 10, 5),
+    );
+
+    LiveQuoteEntry entry(String symbol, double price) => LiveQuoteEntry(
+      symbol: symbol,
+      date: DateTime(2026, 10, 6),
+      price: price,
+      displaySource: LiveDisplaySource.trade,
+      previousClose: 100,
+      quoteTime: '10:14:50',
+      isClosingQuote: false,
+    );
+
+    testWidgets('🚨 登記這一檔(市場別、還沒有今天的正式資料)', (tester) async {
+      widenViewport(tester);
+      final center = _LiveCenter(const LiveQuoteState());
+      await tester.pumpWidget(
+        buildTestWidget(stockState: content, liveCenter: center, now: morning),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(center.registered.values.single, const [
+        LiveQuoteRegistration(symbol: '2330', market: 'TWSE'),
+      ]);
+    });
+
+    testWidgets('🚨 有即時:上方顯示即時價,背景漸層方向跟著即時(資料庫是跌)', (tester) async {
+      widenViewport(tester);
+      final center = _LiveCenter(
+        LiveQuoteState(entries: {'2330': entry('2330', 103)}),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(stockState: content, liveCenter: center, now: morning),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('103.00'), findsOneWidget);
+      // 背景是 LiveQuoteScope 底下的第一個 Container(上方區塊的漲跌膠囊
+      // 也有漸層,不可用「第一個有漸層的 Container」找)
+      final body = tester.widget<Container>(
+        find
+            .descendant(
+              of: find.byType(LiveQuoteScope),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      final gradient =
+          (body.decoration! as BoxDecoration).gradient! as LinearGradient;
+      expect(gradient.colors.first, AppTheme.upColor.withValues(alpha: 0.15));
+    });
+
+    testWidgets('🚨 鎖漲停 → 上方徽章「漲停鎖」(以交易所漲跌停價判斷)', (tester) async {
+      widenViewport(tester);
+      final center = _LiveCenter(
+        LiveQuoteState(
+          entries: {
+            '2330': LiveQuoteEntry(
+              symbol: '2330',
+              date: DateTime(2026, 10, 6),
+              price: 110,
+              displaySource: LiveDisplaySource.locked,
+              previousClose: 100,
+              quoteTime: '10:14:50',
+              isClosingQuote: false,
+              limitUp: 110,
+              limitDown: 90,
+              isLimitUpLocked: true,
+            ),
+          },
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(stockState: content, liveCenter: center, now: morning),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('price.limitUpLocked'), findsOneWidget);
+    });
+
+    testWidgets('🚨 上下滑換股 → 新代號帶著的閃色事件不閃(使用者沒看到那次變動)', (tester) async {
+      widenViewport(tester);
+      LiveQuoteEntry flashing(String symbol, double price, int id) =>
+          LiveQuoteEntry(
+            symbol: symbol,
+            date: DateTime(2026, 10, 6),
+            price: price,
+            displaySource: LiveDisplaySource.trade,
+            previousClose: 100,
+            quoteTime: '10:14:50',
+            isClosingQuote: false,
+            flash: LiveQuoteFlash(id: id, up: true),
+          );
+      final center = _LiveCenter(
+        LiveQuoteState(
+          entries: {
+            '2330': flashing('2330', 103, 1),
+            '2317': flashing('2317', 257, 2),
+          },
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: content,
+          liveCenter: center,
+          now: morning,
+          browsingContext: const ['2330', '2317'],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('257.00'), findsOneWidget, reason: '前提:已換到 2317');
+
+      final tint =
+          (tester
+                      .widget<DecoratedBox>(find.byKey(PriceFlash.tintKey))
+                      .decoration
+                  as BoxDecoration)
+              .color;
+      expect(tint, isNull);
+    });
+
+    testWidgets('🚨 App 開著跨過午夜、畫面沒重建 → 登記改成還沒有今天正式資料', (tester) async {
+      widenViewport(tester);
+      final center = _LiveCenter(const LiveQuoteState());
+      final clock = _FakeTimeClock(DateTime(2026, 10, 6, 23, 59, 30), tester);
+      final today = StockDetailState(
+        price: StockPriceState(
+          stock: content.price.stock,
+          latestPrice: DailyPriceEntry(
+            symbol: '2330',
+            date: DateTime(2026, 10, 6),
+            close: 100,
+            priceChange: -1,
+          ),
+        ),
+        dataDate: DateTime(2026, 10, 6),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(stockState: today, liveCenter: center, clock: clock),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        center.registered.values.single.single.hasOfficialToday,
+        isTrue,
+        reason: '前提:10/6 晚上,資料是 10/6',
+      );
+
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pump();
+      expect(center.registered.values.single.single.hasOfficialToday, isFalse);
+    });
+
+    testWidgets('🚨 上下滑換股 → 登記與上方價格換到新的代號', (tester) async {
+      widenViewport(tester);
+      final center = _LiveCenter(
+        LiveQuoteState(
+          entries: {'2330': entry('2330', 103), '2317': entry('2317', 257)},
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: content,
+          liveCenter: center,
+          now: morning,
+          browsingContext: const ['2330', '2317'],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('103.00'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(
+        [for (final r in center.registered.values.single) r.symbol],
+        ['2317'],
+      );
+      expect(find.text('257.00'), findsOneWidget);
+      expect(find.text('103.00'), findsNothing);
+    });
+  });
 }
 
 class _FixedBrowsingContext extends StockBrowsingContext {
@@ -372,4 +592,42 @@ class _FixedBrowsingContext extends StockBrowsingContext {
 
   @override
   List<String> build() => symbols;
+}
+
+/// 跟著 testWidgets 假時間走的時鐘:pump 推進多久,現在就晚多久
+class _FakeTimeClock implements AppClock {
+  _FakeTimeClock(this.base, this.tester) : _start = tester.binding.clock.now();
+  final DateTime base;
+  final WidgetTester tester;
+  final DateTime _start;
+
+  @override
+  DateTime now() => base.add(tester.binding.clock.now().difference(_start));
+}
+
+class _Clock implements AppClock {
+  _Clock(this.value);
+  final DateTime value;
+  @override
+  DateTime now() => value;
+}
+
+/// 記錄登記、可推送新狀態的報價中心(不發請求)
+class _LiveCenter extends LiveQuoteCenter {
+  _LiveCenter(this.initial);
+  final LiveQuoteState initial;
+  final registered = <Object, List<LiveQuoteRegistration>>{};
+
+  @override
+  LiveQuoteState build() => initial;
+
+  @override
+  void register(Object owner, List<LiveQuoteRegistration> entries) =>
+      registered[owner] = entries;
+
+  @override
+  void unregister(Object owner) => registered.remove(owner);
+
+  @override
+  void setAppVisible(bool visible) {}
 }

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:flutter_riverpod/misc.dart';
 
@@ -26,6 +27,9 @@ final _testDb = AppDatabase.forTesting();
 /// [overrides] 傳入 mock provider override 列表。
 /// 預設覆寫 [databaseProvider] 為共享 in-memory DB。
 ///
+/// 報價中心預設為 [InertLiveQuoteCenter];要即時資料時傳 `liveQuoteCenter:`,
+/// 不要放進 [overrides](會重複 override)。
+///
 /// [zhTranslations] 為 true 時載入真實 zh-TW 翻譯（`.tr()` 回中文而非
 /// key），語系為 zh_TW。版面寬度相關的斷言要用它：key 字串通常比中文長，
 /// 會造成假性水平溢位。需先 `await setupTestLocalization()`，pump 後翻譯
@@ -38,6 +42,7 @@ Widget buildProviderTestApp(
   Brightness brightness = Brightness.light,
   GoRouter? router,
   bool zhTranslations = false,
+  LiveQuoteCenter Function()? liveQuoteCenter,
 }) {
   if (zhTranslations) {
     return EasyLocalization(
@@ -53,6 +58,7 @@ Widget buildProviderTestApp(
           overrides: overrides,
           brightness: brightness,
           router: router,
+          liveQuoteCenter: liveQuoteCenter,
           locale: context.locale,
           localizationsDelegates: context.localizationDelegates,
         ),
@@ -64,6 +70,7 @@ Widget buildProviderTestApp(
     overrides: overrides,
     brightness: brightness,
     router: router,
+    liveQuoteCenter: liveQuoteCenter,
   );
 }
 
@@ -81,6 +88,7 @@ Widget _buildProviderApp(
   required List<Override> overrides,
   required Brightness brightness,
   required GoRouter? router,
+  required LiveQuoteCenter Function()? liveQuoteCenter,
   Locale? locale,
   Iterable<LocalizationsDelegate<dynamic>>? localizationsDelegates,
 }) {
@@ -91,7 +99,13 @@ Widget _buildProviderApp(
       ? const [Locale('en', 'US')]
       : [locale];
   return ProviderScope(
-    overrides: [databaseProvider.overrideWithValue(_testDb), ...overrides],
+    overrides: [
+      databaseProvider.overrideWithValue(_testDb),
+      liveQuoteCenterProvider.overrideWith(
+        liveQuoteCenter ?? InertLiveQuoteCenter.new,
+      ),
+      ...overrides,
+    ],
     // Riverpod 3 預設對失敗的 FutureProvider 自動重試（指數退避，最多
     // 10 次、單次延遲上看 6.4s，總計可達 ~38s）。Widget 測試需要錯誤狀態
     // 立即、確定性地呈現，故關閉重試——與正式環境的 ProviderScope（main.dart）
@@ -115,4 +129,21 @@ Widget _buildProviderApp(
             routerConfig: router,
           ),
   );
+}
+
+/// 不發請求、不登記的報價中心(預設用它):畫面測試不可隨執行時間是否在
+/// 盤中而不同。需要即時資料的測試用 [buildProviderTestApp] 的
+/// `liveQuoteCenter:` 傳入假的報價中心。
+class InertLiveQuoteCenter extends LiveQuoteCenter {
+  @override
+  LiveQuoteState build() => const LiveQuoteState();
+
+  @override
+  void register(Object owner, List<LiveQuoteRegistration> entries) {}
+
+  @override
+  void unregister(Object owner) {}
+
+  @override
+  void setAppVisible(bool visible) {}
 }

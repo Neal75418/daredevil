@@ -260,6 +260,14 @@ class _DaredevilAppState extends ConsumerState<DaredevilApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // 啟動時的生命週期狀態:observer 掛上之前若已送過 hidden(以隱藏狀態
+    // 啟動),報價中心預設「可見」就會在背景照抓
+    final initialLifecycle = WidgetsBinding.instance.lifecycleState;
+    if (initialLifecycle != null) {
+      ref
+          .read(liveQuoteCenterProvider.notifier)
+          .setAppVisible(AppLifecycleCoordinator.isVisible(initialLifecycle));
+    }
     // 盤中提醒輪詢:僅前景執行(iOS/macOS 不保證背景常駐,見 provider 註解)
     ref.read(intradayMonitorProvider.notifier).start();
   }

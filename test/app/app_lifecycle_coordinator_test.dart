@@ -159,5 +159,21 @@ void main() {
       go(AppLifecycleState.resumed);
       expect(visible, [true, false, true]);
     });
+
+    test('isVisible:啟動時同步報價中心用,與 onStateChanged 同一條規則', () {
+      for (final (state, expected) in const [
+        (AppLifecycleState.resumed, true),
+        (AppLifecycleState.inactive, true),
+        (AppLifecycleState.hidden, false),
+        (AppLifecycleState.paused, false),
+        (AppLifecycleState.detached, false),
+      ]) {
+        expect(
+          AppLifecycleCoordinator.isVisible(state),
+          expected,
+          reason: state.name,
+        );
+      }
+    });
   });
 }

@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/theme/color_contrast.dart';
+import 'package:daredevil/core/utils/price_limit.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/screens/stock_detail/tabs/chip/chip_helpers.dart';
+import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/stock_detail_state.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/stock_detail_header.dart';
 
+import '../../../../helpers/phone_layout_helpers.dart';
 import '../../../../helpers/widget_test_helpers.dart';
 
 void main() {
@@ -307,6 +313,178 @@ void main() {
       final pctText = tester.widget<Text>(find.text('0.00%'));
       expect(pctText.style?.color, AppTheme.getFlatColor(Brightness.light));
     });
+  });
+
+  group('盤中即時報價與開高低量', () {
+    const en = Locale('en', 'US');
+
+    // 開高低量放在右側價格欄會把整列撐爆(右欄寬度不受限、左側股名欄被擠掉);
+    // 改成自己一列、逐項換行。key 字串比中文長,比真實版面更嚴。只跑字級
+    // 1.0:字級 2、3 時股名/價格那一列本來就溢位(與本列無關)
+    for (final scenario in phoneScenarios.where((s) => s.textScale == 1.0)) {
+      testWidgets('🚨 手機版面 $scenario:開高低量列不溢位', (tester) async {
+        applyPhoneScenario(tester, scenario);
+        await tester.pumpWidget(
+          buildTestApp(
+            const StockDetailHeader(
+              data: StockHeaderData(
+                stockName: '台積電',
+                latestClose: 1000,
+                priceChange: 1,
+              ),
+              symbol: '2330',
+              live: StockHeaderLive(
+                price: 1005,
+                changePercent: 1.5,
+                change: 15,
+                statusText: 'liveQuote.quoteTime',
+                open: 1000,
+                high: 1010,
+                low: 995.5,
+                volumeLots: 123456,
+              ),
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('🚨 盤後:開高低量列,成交量股數除以 1,000 以「張」顯示', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(
+          StockDetailHeader(
+            data: StockHeaderData(
+              stockName: '台積電',
+              latestClose: 100,
+              priceChange: 1,
+              dataDate: DateTime(2026, 10, 5),
+              open: 99,
+              high: 101,
+              low: 98.5,
+              volumeShares: 1234000,
+            ),
+            symbol: '2330',
+          ),
+        ),
+      );
+      expect(find.textContaining('stockDetail.open'), findsOneWidget);
+      expect(find.textContaining('98.50'), findsOneWidget);
+      expect(find.textContaining(formatLots(1234, en)), findsOneWidget);
+      // 資料日期標示(今日/昨日/M/D 資料)照常顯示——下一條的對照組
+      expect(find.textContaining('stockDetail.data'), findsOneWidget);
+    });
+
+    testWidgets('🚨 即時:現價、漲跌、狀態取代資料日期;成交量直接用 MIS 張數', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(
+          StockDetailHeader(
+            data: StockHeaderData(
+              stockName: '台積電',
+              latestClose: 100,
+              priceChange: -1,
+              dataDate: DateTime(2026, 10, 5),
+            ),
+            symbol: '2330',
+            live: const StockHeaderLive(
+              price: 103,
+              changePercent: 3,
+              change: 3,
+              statusText: 'liveQuote.quoteTime',
+              open: 100,
+              high: 104,
+              low: 99.5,
+              volumeLots: 5678,
+            ),
+          ),
+        ),
+      );
+      expect(find.text('103.00'), findsOneWidget);
+      expect(find.textContaining('+3.00'), findsOneWidget);
+      expect(find.text('liveQuote.quoteTime'), findsOneWidget);
+      // 不寫死今日/昨日:`_formatDataDate` 依執行當天判斷,三種 key 都以
+      // stockDetail.data 開頭(dataMissing 只在 missingDomains 非空時出現)
+      expect(find.textContaining('stockDetail.data'), findsNothing);
+      expect(find.textContaining(formatLots(5678, en)), findsOneWidget);
+    });
+
+    testWidgets('漲停鎖 → 徽章', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(
+          const StockDetailHeader(
+            data: StockHeaderData(stockName: '測試', latestClose: 44),
+            symbol: 'A',
+            live: StockHeaderLive(
+              price: 44,
+              changePercent: 10,
+              change: 4,
+              statusText: 'liveQuote.quoteTime',
+            ),
+            limitStatus: PriceLimitStatus.limitUpLocked,
+          ),
+        ),
+      );
+      expect(find.text('price.limitUpLocked'), findsOneWidget);
+    });
+
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      testWidgets('🚨 閃色最濃時 $brightness:現價對頁面漸層頂端的實際底色 ≥ 4.5', (tester) async {
+        Widget header(int id) => buildTestApp(
+          StockDetailHeader(
+            data: const StockHeaderData(stockName: '測試', latestClose: 100),
+            symbol: 'A',
+            live: StockHeaderLive(
+              price: 101,
+              changePercent: 1,
+              change: 1,
+              statusText: 'liveQuote.quoteTime',
+              flash: LiveQuoteFlash(id: id, up: true),
+            ),
+          ),
+          brightness: brightness,
+        );
+        await tester.pumpWidget(header(1));
+        await tester.pumpWidget(header(2));
+        await tester.pump();
+
+        final theme = brightness == Brightness.dark
+            ? AppTheme.darkTheme
+            : AppTheme.lightTheme;
+        // 個股頁背景頂端是漲色 15% 疊在 surface 上(stock_detail_screen 的漸層)
+        final pageTop = ColorContrast.compositeOver(
+          AppTheme.upColor,
+          theme.colorScheme.surface,
+          0.15,
+        );
+        final tint =
+            (tester
+                        .widget<DecoratedBox>(find.byKey(PriceFlash.tintKey))
+                        .decoration
+                    as BoxDecoration)
+                .color!;
+        final text = tester
+            .widget<RichText>(
+              find.descendant(
+                of: find.byKey(PriceFlash.tintKey),
+                matching: find.byType(RichText),
+              ),
+            )
+            .text
+            .style!
+            .color!;
+        expect(
+          ColorContrast.ratio(
+            text,
+            ColorContrast.compositeOver(
+              tint.withValues(alpha: 1),
+              pageTop,
+              tint.a,
+            ),
+          ),
+          greaterThanOrEqualTo(4.5),
+        );
+      });
+    }
   });
 }
 

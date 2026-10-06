@@ -8,10 +8,12 @@ import 'package:mocktail/mocktail.dart';
 import 'package:daredevil/core/constants/pagination.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/database/cached_accessor.dart';
+import 'package:daredevil/data/database/dao/user_dao.dart';
 import 'package:daredevil/data/repositories/warning_repository.dart';
 import 'package:daredevil/data/repositories/analysis_repository.dart';
 import 'package:daredevil/data/repositories/insider_repository.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 
 // ==========================================
@@ -28,6 +30,11 @@ class MockWarningRepository extends Mock implements WarningRepository {}
 class MockAnalysisRepository extends Mock implements AnalysisRepository {}
 
 class MockInsiderRepository extends Mock implements InsiderRepository {}
+
+class _FakeSettings extends SettingsNotifier {
+  @override
+  SettingsState build() => const SettingsState();
+}
 
 // ==========================================
 // Test Helpers
@@ -335,6 +342,73 @@ void main() {
       final state = container.read(watchlistProvider);
       expect(state.isLoading, isFalse);
       expect(state.error, isNotNull);
+    });
+
+    test('🚨 項目帶出價格那一筆的日期與漲跌價差(合併規則判斷「是不是今天」用)', () async {
+      final mockAnalysisRepo = MockAnalysisRepository();
+      when(
+        () => mockAnalysisRepo.findLatestAnalysisDate(),
+      ).thenAnswer((_) async => DateTime(2026, 10, 5));
+      final c = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(mockDb),
+          cachedDbProvider.overrideWithValue(mockCachedDb),
+          warningRepositoryProvider.overrideWithValue(mockWarningRepo),
+          insiderRepositoryProvider.overrideWithValue(mockInsiderRepo),
+          analysisRepositoryProvider.overrideWithValue(mockAnalysisRepo),
+          settingsProvider.overrideWith(_FakeSettings.new),
+        ],
+      );
+      addTearDown(c.dispose);
+      when(() => mockDb.getWatchlistWithGroups()).thenAnswer(
+        (_) async => [
+          WatchlistWithGroup(
+            entry: WatchlistEntry(
+              symbol: '2330',
+              createdAt: DateTime(2026, 9, 1),
+            ),
+          ),
+        ],
+      );
+      when(() => mockDb.getWatchlistGroups()).thenAnswer((_) async => []);
+      final price = DailyPriceEntry(
+        symbol: '2330',
+        date: DateTime(2026, 10, 5),
+        close: 2575,
+        priceChange: 15,
+      );
+      when(
+        () => mockCachedDb.loadStockListData(
+          symbols: any(named: 'symbols'),
+          analysisDate: any(named: 'analysisDate'),
+          historyStart: any(named: 'historyStart'),
+        ),
+      ).thenAnswer(
+        (_) async => (
+          stocks: <String, StockMasterEntry>{},
+          latestPrices: {'2330': price},
+          analyses: <String, DailyAnalysisEntry>{},
+          reasons: <String, List<DailyReasonEntry>>{},
+          priceHistories: {
+            '2330': [price],
+          },
+        ),
+      );
+      when(
+        () => mockWarningRepo.getWatchlistWarnings(any()),
+      ).thenAnswer((_) async => {});
+      when(
+        () => mockInsiderRepo.getWatchlistHighPledgeStocks(
+          any(),
+          threshold: any(named: 'threshold'),
+        ),
+      ).thenAnswer((_) async => {});
+
+      await c.read(watchlistProvider.notifier).loadData();
+
+      final row = c.read(watchlistProvider).items.single;
+      expect(row.priceDate, DateTime(2026, 10, 5));
+      expect(row.priceChangeAmount, 15);
     });
 
     test('並發 loadData:先發慢完成者不得覆蓋後發結果(2026-07-30 審查)', () async {

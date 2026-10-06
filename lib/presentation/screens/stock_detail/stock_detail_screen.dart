@@ -7,6 +7,14 @@ import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/utils/error_display.dart';
+import 'package:daredevil/core/utils/date_context.dart';
+import 'package:daredevil/core/utils/price_limit.dart';
+import 'package:daredevil/domain/services/live_quote/live_quote_merge.dart';
+import 'package:daredevil/presentation/providers/live_price_provider.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/providers/settings_provider.dart';
+import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
 import 'package:daredevil/presentation/providers/pinned_thesis_provider.dart';
 import 'package:daredevil/presentation/providers/stock_browsing_context_provider.dart';
 import 'package:daredevil/presentation/providers/stock_detail_provider.dart';
@@ -108,9 +116,23 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
     final isInWatchlist = ref.watch(provider.select((s) => s.isInWatchlist));
     final priceChangeRaw = ref.watch(provider.select((s) => s.priceChange));
     final theme = Theme.of(context);
+    // 只取正負號:build 刻意只 watch 少數欄位,watch 整個合併結果會讓
+    // 整頁每輪報價(15 秒)都重建
+    final liveSign = ref.watch(
+      stockDetailLivePriceProvider(_symbol).select(
+        (m) => m.kind == MergedPriceKind.live ? m.changePercent?.sign : null,
+      ),
+    );
+    final market = ref.watch(provider.select((s) => s.stockMarket));
+    // 登記的「是否已有今天正式資料」跟現在有關:跨過午夜等邊界時重算
+    ref.watch(liveQuoteBoundaryProvider);
+    final officialDate = ref.watch(
+      provider.select((s) => s.price.latestPrice?.date),
+    );
 
     // 依漲跌幅動態漸層
-    final priceChange = priceChangeRaw ?? 0;
+    // 漸層方向與上方區塊同一個來源(用即時報價時跟著即時)
+    final priceChange = liveSign ?? priceChangeRaw ?? 0;
     final isPositive = priceChange > 0;
     final isNegative = priceChange < 0;
 
@@ -158,210 +180,263 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
           );
         },
       ),
-      body: Container(
-        decoration: BoxDecoration(gradient: bgGradient),
-        // 已有內容時的重載（背景 epoch）保留畫面：shimmer 與整頁錯誤只給
-        // 沒有內容的情況，重載失敗改以 app bar 下方的 banner 顯示
-        child: isLoading && !hasContent
-            ? const SafeArea(child: StockDetailShimmer())
-            : error != null && !hasContent
-            ? SafeArea(
-                child: FillRemainingScrollable(
-                  child: ErrorDisplay.isNetworkError(error)
-                      ? EmptyStates.networkError(
-                          onRetry: () => ref
-                              .read(stockDetailProvider(_symbol).notifier)
-                              .loadData(),
-                        )
-                      : EmptyStates.error(
-                          message: error,
-                          onRetry: () => ref
-                              .read(stockDetailProvider(_symbol).notifier)
-                              .loadData(),
-                        ),
-                ),
-              )
-            : NestedScrollView(
-                controller: _scrollController,
-                headerSliverBuilder: (context, innerBoxScrolled) => [
-                  // App Bar（毛玻璃：blur 下方內容，半透質感又不會疊影穿透）
-                  SliverAppBar(
-                    pinned: true,
-                    floating: true,
-                    backgroundColor: Colors.transparent,
-                    surfaceTintColor: Colors.transparent,
-                    flexibleSpace: const FrostedBackground(),
-                    title: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _symbol,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (stockName != null)
-                          Text(
-                            stockName,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
-                    actions: [
-                      // 釘選論點（出場層 Phase 2）：mode 由 dominant 規則推斷
-                      Consumer(
-                        builder: (context, ref, _) {
-                          final pinned = ref.watch(
-                            pinnedThesisProvider.select(
-                              (s) => s.value?.isPinned(_symbol) ?? false,
-                            ),
-                          );
-                          return IconButton(
-                            tooltip: 'thesis.pinTooltip'.tr(),
-                            icon: Icon(
-                              pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                            ),
-                            onPressed: () async {
-                              final notifier = ref.read(
-                                pinnedThesisProvider.notifier,
-                              );
-                              final active = ref
-                                  .read(pinnedThesisProvider)
-                                  .value
-                                  ?.active
-                                  .where((t) => t.symbol == _symbol)
-                                  .toList();
-                              try {
-                                if (active != null && active.isNotEmpty) {
-                                  await notifier.cancel(active.first.id);
-                                } else {
-                                  await notifier.pin(_symbol);
-                                }
-                              } on StateError catch (e) {
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(e.message)),
-                                );
-                              }
-                            },
-                          );
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.compare_arrows),
-                        onPressed: () {
-                          context.push(AppRoutes.compare, extra: [_symbol]);
-                        },
-                        tooltip: 'comparison.compare'.tr(),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          isInWatchlist ? Icons.star : Icons.star_border,
-                          color: isInWatchlist ? Colors.amber : null,
-                        ),
-                        onPressed: () async {
-                          final messenger = ScaffoldMessenger.of(context);
-                          try {
-                            await ref
+      body: LiveQuoteScope(
+        registrations: [
+          if (market != null)
+            LiveQuoteRegistration(
+              symbol: _symbol,
+              market: market,
+              hasOfficialToday:
+                  officialDate != null &&
+                  DateContext.isSameDay(
+                    officialDate,
+                    ref.read(appClockProvider).now(),
+                  ),
+            ),
+        ],
+        child: Container(
+          decoration: BoxDecoration(gradient: bgGradient),
+          // 已有內容時的重載（背景 epoch）保留畫面：shimmer 與整頁錯誤只給
+          // 沒有內容的情況，重載失敗改以 app bar 下方的 banner 顯示
+          child: isLoading && !hasContent
+              ? const SafeArea(child: StockDetailShimmer())
+              : error != null && !hasContent
+              ? SafeArea(
+                  child: FillRemainingScrollable(
+                    child: ErrorDisplay.isNetworkError(error)
+                        ? EmptyStates.networkError(
+                            onRetry: () => ref
                                 .read(stockDetailProvider(_symbol).notifier)
-                                .toggleWatchlist();
-                          } catch (e) {
-                            if (!mounted) return;
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  e is StateError ? e.message : '$e',
-                                ),
-                                behavior: SnackBarBehavior.floating,
+                                .loadData(),
+                          )
+                        : EmptyStates.error(
+                            message: error,
+                            onRetry: () => ref
+                                .read(stockDetailProvider(_symbol).notifier)
+                                .loadData(),
+                          ),
+                  ),
+                )
+              : NestedScrollView(
+                  controller: _scrollController,
+                  headerSliverBuilder: (context, innerBoxScrolled) => [
+                    // App Bar（毛玻璃：blur 下方內容，半透質感又不會疊影穿透）
+                    SliverAppBar(
+                      pinned: true,
+                      floating: true,
+                      backgroundColor: Colors.transparent,
+                      surfaceTintColor: Colors.transparent,
+                      flexibleSpace: const FrostedBackground(),
+                      title: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _symbol,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (stockName != null)
+                            Text(
+                              stockName,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                      actions: [
+                        // 釘選論點（出場層 Phase 2）：mode 由 dominant 規則推斷
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final pinned = ref.watch(
+                              pinnedThesisProvider.select(
+                                (s) => s.value?.isPinned(_symbol) ?? false,
                               ),
                             );
-                          }
+                            return IconButton(
+                              tooltip: 'thesis.pinTooltip'.tr(),
+                              icon: Icon(
+                                pinned
+                                    ? Icons.push_pin
+                                    : Icons.push_pin_outlined,
+                              ),
+                              onPressed: () async {
+                                final notifier = ref.read(
+                                  pinnedThesisProvider.notifier,
+                                );
+                                final active = ref
+                                    .read(pinnedThesisProvider)
+                                    .value
+                                    ?.active
+                                    .where((t) => t.symbol == _symbol)
+                                    .toList();
+                                try {
+                                  if (active != null && active.isNotEmpty) {
+                                    await notifier.cancel(active.first.id);
+                                  } else {
+                                    await notifier.pin(_symbol);
+                                  }
+                                } on StateError catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(e.message)),
+                                  );
+                                }
+                              },
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.compare_arrows),
+                          onPressed: () {
+                            context.push(AppRoutes.compare, extra: [_symbol]);
+                          },
+                          tooltip: 'comparison.compare'.tr(),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            isInWatchlist ? Icons.star : Icons.star_border,
+                            color: isInWatchlist ? Colors.amber : null,
+                          ),
+                          onPressed: () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            try {
+                              await ref
+                                  .read(stockDetailProvider(_symbol).notifier)
+                                  .toggleWatchlist();
+                            } catch (e) {
+                              if (!mounted) return;
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    e is StateError ? e.message : '$e',
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                          tooltip: isInWatchlist
+                              ? 'stock.removeFromWatchlist'.tr()
+                              : 'stock.addToWatchlist'.tr(),
+                        ),
+                      ],
+                    ),
+
+                    if (error != null)
+                      SliverToBoxAdapter(
+                        child: MaterialBanner(
+                          content: Text(error),
+                          leading: const Icon(Icons.error_outline),
+                          actions: [
+                            TextButton(
+                              onPressed: () => ref
+                                  .read(stockDetailProvider(_symbol).notifier)
+                                  .loadData(),
+                              child: Text('common.retry'.tr()),
+                            ),
+                            TextButton(
+                              onPressed: () => ref
+                                  .read(stockDetailProvider(_symbol).notifier)
+                                  .clearError(),
+                              child: Text('common.dismiss'.tr()),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // 股票標題
+                    SliverToBoxAdapter(
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          final headerData = ref.watch(
+                            provider.select(
+                              (s) => StockHeaderData.fromState(s),
+                            ),
+                          );
+                          final merged = ref.watch(
+                            stockDetailLivePriceProvider(_symbol),
+                          );
+                          final center = ref.watch(liveQuoteCenterProvider);
+                          final flashOn = ref.watch(
+                            settingsProvider.select((s) => s.priceFlash),
+                          );
+                          final limitOn = ref.watch(
+                            settingsProvider.select((s) => s.limitAlerts),
+                          );
+                          final live = StockHeaderLive.from(
+                            merged: merged,
+                            state: center,
+                            flashEnabled: flashOn,
+                          );
+                          final limit = limitOn
+                              ? PriceLimit.statusOf(
+                                  changePercent:
+                                      live?.changePercent ??
+                                      headerData.priceChange,
+                                  price: live?.price ?? headerData.latestClose,
+                                  limitUp: merged.live?.limitUp,
+                                  limitDown: merged.live?.limitDown,
+                                  limitUpLocked:
+                                      merged.live?.isLimitUpLocked ?? false,
+                                  limitDownLocked:
+                                      merged.live?.isLimitDownLocked ?? false,
+                                )
+                              : PriceLimitStatus.none;
+                          return StockDetailHeader(
+                            // 原地換股時整塊重建:沿用的閃色狀態會把新代號
+                            // 帶著的(使用者沒看到的)事件當成變動閃一次
+                            key: ValueKey(_symbol),
+                            data: headerData,
+                            symbol: _symbol,
+                            live: live,
+                            limitStatus: limit,
+                          );
                         },
-                        tooltip: isInWatchlist
-                            ? 'stock.removeFromWatchlist'.tr()
-                            : 'stock.addToWatchlist'.tr(),
+                      ),
+                    ),
+
+                    // AI 智慧分析摘要
+                    SliverToBoxAdapter(child: AiSummaryCard(symbol: _symbol)),
+
+                    // Tab Bar（毛玻璃，與 App Bar 一致）
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _TabBarDelegate(
+                        tabController: _tabController,
+                        theme: theme,
+                      ),
+                    ),
+                  ],
+                  body: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      // key 綁 symbol：Chip/Insider/Fundamentals 是 initState
+                      // 載入型，原地換股需 remount 才會載新股資料
+                      TechnicalTab(
+                        key: ValueKey('tech-$_symbol'),
+                        symbol: _symbol,
+                      ),
+                      ChipTab(key: ValueKey('chip-$_symbol'), symbol: _symbol),
+                      InsiderTab(
+                        key: ValueKey('insider-$_symbol'),
+                        symbol: _symbol,
+                      ),
+                      FundamentalsTab(
+                        key: ValueKey('fund-$_symbol'),
+                        symbol: _symbol,
+                      ),
+                      AlertsTab(
+                        key: ValueKey('alerts-$_symbol'),
+                        symbol: _symbol,
                       ),
                     ],
                   ),
-
-                  if (error != null)
-                    SliverToBoxAdapter(
-                      child: MaterialBanner(
-                        content: Text(error),
-                        leading: const Icon(Icons.error_outline),
-                        actions: [
-                          TextButton(
-                            onPressed: () => ref
-                                .read(stockDetailProvider(_symbol).notifier)
-                                .loadData(),
-                            child: Text('common.retry'.tr()),
-                          ),
-                          TextButton(
-                            onPressed: () => ref
-                                .read(stockDetailProvider(_symbol).notifier)
-                                .clearError(),
-                            child: Text('common.dismiss'.tr()),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // 股票標題
-                  SliverToBoxAdapter(
-                    child: Consumer(
-                      builder: (context, ref, _) {
-                        final headerData = ref.watch(
-                          provider.select((s) => StockHeaderData.fromState(s)),
-                        );
-                        return StockDetailHeader(
-                          data: headerData,
-                          symbol: _symbol,
-                        );
-                      },
-                    ),
-                  ),
-
-                  // AI 智慧分析摘要
-                  SliverToBoxAdapter(child: AiSummaryCard(symbol: _symbol)),
-
-                  // Tab Bar（毛玻璃，與 App Bar 一致）
-                  SliverPersistentHeader(
-                    pinned: true,
-                    delegate: _TabBarDelegate(
-                      tabController: _tabController,
-                      theme: theme,
-                    ),
-                  ),
-                ],
-                body: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    // key 綁 symbol：Chip/Insider/Fundamentals 是 initState
-                    // 載入型，原地換股需 remount 才會載新股資料
-                    TechnicalTab(
-                      key: ValueKey('tech-$_symbol'),
-                      symbol: _symbol,
-                    ),
-                    ChipTab(key: ValueKey('chip-$_symbol'), symbol: _symbol),
-                    InsiderTab(
-                      key: ValueKey('insider-$_symbol'),
-                      symbol: _symbol,
-                    ),
-                    FundamentalsTab(
-                      key: ValueKey('fund-$_symbol'),
-                      symbol: _symbol,
-                    ),
-                    AlertsTab(
-                      key: ValueKey('alerts-$_symbol'),
-                      symbol: _symbol,
-                    ),
-                  ],
                 ),
-              ),
+        ),
       ),
     );
   }

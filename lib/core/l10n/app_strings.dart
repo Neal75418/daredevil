@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 
 import 'package:daredevil/core/utils/number_formatter.dart';
+import 'package:daredevil/core/utils/price_limit.dart';
 
 /// 應用程式字串集中管理（基於 easy_localization）
 ///
@@ -121,6 +122,17 @@ class S {
   static String get priceNeutral => 'price.neutral'.tr();
   static String get priceLimitUp => 'price.limitUp'.tr();
   static String get priceLimitDown => 'price.limitDown'.tr();
+  static String get priceLimitUpLocked => 'price.limitUpLocked'.tr();
+  static String get priceLimitDownLocked => 'price.limitDownLocked'.tr();
+
+  /// 漲跌停標示文字;[PriceLimitStatus.none] 回空字串
+  static String priceLimitLabel(PriceLimitStatus status) => switch (status) {
+    PriceLimitStatus.limitUp => priceLimitUp,
+    PriceLimitStatus.limitUpLocked => priceLimitUpLocked,
+    PriceLimitStatus.limitDown => priceLimitDown,
+    PriceLimitStatus.limitDownLocked => priceLimitDownLocked,
+    PriceLimitStatus.none => '',
+  };
 
   static String priceChangeLabel(double? change) {
     if (change == null || change == 0) return priceNeutral;

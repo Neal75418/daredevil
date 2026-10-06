@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/utils/price_limit.dart';
 import 'package:daredevil/presentation/widgets/stock_card_price.dart';
 
 import '../../helpers/widget_test_helpers.dart';
@@ -89,14 +90,14 @@ void main() {
       expect(find.text('50.00'), findsOneWidget);
     });
 
-    testWidgets('shows limit-up marker for 10% change', (tester) async {
+    testWidgets('limitStatus 為漲停 → 顯示漲停標記', (tester) async {
       await tester.pumpWidget(
         buildTestApp(
           const StockCardPriceSection(
             latestClose: 110.00,
             priceChange: 10.0,
             priceColor: Colors.red,
-            showLimitMarkers: true,
+            limitStatus: PriceLimitStatus.limitUp,
           ),
         ),
       );
@@ -104,14 +105,14 @@ void main() {
       expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
     });
 
-    testWidgets('shows limit-down marker for -10% change', (tester) async {
+    testWidgets('limitStatus 為跌停鎖 → 顯示跌停標記', (tester) async {
       await tester.pumpWidget(
         buildTestApp(
           const StockCardPriceSection(
             latestClose: 90.00,
             priceChange: -10.0,
             priceColor: Colors.green,
-            showLimitMarkers: true,
+            limitStatus: PriceLimitStatus.limitDownLocked,
           ),
         ),
       );
@@ -119,16 +120,13 @@ void main() {
       expect(find.byIcon(Icons.arrow_downward_rounded), findsOneWidget);
     });
 
-    testWidgets('hides limit markers when showLimitMarkers is false', (
-      tester,
-    ) async {
+    testWidgets('🚨 價格區塊自己不推算:limitStatus 為 none 時漲 10% 也不標', (tester) async {
       await tester.pumpWidget(
         buildTestApp(
           const StockCardPriceSection(
             latestClose: 110.00,
             priceChange: 10.0,
             priceColor: Colors.red,
-            showLimitMarkers: false,
           ),
         ),
       );

@@ -58,10 +58,13 @@ class AppLifecycleCoordinator {
       startIntraday();
     }
 
-    onAppVisibilityChanged?.call(
-      state == AppLifecycleState.resumed || state == AppLifecycleState.inactive,
-    );
+    onAppVisibilityChanged?.call(isVisible(state));
   }
+
+  /// 這個生命週期狀態下 App 看不看得到(盤中即時報價用;規則見
+  /// [onAppVisibilityChanged])
+  static bool isVisible(AppLifecycleState state) =>
+      state == AppLifecycleState.resumed || state == AppLifecycleState.inactive;
 
   /// 桌面結束 App（macOS Cmd+Q）。engine 會等這裡回覆才真的結束，
   /// 所以落盤能在退出前完成。

@@ -18,6 +18,7 @@ import 'package:daredevil/data/repositories/insider_repository.dart';
 import 'package:daredevil/data/repositories/warning_repository.dart';
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
+import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/watchlist_types.dart';
 import 'package:daredevil/presentation/widgets/warning_badge.dart';
@@ -108,6 +109,14 @@ class WatchlistState {
 
   /// 搜尋過濾後的項目（已快取）
   List<WatchlistItemData> get filteredItems => _filteredItems;
+
+  /// 依代號找項目;沒有回 null
+  WatchlistItemData? itemOf(String symbol) {
+    for (final item in items) {
+      if (item.symbol == symbol) return item;
+    }
+    return null;
+  }
 
   /// 目前顯示的項目（分頁後）
   List<WatchlistItemData> get displayedItems {
@@ -402,6 +411,8 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
           warningType: warningType,
           groupId: item.entry.groupId,
           groupName: item.groupName,
+          priceDate: latestPrice?.date,
+          priceChangeAmount: latestPrice?.priceChange,
         );
       }).toList();
 
@@ -467,12 +478,16 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
       case WatchlistSort.scoreAsc:
         sorted.sort((a, b) => (a.score ?? 0).compareTo(b.score ?? 0));
       case WatchlistSort.priceChangeDesc:
-        sorted.sort(
-          (a, b) => (b.priceChange ?? 0).compareTo(a.priceChange ?? 0),
-        );
       case WatchlistSort.priceChangeAsc:
+        // 與卡片顯示同一個值:有今天的即時報價時用合併後的漲跌幅
+        final live = ref.read(liveQuoteCenterProvider).entries;
+        final now = ref.read(appClockProvider).now();
+        double change(WatchlistItemData i) =>
+            i.changePercentWith(i.mergedWith(live[i.symbol], now)) ?? 0;
         sorted.sort(
-          (a, b) => (a.priceChange ?? 0).compareTo(b.priceChange ?? 0),
+          (a, b) => sort == WatchlistSort.priceChangeDesc
+              ? change(b).compareTo(change(a))
+              : change(a).compareTo(change(b)),
         );
       case WatchlistSort.nameAsc:
         sorted.sort((a, b) => a.symbol.compareTo(b.symbol));
@@ -512,6 +527,16 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
     if (state.sort == sort) return;
     final sortedItems = _sortItems(state.items, sort);
     state = state.copyWith(sort: sort, items: sortedItems);
+  }
+
+  /// 依目前的即時報價重新排序(只在依漲跌幅排序時有作用)。畫面在變為可見
+  /// 後、第一輪即時資料完成時呼叫;其餘時間順序不動、只更新數字
+  void resortWithLive() {
+    if (state.sort != WatchlistSort.priceChangeDesc &&
+        state.sort != WatchlistSort.priceChangeAsc) {
+      return;
+    }
+    state = state.copyWith(items: _sortItems(state.items, state.sort));
   }
 
   /// 設定分組選項
@@ -868,6 +893,8 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
       recentPrices: recentPrices,
       reasons: reasons.map((r) => r.reasonType).toList(),
       warningType: warningType,
+      priceDate: latestPrice?.date,
+      priceChangeAmount: latestPrice?.priceChange,
     );
   }
 }

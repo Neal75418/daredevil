@@ -5,8 +5,12 @@ import 'package:daredevil/presentation/widgets/score_tier_badge.dart';
 import 'package:daredevil/presentation/widgets/stock_card_sparkline.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
+import 'package:daredevil/core/theme/color_contrast.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
+import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/presentation/widgets/stock_card.dart';
+import 'package:daredevil/presentation/widgets/stock_card_live.dart';
 
 import '../../helpers/widget_test_helpers.dart';
 
@@ -445,6 +449,179 @@ void main() {
         );
         expect(find.text('score.tier.observation'), findsOneWidget);
       });
+    });
+    group('漲跌停與即時資料(盤中即時報價)', () {
+      testWidgets('盤後:漲 10% 標「漲停」(推算)', (tester) async {
+        await tester.pumpWidget(
+          buildTestApp(
+            const StockCard(
+              symbol: '2330',
+              stockName: '測試',
+              latestClose: 110,
+              priceChange: 10,
+            ),
+          ),
+        );
+        expect(find.text('price.limitUp'), findsOneWidget);
+      });
+
+      testWidgets('🚨 有交易所漲跌停價時以價格判斷:差一檔不標漲停', (tester) async {
+        await tester.pumpWidget(
+          buildTestApp(
+            const StockCard(
+              symbol: 'A',
+              stockName: '測試',
+              latestClose: 43.95,
+              priceChange: 9.875,
+              live: StockCardLive(limitUp: 44.0, limitDown: 36.0),
+            ),
+          ),
+        );
+        expect(find.text('price.limitUp'), findsNothing);
+        expect(find.byIcon(Icons.arrow_upward_rounded), findsNothing);
+      });
+
+      testWidgets('🚨 鎖漲停 → 名稱列標「漲停鎖」、價格區塊有漲停標記', (tester) async {
+        await tester.pumpWidget(
+          buildTestApp(
+            const StockCard(
+              symbol: 'A',
+              stockName: '測試',
+              latestClose: 44.0,
+              priceChange: 10.0,
+              live: StockCardLive(
+                limitUp: 44.0,
+                limitDown: 36.0,
+                limitUpLocked: true,
+              ),
+            ),
+          ),
+        );
+        expect(find.text('price.limitUpLocked'), findsOneWidget);
+        expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
+      });
+
+      testWidgets('設定關閉漲跌停提示 → 名稱列與價格區塊都不標', (tester) async {
+        await tester.pumpWidget(
+          buildTestApp(
+            const StockCard(
+              symbol: '2330',
+              stockName: '測試',
+              latestClose: 110,
+              priceChange: 10,
+              showLimitMarkers: false,
+            ),
+          ),
+        );
+        expect(find.text('price.limitUp'), findsNothing);
+        expect(find.byIcon(Icons.arrow_upward_rounded), findsNothing);
+      });
+
+      testWidgets('例外標示顯示在名稱列;沒有名稱時照樣顯示', (tester) async {
+        await tester.pumpWidget(
+          buildTestApp(
+            const StockCard(
+              symbol: '2330',
+              latestClose: 100,
+              priceChange: 1,
+              live: StockCardLive(caption: 'liveQuote.cardPaused'),
+            ),
+          ),
+        );
+        expect(find.text('liveQuote.cardPaused'), findsOneWidget);
+      });
+
+      for (final brightness in [Brightness.light, Brightness.dark]) {
+        testWidgets('🚨 例外標示灰字 $brightness:對卡片實際底色 ≥ 4.5', (tester) async {
+          await tester.pumpWidget(
+            buildTestApp(
+              const StockCard(
+                symbol: '2330',
+                stockName: '測試',
+                latestClose: 100,
+                priceChange: 1,
+                live: StockCardLive(caption: 'liveQuote.cardPaused'),
+              ),
+              brightness: brightness,
+            ),
+          );
+          final cardColor = tester
+              .widgetList<Container>(find.byType(Container))
+              .map((c) => c.decoration)
+              .whereType<BoxDecoration>()
+              .firstWhere((d) => d.borderRadius == BorderRadius.circular(16))
+              .color!;
+          final textColor = tester
+              .widget<Text>(find.text('liveQuote.cardPaused'))
+              .style!
+              .color!;
+          expect(
+            ColorContrast.ratio(textColor, cardColor),
+            greaterThanOrEqualTo(4.5),
+          );
+        });
+      }
+
+      for (final brightness in [Brightness.light, Brightness.dark]) {
+        for (final up in [true, false]) {
+          testWidgets(
+            '🚨 閃色最濃時 $brightness ${up ? '漲' : '跌'}:現價數字對實際底色 ≥ 4.5',
+            (tester) async {
+              Widget card(int id) => buildTestApp(
+                StockCard(
+                  symbol: '2330',
+                  stockName: '測試',
+                  latestClose: 100,
+                  priceChange: up ? 1 : -1,
+                  live: StockCardLive(
+                    flash: LiveQuoteFlash(id: id, up: up),
+                  ),
+                ),
+                brightness: brightness,
+              );
+              await tester.pumpWidget(card(1));
+              await tester.pumpWidget(card(2));
+              await tester.pump();
+
+              final tint =
+                  (tester
+                              .widget<DecoratedBox>(
+                                find.byKey(PriceFlash.tintKey),
+                              )
+                              .decoration
+                          as BoxDecoration)
+                      .color!;
+              final cardColor = tester
+                  .widgetList<Container>(find.byType(Container))
+                  .map((c) => c.decoration)
+                  .whereType<BoxDecoration>()
+                  .firstWhere(
+                    (d) => d.borderRadius == BorderRadius.circular(16),
+                  )
+                  .color!;
+              final textColor = tester
+                  .widget<RichText>(
+                    find.descendant(
+                      of: find.byKey(PriceFlash.tintKey),
+                      matching: find.byType(RichText),
+                    ),
+                  )
+                  .text
+                  .style!
+                  .color!;
+              final composite = ColorContrast.compositeOver(
+                tint.withValues(alpha: 1),
+                cardColor,
+                tint.a,
+              );
+              expect(
+                ColorContrast.ratio(textColor, composite),
+                greaterThanOrEqualTo(4.5),
+              );
+            },
+          );
+        }
+      }
     });
   });
 

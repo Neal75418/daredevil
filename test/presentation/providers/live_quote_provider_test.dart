@@ -770,6 +770,95 @@ void main() {
       });
     });
   });
+
+  group('頁首前置修正(第 1 段延後的 Minor)', () {
+    test('🚨 換日時清掉限流時刻與最後更新時間(App 開著過夜)', () {
+      fakeAsync((async) {
+        var round = 0;
+        final h = _Harness(async, weekdayMorning)
+          ..respond = (exCh, now) async {
+            round++;
+            if (round == 2) return '<!doctype html><html></html>';
+            if (round >= 3) {
+              await Future<void>.delayed(const Duration(seconds: 5));
+              throw const _NetworkDown();
+            }
+            return _tradeEach(exCh, now);
+          };
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 16)); // 1 成功、16 限流
+        expect(h.state.lastRespondedAt, isNotNull);
+        expect(h.state.rateLimitedUntil, isNotNull);
+
+        h.jump = const Duration(hours: 23); // 10/7 09:01:17
+        h.elapse(const Duration(seconds: 1)); // 隔天第一輪還在路上
+        expect(h.state.rateLimitedUntil, isNull, reason: '昨天的限流不帶到今天');
+        expect(h.state.lastRespondedAt, isNull, reason: '「最後更新」不可是昨天');
+        h.dispose();
+      });
+    });
+
+    test('🚨 限流後已沒有要抓的(收盤後畫面都已有今天正式資料)→ 不對外顯示限流', () {
+      fakeAsync((async) {
+        final h = _Harness(async, afterCloseStart)
+          ..respond = (_, _) async => '<!doctype html><html></html>';
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 2));
+        expect(h.state.rateLimitedUntil, isNotNull);
+
+        h.center.register('A', const [
+          LiveQuoteRegistration(
+            symbol: '2330',
+            market: MarketCode.twse,
+            hasOfficialToday: true,
+          ),
+        ]);
+        h.elapse(const Duration(seconds: 1));
+        expect(h.state.rateLimitedUntil, isNull);
+        h.dispose();
+      });
+    });
+
+    test('🚨 限流暫停期間不判網路暫停(頁首只說限流)', () {
+      fakeAsync((async) {
+        final h = _Harness(async, weekdayMorning)
+          ..respond = (_, _) async => '<!doctype html><html></html>';
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(minutes: 3));
+        expect(h.state.rateLimitedUntil, isNotNull);
+        expect(h.state.stalled, isFalse);
+        h.dispose();
+      });
+    });
+
+    test('🚨 請求跨午夜、回應比下一拍早到 → 照樣換日,昨天的暫停計時不帶到隔天開盤', () {
+      fakeAsync((async) {
+        // 拍子落在每秒 .900:23:59:59.900 送出的請求在 00:00:00.100 回來,
+        // 比 00:00:00.900 那一拍早——換日先發生在套用結果的時候
+        final h = _Harness(async, DateTime(2026, 10, 6, 23, 58, 57, 900))
+          ..respond = (_, _) async {
+            await Future<void>.delayed(const Duration(milliseconds: 200));
+            throw const _NetworkDown();
+          };
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 63));
+        expect(
+          [for (final r in h.requests) r.at],
+          [
+            DateTime(2026, 10, 6, 23, 58, 58, 900),
+            DateTime(2026, 10, 6, 23, 59, 59, 900),
+          ],
+          reason: '前提:第 2 個請求跨午夜',
+        );
+
+        h.jump = const Duration(hours: 9, seconds: 20); // 10/7 09:00:21.9 起
+        h.elapse(const Duration(seconds: 3));
+        expect(h.requests.length, greaterThan(2), reason: '開盤後照常抓');
+        expect(h.state.stalled, isFalse, reason: '開盤才 2 秒,不可帶著昨晚的 61 秒');
+        h.dispose();
+      });
+    });
+  });
 }
 
 class _Clock implements AppClock {

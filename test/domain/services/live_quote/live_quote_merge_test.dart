@@ -119,4 +119,26 @@ void main() {
     expect(m.price, isNull);
     expect(m.live, isNull);
   });
+
+  test('MergedPrice.changePercent:以 previousClose 計;沒有昨收為 null', () {
+    final m = LiveQuoteMerge.merge(
+      official: official(DateTime(2026, 10, 5), 100),
+      live: live(price: 102),
+      now: morning,
+    );
+    expect(m.changePercent, closeTo(2.0, 1e-9));
+    final none = LiveQuoteMerge.merge(official: null, live: null, now: morning);
+    expect(none.changePercent, isNull);
+  });
+
+  test('OfficialPrice 值相等(讓 provider 的 select 不因新實例而重算)', () {
+    expect(
+      official(DateTime(2026, 10, 5), 100, change: 1),
+      official(DateTime(2026, 10, 5), 100, change: 1),
+    );
+    expect(
+      official(DateTime(2026, 10, 5), 100, change: 1),
+      isNot(official(DateTime(2026, 10, 5), 100, change: 2)),
+    );
+  });
 }

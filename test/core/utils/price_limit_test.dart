@@ -70,4 +70,67 @@ void main() {
       });
     });
   });
+
+  group('statusOf(畫面上所有漲跌停標示的唯一判斷)', () {
+    test('盤後:以漲跌幅推算,推算不出鎖住', () {
+      expect(
+        PriceLimit.statusOf(changePercent: 9.85),
+        PriceLimitStatus.limitUp,
+      );
+      expect(
+        PriceLimit.statusOf(changePercent: -9.85),
+        PriceLimitStatus.limitDown,
+      );
+      expect(PriceLimit.statusOf(changePercent: 9.84), PriceLimitStatus.none);
+      expect(PriceLimit.statusOf(changePercent: null), PriceLimitStatus.none);
+    });
+
+    test('🚨 盤中有交易所漲跌停價:低價股差一檔(40→43.95,+9.875%)不判漲停', () {
+      expect(
+        PriceLimit.statusOf(
+          changePercent: 9.875,
+          price: 43.95,
+          limitUp: 44.0,
+          limitDown: 36.0,
+        ),
+        PriceLimitStatus.none,
+        reason: '推算會誤判成漲停',
+      );
+      expect(
+        PriceLimit.statusOf(
+          changePercent: 10.0,
+          price: 44.0,
+          limitUp: 44.0,
+          limitDown: 36.0,
+        ),
+        PriceLimitStatus.limitUp,
+      );
+    });
+
+    test('🚨 鎖住加「鎖」;跌停鏡像', () {
+      expect(
+        PriceLimit.statusOf(
+          changePercent: 10.0,
+          price: 44.0,
+          limitUp: 44.0,
+          limitDown: 36.0,
+          limitUpLocked: true,
+        ),
+        PriceLimitStatus.limitUpLocked,
+      );
+      expect(
+        PriceLimit.statusOf(
+          changePercent: -10.0,
+          price: 36.0,
+          limitUp: 44.0,
+          limitDown: 36.0,
+          limitDownLocked: true,
+        ),
+        PriceLimitStatus.limitDownLocked,
+      );
+      expect(PriceLimitStatus.limitUpLocked.isUp, isTrue);
+      expect(PriceLimitStatus.limitDownLocked.isDown, isTrue);
+      expect(PriceLimitStatus.limitUp.isLocked, isFalse);
+    });
+  });
 }

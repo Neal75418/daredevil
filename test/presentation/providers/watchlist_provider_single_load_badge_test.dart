@@ -138,5 +138,22 @@ void main() {
       final item = container.read(watchlistProvider).items.single;
       expect(item.warningType, WarningBadgeType.disposal);
     });
+
+    test('🚨 單筆載入(新增/復原)同樣帶出價格日期與漲跌價差', () async {
+      when(() => mockDb.getLatestPrice('2330')).thenAnswer(
+        (_) async => DailyPriceEntry(
+          symbol: '2330',
+          date: DateTime(2026, 7, 22),
+          close: 1000,
+          priceChange: -5,
+        ),
+      );
+      final container = buildContainer(showBadges: true);
+      await container.read(watchlistProvider.notifier).addStock('2330');
+
+      final row = container.read(watchlistProvider).itemOf('2330')!;
+      expect(row.priceDate, DateTime(2026, 7, 22));
+      expect(row.priceChangeAmount, -5);
+    });
   });
 }

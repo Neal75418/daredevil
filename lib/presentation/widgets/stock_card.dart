@@ -14,6 +14,7 @@ import 'package:daredevil/core/constants/reason_type.dart';
 import 'package:daredevil/presentation/widgets/reason_tags.dart';
 import 'package:daredevil/presentation/widgets/risk_badge_cluster.dart';
 import 'package:daredevil/presentation/widgets/score_tier_badge.dart';
+import 'package:daredevil/presentation/widgets/stock_card_live.dart';
 import 'package:daredevil/presentation/widgets/stock_card_price.dart';
 import 'package:daredevil/presentation/widgets/stock_card_sparkline.dart';
 import 'package:daredevil/presentation/widgets/warning_badge.dart';
@@ -49,6 +50,7 @@ class StockCard extends StatefulWidget {
     this.warningType,
     this.warningReasons = const [],
     this.showLimitMarkers = true,
+    this.live,
   });
 
   final String symbol;
@@ -93,6 +95,9 @@ class StockCard extends StatefulWidget {
   /// 是否顯示漲跌停標記
   final bool showLimitMarkers;
 
+  /// 盤中即時報價(自選清單才傳;null = 盤後行為)
+  final StockCardLive? live;
+
   @override
   State<StockCard> createState() => _StockCardState();
 }
@@ -107,6 +112,20 @@ class _StockCardState extends State<StockCard> {
     _cachedSemanticLabel = null;
   }
 
+  /// 漲跌停狀態——語意標籤、名稱列徽章、價格區塊三處共用
+  PriceLimitStatus get _limitStatus {
+    if (!widget.showLimitMarkers) return PriceLimitStatus.none;
+    final live = widget.live;
+    return PriceLimit.statusOf(
+      changePercent: widget.priceChange,
+      price: widget.latestClose,
+      limitUp: live?.limitUp,
+      limitDown: live?.limitDown,
+      limitUpLocked: live?.limitUpLocked ?? false,
+      limitDownLocked: live?.limitDownLocked ?? false,
+    );
+  }
+
   /// 建立無障礙語意標籤
   String _buildSemanticLabel() {
     final parts = <String>[];
@@ -117,14 +136,11 @@ class _StockCardState extends State<StockCard> {
     }
     if (widget.priceChange != null) {
       parts.add(S.accessibilityPriceChange(widget.priceChange!));
-      if (widget.showLimitMarkers) {
-        if (PriceLimit.isLimitUp(widget.priceChange)) {
-          parts.add(S.priceLimitUp);
-        } else if (PriceLimit.isLimitDown(widget.priceChange)) {
-          parts.add(S.priceLimitDown);
-        }
-      }
+      final limit = _limitStatus;
+      if (limit != PriceLimitStatus.none) parts.add(S.priceLimitLabel(limit));
     }
+    final caption = widget.live?.caption;
+    if (caption != null) parts.add(caption);
     if (widget.score != null && widget.score! > 0) {
       parts.add(S.accessibilityScore(widget.score!.toInt()));
     }
@@ -233,7 +249,8 @@ class _StockCardState extends State<StockCard> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     _buildHeader(theme),
-                                    if (widget.stockName != null) ...[
+                                    if (widget.stockName != null ||
+                                        widget.live?.caption != null) ...[
                                       const SizedBox(
                                         height: DesignTokens.spacing2,
                                       ),
@@ -280,7 +297,9 @@ class _StockCardState extends State<StockCard> {
                               StockCardPriceSection(
                                 latestClose: widget.latestClose,
                                 priceChange: widget.priceChange,
-                                showLimitMarkers: widget.showLimitMarkers,
+                                limitStatus: _limitStatus,
+                                flash: widget.live?.flash,
+                                flashEnabled: widget.live?.flashEnabled ?? true,
                                 priceColor: priceColor,
                                 compact: isCompactPrice,
                               ),
@@ -429,23 +448,23 @@ class _StockCardState extends State<StockCard> {
 
   Widget _buildStockName(ThemeData theme) {
     final marketLabel = widget.market == MarketCode.tpex ? '櫃' : null;
-    final isLimitUp =
-        widget.showLimitMarkers && PriceLimit.isLimitUp(widget.priceChange);
-    final isLimitDown =
-        widget.showLimitMarkers && PriceLimit.isLimitDown(widget.priceChange);
+    final limit = _limitStatus;
+    final name = widget.stockName;
+    final caption = widget.live?.caption;
 
     return Row(
       children: [
-        Flexible(
-          child: Text(
-            widget.stockName!,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+        if (name != null)
+          Flexible(
+            child: Text(
+              name,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-        ),
         if (marketLabel != null) ...[
           const SizedBox(width: 4),
           Container(
@@ -464,25 +483,41 @@ class _StockCardState extends State<StockCard> {
             ),
           ),
         ],
-        // 漲停/跌停醒目標籤
-        if (isLimitUp || isLimitDown) ...[
+        // 漲停/跌停醒目標籤(鎖住加「鎖」)
+        if (limit != PriceLimitStatus.none) ...[
           const SizedBox(width: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
             decoration: BoxDecoration(
               color: AppTheme.getPriceColor(
-                widget.priceChange,
+                limit.isUp ? 1 : -1,
                 Theme.of(context).brightness,
               ),
               borderRadius: BorderRadius.circular(DesignTokens.radiusXs),
             ),
             child: Text(
-              isLimitUp ? S.priceLimitUp : S.priceLimitDown,
+              S.priceLimitLabel(limit),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: Colors.white,
                 fontSize: DesignTokens.fontSizeXs,
                 fontWeight: FontWeight.w700,
               ),
+            ),
+          ),
+        ],
+        // 即時報價的例外標示(報價暫停／無報價／最後報價):放在名稱列,
+        // 不增加卡片高度(格狀模式的卡片是固定高度)
+        if (caption != null) ...[
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              caption,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: DesignTokens.fontSizeXs,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

@@ -49,6 +49,9 @@ class FakeSettingsNotifier extends SettingsNotifier {
   void setShowROCYear(bool value) {}
 
   @override
+  void setPriceFlash(bool value) {}
+
+  @override
   void setCacheDurationMinutes(int minutes) {}
 
   @override
