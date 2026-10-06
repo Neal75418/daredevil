@@ -176,7 +176,6 @@ class StockDetailState {
     this.hasDataMismatch = false,
     this.reasons = const [],
     this.aiSummary,
-    this.recentNews = const [],
   });
 
   final StockPriceState price;
@@ -199,7 +198,6 @@ class StockDetailState {
 
   final List<DailyReasonEntry> reasons;
   final StockSummary? aiSummary;
-  final List<NewsItemEntry> recentNews;
 
   // 便捷存取 — 減少 header / tab 的鏈式存取
 
@@ -248,7 +246,6 @@ class StockDetailState {
     bool? hasDataMismatch,
     List<DailyReasonEntry>? reasons,
     StockSummary? aiSummary,
-    List<NewsItemEntry>? recentNews,
   }) {
     // 僅在子狀態欄位有更新時才建立新物件
     final needsPriceUpdate =
@@ -331,7 +328,6 @@ class StockDetailState {
       hasDataMismatch: hasDataMismatch ?? this.hasDataMismatch,
       reasons: reasons ?? this.reasons,
       aiSummary: aiSummary ?? this.aiSummary,
-      recentNews: recentNews ?? this.recentNews,
     );
   }
 }

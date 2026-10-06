@@ -23,6 +23,7 @@ import 'package:daredevil/presentation/screens/stock_detail/tabs/alerts_tab.dart
 import 'package:daredevil/presentation/screens/stock_detail/tabs/chip/chip_tab.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/fundamentals/fundamentals_tab.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/insider_tab.dart';
+import 'package:daredevil/presentation/screens/stock_detail/tabs/news_tab.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/technical/technical_tab.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/ai_summary_card.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/stock_detail_header.dart';
@@ -60,7 +61,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
   void initState() {
     super.initState();
     _symbol = widget.symbol;
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     Future.microtask(() {
       final notifier = ref.read(stockDetailProvider(widget.symbol).notifier);
       notifier.loadData();
@@ -429,6 +430,10 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
                         key: ValueKey('fund-$_symbol'),
                         symbol: _symbol,
                       ),
+                      StockNewsTab(
+                        key: ValueKey('news-$_symbol'),
+                        symbol: _symbol,
+                      ),
                       AlertsTab(
                         key: ValueKey('alerts-$_symbol'),
                         symbol: _symbol,
@@ -483,6 +488,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
           Tab(text: 'stockDetail.tabChip'.tr()),
           Tab(text: 'stockDetail.tabInsider'.tr()),
           Tab(text: 'stockDetail.tabFundamentals'.tr()),
+          Tab(text: 'stockDetail.tabNews'.tr()),
           Tab(text: 'stockDetail.tabAlerts'.tr()),
         ],
       ),

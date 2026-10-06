@@ -271,70 +271,79 @@ void main() {
 
   group('syncMaterialInfo', () {
     late MockTwseClient client;
-    late MockAppDatabase db2;
+    late AppDatabase db;
     late NewsRepository repo2;
 
-    TwseMaterialInfo mat({
-      required String code,
-      String subject = '公告',
-      String desc = '',
-    }) {
+    TwseMaterialInfo mat({required String code, String subject = '公告'}) {
       return TwseMaterialInfo.fromJson({
         '發言日期': '1150723',
         '發言時間': '151812',
         '公司代號': code,
         '公司名稱': 'X',
         '主旨 ': subject,
-        '說明': desc,
+        '說明': '',
       });
     }
 
-    setUp(() {
+    setUp(() async {
       client = MockTwseClient();
-      db2 = MockAppDatabase();
+      db = AppDatabase.forTesting();
+      await db.upsertStocks([
+        for (final s in ['9901', '9902', '9903', '9904'])
+          StockMasterCompanion.insert(symbol: s, name: '測$s', market: 'TWSE'),
+      ]);
       repo2 = NewsRepository(
-        database: db2,
+        database: db,
         rssParser: mockRssParser,
         twseClient: client,
       );
     });
 
-    test('過濾自選∪持倉、穩定 id、寫入 news_item 與股票關聯', () async {
-      when(() => db2.getWatchlist()).thenAnswer(
-        (_) async => [
-          WatchlistEntry(symbol: '1537', createdAt: DateTime(2026, 1, 1)),
-        ],
+    tearDown(() => db.close());
+
+    test('只收自選∪持股（數量 > 0）、穩定 id、寫入新聞與股票關聯', () async {
+      await db.addToWatchlist('9901');
+      await db.upsertPortfolioPosition(
+        PortfolioPositionCompanion.insert(
+          symbol: '9902',
+          quantity: const Value(1000),
+        ),
       );
-      when(() => db2.getPortfolioPositions()).thenAnswer((_) async => []);
+      await db.upsertPortfolioPosition(
+        PortfolioPositionCompanion.insert(
+          symbol: '9903',
+          quantity: const Value(0),
+        ),
+      );
       when(() => client.getMaterialInformation()).thenAnswer(
         (_) async => [
-          mat(code: '1537', subject: '受邀參加法人說明會'),
-          mat(code: '9999', subject: '非自選公告'),
+          mat(code: '9901', subject: '受邀參加法人說明會'),
+          mat(code: '9902', subject: '董事會決議'),
+          mat(code: '9903', subject: '已清倉的公告'),
+          mat(code: '9904', subject: '非自選公告'),
         ],
       );
-      final inserted = <NewsItemCompanion>[];
-      final mapped = <NewsStockMapCompanion>[];
-      when(() => db2.insertNewsWithMappings(any(), any())).thenAnswer((
-        inv,
-      ) async {
-        inserted.addAll(inv.positionalArguments[0] as List<NewsItemCompanion>);
-        mapped.addAll(
-          inv.positionalArguments[1] as List<NewsStockMapCompanion>,
-        );
-      });
 
       final count = await repo2.syncMaterialInfo();
 
-      expect(count, 1);
-      expect(inserted, hasLength(1));
-      expect(inserted.first.id.value, 'mops_1537_1150723_151812');
-      expect(inserted.first.source.value, '重大訊息');
-      expect(inserted.first.title.value, contains('1537'));
-      expect(mapped.single.symbol.value, '1537');
+      expect(count, 2);
+      final items = await db.select(db.newsItem).get();
+      expect(items.map((n) => n.id).toSet(), {
+        'mops_9901_1150723_151812',
+        'mops_9902_1150723_151812',
+      });
+      expect(items.every((n) => n.source == '重大訊息'), isTrue);
+      final maps = await db.select(db.newsStockMap).get();
+      expect(maps.map((m) => m.symbol).toSet(), {'9901', '9902'});
+    });
+
+    test('沒有自選也沒有持股時不打 API、回 0', () async {
+      expect(await repo2.syncMaterialInfo(), 0);
+      verifyNever(() => client.getMaterialInformation());
     });
 
     test('未注入 client 回 0', () async {
-      final bare = NewsRepository(database: db2, rssParser: mockRssParser);
+      final bare = NewsRepository(database: db, rssParser: mockRssParser);
       expect(await bare.syncMaterialInfo(), 0);
     });
   });

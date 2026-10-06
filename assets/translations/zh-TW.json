@@ -119,7 +119,12 @@
     "articlesCount": "{} 篇",
     "sourcesCount": "{} 源",
     "prevWeekCount": "前三週共 {} 篇",
-    "heatEmpty": "近期新聞不足，無法分析熱度"
+    "heatEmpty": "近期新聞不足，無法分析熱度",
+    "fetchAllFailed": "新聞來源都抓取失敗，顯示的是先前的新聞",
+    "fetchPartialFailed": "有 {count} 個新聞來源抓取失敗",
+    "filterMine": "自選",
+    "mineEmptyNoStocks": "還沒有自選股或持股",
+    "mineEmptyNoNews": "近 7 天沒有自選股或持股的相關新聞"
   },
   "market": {
     "twse": "市",
@@ -446,6 +451,7 @@
     "tabTechnical": "技術",
     "tabChip": "籌碼",
     "tabFundamentals": "基本面",
+    "tabNews": "新聞",
     "tabAlerts": "提醒",
     "otcBadge": "櫃",
     "noTechnicalData": "暫無技術資料",
@@ -1697,5 +1703,12 @@
     "point4": "任何投資決定與盈虧，由你自行判斷並承擔。",
     "accept": "我了解並同意",
     "short": "訊號由規則自動產生，僅供參考，不構成投資建議。"
+  },
+  "stockNews": {
+    "noteMatched": "依標題中的股票代號與公司名稱比對，可能包含同名詞；公告只收上市公司的自選與持股",
+    "noteExcluded": "這檔簡稱是常見詞，只依代號比對；公告只收上市公司的自選與持股",
+    "noteNotListed": "這檔不在目前的股票清單，只依代號比對；公告只收上市公司的自選與持股",
+    "empty": "近 30 天沒有找到這檔的新聞",
+    "refresh": "重新整理新聞"
   }
 }

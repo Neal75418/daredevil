@@ -70,6 +70,18 @@ class S {
       'news.hoursAgo'.tr(namedArgs: {'hours': hours.toString()});
   static String newsDaysAgo(int days) =>
       'news.daysAgo'.tr(namedArgs: {'days': days.toString()});
+  static String get newsFetchAllFailed => 'news.fetchAllFailed'.tr();
+  static String newsFetchPartialFailed(int count) =>
+      'news.fetchPartialFailed'.tr(namedArgs: {'count': count.toString()});
+  static String get newsFilterMine => 'news.filterMine'.tr();
+  static String get newsMineEmptyNoStocks => 'news.mineEmptyNoStocks'.tr();
+  static String get newsMineEmptyNoNews => 'news.mineEmptyNoNews'.tr();
+  static String get stockDetailTabNews => 'stockDetail.tabNews'.tr();
+  static String get stockNewsNoteMatched => 'stockNews.noteMatched'.tr();
+  static String get stockNewsNoteExcluded => 'stockNews.noteExcluded'.tr();
+  static String get stockNewsNoteNotListed => 'stockNews.noteNotListed'.tr();
+  static String get stockNewsEmpty => 'stockNews.empty'.tr();
+  static String get stockNewsRefresh => 'stockNews.refresh'.tr();
 
   // ==================================================
   // 自選股頁面

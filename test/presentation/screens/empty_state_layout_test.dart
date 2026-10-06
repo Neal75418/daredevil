@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/presentation/providers/industry_eps_provider.dart';
+import 'package:daredevil/presentation/providers/news_fetch_provider.dart';
 import 'package:daredevil/presentation/providers/news_provider.dart';
 import 'package:daredevil/presentation/providers/short_sell_ranking_provider.dart';
 import 'package:daredevil/presentation/screens/industry/industry_eps_screen.dart';
@@ -73,7 +74,10 @@ class _FakeNewsNotifier extends NewsNotifier {
 
   // 下拉走 refresh()；覆寫以免測試打到真的 RSS 同步
   @override
-  Future<void> refresh({int days = 7}) async => refreshCalls++;
+  Future<NewsFetchOutcome?> refresh({int days = 7}) async {
+    refreshCalls++;
+    return null;
+  }
 }
 
 // 可下拉重新整理的空狀態：小螢幕或放大字級時不得溢位，且仍可下拉觸發

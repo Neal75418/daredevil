@@ -30,6 +30,34 @@ mixin NewsDaoMixin on $AppDatabase {
     return grouped;
   }
 
+  /// 個股新聞的候選：[since] 之後、代號對應到 [symbol] 或標題含 [names] 任一者，新到舊
+  ///
+  /// 標題比對用 `instr()`（分大小寫、不吃 `%`／`_` 萬用字元）。時間比較由
+  /// drift 換成 `julianday()` 兩邊比（DateTime 以文字儲存時的行為），截止點
+  /// 傳本地或 UTC 時間結果相同。
+  Future<List<NewsItemEntry>> getNewsCandidatesForStock({
+    required String symbol,
+    required List<String> names,
+    required DateTime since,
+  }) {
+    final mappedIds = selectOnly(newsStockMap)
+      ..addColumns([newsStockMap.newsId])
+      ..where(newsStockMap.symbol.equals(symbol));
+    Expression<bool> matches = newsItem.id.isInQuery(mappedIds);
+    for (final name in names) {
+      matches =
+          matches |
+          FunctionCallExpression<int>('instr', [
+            newsItem.title,
+            Variable<String>(name),
+          ]).isBiggerThanValue(0);
+    }
+    return (select(newsItem)
+          ..where((t) => t.publishedAt.isBiggerOrEqualValue(since) & matches)
+          ..orderBy([(t) => OrderingTerm.desc(t.publishedAt)]))
+        .get();
+  }
+
   /// 讀取所有已存的重大訊息公告（source=重大訊息）＋其關聯股票。
   ///
   /// 回傳 (symbol, text)：text＝標題＋內文合併，供 investorConferenceDate

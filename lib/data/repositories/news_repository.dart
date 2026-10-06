@@ -111,12 +111,7 @@ class NewsRepository implements INewsRepository {
     final client = _twseClient;
     if (client == null) return 0;
 
-    final watchlistEntries = await _db.getWatchlist();
-    final portfolioPositions = await _db.getPortfolioPositions();
-    final symbols = <String>{
-      ...watchlistEntries.map((e) => e.symbol),
-      ...portfolioPositions.map((e) => e.symbol),
-    };
+    final symbols = await _db.getWatchlistAndHoldingSymbols();
     if (symbols.isEmpty) return 0;
 
     final rows = await client.getMaterialInformation();

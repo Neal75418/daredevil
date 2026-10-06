@@ -6,6 +6,7 @@ import 'package:daredevil/core/constants/scoring_mode.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/news_repository.dart';
 import 'package:daredevil/presentation/providers/mode_recommendation_provider.dart';
+import 'package:daredevil/presentation/providers/news_fetch_provider.dart';
 import 'package:daredevil/presentation/providers/news_heat_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 
@@ -167,5 +168,19 @@ void main() {
     container.invalidate(newsHeatProvider);
     final dense = await container.read(newsHeatProvider.future);
     expect(dense.surgeReliable, isTrue);
+  });
+
+  test('新聞資料版本遞增後重算熱度', () async {
+    final sub = container.listen(newsHeatProvider, (_, _) {});
+    addTearDown(sub.close);
+    await container.read(newsHeatProvider.future);
+    clearInteractions(mockNewsRepo);
+
+    container.read(newsDataVersionProvider.notifier).bump();
+    await container.read(newsHeatProvider.future);
+
+    verify(
+      () => mockNewsRepo.getRecentNews(days: any(named: 'days')),
+    ).called(1);
   });
 }

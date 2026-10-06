@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/services/news/heat_calculator.dart';
+import 'package:daredevil/presentation/providers/news_fetch_provider.dart';
 import 'package:daredevil/presentation/providers/news_heat_provider.dart';
 import 'package:daredevil/presentation/providers/news_provider.dart';
 import 'package:daredevil/presentation/screens/news/heat_analysis_tab.dart';
@@ -20,15 +24,38 @@ import '../../../helpers/widget_test_helpers.dart';
 
 class FakeNewsNotifier extends NewsNotifier {
   NewsState initialState = NewsState();
+  final calls = <String>[];
+  NewsFetchOutcome? outcome;
+  Set<String>? mySymbolsAfterReload;
 
   @override
   NewsState build() => initialState;
 
   @override
-  Future<void> loadData({int days = 7}) async {}
+  Future<void> loadData({int days = 7}) async => calls.add('load');
 
   @override
-  void setSourceFilter(NewsSource source) {}
+  void setFilter(NewsFilter filter) {
+    calls.add('filter');
+    state = state.copyWith(filter: filter);
+  }
+
+  @override
+  Future<NewsFetchOutcome?> refresh({int days = 7}) async {
+    calls.add('refresh');
+    return outcome;
+  }
+
+  @override
+  void onNewsDataChanged() => calls.add('changed');
+
+  @override
+  Future<void> reloadMySymbols() async {
+    calls.add('reloadMine');
+    if (mySymbolsAfterReload case final s?) {
+      state = state.copyWith(mySymbols: s);
+    }
+  }
 }
 
 // ==========================================
@@ -286,7 +313,10 @@ void main() {
       };
       await tester.pumpWidget(
         buildTestWidget(
-          newsState: NewsState(allNews: newsItems, newsStockMap: newsStockMap),
+          newsState: NewsState(
+            allNews: newsItems,
+            relatedStocksByNewsId: newsStockMap,
+          ),
         ),
       );
       await tester.pump(const Duration(seconds: 1));
@@ -309,7 +339,10 @@ void main() {
       };
       await tester.pumpWidget(
         buildTestWidget(
-          newsState: NewsState(allNews: newsItems, newsStockMap: newsStockMap),
+          newsState: NewsState(
+            allNews: newsItems,
+            relatedStocksByNewsId: newsStockMap,
+          ),
         ),
       );
       await tester.pump(const Duration(seconds: 1));
@@ -354,6 +387,236 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(HeatAnalysisTab), findsOneWidget);
+    });
+    testWidgets('篩選列有「自選」與則數，排在全部之後', (tester) async {
+      widenViewport(tester);
+      final state = NewsState(
+        allNews: [createNewsItem(id: 'a', publishedAt: DateTime.now())],
+        relatedStocksByNewsId: const {
+          'a': ['9901'],
+        },
+        mySymbols: const {'9901'},
+      );
+      await tester.pumpWidget(buildTestWidget(newsState: state));
+      await tester.pump(const Duration(seconds: 1));
+
+      final labels = tester
+          .widgetList<FilterChip>(find.byType(FilterChip))
+          .map((c) => ((c.label as Text).data ?? ''))
+          .toList();
+      expect(labels[0], startsWith('empty.sourceAll'));
+      expect(labels[1], 'news.filterMine (1)');
+    });
+
+    testWidgets('自選 0 則也顯示「自選」', (tester) async {
+      widenViewport(tester);
+      final state = NewsState(
+        allNews: [createNewsItem(id: 'a', publishedAt: DateTime.now())],
+      );
+      await tester.pumpWidget(buildTestWidget(newsState: state));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('news.filterMine (0)'), findsOneWidget);
+    });
+
+    testWidgets('點「自選」只列自選相關新聞', (tester) async {
+      widenViewport(tester);
+      final now = DateTime.now();
+      final state = NewsState(
+        allNews: [
+          createNewsItem(id: 'a', title: '自選那則', publishedAt: now),
+          createNewsItem(id: 'b', title: '別檔那則', publishedAt: now),
+        ],
+        relatedStocksByNewsId: const {
+          'a': ['9901'],
+          'b': ['9902'],
+        },
+        mySymbols: const {'9901'},
+      );
+      await tester.pumpWidget(buildTestWidget(newsState: state));
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.text('news.filterMine (1)'));
+      await tester.pump();
+
+      expect(find.text('自選那則'), findsOneWidget);
+      expect(find.text('別檔那則'), findsNothing);
+    });
+
+    testWidgets('自選篩選、沒有自選也沒有持股：顯示還沒有自選股或持股', (tester) async {
+      widenViewport(tester);
+      final state = NewsState(
+        allNews: [createNewsItem(id: 'a', publishedAt: DateTime.now())],
+        filter: NewsFilter.mine,
+      );
+      await tester.pumpWidget(buildTestWidget(newsState: state));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('news.mineEmptyNoStocks'), findsOneWidget);
+    });
+
+    testWidgets('自選篩選、有自選但沒新聞：顯示近 7 天沒有相關新聞', (tester) async {
+      widenViewport(tester);
+      final state = NewsState(
+        allNews: [createNewsItem(id: 'a', publishedAt: DateTime.now())],
+        mySymbols: const {'9901'},
+        filter: NewsFilter.mine,
+      );
+      await tester.pumpWidget(buildTestWidget(newsState: state));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('news.mineEmptyNoNews'), findsOneWidget);
+    });
+
+    testWidgets('自選篩選下，自選股的標籤排在 +N 之前看得到', (tester) async {
+      widenViewport(tester);
+      final state = NewsState(
+        allNews: [createNewsItem(id: 'a', publishedAt: DateTime.now())],
+        relatedStocksByNewsId: const {
+          'a': ['9902', '9903', '9904', '9901'],
+        },
+        mySymbols: const {'9901'},
+        filter: NewsFilter.mine,
+      );
+      await tester.pumpWidget(buildTestWidget(newsState: state));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('9901'), findsOneWidget);
+      expect(find.text('+1'), findsOneWidget);
+    });
+
+    testWidgets('從個股頁返回後重讀自選；移除最後一檔後自選篩選顯示空', (tester) async {
+      widenViewport(tester);
+      final notifier = FakeNewsNotifier()
+        ..initialState = NewsState(
+          allNews: [createNewsItem(id: 'a', publishedAt: DateTime.now())],
+          relatedStocksByNewsId: const {
+            'a': ['9901'],
+          },
+          mySymbols: const {'9901'},
+          filter: NewsFilter.mine,
+        )
+        ..mySymbolsAfterReload = const {};
+      final router = GoRouter(
+        initialLocation: '/news',
+        routes: [
+          GoRoute(path: '/news', builder: (_, _) => const NewsScreen()),
+          GoRoute(
+            path: '/stock/:symbol',
+            builder: (_, _) => const Scaffold(body: Text('detail')),
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        buildProviderTestApp(
+          const SizedBox(),
+          router: router,
+          overrides: [newsProvider.overrideWith(() => notifier)],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.text('9901'));
+      await tester.pumpAndSettle();
+      expect(find.text('detail'), findsOneWidget);
+      router.pop();
+      // 空狀態圖示有循環動畫，pumpAndSettle 等不到靜止
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(notifier.calls, contains('reloadMine'));
+      expect(find.text('news.mineEmptyNoStocks'), findsOneWidget);
+    });
+
+    testWidgets('從熱度分頁點進個股頁、返回後也重讀自選', (tester) async {
+      widenViewport(tester);
+      final notifier = FakeNewsNotifier();
+      final router = GoRouter(
+        initialLocation: '/news',
+        routes: [
+          GoRoute(path: '/news', builder: (_, _) => const NewsScreen()),
+          GoRoute(
+            path: '/stock/:symbol',
+            builder: (_, _) => const Scaffold(body: Text('detail')),
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        buildProviderTestApp(
+          const SizedBox(),
+          router: router,
+          overrides: [
+            newsProvider.overrideWith(() => notifier),
+            newsHeatProvider.overrideWith(
+              (ref) async => const NewsHeatAnalysis(
+                themes: [],
+                stocks: [
+                  StockHeat(
+                    symbol: '9901',
+                    mentions7d: 5,
+                    mentionsPrev21d: 1,
+                    isSurging: false,
+                    distinctSources7d: 2,
+                    hasRiskNews: false,
+                    isNewEntrant: false,
+                    surgeRatio: 1.0,
+                  ),
+                ],
+                stockNames: {'9901': '甲乙'},
+                modeBySymbol: {},
+              ),
+            ),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('news.heatTab'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('甲乙')); // 焦點股列的股名
+      await tester.pumpAndSettle();
+      expect(find.text('detail'), findsOneWidget);
+      router.pop();
+      await tester.pumpAndSettle();
+
+      expect(notifier.calls, contains('reloadMine'));
+    });
+
+    testWidgets('新聞資料版本遞增時通知 notifier', (tester) async {
+      widenViewport(tester);
+      final notifier = FakeNewsNotifier();
+      await tester.pumpWidget(
+        buildProviderTestApp(
+          const NewsScreen(),
+          overrides: [newsProvider.overrideWith(() => notifier)],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      ProviderScope.containerOf(
+        tester.element(find.byType(NewsScreen)),
+      ).read(newsDataVersionProvider.notifier).bump();
+      await tester.pump();
+
+      expect(notifier.calls, contains('changed'));
+    });
+
+    testWidgets('重新整理全部來源失敗時跳錯誤提示', (tester) async {
+      widenViewport(tester);
+      final notifier = FakeNewsNotifier()
+        ..outcome = const NewsFetchOutcome(totalSources: 5, failedSources: 5);
+      await tester.pumpWidget(
+        buildProviderTestApp(
+          const NewsScreen(),
+          overrides: [newsProvider.overrideWith(() => notifier)],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.byIcon(Icons.refresh));
+      await tester.pump();
+
+      expect(find.text('news.fetchAllFailed'), findsOneWidget);
     });
   });
 }

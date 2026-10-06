@@ -105,7 +105,6 @@ void main() {
       expect(state.hasDataMismatch, isFalse);
       expect(state.reasons, isEmpty);
       expect(state.aiSummary, isNull);
-      expect(state.recentNews, isEmpty);
     });
 
     // Convenience getters

@@ -11,6 +11,7 @@ import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/services/news/heat_calculator.dart';
 import 'package:daredevil/presentation/providers/news_heat_provider.dart';
+import 'package:daredevil/presentation/providers/news_provider.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/warning_badge.dart';
 import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
@@ -406,7 +407,10 @@ class _ModeBadge extends StatelessWidget {
   }
 }
 
-void _openStockDetail(BuildContext context, String symbol) {
+Future<void> _openStockDetail(BuildContext context, String symbol) async {
   // 照 news_screen.dart 既有慣例（AppRoutes.stockDetail + context.push）。
-  context.push(AppRoutes.stockDetail(symbol));
+  // 返回後重讀自選∪持股：個股頁可能加入或移除了自選，新聞頁「自選」篩選要跟上
+  final container = ProviderScope.containerOf(context, listen: false);
+  await context.push(AppRoutes.stockDetail(symbol));
+  await container.read(newsProvider.notifier).reloadMySymbols();
 }

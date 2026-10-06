@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/domain/services/news/stock_name_matcher.dart';
 import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
@@ -13,6 +17,7 @@ import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/providers/stock_browsing_context_provider.dart';
 import 'package:daredevil/presentation/providers/stock_detail_provider.dart';
+import 'package:daredevil/presentation/providers/stock_news_provider.dart';
 import 'package:daredevil/presentation/screens/stock_detail/stock_detail_screen.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
@@ -133,6 +138,7 @@ void main() {
     _LiveCenter? liveCenter,
     DateTime? now,
     AppClock? clock,
+    List<Override> extraOverrides = const [],
   }) {
     final stock = stockState ?? const StockDetailState();
     final alert = alertState ?? const PriceAlertState();
@@ -165,6 +171,7 @@ void main() {
           appClockProvider.overrideWithValue(clock)
         else if (now != null)
           appClockProvider.overrideWithValue(_Clock(now)),
+        ...extraOverrides,
       ],
       brightness: brightness,
       liveQuoteCenter: liveCenter == null ? null : () => liveCenter,
@@ -236,13 +243,26 @@ void main() {
       expect(find.byIcon(Icons.star), findsOneWidget);
     });
 
-    testWidgets('shows TabBar with 5 tabs', (tester) async {
+    testWidgets('shows TabBar with 6 tabs', (tester) async {
       widenViewport(tester);
       await tester.pumpWidget(buildTestWidget());
       await tester.pump(const Duration(seconds: 1));
 
       expect(find.byType(TabBar), findsOneWidget);
-      expect(find.byType(Tab), findsNWidgets(5));
+      expect(find.byType(Tab), findsNWidgets(6));
+    });
+
+    testWidgets('新聞分頁在基本面與提醒之間', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump(const Duration(seconds: 1));
+
+      final labels = tester
+          .widgetList<Tab>(find.byType(Tab))
+          .map((t) => t.text)
+          .toList();
+      expect(labels.indexOf('stockDetail.tabNews'), 4);
+      expect(labels.last, 'stockDetail.tabAlerts');
     });
 
     testWidgets('shows NestedScrollView when loaded', (tester) async {
@@ -520,6 +540,52 @@ void main() {
                   as BoxDecoration)
               .color;
       expect(tint, isNull);
+    });
+
+    testWidgets('新聞分頁載入中原地換股：換股後只顯示新股票的新聞', (tester) async {
+      widenViewport(tester);
+      final pending2330 = Completer<StockNews>();
+      NewsItemEntry n(String id) => NewsItemEntry(
+        id: id,
+        source: '鉅亨網',
+        title: '標題$id',
+        url: 'https://example.com/$id',
+        category: 'OTHER',
+        publishedAt: DateTime.now(),
+        fetchedAt: DateTime.now(),
+      );
+      StockNews news(String id) => StockNews(
+        items: [n(id)],
+        otherStocksByNewsId: const {},
+        nameStatus: StockNameStatus.matched,
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          stockState: content,
+          browsingContext: const ['2330', '2317'],
+          extraOverrides: [
+            stockNewsProvider.overrideWith(
+              (ref, s) => s == '2330'
+                  ? pending2330.future
+                  : Future.value(news('2317-only')),
+            ),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('stockDetail.tabNews'));
+      await tester.pump(
+        const Duration(seconds: 1),
+      ); // 2330 仍在載入（shimmer，不可 pumpAndSettle）
+
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      pending2330.complete(news('2330-only'));
+      await tester.pump();
+
+      expect(find.text('標題2317-only'), findsOneWidget);
+      expect(find.text('標題2330-only'), findsNothing);
     });
 
     testWidgets('🚨 App 開著跨過午夜、畫面沒重建 → 登記改成還沒有今天正式資料', (tester) async {

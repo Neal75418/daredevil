@@ -5,23 +5,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/utils/error_display.dart';
-import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/data/database/app_database.dart';
-import 'package:daredevil/presentation/providers/news_heat_provider.dart';
+import 'package:daredevil/presentation/providers/news_fetch_provider.dart';
 import 'package:daredevil/presentation/providers/news_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/screens/news/heat_analysis_tab.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
+import 'package:daredevil/presentation/widgets/news/news_grouping.dart';
+import 'package:daredevil/presentation/widgets/news/news_widgets.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
-import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
-import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 
 /// 新聞畫面 - 顯示近期市場新聞，支援篩選、搜尋與分類
 class NewsScreen extends ConsumerStatefulWidget {
@@ -63,18 +62,26 @@ class _NewsScreenState extends ConsumerState<NewsScreen> {
   }
 
   Future<void> _refresh() async {
-    // 先抓 RSS 再重讀本地（RSS 失敗仍會重讀，見 NewsNotifier.refresh）
-    await ref.read(newsProvider.notifier).refresh();
-    // 熱度分析與全部新聞共用同一份 RSS 資料，重新整理完成後 invalidate
-    // 讓熱度分頁的下次讀取反映新抓的新聞
-    ref.invalidate(newsHeatProvider);
-    // 刷新完成時觸覺回饋
+    // 先抓新聞再重讀本地（抓取失敗仍會重讀，見 NewsNotifier.refresh）；
+    // 熱度分頁監聽新聞資料版本，不必在這裡 invalidate
+    // await 前先取：抓取期間離開新聞頁，提示仍要出現
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+    final outcome = await ref.read(newsProvider.notifier).refresh();
+    if (outcome != null) {
+      showNewsFetchFeedback(messenger, outcome, errorColor: errorColor);
+    }
     HapticFeedback.mediumImpact();
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(newsProvider);
+    // 任何地方抓完新聞（例如個股新聞分頁）都重讀；自己的 refresh 進行中會略過
+    ref.listen(
+      newsDataVersionProvider,
+      (_, _) => ref.read(newsProvider.notifier).onNewsDataChanged(),
+    );
 
     return DefaultTabController(
       length: 2,
@@ -140,13 +147,13 @@ class _NewsScreenState extends ConsumerState<NewsScreen> {
 }
 
 // ==================================================
-// 全部新聞分頁（原 NewsScreen body，邏輯不變）
+// 全部新聞分頁（篩選、清單、返回後重讀自選）
 // ==================================================
 
 class _AllNewsTab extends ConsumerStatefulWidget {
   const _AllNewsTab({required this.onRefresh});
 
-  /// 重新整理回呼（由 NewsScreen 提供，含 RSS 同步 + newsHeatProvider invalidate）
+  /// 重新整理回呼（由 NewsScreen 提供：抓新聞、重讀、顯示抓取結果）
   final Future<void> Function() onRefresh;
 
   @override
@@ -154,143 +161,31 @@ class _AllNewsTab extends ConsumerStatefulWidget {
 }
 
 class _AllNewsTabState extends ConsumerState<_AllNewsTab> {
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null || !{'http', 'https'}.contains(uri.scheme)) {
-      if (mounted) _showOpenLinkError();
-      return;
-    }
-    try {
-      final launched = await canLaunchUrl(uri);
-      if (launched) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        if (mounted) _showOpenLinkError();
-      }
-    } catch (e) {
-      if (mounted) _showOpenLinkError();
-    }
+  /// 返回後重讀自選∪持股：個股頁可能加入或移除了自選，「自選」篩選要跟上
+  Future<void> _openStock(String symbol) async {
+    await context.push(AppRoutes.stockDetail(symbol));
+    if (!mounted) return;
+    await ref.read(newsProvider.notifier).reloadMySymbols();
   }
 
-  void _showOpenLinkError() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(S.newsCannotOpenLink),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Theme.of(context).colorScheme.error,
-      ),
-    );
-  }
+  void _showPreview(NewsItemEntry item, List<String> related) =>
+      showNewsPreviewSheet(
+        context,
+        item: item,
+        relatedStocks: related,
+        onStockTap: _openStock,
+      );
 
-  void _showNewsPreview(NewsItemEntry item, List<String> relatedStocks) {
-    final theme = Theme.of(context);
-
-    showAppBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        minChildSize: 0.3,
-        maxChildSize: 0.85,
-        expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            // 拖曳把手
-            const DragHandle(
-              margin: EdgeInsets.symmetric(vertical: DesignTokens.spacing8),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                controller: scrollController,
-                padding: const EdgeInsets.all(DesignTokens.spacing16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 來源與時間
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: DesignTokens.spacing8,
-                            vertical: DesignTokens.spacing4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.secondaryContainer,
-                            borderRadius: BorderRadius.circular(
-                              DesignTokens.radiusXs,
-                            ),
-                          ),
-                          child: Text(
-                            item.source,
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: theme.colorScheme.onSecondaryContainer,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: DesignTokens.spacing8),
-                        Text(
-                          _formatFullTime(item.publishedAt),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: DesignTokens.spacing16),
-                    // 標題
-                    Text(
-                      item.title,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    // 相關股票
-                    if (relatedStocks.isNotEmpty) ...[
-                      const SizedBox(height: DesignTokens.spacing16),
-                      Text(
-                        S.newsRelatedStocks,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: DesignTokens.spacing8),
-                      Wrap(
-                        spacing: DesignTokens.spacing8,
-                        runSpacing: DesignTokens.spacing8,
-                        children: relatedStocks.map((symbol) {
-                          return ActionChip(
-                            label: Text(symbol),
-                            onPressed: () {
-                              HapticFeedback.lightImpact();
-                              Navigator.pop(context);
-                              context.push(AppRoutes.stockDetail(symbol));
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                    const SizedBox(height: DesignTokens.spacing24),
-                    // 在瀏覽器開啟按鈕
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _openUrl(item.url);
-                        },
-                        icon: const Icon(Icons.open_in_new),
-                        label: Text(S.newsOpenInBrowser),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  Widget _emptyState(NewsState state) {
+    if (state.filter is MineNewsFilter && state.searchQuery.isEmpty) {
+      return state.mySymbols.isEmpty
+          ? EmptyState(icon: Icons.star_outline, title: S.newsMineEmptyNoStocks)
+          : EmptyState(
+              icon: Icons.article_outlined,
+              title: S.newsMineEmptyNoNews,
+            );
+    }
+    return EmptyStates.noNews();
   }
 
   @override
@@ -301,12 +196,11 @@ class _AllNewsTabState extends ConsumerState<_AllNewsTab> {
       children: [
         // 來源篩選標籤（重新整理時保留，避免整排 chips 閃爍消失）
         if (state.allNews.isNotEmpty)
-          _SourceFilterChips(
-            selectedSource: state.selectedSource,
+          _NewsFilterChips(
+            filter: state.filter,
             sourceCounts: state.sourceCounts,
-            onSelected: (source) {
-              ref.read(newsProvider.notifier).setSourceFilter(source);
-            },
+            mineCount: state.mineCount,
+            onSelected: ref.read(newsProvider.notifier).setFilter,
           ),
         // Refresh 失敗但有舊資料時顯示 MaterialBanner
         if (state.error != null && state.allNews.isNotEmpty)
@@ -341,22 +235,22 @@ class _AllNewsTabState extends ConsumerState<_AllNewsTab> {
                           ),
                   )
                 : state.filteredNews.isEmpty
-                ? FillRemainingScrollable(child: EmptyStates.noNews())
-                : _GroupedNewsList(
-                    news: state.filteredNews,
-                    newsStockMap: state.newsStockMap,
-                    onTap: _showNewsPreview,
+                ? FillRemainingScrollable(child: _emptyState(state))
+                : CustomScrollView(
+                    slivers: newsSectionSlivers(
+                      sections: groupNewsTodayYesterdayEarlier(
+                        state.filteredNews,
+                        ref.read(appClockProvider).now(),
+                      ),
+                      relatedStocksOf: state.relatedStocksOf,
+                      onTap: _showPreview,
+                      onStockTap: _openStock,
+                    ),
                   ),
           ),
         ),
       ],
     );
-  }
-
-  String _formatFullTime(DateTime dt) {
-    return '${dt.year}/${dt.month}/${dt.day} '
-        '${dt.hour.toString().padLeft(2, '0')}:'
-        '${dt.minute.toString().padLeft(2, '0')}';
   }
 }
 
@@ -364,16 +258,18 @@ class _AllNewsTabState extends ConsumerState<_AllNewsTab> {
 // 來源篩選標籤
 // ==================================================
 
-class _SourceFilterChips extends StatelessWidget {
-  const _SourceFilterChips({
-    required this.selectedSource,
+class _NewsFilterChips extends StatelessWidget {
+  const _NewsFilterChips({
+    required this.filter,
     required this.sourceCounts,
+    required this.mineCount,
     required this.onSelected,
   });
 
-  final NewsSource selectedSource;
+  final NewsFilter filter;
   final Map<NewsSource, int> sourceCounts;
-  final ValueChanged<NewsSource> onSelected;
+  final int mineCount;
+  final ValueChanged<NewsFilter> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -388,6 +284,21 @@ class _SourceFilterChips extends StatelessWidget {
         ? theme.colorScheme.onSecondaryContainer
         : theme.colorScheme.onSurface;
 
+    Widget chip(NewsFilter value, String label) {
+      final selected = value == filter;
+      return FilterChip(
+        selected: selected,
+        label: Text(label),
+        labelStyle: theme.textTheme.labelMedium?.copyWith(
+          color: selected ? selectedLabelColor : theme.colorScheme.onSurface,
+        ),
+        onSelected: (_) {
+          HapticFeedback.selectionClick();
+          onSelected(value);
+        },
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: DesignTokens.spacing16,
@@ -397,316 +308,18 @@ class _SourceFilterChips extends StatelessWidget {
         spacing: DesignTokens.spacing8,
         runSpacing: DesignTokens.spacing8,
         children: [
+          chip(
+            NewsFilter.all,
+            '${NewsSource.all.label} (${sourceCounts[NewsSource.all] ?? 0})',
+          ),
+          chip(NewsFilter.mine, '${S.newsFilterMine} ($mineCount)'),
           for (final source in NewsSource.values)
-            if (source == NewsSource.all || (sourceCounts[source] ?? 0) > 0)
-              FilterChip(
-                selected: source == selectedSource,
-                label: Text('${source.label} (${sourceCounts[source] ?? 0})'),
-                labelStyle: theme.textTheme.labelMedium?.copyWith(
-                  color: source == selectedSource
-                      ? selectedLabelColor
-                      : theme.colorScheme.onSurface,
-                ),
-                onSelected: (_) {
-                  HapticFeedback.selectionClick();
-                  onSelected(source);
-                },
+            if (source != NewsSource.all && (sourceCounts[source] ?? 0) > 0)
+              chip(
+                SourceNewsFilter(source),
+                '${source.label} (${sourceCounts[source] ?? 0})',
               ),
         ],
-      ),
-    );
-  }
-}
-
-// ==================================================
-// 分組新聞列表
-// ==================================================
-
-class _GroupedNewsList extends StatelessWidget {
-  const _GroupedNewsList({
-    required this.news,
-    required this.newsStockMap,
-    required this.onTap,
-  });
-
-  final List<NewsItemEntry> news;
-  final Map<String, List<String>> newsStockMap;
-  final void Function(NewsItemEntry, List<String>) onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final today = DateContext.normalize(now);
-    final yesterday = today.subtract(const Duration(days: 1));
-
-    // 依日期分組新聞
-    final todayNews = <NewsItemEntry>[];
-    final yesterdayNews = <NewsItemEntry>[];
-    final earlierNews = <NewsItemEntry>[];
-
-    for (final item in news) {
-      final itemDate = DateTime(
-        item.publishedAt.year,
-        item.publishedAt.month,
-        item.publishedAt.day,
-      );
-
-      if (itemDate == today) {
-        todayNews.add(item);
-      } else if (itemDate == yesterday) {
-        yesterdayNews.add(item);
-      } else {
-        earlierNews.add(item);
-      }
-    }
-
-    // 建立帶 section header 的扁平索引清單，用於 lazy loading
-    final sections = <(String title, List<NewsItemEntry> items)>[
-      if (todayNews.isNotEmpty) (S.newsToday, todayNews),
-      if (yesterdayNews.isNotEmpty) (S.newsYesterday, yesterdayNews),
-      if (earlierNews.isNotEmpty) (S.newsEarlier, earlierNews),
-    ];
-
-    return CustomScrollView(
-      slivers: [
-        for (final (title, items) in sections) ...[
-          SliverToBoxAdapter(
-            child: _SectionHeader(title: title, count: items.length),
-          ),
-          SliverList.builder(
-            itemCount: items.length,
-            itemBuilder: (context, index) => _NewsListItem(
-              item: items[index],
-              relatedStocks: newsStockMap[items[index].id] ?? [],
-              onTap: onTap,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-// ==================================================
-// 區段標題
-// ==================================================
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.count});
-
-  final String title;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: DesignTokens.spacing16,
-        vertical: DesignTokens.spacing8,
-      ),
-      color: theme.colorScheme.surfaceContainerLow,
-      child: Row(
-        children: [
-          Text(
-            title,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(width: DesignTokens.spacing8),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: DesignTokens.spacing6,
-              vertical: DesignTokens.spacing2,
-            ),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$count',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSecondaryContainer,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ==================================================
-// 新聞列表項目
-// ==================================================
-
-class _NewsListItem extends StatelessWidget {
-  const _NewsListItem({
-    required this.item,
-    required this.relatedStocks,
-    required this.onTap,
-  });
-
-  final NewsItemEntry item;
-  final List<String> relatedStocks;
-  final void Function(NewsItemEntry, List<String>) onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    const maxVisibleStocks = 3;
-    final hasMoreStocks = relatedStocks.length > maxVisibleStocks;
-
-    return InkWell(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap(item, relatedStocks);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: DesignTokens.spacing16,
-          vertical: DesignTokens.spacing12,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 標題
-            Text(
-              item.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: DesignTokens.spacing8),
-            // 來源與時間
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: DesignTokens.spacing6,
-                    vertical: DesignTokens.spacing2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(DesignTokens.radiusXs),
-                  ),
-                  child: Text(
-                    item.source,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSecondaryContainer,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: DesignTokens.spacing8),
-                Text(
-                  _formatTime(item.publishedAt),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const Spacer(),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ],
-            ),
-            // 相關股票
-            if (relatedStocks.isNotEmpty) ...[
-              const SizedBox(height: DesignTokens.spacing8),
-              Wrap(
-                spacing: DesignTokens.spacing4,
-                runSpacing: DesignTokens.spacing4,
-                children: [
-                  ...relatedStocks.take(maxVisibleStocks).map((symbol) {
-                    return _StockChip(
-                      symbol: symbol,
-                      onTap: () => context.push(AppRoutes.stockDetail(symbol)),
-                    );
-                  }),
-                  if (hasMoreStocks)
-                    _StockChip(
-                      symbol: '+${relatedStocks.length - maxVisibleStocks}',
-                      isOverflow: true,
-                      onTap: () => onTap(item, relatedStocks),
-                    ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _formatTime(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-
-    if (diff.inMinutes < 60) {
-      return S.newsMinutesAgo(diff.inMinutes);
-    } else if (diff.inHours < 24) {
-      return S.newsHoursAgo(diff.inHours);
-    } else if (diff.inDays < 7) {
-      return S.newsDaysAgo(diff.inDays);
-    } else if (dt.year == now.year) {
-      return '${dt.month}/${dt.day}';
-    } else {
-      return '${dt.year}/${dt.month}/${dt.day}';
-    }
-  }
-}
-
-// ==================================================
-// 股票標籤
-// ==================================================
-
-class _StockChip extends StatelessWidget {
-  const _StockChip({
-    required this.symbol,
-    required this.onTap,
-    this.isOverflow = false,
-  });
-
-  final String symbol;
-  final VoidCallback onTap;
-  final bool isOverflow;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: DesignTokens.spacing8,
-          vertical: DesignTokens.spacing4,
-        ),
-        decoration: BoxDecoration(
-          color: isOverflow
-              ? theme.colorScheme.tertiaryContainer
-              : theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
-        ),
-        child: Text(
-          symbol,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: isOverflow
-                ? theme.colorScheme.onTertiaryContainer
-                : theme.colorScheme.onSurfaceVariant,
-            fontWeight: isOverflow ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
       ),
     );
   }

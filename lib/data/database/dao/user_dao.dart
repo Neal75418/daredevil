@@ -35,6 +35,21 @@ mixin UserDaoMixin on $AppDatabase {
     )..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).get();
   }
 
+  /// 自選∪持股（數量 > 0）的股票代碼——新聞「自選」篩選與公告同步共用
+  Future<Set<String>> getWatchlistAndHoldingSymbols() async {
+    final watched =
+        await (selectOnly(watchlist)..addColumns([watchlist.symbol]))
+            .map((r) => r.read(watchlist.symbol)!)
+            .get();
+    final held =
+        await (selectOnly(portfolioPosition)
+              ..addColumns([portfolioPosition.symbol])
+              ..where(portfolioPosition.quantity.isBiggerThanValue(0)))
+            .map((r) => r.read(portfolioPosition.symbol)!)
+            .get();
+    return {...watched, ...held};
+  }
+
   /// 加入自選股
   ///
   /// [groupId] 用 `Value` 三態：

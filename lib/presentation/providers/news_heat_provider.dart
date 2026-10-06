@@ -20,6 +20,7 @@ import 'package:daredevil/domain/services/news/stock_name_matcher.dart';
 import 'package:daredevil/domain/services/news/theme_matcher.dart';
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/mode_recommendation_provider.dart';
+import 'package:daredevil/presentation/providers/news_fetch_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 
 /// 熱度分析結果（新聞頁「熱度分析」Tab 的完整狀態）
@@ -60,10 +61,11 @@ class NewsHeatAnalysis {
 
 /// 即時計算近 28 天新聞的熱度分析。
 ///
-/// 資料源與新聞頁共用（重新整理抓完 RSS 後 invalidate 本 provider 即同步）。
+/// 資料源與新聞頁共用（抓完新聞後經 `newsDataVersionProvider` 重算）。
 /// 匹配結果只存在記憶體，不寫 news_stock_map（不進評分）。
 final newsHeatProvider = FutureProvider<NewsHeatAnalysis>((ref) async {
   ref.watch(dataUpdateEpochProvider);
+  ref.watch(newsDataVersionProvider);
 
   final newsRepo = ref.read(newsRepositoryProvider);
   final db = ref.read(databaseProvider);
