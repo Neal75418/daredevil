@@ -9,6 +9,7 @@ import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/hero_index_section.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/mini_trend_chart.dart';
 
+import '../../../helpers/price_flash_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
 
 void main() {
@@ -320,25 +321,11 @@ void main() {
         await tester.pumpWidget(hero(2));
         await tester.pump();
 
-        final tint =
-            (tester
-                        .widget<DecoratedBox>(find.byKey(PriceFlash.tintKey))
-                        .decoration
-                    as BoxDecoration)
-                .color!;
+        final tint = priceFlashTint(tester)!;
         final cardColor = Theme.of(
           tester.element(find.byKey(PriceFlash.tintKey)),
         ).colorScheme.surfaceContainerLowest;
-        final text = tester
-            .widget<RichText>(
-              find.descendant(
-                of: find.byKey(PriceFlash.tintKey),
-                matching: find.byType(RichText),
-              ),
-            )
-            .text
-            .style!
-            .color!;
+        final text = priceFlashTextColor(tester);
         expect(
           ColorContrast.ratio(
             text,

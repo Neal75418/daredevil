@@ -36,6 +36,10 @@ abstract final class PriceColors {
   /// 下跌（淺色主題專用，白底對比加強）
   static const downOnLight = Color(0xFF1B9E50);
 
+  /// 價格閃色時的數字色（疊在實心 [up]／[down]／[downOnLight] 上）：白字在
+  /// 亮紅、亮綠上都不到 4.5:1，深色字兩種主題都達標（`price_flash_test`）
+  static const onFlash = Color(0xFF18181B);
+
   /// 平盤（深色主題）。刻意使用灰階，不佔用任何色相。
   ///
   /// 對深色卡片（`SemanticColors.darkSurface` `#27272A`）5.76:1、對 scaffold

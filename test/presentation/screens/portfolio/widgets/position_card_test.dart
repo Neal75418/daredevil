@@ -8,6 +8,7 @@ import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
 import 'package:daredevil/presentation/screens/portfolio/widgets/position_card.dart';
 
+import '../../../../helpers/price_flash_helpers.dart';
 import '../../../../helpers/widget_test_helpers.dart';
 
 void main() {
@@ -156,25 +157,11 @@ void main() {
         await tester.pumpWidget(card(2));
         await tester.pump();
 
-        final tint =
-            (tester
-                        .widget<DecoratedBox>(find.byKey(PriceFlash.tintKey))
-                        .decoration
-                    as BoxDecoration)
-                .color!;
+        final tint = priceFlashTint(tester)!;
         final cardColor = Theme.of(
           tester.element(find.byKey(PriceFlash.tintKey)),
         ).colorScheme.surfaceContainerLow;
-        final text = tester
-            .widget<RichText>(
-              find.descendant(
-                of: find.byKey(PriceFlash.tintKey),
-                matching: find.byType(RichText),
-              ),
-            )
-            .text
-            .style!
-            .color!;
+        final text = priceFlashTextColor(tester);
         expect(
           ColorContrast.ratio(
             text,

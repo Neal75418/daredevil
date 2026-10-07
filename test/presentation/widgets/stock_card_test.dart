@@ -8,10 +8,10 @@ import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/color_contrast.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
-import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/presentation/widgets/stock_card.dart';
 import 'package:daredevil/presentation/widgets/stock_card_live.dart';
 
+import '../../helpers/price_flash_helpers.dart';
 import '../../helpers/widget_test_helpers.dart';
 
 /// 取趨勢箭頭的顏色（守門用：形狀可留，顏色不得是股價紅綠）
@@ -583,14 +583,7 @@ void main() {
               await tester.pumpWidget(card(2));
               await tester.pump();
 
-              final tint =
-                  (tester
-                              .widget<DecoratedBox>(
-                                find.byKey(PriceFlash.tintKey),
-                              )
-                              .decoration
-                          as BoxDecoration)
-                      .color!;
+              final tint = priceFlashTint(tester)!;
               final cardColor = tester
                   .widgetList<Container>(find.byType(Container))
                   .map((c) => c.decoration)
@@ -599,16 +592,7 @@ void main() {
                     (d) => d.borderRadius == BorderRadius.circular(16),
                   )
                   .color!;
-              final textColor = tester
-                  .widget<RichText>(
-                    find.descendant(
-                      of: find.byKey(PriceFlash.tintKey),
-                      matching: find.byType(RichText),
-                    ),
-                  )
-                  .text
-                  .style!
-                  .color!;
+              final textColor = priceFlashTextColor(tester);
               final composite = ColorContrast.compositeOver(
                 tint.withValues(alpha: 1),
                 cardColor,

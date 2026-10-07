@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/data/models/twse/twse_market_index.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
-import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
 import 'package:daredevil/domain/services/market_reading_service.dart';
 import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
@@ -13,6 +12,7 @@ import 'package:daredevil/presentation/widgets/market_dashboard/market_dashboard
 import 'package:daredevil/presentation/widgets/market_dashboard/market_reading_line.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/sentiment_gauge_section.dart';
 
+import '../../../helpers/price_flash_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
 
 void main() {
@@ -604,12 +604,7 @@ void main() {
           MarketCode.tpex: liveIndex(MarketIndexNames.tpexIndex, 301, 2),
         },
       );
-      Color? tint() =>
-          (tester
-                      .widget<DecoratedBox>(find.byKey(PriceFlash.tintKey))
-                      .decoration
-                  as BoxDecoration)
-              .color;
+      Color? tint() => priceFlashTint(tester);
 
       await tester.pumpWidget(
         buildTestApp(MarketDashboard(state: both, live: live)),

@@ -11,7 +11,6 @@ import 'package:daredevil/domain/services/news/stock_name_matcher.dart';
 import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
-import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
@@ -23,6 +22,7 @@ import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/shimmer_loading.dart';
 import 'package:daredevil/presentation/widgets/stock_nav_bar.dart';
 
+import '../../../helpers/price_flash_helpers.dart';
 import '../../../helpers/phone_layout_helpers.dart';
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
@@ -533,12 +533,7 @@ void main() {
       await tester.pump();
       expect(find.text('257.00'), findsOneWidget, reason: '前提:已換到 2317');
 
-      final tint =
-          (tester
-                      .widget<DecoratedBox>(find.byKey(PriceFlash.tintKey))
-                      .decoration
-                  as BoxDecoration)
-              .color;
+      final tint = priceFlashTint(tester);
       expect(tint, isNull);
     });
 

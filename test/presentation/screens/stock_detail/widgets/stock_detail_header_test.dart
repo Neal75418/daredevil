@@ -6,11 +6,11 @@ import 'package:daredevil/core/theme/color_contrast.dart';
 import 'package:daredevil/core/utils/price_limit.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
 import 'package:daredevil/presentation/screens/stock_detail/tabs/chip/chip_helpers.dart';
-import 'package:daredevil/presentation/widgets/price_flash.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/stock_detail_state.dart';
 import 'package:daredevil/presentation/screens/stock_detail/widgets/stock_detail_header.dart';
 
+import '../../../../helpers/price_flash_helpers.dart';
 import '../../../../helpers/phone_layout_helpers.dart';
 import '../../../../helpers/widget_test_helpers.dart';
 
@@ -456,22 +456,8 @@ void main() {
           theme.colorScheme.surface,
           0.15,
         );
-        final tint =
-            (tester
-                        .widget<DecoratedBox>(find.byKey(PriceFlash.tintKey))
-                        .decoration
-                    as BoxDecoration)
-                .color!;
-        final text = tester
-            .widget<RichText>(
-              find.descendant(
-                of: find.byKey(PriceFlash.tintKey),
-                matching: find.byType(RichText),
-              ),
-            )
-            .text
-            .style!
-            .color!;
+        final tint = priceFlashTint(tester)!;
+        final text = priceFlashTextColor(tester);
         expect(
           ColorContrast.ratio(
             text,

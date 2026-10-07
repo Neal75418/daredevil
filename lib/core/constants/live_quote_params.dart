@@ -49,12 +49,19 @@ abstract final class LiveQuoteParams {
   /// 報價中心的節拍:登記變動、可見性變動都等下一拍才動作
   static const Duration tick = Duration(seconds: 1);
 
-  /// 閃色淡出(第 2 段畫面使用)
-  static const Duration flashFade = Duration(milliseconds: 600);
+  /// 一次閃色維持多久（2026-10-07 實機後改成券商看盤軟體的做法：價格那一格
+  /// 整塊實心紅／綠、數字反色，時間到一次收掉。原本 20% 淡色、0.6 秒一出現
+  /// 就淡、只襯在數字後面，盯著看也幾乎察覺不到。不留淡出：試過停留後淡出、
+  /// 濃度剩一半時數字才切回原色，切換那一刻深色主題對比只有約 2.2）
+  static const Duration flashDuration = Duration(milliseconds: 600);
 
-  /// 閃色底色最濃時的透明度。現價數字是一般文字色(不是紅綠),疊在 20% 的
-  /// 紅綠底上兩種主題對比都遠高於 4.5(`stock_card_test` 的閃色對比度測試)
-  static const double flashTintAlpha = 0.2;
+  /// 閃色底色的透明度：實心。數字同時改成 `PriceColors.onFlash`
+  static const double flashTintAlpha = 1.0;
+
+  /// 價格色塊左右比數字寬出多少（往外擴、不推動版面）。上下不擴：數字那一
+  /// 行的行框本身已含字上下的空白，再往外擴會壓到緊貼在上下的元件（個股頁
+  /// 現價正下方就是漲跌幅膠囊、中間沒有間距）
+  static const double flashChipPadH = 4;
 
   /// 大盤指數在 MIS 的代號(市場別硬對應,不查主檔)
   static const String twseIndexSymbol = 't00';
