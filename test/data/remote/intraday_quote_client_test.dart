@@ -74,6 +74,22 @@ void main() {
     expect(url, isNot(contains('tse_6538')));
   });
 
+  test('🚨 每個請求帶不同的 _ 參數(同一網址會被 MIS 快取約 45 秒)', () async {
+    // 2026-10-07 盤中實測:同一網址每 15 秒問一次,連續 3 次拿到同一份
+    // (sysTime 停在 13:02:49),約 45 秒後才換新;加上每次不同的 _ 參數
+    // (MIS 自己的網頁也這樣做)就拿得到新資料
+    final adapter = _FakeAdapter((_, _) => _misBody(['2330']));
+    final client = clientWith(adapter);
+    await client.fetchQuotes({'2330': 'TWSE'});
+    await client.fetchQuotes({'2330': 'TWSE'});
+
+    final busters = [
+      for (final r in adapter.requests) Uri.parse(r).queryParameters['_'],
+    ];
+    expect(busters, everyElement(isNotNull));
+    expect(busters.toSet(), hasLength(2), reason: '同一批連續兩次的網址也要不同');
+  });
+
   test('🚨 超過 35 檔分批,不漏送不重送', () async {
     final symbols = {for (var i = 0; i < 71; i++) '${1000 + i}': 'TWSE'};
     final adapter = _FakeAdapter((_, _) => _misBody(const []));

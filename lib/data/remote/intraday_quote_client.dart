@@ -52,6 +52,9 @@ class IntradayQuoteClient {
   static const String _tag = 'MIS';
   final Dio _dio;
 
+  /// 防快取參數的序號:同一毫秒內的兩個請求也不會撞同一個網址
+  static int _requestSeq = 0;
+
   /// 單批失敗是否記 `AppLogger.warning`。盤中即時報價每 15 秒一輪,失敗改
   /// 由報價中心統一記(一段連續失敗只記開始與恢復),所以傳 false;盤中
   /// 提醒與 CLI 維持預設。
@@ -153,7 +156,15 @@ class IntradayQuoteClient {
         .join('|');
     final response = await _dio.get(
       ApiEndpoints.twseMisIntraday,
-      queryParameters: {'ex_ch': exCh, 'json': 1, 'delay': 0},
+      // `_` 每次不同(2026-10-07 盤中實測):MIS 對完全相同的網址約 45 秒
+      // 內都回同一份快取,每 15 秒一輪就有兩輪拿到舊資料;MIS 自己的網頁
+      // 也帶這個參數
+      queryParameters: {
+        'ex_ch': exCh,
+        'json': 1,
+        'delay': 0,
+        '_': '${DateTime.now().millisecondsSinceEpoch}${_requestSeq++}',
+      },
       // 一律取原始字串自行解碼(2026-08-08 code review):讓 Dio 解析
       // 有兩個坑——①MIS 回應前綴帶空行,json 模式會解析失敗;②限流
       // 時回 HTML,若 Dio 先拋解析錯,就會被下面的 catch 吞成「這批

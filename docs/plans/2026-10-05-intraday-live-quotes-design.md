@@ -67,7 +67,7 @@ Daredevil 以盤後資料為主：
 
 | 項目 | 現況 |
 |:--|:--|
-| 報價 client | `lib/data/remote/intraday_quote_client.dart`：每批最多 `ApiEndpoints.misBatchSize`（35）檔、不快取、單批失敗不影響其他批、回傳 `(quotes, errors)`；`RateLimitException` 往上拋。每批失敗都記 `AppLogger.warning`（`:81`）。請求字串的市場前綴只有 `MarketCode.twse` 為 `tse_`、其餘一律 `otc_`（`:49-51`） |
+| 報價 client | `lib/data/remote/intraday_quote_client.dart`：每批最多 `ApiEndpoints.misBatchSize`（35）檔、不快取（2026-10-07 實機發現 MIS 端會把同一網址的回應快取約 45 秒，請求改帶每次不同的 `_` 參數）、單批失敗不影響其他批、回傳 `(quotes, errors)`；`RateLimitException` 往上拋。每批失敗都記 `AppLogger.warning`（`:81`）。請求字串的市場前綴只有 `MarketCode.twse` 為 `tse_`、其餘一律 `otc_`（`:49-51`） |
 | 報價模型 | `lib/data/models/twse/intraday_quote.dart`：價格取 `z`（成交）→ `pz`（試撮）→ 漲跌停鎖住價（`_lockedPrice`，2026-10-06 `e9a625ca` 先行修正）→ 買賣最佳一檔中價（單邊取該側）；沒有就不回傳該檔；`rtcode` 非 `0000` 回空（`:62`） |
 | 逾時 | Dio 連線 30 秒、讀取 60 秒（`ApiConfig.twseConnectTimeoutSec`／`twseReceiveTimeoutSec`） |
 | 盤中時段 | `IntradayPollSchedule.isMarketHours`（交易日且 09:00–13:30，開收盤時間是該檔私有常數；交易日曆 `TaiwanCalendar` 含國定假日） |
