@@ -691,6 +691,30 @@ void main() {
       expect(parse(_tpexBody(const [])), isEmpty);
     });
 
+    test('開始交易基準價 → tradingBasePrice；該欄不可解析 → null、整批照收', () {
+      final rows = [
+        _tpexRow('114/01/02', '00950B', '除息', '0.08', '0'),
+        _tpexRow('114/06/18', '6762', '除權息', '0.30', '150'),
+      ];
+      rows[0][11] = '32.44';
+      rows[1][11] = '--';
+      final r = parse(_tpexBody(rows))!;
+      expect(r[0].tradingBasePrice, 32.44);
+      expect(r[1].tradingBasePrice, isNull);
+    });
+
+    test('沒有開始交易基準價欄 → 整批照收、tradingBasePrice 全 null', () {
+      final body = _tpexBody([
+        _tpexRow('114/01/02', '00950B', '除息', '0.08', '0'),
+      ]);
+      ((body['tables'] as List).first as Map)['fields'] = [
+        for (final f in _tpexFields) f == '開始交易基準價' ? '其他' : f,
+      ];
+      final r = parse(body)!;
+      expect(r.single.symbol, '00950B');
+      expect(r.single.tradingBasePrice, isNull);
+    });
+
     test('stat 異常：回 null，即使區間與欄位都對', () {
       final body = _tpexBody([
         _tpexRow('114/01/02', '00950B', '除息', '0.08', '0'),

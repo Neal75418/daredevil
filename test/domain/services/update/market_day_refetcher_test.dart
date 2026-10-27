@@ -23,6 +23,9 @@ class MockTradingRepository extends Mock implements ITradingRepository {}
 class MockShareholdingRepository extends Mock
     implements ShareholdingRepository {}
 
+MarketDayBackfillResult _backfilled(int rows) =>
+    MarketDayBackfillResult(rows: rows, basePrice: BasePriceStatus.skipped);
+
 void main() {
   group('refetchCandidateDays', () {
     test('早於今天、不早於追蹤起始日、只含交易日，新→舊', () {
@@ -173,7 +176,7 @@ void main() {
         ),
       ).thenAnswer((_) async {
         calls.add('prices/TWSE');
-        return 1;
+        return _backfilled(1);
       });
       when(
         () => price.backfillTpexPricesByDate(
@@ -183,7 +186,7 @@ void main() {
         ),
       ).thenAnswer((_) async {
         calls.add('prices/TPEx');
-        return 1;
+        return _backfilled(1);
       });
       when(
         () => inst.syncAllMarketInstitutional(
@@ -412,6 +415,112 @@ void main() {
       expect(s.stoppedAt, d);
     });
 
+    test(
+      '🚨 價格 attempt：平盤價缺 → summary.errors 一筆、這天不算 finalized、其他組照常',
+      () async {
+        when(
+          () => price.backfillTwsePricesByDate(
+            date: any(named: 'date'),
+            targetSymbols: any(named: 'targetSymbols'),
+            ledger: any(named: 'ledger'),
+          ),
+        ).thenAnswer((_) async {
+          calls.add('prices/TWSE');
+          return const MarketDayBackfillResult(
+            rows: 1,
+            basePrice: BasePriceStatus(
+              fetch: BasePriceFetch.failed,
+              missing: 2,
+              withheld: true,
+              reason: '網路錯誤',
+            ),
+          );
+        });
+        final s = await refetcher.refetchPending(today: today, ledger: ledger);
+        expect(
+          s.errors.single,
+          allOf(contains('prices/TWSE'), contains('平盤價缺 2 列')),
+        );
+        expect(
+          s.finalized[(
+                dataset: MarketDataset.prices,
+                market: MarketCode.twse,
+              )] ??
+              0,
+          0,
+        );
+        expect(s.rateLimited, isFalse);
+        expect(calls, contains('prices/TPEx'));
+      },
+    );
+
+    test(
+      '🚨 價格 attempt：平盤價限流、N=0（已定案）→ finalized 計入、stoppedAt 不是這一天、回 rateLimitAbort',
+      () async {
+        when(
+          () => price.backfillTwsePricesByDate(
+            date: any(named: 'date'),
+            targetSymbols: any(named: 'targetSymbols'),
+            ledger: any(named: 'ledger'),
+          ),
+        ).thenAnswer((_) async {
+          calls.add('prices/TWSE');
+          await ledger.report(
+            dataset: MarketDataset.prices,
+            market: MarketCode.twse,
+            date: d,
+            rows: 1,
+          );
+          return const MarketDayBackfillResult(
+            rows: 1,
+            basePrice: BasePriceStatus(
+              fetch: BasePriceFetch.rateLimited,
+              reason: '限流',
+              error: RateLimitException('r'),
+            ),
+          );
+        });
+        final s = await refetcher.refetchPending(today: today, ledger: ledger);
+        expect(s.rateLimited, isTrue);
+        expect(
+          s.finalized[(dataset: MarketDataset.prices, market: MarketCode.twse)],
+          1,
+        );
+        expect(s.stoppedAt, isNull, reason: '這天已定案，續跑提示不該把它列成沒抓完');
+        expect(calls, isNot(contains('prices/TPEx')));
+      },
+    );
+
+    test('價格 attempt：平盤價限流、N>0 → stoppedAt 是這一天、不算 finalized', () async {
+      when(
+        () => price.backfillTwsePricesByDate(
+          date: any(named: 'date'),
+          targetSymbols: any(named: 'targetSymbols'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer((_) async {
+        calls.add('prices/TWSE');
+        return const MarketDayBackfillResult(
+          rows: 1,
+          basePrice: BasePriceStatus(
+            fetch: BasePriceFetch.rateLimited,
+            missing: 2,
+            withheld: true,
+            reason: '限流',
+            error: RateLimitException('r'),
+          ),
+        );
+      });
+      final s = await refetcher.refetchPending(today: today, ledger: ledger);
+      expect(s.rateLimited, isTrue);
+      expect(s.stoppedAt, d);
+      expect(
+        s.finalized[(dataset: MarketDataset.prices, market: MarketCode.twse)] ??
+            0,
+        0,
+      );
+    });
+
     test('網路異常：同一組後續天數會被跳過（其他組不受影響）', () async {
       // 拉早追蹤起始日到 9/23，讓上市價格這組有兩個候選日（9/24、9/23）
       await db.setSetting(MarketDayRefetcher.trackingSinceKey, '2026-09-23');
@@ -489,7 +598,7 @@ void main() {
           date: inv.namedArguments[#date] as DateTime,
           rows: 1,
         );
-        return 1;
+        return _backfilled(1);
       });
       final s = await refetcher.refetchPending(today: today, ledger: ledger);
       const twse = (dataset: MarketDataset.prices, market: MarketCode.twse);

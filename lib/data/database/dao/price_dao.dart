@@ -1,9 +1,23 @@
 import 'package:drift/drift.dart';
 
+import 'package:daredevil/core/constants/api_config.dart';
+import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/rule_params_indicator.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.drift.dart';
 import 'package:daredevil/data/database/tables/daily_price.drift.dart';
+
+/// 修復工具套用平盤價的一列：(代號, 日期, 交易所當天的平盤價)
+typedef BasePriceRow = ({String symbol, DateTime date, double basePrice});
+
+/// 每輪摘要的計數：「漲跌因缺平盤價而是空值」的列數（上市、上櫃分開）與
+/// 最早、最近的日子；全 0 時日期為 null
+typedef BasePriceGap = ({
+  int twseRows,
+  int tpexRows,
+  DateTime? earliest,
+  DateTime? latest,
+});
 
 /// 日價格操作
 mixin PriceDaoMixin on $AppDatabase {
@@ -171,6 +185,7 @@ mixin PriceDaoMixin on $AppDatabase {
         close: row.readNullable<double>('close'),
         volume: row.readNullable<double>('volume'),
         priceChange: row.readNullable<double>('price_change'),
+        basePrice: row.readNullable<double>('base_price'),
       );
       result[entry.symbol] = entry;
     }
@@ -178,13 +193,266 @@ mixin PriceDaoMixin on $AppDatabase {
     return result;
   }
 
-  /// 批次新增價格
+  /// 批次新增或覆寫價格：依 (symbol, date) upsert（除權息漲跌修正，2026-10）
+  ///
+  /// 這是**唯一**的新增／覆寫入口（守門：
+  /// `test/data/database/price_change_single_writer_guard_test.dart`）。每一筆：
+  /// - 開高低收、成交量用新值；
+  /// - `base_price`：新寫入有帶就用新的，否則保留舊的；
+  /// - `price_change` 依序：
+  ///   0. 新收盤 null → null（沒成交）；
+  ///   1. 合併後的平盤價非 null → ROUND(收盤 − 平盤價, 2)；
+  ///   2. 否則 entry 有帶漲跌欄（含明確空值，例如 STOCK_DAY 的 `X0.00`、
+  ///      上櫃的除息文字）→ 用它；
+  ///   3. 否則（FinMind 這類沒帶漲跌欄）→ 收盤沒變保留舊漲跌，變了存 null。
+  ///
+  /// 第 2、3 條要分開：STOCK_DAY 明確說「這天不比價」時要寫空值，用第 3 條
+  /// 保留舊值會把 2025-06 以來存錯的 0 留下來。SQL 的 `excluded` 分不出
+  /// 「沒帶」和「帶空值」，所以依 companion 的 `priceChange.present` 走兩種
+  /// DoUpdate。insert 分支（沒有舊列）由 Dart 先依第 0、1、2 條算好——
+  /// `ON CONFLICT DO UPDATE` 只在衝突時生效，15:30 第一次寫入走的正是它。
   Future<void> insertPrices(List<DailyPriceCompanion> entries) async {
+    if (entries.isEmpty) return;
     await batch((b) {
       for (final entry in entries) {
-        b.insert(dailyPrice, entry, mode: InsertMode.insertOrReplace);
+        final hasChangeColumn = entry.priceChange.present;
+        b.insert(
+          dailyPrice,
+          _withInsertPriceChange(entry),
+          onConflict: DoUpdate<$DailyPriceTable, DailyPriceEntry>.withExcluded(
+            (old, excluded) =>
+                _upsertUpdate(old, excluded, hasChangeColumn: hasChangeColumn),
+          ),
+        );
       }
     });
+  }
+
+  /// insert 分支的 price_change（第 0、1、2 條；沒有舊列時合併後的平盤價
+  /// 就是這筆帶的值）。
+  static DailyPriceCompanion _withInsertPriceChange(DailyPriceCompanion e) {
+    final close = e.close.present ? e.close.value : null;
+    final base = e.basePrice.present ? e.basePrice.value : null;
+    final Value<double?> change;
+    if (close == null) {
+      change = const Value(null);
+    } else if (base != null) {
+      change = Value(_round2(close - base));
+    } else if (e.priceChange.present) {
+      change = e.priceChange;
+    } else {
+      change = const Value(null);
+    }
+    return e.copyWith(priceChange: change);
+  }
+
+  /// 價格最小跳動 0.01；與 SQL 的 `ROUND(x, 2)` 同為四捨五入
+  static double _round2(double v) => (v * 100).roundToDouble() / 100;
+
+  /// update 分支：平盤價合併＋ price_change 規則 0～3（見 [insertPrices]）
+  static Insertable<DailyPriceEntry> _upsertUpdate(
+    $DailyPriceTable old,
+    $DailyPriceTable excluded, {
+    required bool hasChangeColumn,
+  }) {
+    final mergedBase = coalesce<double>([excluded.basePrice, old.basePrice]);
+    final Expression<double> withoutBase = hasChangeColumn
+        ? excluded.priceChange
+        : CaseWhenExpression<double>(
+            cases: [
+              CaseWhen(old.close.isExp(excluded.close), then: old.priceChange),
+            ],
+            orElse: const Constant<double>(null),
+          );
+    final change = CaseWhenExpression<double>(
+      cases: [
+        CaseWhen(excluded.close.isNull(), then: const Constant<double>(null)),
+        CaseWhen(
+          mergedBase.isNotNull(),
+          then: FunctionCallExpression<double>('ROUND', [
+            excluded.close - mergedBase,
+            const Constant<int>(2),
+          ]),
+        ),
+      ],
+      orElse: withoutBase,
+    );
+    return DailyPriceCompanion.custom(
+      open: excluded.open,
+      high: excluded.high,
+      low: excluded.low,
+      close: excluded.close,
+      volume: excluded.volume,
+      basePrice: mergedBase,
+      priceChange: change,
+    );
+  }
+
+  /// 修復工具用：只更新**已存在**的列的平盤價與漲跌（規則第 0、1 條），
+  /// 不 insert。回傳實際更新的列數。
+  Future<int> applyBasePrices(List<BasePriceRow> rows) async {
+    var updated = 0;
+    for (final r in rows) {
+      updated += await customUpdate(
+        'UPDATE daily_price SET base_price = ?, '
+        'price_change = CASE WHEN close IS NULL THEN NULL '
+        'ELSE ROUND(close - ?, 2) END '
+        'WHERE symbol = ? AND date = ?',
+        variables: [
+          Variable.withReal(r.basePrice),
+          Variable.withReal(r.basePrice),
+          Variable.withString(r.symbol),
+          Variable.withDateTime(r.date),
+        ],
+        updates: {dailyPrice},
+      );
+    }
+    return updated;
+  }
+
+  /// 修復工具用：某日、某市場收盤是空值的列，漲跌改成空值（規則第 0 條；
+  /// 2025-06 以來上市有 873 列沒成交卻存 0）。回傳更新列數。
+  Future<int> nullifyPriceChangeWithoutClose({
+    required DateTime date,
+    required String market,
+  }) {
+    return customUpdate(
+      'UPDATE daily_price SET price_change = NULL '
+      'WHERE date = ? AND close IS NULL AND price_change IS NOT NULL '
+      'AND symbol IN (SELECT symbol FROM stock_master WHERE market = ?)',
+      variables: [Variable.withDateTime(date), Variable.withString(market)],
+      updates: {dailyPrice},
+    );
+  }
+
+  /// 市場日寫入後查「需要平盤價的列」還缺幾列（spec 第 3 節的 N）：
+  /// [symbols] 裡在 [date] 這天 `base_price IS NULL` 的列數；[symbols] 為空
+  /// 回 0。沒有列的代號不算缺。
+  Future<int> countMissingBasePrice({
+    required DateTime date,
+    required Set<String> symbols,
+  }) async {
+    if (symbols.isEmpty) return 0;
+    final placeholders = List.filled(symbols.length, '?').join(', ');
+    final row = await customSelect(
+      'SELECT COUNT(*) AS cnt FROM daily_price '
+      'WHERE date = ? AND base_price IS NULL AND symbol IN ($placeholders)',
+      variables: [
+        Variable.withDateTime(date),
+        for (final s in symbols) Variable.withString(s),
+      ],
+      readsFrom: {dailyPrice},
+    ).getSingle();
+    return row.read<int>('cnt');
+  }
+
+  /// 每輪摘要的計數（除權息漲跌修正 spec 第 3 節）：「漲跌因缺平盤價而是
+  /// 空值」的列。上市：收盤非空、漲跌空值（本設計之後上市只有缺平盤價才會
+  /// 這樣；轉上市股轉市場前的空值列例外、修不掉，見 spec 已知限制）；上櫃：配發表有這檔這天、收盤非空、漲跌空值（只有 FinMind 價格
+  /// 的股票本來就沒有漲跌，只數除權息列）。市場依目前主檔：轉上市股票轉市場
+  /// 前的上櫃文字標記列算在上市。上市涵蓋所有不會被自動重抓的缺口（追蹤起始日
+  /// 前、清單不全、滑出 40 天窗）；上櫃只數配發表有的列，exDailyQ 清單不全而
+  /// 配發表也沒有的列不計（只在寫入當下的 warning 看得到）。
+  Future<BasePriceGap> getBasePriceGap() async {
+    final rows = await customSelect(
+      '''
+      SELECT sm.market AS market, COUNT(*) AS cnt,
+        MIN(dp.date) AS earliest, MAX(dp.date) AS latest
+      FROM daily_price dp
+      INNER JOIN stock_master sm ON dp.symbol = sm.symbol
+      WHERE dp.close IS NOT NULL AND dp.price_change IS NULL
+        AND (sm.market = ? OR EXISTS (
+          SELECT 1 FROM dividend_distribution dd
+          WHERE dd.symbol = dp.symbol AND dd.ex_date = dp.date))
+      GROUP BY sm.market
+      ''',
+      variables: [Variable.withString(MarketCode.twse)],
+      readsFrom: {dailyPrice, stockMaster, dividendDistribution},
+    ).get();
+    var twse = 0;
+    var tpex = 0;
+    DateTime? earliest;
+    DateTime? latest;
+    for (final r in rows) {
+      final market = r.read<String>('market');
+      final cnt = r.read<int>('cnt');
+      if (market == MarketCode.twse) {
+        twse = cnt;
+      } else if (market == MarketCode.tpex) {
+        tpex = cnt;
+      } else {
+        continue;
+      }
+      final e = r.read<DateTime?>('earliest');
+      final l = r.read<DateTime?>('latest');
+      if (e != null && (earliest == null || e.isBefore(earliest))) earliest = e;
+      if (l != null && (latest == null || l.isAfter(latest))) latest = l;
+    }
+    return (twseRows: twse, tpexRows: tpex, earliest: earliest, latest: latest);
+  }
+
+  /// 修復工具挑日：價格表裡有上市列、但有平盤價的列不到
+  /// [ApiConfig.basePriceBackfillDoneRatio] 的日子（舊→新；spec 第 4 節）。
+  /// 這個條件同時是「做過沒」的判斷，可中斷重跑。不用「有任何一列」：上櫃那
+  /// 一輪會把平盤價寫進主檔已轉上市的轉市場列，一列就讓那天被當成做過。
+  Future<List<DateTime>> getTwseDaysWithoutBasePrice({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final rows = await customSelect(
+      '''
+      SELECT dp.date AS day
+      FROM daily_price dp
+      INNER JOIN stock_master sm ON dp.symbol = sm.symbol
+      WHERE sm.market = ?
+        ${from != null ? 'AND dp.date >= ?' : ''}
+        ${to != null ? 'AND dp.date <= ?' : ''}
+      GROUP BY dp.date
+      HAVING SUM(dp.base_price IS NOT NULL) < COUNT(*) * ?
+      ORDER BY dp.date
+      ''',
+      variables: [
+        Variable.withString(MarketCode.twse),
+        if (from != null) Variable.withDateTime(from),
+        if (to != null) Variable.withDateTime(to),
+        Variable.withReal(ApiConfig.basePriceBackfillDoneRatio),
+      ],
+      readsFrom: {dailyPrice, stockMaster},
+    ).get();
+    return [for (final r in rows) r.read<DateTime>('day')];
+  }
+
+  /// 修復工具用：價格表有上櫃列的每個月（舊→新；spec 第 4 節，上櫃逐月抓
+  /// exDailyQ）。上櫃的列分不出做過沒（沒平盤價的列多數本來就不是除權息），
+  /// 所以每次全部跑。
+  Future<List<({int year, int month})>> getTpexMonthsWithPrices({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final rows = await customSelect(
+      '''
+      SELECT DISTINCT substr(dp.date, 1, 7) AS ym
+      FROM daily_price dp
+      INNER JOIN stock_master sm ON dp.symbol = sm.symbol
+      WHERE sm.market = ?
+        ${from != null ? 'AND dp.date >= ?' : ''}
+        ${to != null ? 'AND dp.date <= ?' : ''}
+      ORDER BY ym
+      ''',
+      variables: [
+        Variable.withString(MarketCode.tpex),
+        if (from != null) Variable.withDateTime(from),
+        if (to != null) Variable.withDateTime(to),
+      ],
+      readsFrom: {dailyPrice, stockMaster},
+    ).get();
+    return [
+      for (final r in rows)
+        (
+          year: int.parse(r.read<String>('ym').substring(0, 4)),
+          month: int.parse(r.read<String>('ym').substring(5, 7)),
+        ),
+    ];
   }
 
   /// 清理無效股票代碼的資料

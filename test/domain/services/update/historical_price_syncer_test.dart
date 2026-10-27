@@ -6,12 +6,16 @@ import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/price_repository.dart';
 import 'package:daredevil/domain/services/update/historical_price_syncer.dart';
+import 'package:daredevil/domain/repositories/price_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockAppDatabase extends Mock implements AppDatabase {}
 
 class MockPriceRepository extends Mock implements PriceRepository {}
+
+MarketDayBackfillResult _backfilled(int rows) =>
+    MarketDayBackfillResult(rows: rows, basePrice: BasePriceStatus.skipped);
 
 void main() {
   late MockAppDatabase mockDb;
@@ -755,7 +759,7 @@ void main() {
             date: any(named: 'date'),
             targetSymbols: any(named: 'targetSymbols'),
           ),
-        ).thenAnswer((_) async => rowsPerDay);
+        ).thenAnswer((_) async => _backfilled(rowsPerDay));
       }
 
       setUp(() {
@@ -927,6 +931,85 @@ void main() {
         expect(result.marketDayRows, 0);
       });
 
+      test('Phase 0：平盤價缺 → 不中止、不進 rateLimitError、列數照常累計', () async {
+        setupDayCounts(missingTwseDays: {tue, mon});
+        when(
+          () => mockPriceRepo.backfillTwsePricesByDate(
+            date: any(named: 'date'),
+            targetSymbols: any(named: 'targetSymbols'),
+          ),
+        ).thenAnswer(
+          (_) async => const MarketDayBackfillResult(
+            rows: 700,
+            basePrice: BasePriceStatus(
+              fetch: BasePriceFetch.failed,
+              missing: 3,
+              withheld: true,
+              reason: '網路錯誤',
+            ),
+          ),
+        );
+
+        final result = await fastSyncer.syncHistoricalPrices(
+          date: testDate,
+          watchlistSymbols: [],
+          popularStocks: [],
+          marketCandidates: [],
+        );
+
+        verify(
+          () => mockPriceRepo.backfillTwsePricesByDate(
+            date: any(named: 'date'),
+            targetSymbols: any(named: 'targetSymbols'),
+          ),
+        ).called(2);
+        expect(result.marketDayRows, 1400);
+        expect(result.rateLimitError, isNull);
+      });
+
+      test('Phase 0：平盤價限流 → 中止 phase 0、不外拋、phase 1 照常', () async {
+        setupDayCounts(missingTwseDays: {tue, mon});
+        when(
+          () => mockPriceRepo.backfillTwsePricesByDate(
+            date: any(named: 'date'),
+            targetSymbols: any(named: 'targetSymbols'),
+          ),
+        ).thenAnswer(
+          (_) async => const MarketDayBackfillResult(
+            rows: 700,
+            basePrice: BasePriceStatus(
+              fetch: BasePriceFetch.rateLimited,
+              missing: 1,
+              withheld: true,
+              reason: '限流',
+              error: RateLimitException('r'),
+            ),
+          ),
+        );
+
+        final result = await fastSyncer.syncHistoricalPrices(
+          date: testDate,
+          watchlistSymbols: [],
+          popularStocks: [],
+          marketCandidates: [],
+        );
+
+        verify(
+          () => mockPriceRepo.backfillTwsePricesByDate(
+            date: any(named: 'date'),
+            targetSymbols: any(named: 'targetSymbols'),
+          ),
+        ).called(1);
+        expect(result.marketDayRows, 700);
+        verify(
+          () => mockDb.getSymbolsWithSufficientData(
+            minDays: any(named: 'minDays'),
+            startDate: any(named: 'startDate'),
+            endDate: any(named: 'endDate'),
+          ),
+        ).called(1);
+      });
+
       test('單日失敗（DatabaseException）不中斷後續日子', () async {
         setupDayCounts(missingTwseDays: {tue, mon});
         var call = 0;
@@ -938,7 +1021,7 @@ void main() {
         ).thenAnswer((_) async {
           call++;
           if (call == 1) throw const DatabaseException('單日失敗');
-          return 700;
+          return _backfilled(700);
         });
 
         final result = await fastSyncer.syncHistoricalPrices(

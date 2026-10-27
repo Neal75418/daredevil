@@ -13,6 +13,7 @@ class ExRightResult {
     this.closeBefore,
     this.referencePrice,
     this.dividendAdjustedReference,
+    this.tradingBasePrice,
   });
 
   final String symbol;
@@ -37,6 +38,11 @@ class ExRightResult {
   /// 列；核對明細用，見 [matchesReference]）
   final double? dividendAdjustedReference;
 
+  /// 開始交易基準價（TPEx exDailyQ）：除權息日交易所算漲跌用的平盤價，
+  /// 依升降單位取整、只有現金增資時不扣增資（≠ [referencePrice]）。
+  /// 2026-10-27 實測三檔與盤中報價的 `y` 相同。TWSE 列表不帶（上市用 TWT84U）。
+  final double? tradingBasePrice;
+
   bool get needsDetail =>
       cashDividend == null || stockSharesPerThousand == null;
 
@@ -49,6 +55,7 @@ class ExRightResult {
     closeBefore: closeBefore,
     referencePrice: referencePrice,
     dividendAdjustedReference: dividendAdjustedReference,
+    tradingBasePrice: tradingBasePrice,
   );
 
   /// 明細與列表是否指同一次除權息：以明細的現金與配股推算

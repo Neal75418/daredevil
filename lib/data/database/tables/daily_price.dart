@@ -33,8 +33,13 @@ class DailyPrice extends Table {
   /// 成交量（股）
   RealColumn get volume => real().nullable()();
 
-  /// 漲跌價差（來自 TWSE/TPEX API，用於計算漲跌幅）
+  /// 漲跌價差＝收盤 − 當天的平盤價 [basePrice]（有平盤價時由 `insertPrices`
+  /// 重算；沒有時照來源給的值）。平盤價不明的不比價日為 null，不得為 0。
   RealColumn get priceChange => real().named('price_change').nullable()();
+
+  /// 交易所當天的平盤價（開盤競價基準）：上市來自 TWT84U、上櫃除權息列來自
+  /// exDailyQ。只存來源直接給的值、不從漲跌回推；沒取得為 null。
+  RealColumn get basePrice => real().named('base_price').nullable()();
 
   @override
   Set<Column> get primaryKey => {symbol, date};

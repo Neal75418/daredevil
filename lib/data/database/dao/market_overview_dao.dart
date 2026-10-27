@@ -6,6 +6,14 @@ import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.drift.dart';
 
 /// 大盤總覽彙總查詢操作
+
+/// 官方「無比價」：除權息日的列不算漲、跌、平（除權息漲跌修正 spec 第 5 節）。
+/// 只排除配發表上的列（含只有現金增資的 0／0 列）；減資恢復買賣、新股首日
+/// 仍照漲跌計入（已知限制）。
+const _notExDividend =
+    'NOT EXISTS (SELECT 1 FROM dividend_distribution dd '
+    'WHERE dd.symbol = dp.symbol AND dd.ex_date = dp.date)';
+
 mixin MarketOverviewDaoMixin on $AppDatabase {
   /// 取得指定日期「可交易池」股數 —— 過流動性門檻的 daily_price 筆數。
   ///
@@ -50,7 +58,8 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
 
     // 直接使用 daily_price.price_change 欄位（API 同步時已填入）
     // 避免 INNER JOIN 前一交易日，確保只有 1 天資料的股票也能統計
-    const query = '''
+    const query =
+        '''
     SELECT
       sm.market,
       SUM(CASE WHEN dp.price_change > 0 THEN 1 ELSE 0 END) as advance,
@@ -61,6 +70,7 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
     WHERE dp.date >= ? AND dp.date < ?
       AND dp.close IS NOT NULL
       AND dp.price_change IS NOT NULL
+      AND $_notExDividend
     GROUP BY sm.market
   ''';
 
@@ -70,7 +80,7 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
         Variable.withDateTime(startOfDay),
         Variable.withDateTime(endOfDay),
       ],
-      readsFrom: {dailyPrice, stockMaster},
+      readsFrom: {dailyPrice, stockMaster, dividendDistribution},
     ).get();
 
     final byMarket = <String, ({int advance, int decline, int unchanged})>{};
@@ -210,7 +220,7 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
         Variable.withDateTime(startOfDay),
         Variable.withDateTime(endOfDay),
       ],
-      readsFrom: {dailyPrice, stockMaster},
+      readsFrom: {dailyPrice, stockMaster, dividendDistribution},
     ).get();
 
     final byMarket = <String, ({double totalTurnover})>{};
@@ -238,7 +248,8 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
     final startOfDay = DateContext.normalize(date);
     final endOfDay = startOfDay.add(const Duration(days: 1));
 
-    const query = '''
+    const query =
+        '''
     SELECT sm.market,
       SUM(CASE WHEN (dp.price_change / (dp.close - dp.price_change) * 100) >= 9.5 THEN 1 ELSE 0 END) as limit_up,
       SUM(CASE WHEN (dp.price_change / (dp.close - dp.price_change) * 100) <= -9.5 THEN 1 ELSE 0 END) as limit_down
@@ -247,6 +258,7 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
     WHERE dp.date >= ? AND dp.date < ?
       AND dp.close IS NOT NULL AND dp.price_change IS NOT NULL
       AND (dp.close - dp.price_change) != 0
+      AND $_notExDividend
     GROUP BY sm.market
   ''';
 
@@ -256,7 +268,7 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
         Variable.withDateTime(startOfDay),
         Variable.withDateTime(endOfDay),
       ],
-      readsFrom: {dailyPrice, stockMaster},
+      readsFrom: {dailyPrice, stockMaster, dividendDistribution},
     ).get();
 
     final byMarket = <String, ({int limitUp, int limitDown})>{};
@@ -314,7 +326,7 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
         Variable.withDateTime(endOfDay),
         Variable.withInt(coverage),
       ],
-      readsFrom: {dailyPrice, stockMaster},
+      readsFrom: {dailyPrice, stockMaster, dividendDistribution},
     ).get();
 
     final byMarket = <String, List<({DateTime date, double turnover})>>{};
@@ -567,15 +579,19 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
       date,
     ).subtract(Duration(days: days * 5 + 7));
 
-    const query = '''
+    const query =
+        '''
     SELECT sm.market, dp.date,
-      SUM(CASE WHEN dp.price_change > 0 THEN 1 ELSE 0 END) as advance,
-      SUM(CASE WHEN dp.price_change < 0 THEN 1 ELSE 0 END) as decline,
-      SUM(CASE WHEN dp.price_change = 0 THEN 1 ELSE 0 END) as unchanged,
-      SUM(CASE WHEN dp.price_change > 0 THEN dp.close * dp.volume END)
-        as up_turnover,
-      SUM(CASE WHEN dp.price_change < 0 THEN dp.close * dp.volume END)
-        as down_turnover
+      SUM(CASE WHEN dp.price_change > 0 AND $_notExDividend THEN 1 ELSE 0 END)
+        as advance,
+      SUM(CASE WHEN dp.price_change < 0 AND $_notExDividend THEN 1 ELSE 0 END)
+        as decline,
+      SUM(CASE WHEN dp.price_change = 0 AND $_notExDividend THEN 1 ELSE 0 END)
+        as unchanged,
+      SUM(CASE WHEN dp.price_change > 0 AND $_notExDividend
+        THEN dp.close * dp.volume END) as up_turnover,
+      SUM(CASE WHEN dp.price_change < 0 AND $_notExDividend
+        THEN dp.close * dp.volume END) as down_turnover
     FROM daily_price dp
     INNER JOIN stock_master sm ON dp.symbol = sm.symbol
     WHERE dp.date > ? AND dp.date < ?
@@ -593,7 +609,7 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
         Variable.withDateTime(endOfDay),
         Variable.withInt(coverage),
       ],
-      readsFrom: {dailyPrice, stockMaster},
+      readsFrom: {dailyPrice, stockMaster, dividendDistribution},
     ).get();
 
     final byMarket =
@@ -691,7 +707,7 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
         Variable.withDateTime(startDate),
         Variable.withDateTime(endOfDay),
       ],
-      readsFrom: {dailyPrice, stockMaster},
+      readsFrom: {dailyPrice, stockMaster, dividendDistribution},
     ).get();
 
     final byMarket = <String, ({int newHighs, int newLows})>{};
@@ -737,11 +753,14 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
     final startOfDay = DateContext.normalize(date);
     final endOfDay = startOfDay.add(const Duration(days: 1));
 
-    const query = '''
+    const query =
+        '''
     SELECT sm.industry, COUNT(*) as stock_count,
       AVG(dp.price_change / (dp.close - dp.price_change) * 100) as avg_change_pct,
-      SUM(CASE WHEN dp.price_change > 0 THEN 1 ELSE 0 END) as advance,
-      SUM(CASE WHEN dp.price_change < 0 THEN 1 ELSE 0 END) as decline
+      SUM(CASE WHEN dp.price_change > 0 AND $_notExDividend THEN 1 ELSE 0 END)
+        as advance,
+      SUM(CASE WHEN dp.price_change < 0 AND $_notExDividend THEN 1 ELSE 0 END)
+        as decline
     FROM daily_price dp
     INNER JOIN stock_master sm ON dp.symbol = sm.symbol
     WHERE dp.date >= ? AND dp.date < ? AND sm.market = ?
@@ -761,7 +780,7 @@ mixin MarketOverviewDaoMixin on $AppDatabase {
         Variable.withString(market),
         Variable.withInt(minStockCount),
       ],
-      readsFrom: {dailyPrice, stockMaster},
+      readsFrom: {dailyPrice, stockMaster, dividendDistribution},
     ).get();
 
     return results.map((row) {

@@ -50,6 +50,7 @@ void main() {
             low: const Value(0),
             close: const Value(0),
             volume: const Value(17),
+            priceChange: const Value(0),
           ),
         );
     await db1
@@ -63,6 +64,7 @@ void main() {
             low: const Value(2190),
             close: const Value(2205),
             volume: const Value(51372177),
+            priceChange: const Value(5),
           ),
         );
     await db1.close();
@@ -76,9 +78,15 @@ void main() {
     expect(r1472.high, isNull);
     expect(r1472.low, isNull);
     expect(r1472.volume, 17, reason: 'volume 不清(0 量合法、17 更是真值)');
+    expect(
+      r1472.priceChange,
+      isNull,
+      reason: '收盤清成空值時漲跌一併清(除權息漲跌修正 spec 第 2 節第 0 條)',
+    );
     final r2330 = rows.firstWhere((r) => r.symbol == '2330');
     expect(r2330.close, 2205);
     expect(r2330.open, 2205);
+    expect(r2330.priceChange, 5);
   });
 
   test('sanitize 走 partial index,不再每次啟動全表掃描(2026-08-01 複審)', () async {
@@ -101,7 +109,7 @@ void main() {
     final plan = await db
         .customSelect(
           'EXPLAIN QUERY PLAN UPDATE daily_price SET open=NULL, high=NULL, '
-          'low=NULL, close=NULL WHERE close = 0',
+          'low=NULL, close=NULL, price_change=NULL WHERE close = 0',
         )
         .get();
     final detail = plan.map((r) => r.read<String>('detail')).join(' | ');

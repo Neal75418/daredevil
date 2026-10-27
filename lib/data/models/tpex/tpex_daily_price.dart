@@ -11,6 +11,7 @@ class TpexDailyPrice {
     required this.volume,
     required this.change,
     this.turnover,
+    this.noComparison = false,
   });
 
   final DateTime date;
@@ -23,4 +24,8 @@ class TpexDailyPrice {
   final double? volume;
   final double? change;
   final double? turnover;
+
+  /// 漲跌欄是文字（除息／除權／除權息）＝當天不比價，漲跌要用 exDailyQ 的
+  /// 開始交易基準價算（除權息漲跌修正）；沒成交的 `---`、`--`、空白不算。
+  final bool noComparison;
 }

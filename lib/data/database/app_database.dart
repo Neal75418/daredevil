@@ -229,6 +229,7 @@ class AppDatabase extends $AppDatabase
       await _ensureDividendBackfillSchema();
       await _ensureDividendPriceColumns();
       await _ensureDividendFactsSchema();
+      await _ensureDailyPriceBasePriceColumn();
       await ensurePriceAlertManagedByColumn();
       await _ensureRetiredSchemaDropped();
       await ensureInsiderTransferPk();
@@ -341,9 +342,11 @@ class AppDatabase extends $AppDatabase
       'CREATE INDEX IF NOT EXISTS idx_daily_price_zero_close '
       'ON daily_price (close) WHERE close = 0',
     );
+    // price_change 一併清：收盤是空值的列漲跌必為空值（除權息漲跌修正
+    // spec 第 2 節第 0 條），留著 0 會被當成平盤。
     await customStatement(
       'UPDATE daily_price SET open = NULL, high = NULL, low = NULL, '
-      'close = NULL WHERE close = 0',
+      'close = NULL, price_change = NULL WHERE close = 0',
     );
   }
 
@@ -439,6 +442,26 @@ class AppDatabase extends $AppDatabase
         '既有 DB 補上 dividend_month_ledger.prices_recorded 欄（既有紀錄為 false）',
       );
     }
+  }
+
+  /// `daily_price` 補 `base_price` 欄（2026-10-27，除權息漲跌修正）：交易所
+  /// 當天的平盤價。沿 [_ensureDividendPriceColumns] 先例——nullable 欄位用
+  /// `ALTER TABLE ADD COLUMN` 就地補、不 bump fingerprint（bump 會 wipe
+  /// 數十萬列價格）。既有列為 null，由修復工具 `tool/backfill_base_prices.dart`
+  /// 補值。守門測試：`test/data/database/daily_price_base_price_column_test.dart`。
+  Future<void> _ensureDailyPriceBasePriceColumn() async {
+    final columns = await customSelect(
+      "PRAGMA table_info('daily_price')",
+    ).get();
+    final hasColumn = columns.any(
+      (row) => row.read<String>('name') == 'base_price',
+    );
+    if (hasColumn) return;
+    await customStatement('ALTER TABLE daily_price ADD COLUMN base_price REAL');
+    AppLogger.info(
+      'AppDatabase',
+      '既有 DB 補上 daily_price.base_price 欄（既有列為 null）',
+    );
   }
 
   /// `price_alert` 補 `managed_by` 欄（2026-08-16）。
@@ -766,6 +789,10 @@ class AppDatabase extends $AppDatabase
   ///
   /// 例外：純新增、不動既有表的 table 可比照 `_ensureQuarterlyReportSchema`
   /// 用 `Migrator.createTable` 補建而不 bump（2026-08-06 起的先例）。
+  ///
+  /// 例外：新增 **nullable** column 可比照 [_ensureDividendPriceColumns]、
+  /// [_ensureDailyPriceBasePriceColumn] 在 beforeOpen 用 `ALTER TABLE ADD
+  /// COLUMN` 就地補而不 bump（既有資料原封不動；2026-10-03 起的先例）。
   ///
   /// 例外：退役的表或欄位加進 [_ensureRetiredSchemaDropped] 就地 DROP 而不
   /// bump（2026-08-15 起的先例）——bump 會 wipe 價格等全部非白名單表。退役的

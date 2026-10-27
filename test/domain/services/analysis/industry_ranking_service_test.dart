@@ -106,6 +106,52 @@ void main() {
       expect(rankings.last.momentumPct, closeTo(-1.0, 0.001));
     });
 
+    test('🚨 d1 用漲跌價差：除權息日不含股息；只有 1 筆歷史但有 priceChange 也計入', () {
+      // 甲：除息日前收 33.94、今收 32.12、交易所漲跌 −0.32 → −0.986%（前後
+      // 收盤會算成 −5.36%，把股息當跌幅）；乙：只有今天一筆但帶漲跌 +1
+      // （基準 49）→ +2.04%
+      final rankings = service.rank(
+        priceHistories: {
+          for (var i = 0; i < 5; i++)
+            'A$i': [
+              createTestPrice(
+                symbol: 'A$i',
+                date: DateTime(2026, 8, 11),
+                close: 33.94,
+              ),
+              createTestPrice(
+                symbol: 'A$i',
+                date: DateTime(2026, 8, 12),
+                close: 32.12,
+                priceChange: -0.32,
+              ),
+            ],
+          for (var i = 0; i < 5; i++)
+            'B$i': [
+              createTestPrice(
+                symbol: 'B$i',
+                date: DateTime(2026, 8, 12),
+                close: 50,
+                priceChange: 1,
+              ),
+            ],
+        },
+        industries: {
+          for (var i = 0; i < 5; i++) 'A$i': '甲',
+          for (var i = 0; i < 5; i++) 'B$i': '乙',
+        },
+        names: const {},
+        institutionalHistories: const {},
+        window: RankingWindow.d1,
+      );
+
+      expect(rankings.first.industry, '乙');
+      expect(rankings.first.momentumPct, closeTo(2.0408, 0.001));
+      expect(rankings.first.memberCount, 5, reason: '1 筆歷史但有漲跌價差也計入');
+      expect(rankings.last.industry, '甲');
+      expect(rankings.last.momentumPct, closeTo(-0.986, 0.001));
+    });
+
     test('僅 1 筆歷史(算不出當日報酬)的成員不列入', () {
       final rankings = service.rank(
         priceHistories: {

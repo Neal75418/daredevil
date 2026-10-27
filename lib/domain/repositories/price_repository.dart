@@ -40,10 +40,16 @@ abstract class IPriceRepository {
   ///
   /// ⚠️ 只有全市場抓取可傳 [ledger]；部分股票的呼叫（例如 tool/backfill 的
   /// targetSymbols 子集）不得傳，否則會把缺股的日子標成定案。
+  ///
+  /// [withBasePrices]：價格之後抓同一天的平盤價（上市 TWT84U、上櫃
+  /// exDailyQ）並寫進同一個 transaction，狀態在
+  /// [MarketSyncResult.basePrices]。`false` 只給校準 DB（`tool/backfill`）
+  /// 用，**不得與 [ledger] 同時傳**（assert）：會把缺平盤價的日子記成定案。
   Future<MarketSyncResult> syncAllPricesForDate(
     DateTime date, {
     bool force = false,
     MarketDayFetchLedger? ledger,
+    bool withBasePrices = true,
   });
 
   /// 用 TWSE batch endpoint 回補單一交易日**所有**上市股票價格
@@ -57,17 +63,21 @@ abstract class IPriceRepository {
   ///
   /// 與 [backfillTpexPricesByDate] 採完全對稱 pattern。
   ///
-  /// 回傳實際寫入的 price row 數。
+  /// 回傳實際寫入的 price row 數與平盤價狀態（[MarketDayBackfillResult]）。
   ///
-  /// 例外政策：[RateLimitException] / [NetworkException] rethrow；其他例外
-  /// 包成 [DatabaseException]。
+  /// 例外政策：價格本身的 [RateLimitException] / [NetworkException] rethrow；
+  /// 其他例外包成 [DatabaseException]。**平盤價那一段的錯誤不拋**（價格與平盤
+  /// 價寫進同一個 transaction，拋出會連價格都寫不進去），放進
+  /// [MarketDayBackfillResult.basePrice]。
   ///
   /// ⚠️ 只有全市場抓取可傳 [ledger]；部分股票的呼叫（例如 tool/backfill 的
   /// targetSymbols 子集）不得傳，否則會把缺股的日子標成定案。
-  Future<int> backfillTwsePricesByDate({
+  /// [withBasePrices] 同 [syncAllPricesForDate]，不得與 [ledger] 同時傳。
+  Future<MarketDayBackfillResult> backfillTwsePricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,
     MarketDayFetchLedger? ledger,
+    bool withBasePrices = true,
   });
 
   /// 用 TPEx OpenAPI batch endpoint 回補單一交易日**所有**上櫃股票價格
@@ -84,18 +94,91 @@ abstract class IPriceRepository {
   /// [targetSymbols] 為要寫入 DB 的 symbol 白名單；其他從 API 回來但不在
   /// 白名單的股票（例如新上市但 stock_master 尚未同步到的）會被忽略。
   ///
-  /// 回傳實際寫入的 price row 數。
+  /// 回傳實際寫入的 price row 數與平盤價狀態（[MarketDayBackfillResult]）。
   ///
-  /// 例外政策：[RateLimitException] / [NetworkException] rethrow（交給呼叫端
-  /// 決定 abort/retry）；其他例外包成 [DatabaseException]。
+  /// 例外政策：價格本身的 [RateLimitException] / [NetworkException] rethrow
+  /// （交給呼叫端決定 abort/retry）；其他例外包成 [DatabaseException]。
+  /// **平盤價那一段的錯誤不拋**，放進 [MarketDayBackfillResult.basePrice]。
   ///
   /// ⚠️ 只有全市場抓取可傳 [ledger]；部分股票的呼叫（例如 tool/backfill 的
   /// targetSymbols 子集）不得傳，否則會把缺股的日子標成定案。
-  Future<int> backfillTpexPricesByDate({
+  /// [withBasePrices] 同 [syncAllPricesForDate]，不得與 [ledger] 同時傳。
+  Future<MarketDayBackfillResult> backfillTpexPricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,
     MarketDayFetchLedger? ledger,
+    bool withBasePrices = true,
   });
+}
+
+/// 平盤價抓取結果（除權息漲跌修正 spec 第 3 節狀態表）
+enum BasePriceFetch {
+  /// 回應可信
+  fetched,
+
+  /// 網路錯誤、回應不可信（stat／date／total 不符）、解析失敗、需要的列
+  /// 一列都對不上
+  failed,
+
+  /// 限流（原始例外在 [BasePriceStatus.error]）
+  rateLimited,
+
+  /// 這批沒有需要平盤價的列（上櫃沒有文字標記），沒抓
+  notNeeded,
+
+  /// 價格回空，或 `withBasePrices: false`，沒抓
+  skipped,
+}
+
+/// 市場日價格寫入後，每個市場的平盤價狀態：抓取結果＋N。
+///
+/// 平盤價那一段的錯誤不拋（價格與平盤價寫進同一個 transaction，拋出會連價格
+/// 都寫不進去、呼叫端也拿不到回傳值），呼叫端只看 [rateLimited] 與
+/// [shouldRecordError]。
+class BasePriceStatus {
+  const BasePriceStatus({
+    required this.fetch,
+    this.missing = 0,
+    this.withheld = false,
+    this.reason,
+    this.error,
+  });
+
+  final BasePriceFetch fetch;
+
+  /// 需要平盤價、合併後仍沒有的列數（N）
+  final int missing;
+
+  /// 本函式因平盤價而沒向 ledger 回報定案（這一天會被步驟 5.5 重抓）
+  final bool withheld;
+
+  final String? reason;
+  final Object? error;
+
+  bool get rateLimited => fetch == BasePriceFetch.rateLimited;
+
+  /// 呼叫端要記 errors 的情況（spec 呼叫端表的「缺」）：沒回報定案、而且
+  /// 不是限流（限流由呼叫端另設旗標）。`fetched` 而 N＞0 只記 warning；
+  /// `failed` 而 N＝0 只記 log。
+  bool get shouldRecordError => withheld && !rateLimited;
+
+  static const notNeeded = BasePriceStatus(fetch: BasePriceFetch.notNeeded);
+  static const skipped = BasePriceStatus(fetch: BasePriceFetch.skipped);
+
+  @override
+  String toString() =>
+      'BasePriceStatus(${fetch.name}, missing: $missing, withheld: $withheld'
+      '${reason == null ? '' : ', $reason'})';
+}
+
+/// 單一市場、單一交易日回補的結果
+class MarketDayBackfillResult {
+  const MarketDayBackfillResult({required this.rows, required this.basePrice});
+
+  /// 實際寫入的價格列數
+  final int rows;
+
+  final BasePriceStatus basePrice;
 }
 
 /// 全市場價格同步結果
@@ -106,10 +189,15 @@ class MarketSyncResult {
     this.dataDate,
     this.skipped = false,
     this.emptyMarkets = const [],
+    this.basePrices = const {},
   });
 
   final int count;
   final List<String> candidates;
+
+  /// 每個市場（`MarketCode`）的平盤價狀態；提早回傳的分支（已定案跳過、
+  /// 兩市場皆空）為空 Map
+  final Map<String, BasePriceStatus> basePrices;
 
   /// 主要資料日期（優先 TWSE）
   final DateTime? dataDate;

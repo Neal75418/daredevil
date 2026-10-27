@@ -163,6 +163,55 @@ TDCC holding、dividend、insider transfer、quarterly report。
   需用修復工具 `tool/refetch_market_days.dart` 手動處理（重用同一套
   `refetchRange` 抓取邏輯，不受每輪上限、回補窗、追蹤起始日限制）
 
+### 平盤價（2026-10：除權息漲跌修正）
+
+- **欄位** `daily_price.base_price`（`beforeOpen` 補欄、不 bump schema
+  fingerprint）。漲跌價差 `price_change` 只在 `PriceDaoMixin.insertPrices` 的
+  upsert 與修復工具用的 `applyBasePrices` 裡算（守門
+  `price_change_single_writer_guard_test` 只管在哪裡寫；其他放行的寫入點只清成
+  空值或刪列，內容由讀程式碼確認）：收盤空 → 空；有平盤價
+  （新值優先、否則沿用舊值）→ `ROUND(收盤 − 平盤價, 2)`；都沒有 → 來源的漲跌
+  （companion 沒帶漲跌欄時：舊列收盤沒變就沿用舊漲跌，否則空）
+- **來源**：上市 TWT84U 每日升降幅度（`TwseClient.getOpeningBasePrices`；`stat`／
+  `date`／`total` 不符視為沒抓到），上櫃 exDailyQ 的「開始交易基準價」
+  （`TpexClient.getExRightResults` → `ExRightResult.tradingBasePrice`）。MI_INDEX
+  的 `X`、STOCK_DAY 的 `X0.00` 解析成空值；上櫃日資料漲跌欄是文字的列標
+  `noComparison`
+- **三個市場日寫入函式**（`syncAllPricesForDate`、`backfillTwsePricesByDate`、
+  `backfillTpexPricesByDate`）先抓價格、再抓同一天的平盤價（上市：價格非空就抓；
+  上櫃：這批有 `noComparison` 列才抓），兩者寫進**同一個 transaction**
+  （`PriceRepository._writeMarketDay`），網路請求都在 transaction 外。需要平盤價的
+  列：上市 `STOCK_DAY_ALL` 漲跌 0、MI_INDEX `X`、上櫃 `noComparison`；
+  `STOCK_DAY_ALL` 的 0 列沒拿到平盤價時漲跌改存空值，不暫存 0。逐檔路徑
+  （STOCK_DAY 月資料、FinMind、`tool/backfill.dart` 傳 `withBasePrices: false`）
+  不抓，靠 upsert 保留既有平盤價
+- **狀態放回傳值、不拋**（`BasePriceStatus`：`fetch` ∈ fetched／failed／
+  rateLimited／notNeeded／skipped、`missing`＝寫入後仍缺平盤價的列數 N、
+  `withheld`＝這天不回報定案）——平盤價在 transaction 之前抓，價格已抓到、要
+  和平盤價寫進同一個 transaction；在這裡拋出，價格也寫不進去、呼叫端也拿不到
+  回傳值（CLAUDE.md「錯誤處理」的例外）。`withheld`：`failed`／`rateLimited` 而 N＞0；
+  清單整個對不上算 `failed`；缺口來自 `STOCK_DAY_ALL`（每日端點、`fetched` 而
+  N＞0）交給隔天 MI_INDEX 重抓
+- **呼叫端**：`_syncDailyPrices` → `rateLimited` 設 `rateLimitedAbort`＋
+  `recordError`，`withheld` 且非限流 → `recordError`（本輪 PARTIAL）；
+  `MarketDayRefetcher.attempt` → 記 `summary.errors`；限流先照常算這天定案再
+  `rateLimitAbort`，`stoppedAt` 只在這天沒定案時設成這天（已定案時由價格迴圈設
+  成清單上下一個要抓的日子——`days` 新→舊，即前一個交易日；沒有就留 null）；
+  Phase 0 → warning 計
+  「平盤價缺」天數、限流中止
+- **每輪摘要計數**（`PriceDao.getBasePriceGap`，post-update fail-safe）：上市
+  「收盤非空、漲跌空值」、上櫃「配發表有這檔這天、收盤非空、漲跌空值」的列數與
+  日期範圍（exDailyQ 清單不全而配發表也沒有的上櫃列不計，只在寫入當下的 warning
+  看得到；主檔已轉上市的股票，掛牌前的 FinMind 空值列會算進上市、修復工具修不
+  掉——已知限制，發生時清掛牌前的列）；通知只放短句（「N 筆漲跌缺平盤價」），`UpdateResult.summary` 與 update_run 訊息
+  尾巴放完整
+- **修復工具** `tool/backfill_base_prices.dart`：既有資料一次補平盤價（上市逐日
+  TWT84U、上櫃逐月 exDailyQ；`--db` 對副本彩排、`--dry-run` 只算次數）
+- **請求量**：上市每天多 1 個（約 136 KB，前置 `ApiConfig.basePriceCallDelayMs`
+  1 秒）、上櫃只在有 `noComparison` 列時多 1 個；Phase 0 每輪上限仍以
+  （日, 市場）計 30 個（`historicalMarketDayMaxCallsPerRun`），但上市每一天變成
+  2 個請求
+
 ### 步驟 6.6：除權除息（`DividendSyncer.syncDistributions`）
 
 - 寫入 `dividend_distribution`（一次除權息一列；`beforeOpen` 補建、不 bump

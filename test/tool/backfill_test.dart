@@ -8,6 +8,7 @@
 // - Symbols whitelist 優先於 stock master 查詢
 //
 // 不測試真實 TWSE/FinMind API — 那些由 operational run 驗證。
+import 'dart:io';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/repositories/fundamental_repository.dart';
@@ -31,6 +32,9 @@ class _MockInstitutionalRepo extends Mock implements IInstitutionalRepository {}
 class _MockFundamentalRepo extends Mock implements IFundamentalRepository {}
 
 class _MockTradingRepo extends Mock implements ITradingRepository {}
+
+MarketDayBackfillResult _backfilled(int rows) =>
+    MarketDayBackfillResult(rows: rows, basePrice: BasePriceStatus.skipped);
 
 void main() {
   late _MockDb db;
@@ -114,14 +118,16 @@ void main() {
       () => priceRepo.backfillTwsePricesByDate(
         date: any(named: 'date'),
         targetSymbols: any(named: 'targetSymbols'),
+        withBasePrices: any(named: 'withBasePrices'),
       ),
-    ).thenAnswer((_) async => 0);
+    ).thenAnswer((_) async => _backfilled(0));
     when(
       () => priceRepo.backfillTpexPricesByDate(
         date: any(named: 'date'),
         targetSymbols: any(named: 'targetSymbols'),
+        withBasePrices: any(named: 'withBasePrices'),
       ),
-    ).thenAnswer((_) async => 0);
+    ).thenAnswer((_) async => _backfilled(0));
     // Default: institutional batch backfill 預設 no-op（每天 0 rows）。
     when(
       () => institutionalRepo.backfillInstitutionalByDate(
@@ -204,6 +210,7 @@ void main() {
         () => priceRepo.backfillTwsePricesByDate(
           date: any(named: 'date'),
           targetSymbols: captureAny(named: 'targetSymbols'),
+          withBasePrices: any(named: 'withBasePrices'),
         ),
       ).captured;
       expect(captured, isNotEmpty);
@@ -464,8 +471,9 @@ void main() {
           () => priceRepo.backfillTwsePricesByDate(
             date: any(named: 'date'),
             targetSymbols: any(named: 'targetSymbols'),
+            withBasePrices: any(named: 'withBasePrices'),
           ),
-        ).thenAnswer((_) async => 7);
+        ).thenAnswer((_) async => _backfilled(7));
 
         final backfiller = makeBackfiller(makeConfig(symbols: const ['2330']));
         final result = await backfiller.run();
@@ -494,11 +502,27 @@ void main() {
           () => priceRepo.backfillTwsePricesByDate(
             date: any(named: 'date'),
             targetSymbols: captureAny(named: 'targetSymbols'),
+            withBasePrices: any(named: 'withBasePrices'),
           ),
         ).captured;
         expect(captured, isNotEmpty);
         final targets = captured.first as Set<String>;
         expect(targets, contains('2330'));
+      },
+    );
+
+    test(
+      '🚨 校準 DB 不抓平盤價：backfillTwsePricesByDate 傳 withBasePrices: false、不傳 ledger',
+      () async {
+        final backfiller = makeBackfiller(makeConfig(symbols: const ['2330']));
+        await backfiller.run();
+        verify(
+          () => priceRepo.backfillTwsePricesByDate(
+            date: any(named: 'date'),
+            targetSymbols: any(named: 'targetSymbols'),
+            withBasePrices: false,
+          ),
+        ).called(greaterThan(0));
       },
     );
 
@@ -509,6 +533,7 @@ void main() {
           () => priceRepo.backfillTwsePricesByDate(
             date: any(named: 'date'),
             targetSymbols: any(named: 'targetSymbols'),
+            withBasePrices: any(named: 'withBasePrices'),
           ),
         ).thenThrow(const RateLimitException());
 
@@ -530,6 +555,56 @@ void main() {
             endDate: any(named: 'endDate'),
           ),
         );
+      },
+    );
+
+    test(
+      '🚨 FinMind 逐檔回補的 companion 不帶 priceChange／basePrice（insertPrices 第 1／3 條才會保留已補正的值）',
+      () {
+        final src = File('tool/backfill.dart').readAsStringSync();
+        // 要找定義（呼叫點更早出現、往後切不到 companion）
+        final start = src.indexOf(
+          'Future<PhaseResult> _backfillPricesViaFinMind(',
+        );
+        expect(start, greaterThan(0), reason: 'sanity：找得到 FinMind phase');
+        final next = src.indexOf('\n  Future<', start + 1);
+        final body = src.substring(start, next < 0 ? src.length : next);
+        final m = RegExp(
+          r'DailyPriceCompanion\.insert\((.*?)\n\s*\),\n\s*\);',
+          dotAll: true,
+        ).firstMatch(body);
+        expect(m, isNotNull, reason: 'sanity：找得到 companion');
+        final args = m!.group(1)!;
+        expect(args, contains('close:'), reason: 'sanity：真的抓到那段 companion');
+        expect(args, isNot(contains('priceChange')));
+        expect(args, isNot(contains('basePrice')));
+      },
+    );
+
+    test(
+      '🚨 校準 DB 不抓平盤價：backfillTpexPricesByDate 傳 withBasePrices: false',
+      () async {
+        when(() => db.getStocksBatch(any())).thenAnswer(
+          (_) async => {
+            '4488': StockMasterEntry(
+              symbol: '4488',
+              name: 'TPEx Stock',
+              market: 'TPEx',
+              industry: 'Test',
+              isActive: true,
+              updatedAt: DateTime(2026, 1, 1),
+            ),
+          },
+        );
+        final backfiller = makeBackfiller(makeConfig(symbols: const ['4488']));
+        await backfiller.run();
+        verify(
+          () => priceRepo.backfillTpexPricesByDate(
+            date: any(named: 'date'),
+            targetSymbols: any(named: 'targetSymbols'),
+            withBasePrices: false,
+          ),
+        ).called(greaterThan(0));
       },
     );
 
@@ -562,8 +637,9 @@ void main() {
           () => priceRepo.backfillTpexPricesByDate(
             date: any(named: 'date'),
             targetSymbols: any(named: 'targetSymbols'),
+            withBasePrices: any(named: 'withBasePrices'),
           ),
-        ).thenAnswer((_) async => 1);
+        ).thenAnswer((_) async => _backfilled(1));
 
         final backfiller = makeBackfiller(
           makeConfig(symbols: ['2330', '4488']),
@@ -580,6 +656,7 @@ void main() {
           () => priceRepo.backfillTwsePricesByDate(
             date: any(named: 'date'),
             targetSymbols: any(named: 'targetSymbols'),
+            withBasePrices: any(named: 'withBasePrices'),
           ),
         ).called(greaterThan(0));
 
@@ -598,6 +675,7 @@ void main() {
           () => priceRepo.backfillTpexPricesByDate(
             date: any(named: 'date'),
             targetSymbols: captureAny(named: 'targetSymbols'),
+            withBasePrices: any(named: 'withBasePrices'),
           ),
         ).captured;
         expect(captured, isNotEmpty);
@@ -641,6 +719,7 @@ void main() {
           () => priceRepo.backfillTpexPricesByDate(
             date: any(named: 'date'),
             targetSymbols: any(named: 'targetSymbols'),
+            withBasePrices: any(named: 'withBasePrices'),
           ),
         );
       },
@@ -746,6 +825,7 @@ void main() {
         () => priceRepo.backfillTpexPricesByDate(
           date: any(named: 'date'),
           targetSymbols: any(named: 'targetSymbols'),
+          withBasePrices: any(named: 'withBasePrices'),
         ),
       ).thenThrow(const RateLimitException());
 
@@ -795,6 +875,7 @@ void main() {
         () => priceRepo.backfillTwsePricesByDate(
           date: any(named: 'date'),
           targetSymbols: any(named: 'targetSymbols'),
+          withBasePrices: any(named: 'withBasePrices'),
         ),
       ).called(lessThanOrEqualTo(12)); // 閾值 10 + 邊際
       expect(logs.join('\n'), contains('連續'), reason: 'abort 時要留下可診斷的訊息');
@@ -815,6 +896,7 @@ void main() {
         () => priceRepo.backfillTwsePricesByDate(
           date: any(named: 'date'),
           targetSymbols: any(named: 'targetSymbols'),
+          withBasePrices: any(named: 'withBasePrices'),
         ),
       );
     });
@@ -832,6 +914,7 @@ void main() {
         () => priceRepo.backfillTwsePricesByDate(
           date: any(named: 'date'),
           targetSymbols: any(named: 'targetSymbols'),
+          withBasePrices: any(named: 'withBasePrices'),
         ),
       ).called(greaterThan(0));
     });
@@ -894,6 +977,7 @@ void main() {
         () => priceRepo.backfillTwsePricesByDate(
           date: any(named: 'date'),
           targetSymbols: any(named: 'targetSymbols'),
+          withBasePrices: any(named: 'withBasePrices'),
         ),
       );
       verifyNever(

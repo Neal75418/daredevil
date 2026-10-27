@@ -1,3 +1,4 @@
+import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/market_dataset.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
@@ -12,6 +13,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
+import 'package:daredevil/data/repositories/base_price_merge.dart';
 import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 import 'package:daredevil/data/repositories/price_candidate_filter.dart';
 import 'package:daredevil/data/repositories/twse_price_source.dart';
@@ -32,6 +34,9 @@ class PriceRepository implements IPriceRepository {
     required TwseClient twseClient,
     required TpexClient tpexClient,
     AppClock clock = const SystemClock(),
+    this.basePriceDelay = const Duration(
+      milliseconds: ApiConfig.basePriceCallDelayMs,
+    ),
   }) : _db = database,
        _twseSource = TwsePriceSource(client: twseClient),
        _tpexSource = TpexPriceSource(
@@ -44,6 +49,9 @@ class PriceRepository implements IPriceRepository {
   final TwsePriceSource _twseSource;
   final TpexPriceSource _tpexSource;
   final AppClock _clock;
+
+  /// 平盤價請求前的等待（價格請求之後緊接著打第二個；測試注入 zero）
+  final Duration basePriceDelay;
 
   /// Request deduplicator for price history queries
   final _priceHistoryDedup = RequestDeduplicator<List<DailyPriceEntry>>();
@@ -209,15 +217,17 @@ class PriceRepository implements IPriceRepository {
   /// DB Companion 並依 [targetSymbols] 過濾，最後一次 batch insert。
   /// Pattern 與 [backfillTpexPricesByDate] 對稱。
   @override
-  Future<int> backfillTwsePricesByDate({
+  Future<MarketDayBackfillResult> backfillTwsePricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,
     MarketDayFetchLedger? ledger,
+    bool withBasePrices = true,
   }) async {
+    assert(withBasePrices || ledger == null, _withBasePricesLedgerAssert);
     try {
       // 歷史回補走 MI_INDEX（STOCK_DAY_ALL 自 2026-06 起忽略 date 參數）
       final prices = await _twseSource.fetchAllDailyPricesHistorical(date);
-      if (prices.isEmpty) return 0;
+      if (prices.isEmpty) return _skippedBackfill;
 
       final processed = _twseSource.processDailyPrices(prices);
 
@@ -233,17 +243,37 @@ class PriceRepository implements IPriceRepository {
           )
           .toList();
 
-      if (filtered.isEmpty) return 0;
+      if (filtered.isEmpty) return _skippedBackfill;
 
+      // 平盤價（網路請求在 transaction 外）：X 列已是 null，不用 zeroToNull
+      final written = {for (final e in filtered) e.symbol.value};
+      final needs = withBasePrices
+          ? twseHistoricalNeedsBasePrice(prices).intersection(written)
+          : <String>{};
+      final base = withBasePrices
+          ? await _fetchTwseBasePrices(requestedDay)
+          : _skippedFetch;
+      final entries = mergeBasePrices(
+        filtered,
+        bases: base.bases,
+        needs: needs,
+        zeroToNull: false,
+      );
+
+      late BasePriceStatus status;
       await _db.transaction<void>(() async {
-        await _db.insertPrices(filtered);
-        await _afterMarketDayWrite(
+        status = await _writeMarketDay(
           market: MarketCode.twse,
-          entries: filtered,
+          day: requestedDay,
+          entries: entries,
+          needs: needs,
+          coverage: written,
+          base: base,
+          fromDailyEndpoint: false,
           ledger: ledger,
         );
       });
-      return filtered.length;
+      return MarketDayBackfillResult(rows: entries.length, basePrice: status);
     } on RateLimitException {
       rethrow;
     } on NetworkException {
@@ -265,15 +295,17 @@ class PriceRepository implements IPriceRepository {
   /// 忽略歷史 date），接著 [TpexPriceSource.processDailyPrices] 轉成
   /// DB Companion 並依 [targetSymbols] 過濾，最後一次 batch insert。
   @override
-  Future<int> backfillTpexPricesByDate({
+  Future<MarketDayBackfillResult> backfillTpexPricesByDate({
     required DateTime date,
     required Set<String> targetSymbols,
     MarketDayFetchLedger? ledger,
+    bool withBasePrices = true,
   }) async {
+    assert(withBasePrices || ledger == null, _withBasePricesLedgerAssert);
     try {
       // 歷史回補走 afterTrading/dailyQuotes（官方口徑，與每日端點相同）
       final prices = await _tpexSource.fetchAllDailyPricesHistorical(date);
-      if (prices.isEmpty) return 0;
+      if (prices.isEmpty) return _skippedBackfill;
 
       // processDailyPrices 已處理 StockPatterns.isValidCode 過濾。
       final processed = _tpexSource.processDailyPrices(prices);
@@ -287,17 +319,38 @@ class PriceRepository implements IPriceRepository {
             DateContext.normalize(entry.date.value) == requestedDay;
       }).toList();
 
-      if (filtered.isEmpty) return 0;
+      if (filtered.isEmpty) return _skippedBackfill;
 
+      // 上櫃平盤價：這批有文字標記的列才抓 exDailyQ 單日（網路請求在
+      // transaction 外）；文字標記列的漲跌已是 null，不用 zeroToNull。
+      // coverage＝needs：exDailyQ 只列除權息列（spec 例外一）
+      final written = {for (final e in filtered) e.symbol.value};
+      final needs = withBasePrices
+          ? tpexNeedsBasePrice(prices).intersection(written)
+          : <String>{};
+      final base = withBasePrices
+          ? await _fetchTpexBasePrices(requestedDay, needs)
+          : _skippedFetch;
+      final entries = mergeBasePrices(
+        filtered,
+        bases: base.bases,
+        needs: needs,
+        zeroToNull: false,
+      );
+      late BasePriceStatus status;
       await _db.transaction<void>(() async {
-        await _db.insertPrices(filtered);
-        await _afterMarketDayWrite(
+        status = await _writeMarketDay(
           market: MarketCode.tpex,
-          entries: filtered,
+          day: requestedDay,
+          entries: entries,
+          needs: needs,
+          coverage: needs,
+          base: base,
+          fromDailyEndpoint: false,
           ledger: ledger,
         );
       });
-      return filtered.length;
+      return MarketDayBackfillResult(rows: entries.length, basePrice: status);
     } on RateLimitException {
       rethrow;
     } on NetworkException {
@@ -322,7 +375,9 @@ class PriceRepository implements IPriceRepository {
     DateTime date, {
     bool force = false,
     MarketDayFetchLedger? ledger,
+    bool withBasePrices = true,
   }) async {
+    assert(withBasePrices || ledger == null, _withBasePricesLedgerAssert);
     try {
       // 正規化日期至裝置本地午夜時間（DateContext.normalize 是本地時間，
       // 非 UTC），以匹配資料庫中儲存的日期格式
@@ -401,23 +456,76 @@ class PriceRepository implements IPriceRepository {
         ...tpexResult.candidates,
       ];
 
+      // 上市平盤價：以 STOCK_DAY_ALL 回應的資料日抓 TWT84U（15:30 端點若還是
+      // 前一天的資料，就抓前一天的）。網路請求在 transaction 外。漲跌 0 的列
+      // 分不出不比價與真的平盤，沒拿到平盤價時改存 null（不得暫存 0）。
+      final twseEntries = twseResult.priceEntries;
+      final twseDay = twseEntries.isEmpty
+          ? null
+          : DateContext.normalize(twseEntries.first.date.value);
+      final twseWritten = {for (final e in twseEntries) e.symbol.value};
+      final twseNeeds = withBasePrices && twseEntries.isNotEmpty
+          ? twseDailyNeedsBasePrice(twsePrices).intersection(twseWritten)
+          : <String>{};
+      final twseBase = withBasePrices && twseDay != null
+          ? await _fetchTwseBasePrices(twseDay)
+          : _skippedFetch;
+      final mergedTwse = mergeBasePrices(
+        twseEntries,
+        bases: twseBase.bases,
+        needs: twseNeeds,
+        zeroToNull: true,
+      );
+      final tpexEntries = tpexResult.priceEntries;
+      final tpexDay = tpexEntries.isEmpty
+          ? null
+          : DateContext.normalize(tpexEntries.first.date.value);
+      final tpexNeeds = withBasePrices && tpexEntries.isNotEmpty
+          ? tpexNeedsBasePrice(
+              tpexPrices,
+            ).intersection({for (final e in tpexEntries) e.symbol.value})
+          : <String>{};
+      final tpexBase = withBasePrices && tpexDay != null
+          ? await _fetchTpexBasePrices(tpexDay, tpexNeeds)
+          : _skippedFetch;
+      final mergedTpex = mergeBasePrices(
+        tpexEntries,
+        bases: tpexBase.bases,
+        needs: tpexNeeds,
+        zeroToNull: false,
+      );
+
       // 資料、當沖比例重算、抓取狀態在同一個 transaction：App 與 launchd
       // 並行時，最後寫入者的資料與狀態一致
+      final basePrices = <String, BasePriceStatus>{};
       await _db.transaction<void>(() async {
         if (allStockEntries.isNotEmpty) {
           await _db.upsertStocks(allStockEntries);
         }
-        await _db.insertPrices(allPriceEntries);
-        await _afterMarketDayWrite(
-          market: MarketCode.twse,
-          entries: twseResult.priceEntries,
-          ledger: ledger,
-        );
-        await _afterMarketDayWrite(
-          market: MarketCode.tpex,
-          entries: tpexResult.priceEntries,
-          ledger: ledger,
-        );
+        basePrices[MarketCode.twse] = twseDay == null
+            ? BasePriceStatus.skipped
+            : await _writeMarketDay(
+                market: MarketCode.twse,
+                day: twseDay,
+                entries: mergedTwse,
+                needs: twseNeeds,
+                coverage: twseWritten,
+                base: twseBase,
+                fromDailyEndpoint: true,
+                ledger: ledger,
+              );
+        basePrices[MarketCode.tpex] = tpexDay == null
+            ? BasePriceStatus.skipped
+            : await _writeMarketDay(
+                market: MarketCode.tpex,
+                day: tpexDay,
+                entries: mergedTpex,
+                needs: tpexNeeds,
+                coverage: tpexNeeds,
+                base: tpexBase,
+                fromDailyEndpoint: false,
+                ledger: ledger,
+              );
       });
 
       // 決定資料日期
@@ -455,6 +563,7 @@ class PriceRepository implements IPriceRepository {
         candidates: allCandidates,
         dataDate: dataDate,
         emptyMarkets: emptyMarkets,
+        basePrices: basePrices,
       );
     } on RateLimitException {
       rethrow;
@@ -466,24 +575,171 @@ class PriceRepository implements IPriceRepository {
     }
   }
 
-  /// 全市場價格寫入後：重算同日當沖比例（成交量可能被更正），並向 ledger
-  /// 回報實際寫入的資料日與列數。[entries] 為空（該市場抓取失敗）時不動作。
-  Future<void> _afterMarketDayWrite({
+  /// 上市平盤價：TWT84U（每天、所有情況）
+  Future<_BaseFetch> _fetchTwseBasePrices(DateTime day) => _fetchBasePrices(
+    '上市',
+    day,
+    () => _twseSource.fetchOpeningBasePrices(day),
+  );
+
+  /// 上櫃平盤價：這批沒有文字標記（[needs] 空）→ `notNeeded`、不打；否則抓
+  /// exDailyQ 單日的開始交易基準價。
+  Future<_BaseFetch> _fetchTpexBasePrices(DateTime day, Set<String> needs) =>
+      needs.isEmpty
+      ? Future.value(_notNeededFetch)
+      : _fetchBasePrices(
+          '上櫃',
+          day,
+          () => _tpexSource.fetchTradingBasePrices(day),
+        );
+
+  /// 等 [basePriceDelay] 後抓平盤價。錯誤不拋（價格已抓到、接著要寫入）：
+  /// 限流 → `rateLimited`；網路、回應不可信、解析 → `failed`。
+  Future<_BaseFetch> _fetchBasePrices(
+    String label,
+    DateTime day,
+    Future<Map<String, double>> Function() fetch,
+  ) async {
+    await Future<void>.delayed(basePriceDelay);
+    final ymd = DateContext.formatYmd(day);
+    try {
+      final bases = await fetch();
+      return (
+        bases: bases,
+        fetch: BasePriceFetch.fetched,
+        error: null,
+        reason: null,
+      );
+    } on RateLimitException catch (e) {
+      AppLogger.warning('PriceRepo', '$label平盤價限流 ($ymd)', e);
+      return (
+        bases: const <String, double>{},
+        fetch: BasePriceFetch.rateLimited,
+        error: e,
+        reason: '限流',
+      );
+    } catch (e, stack) {
+      final reason = switch (e) {
+        NetworkException() => '網路錯誤',
+        ApiException() => '回應不可信',
+        _ => '抓取失敗',
+      };
+      AppLogger.warning('PriceRepo', '$label平盤價$reason ($ymd)', e, stack);
+      return (
+        bases: const <String, double>{},
+        fetch: BasePriceFetch.failed,
+        error: e,
+        reason: reason,
+      );
+    }
+  }
+
+  /// 市場日寫入（在呼叫端的 transaction 內）：upsert → 查「需要平盤價的列」
+  /// 還缺幾列（N）→ 依狀態表決定回不回報定案 → 重算當沖比例（成交量可能
+  /// 被更正）。
+  ///
+  /// 不回報定案的情況（spec 第 3 節）：抓取失敗或限流而 N＞0；`fetched` 而
+  /// N＞0 時，來自 `STOCK_DAY_ALL` 的缺口一律不回報（例外二：那些列可能是
+  /// 真的平盤股，隔天 MI_INDEX 重抓會寫回 0），其他來源回報＋warning（清單
+  /// 不全，重抓也拿不到同一份清單的缺口）。[coverage] 裡的代號一個都不在
+  /// 清單上（含空清單）視同 `failed`——清單整個不對（日期、還沒更新），
+  /// 重抓有機會拿到：上市傳寫入的全部代號（TWT84U 是全市場清單），上櫃傳
+  /// 需要的列（exDailyQ 只列除權息列；spec 例外一）。
+  Future<BasePriceStatus> _writeMarketDay({
     required String market,
+    required DateTime day,
     required List<DailyPriceCompanion> entries,
+    required Set<String> needs,
+    required Set<String> coverage,
+    required _BaseFetch base,
+    required bool fromDailyEndpoint,
     required MarketDayFetchLedger? ledger,
   }) async {
-    if (entries.isEmpty) return;
-    final day = DateContext.normalize(entries.first.date.value);
+    await _db.insertPrices(entries);
+
+    var fetch = base.fetch;
+    var reason = base.reason;
+    if (fetch == BasePriceFetch.fetched &&
+        coverage.isNotEmpty &&
+        !coverage.any(base.bases.containsKey)) {
+      fetch = BasePriceFetch.failed;
+      reason =
+          '清單整個對不上（${coverage.length} 檔沒有一檔在清單上，清單 ${base.bases.length} 檔）';
+    }
+    final missing = needs.isEmpty
+        ? 0
+        : await _db.countMissingBasePrice(date: day, symbols: needs);
+    final withheld = switch (fetch) {
+      BasePriceFetch.fetched => missing > 0 && fromDailyEndpoint,
+      BasePriceFetch.failed || BasePriceFetch.rateLimited => missing > 0,
+      BasePriceFetch.notNeeded || BasePriceFetch.skipped => false,
+    };
+    final ymd = DateContext.formatYmd(day);
+    if (fetch == BasePriceFetch.fetched && missing > 0) {
+      reason = '清單不全';
+      AppLogger.warning(
+        'PriceRepo',
+        '$market $ymd 平盤價清單不全：$missing 列缺平盤價'
+            '${withheld ? '，不記定案（交給 MI_INDEX 重抓）' : ''}',
+      );
+    } else if (withheld) {
+      AppLogger.warning(
+        'PriceRepo',
+        '$market $ymd 平盤價$reason：$missing 列漲跌暫存空值，不記定案',
+      );
+    } else if (fetch == BasePriceFetch.failed ||
+        fetch == BasePriceFetch.rateLimited) {
+      AppLogger.info('PriceRepo', '$market $ymd 平盤價$reason，但需要的列都已有平盤價');
+    }
+
     await _db.recomputeDayTradingRatios(
       day: day,
       symbols: {for (final e in entries) e.symbol.value},
     );
-    await ledger?.report(
-      dataset: MarketDataset.prices,
-      market: market,
-      date: day,
-      rows: entries.length,
+    if (!withheld) {
+      await ledger?.report(
+        dataset: MarketDataset.prices,
+        market: market,
+        date: day,
+        rows: entries.length,
+      );
+    }
+    return BasePriceStatus(
+      fetch: fetch,
+      missing: missing,
+      withheld: withheld,
+      reason: reason,
+      error: base.error,
     );
   }
 }
+
+/// 平盤價抓取的結果（transaction 外）
+typedef _BaseFetch = ({
+  Map<String, double> bases,
+  BasePriceFetch fetch,
+  Object? error,
+  String? reason,
+});
+
+const _BaseFetch _skippedFetch = (
+  bases: <String, double>{},
+  fetch: BasePriceFetch.skipped,
+  error: null,
+  reason: null,
+);
+
+const _BaseFetch _notNeededFetch = (
+  bases: <String, double>{},
+  fetch: BasePriceFetch.notNeeded,
+  error: null,
+  reason: null,
+);
+
+const _skippedBackfill = MarketDayBackfillResult(
+  rows: 0,
+  basePrice: BasePriceStatus.skipped,
+);
+
+const _withBasePricesLedgerAssert =
+    'withBasePrices: false 不得與 ledger 同時傳：會把缺平盤價的日子記成定案';

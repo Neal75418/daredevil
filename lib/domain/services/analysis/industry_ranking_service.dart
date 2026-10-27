@@ -13,7 +13,8 @@ import 'package:daredevil/domain/models/industry_ranking.dart';
 /// （[SectorParams.tiltWeight] doc），那是評分因子的結論，不影響資訊呈現。
 class IndustryRankingService {
   /// [industries] 為 null／空字串或含「ETF」字樣（`ETF`＋`上櫃ETF` 兩種標記
-  /// 並存）的股票不進排行；歷史不足視窗需求（21／6／2 筆）的成員不計入。
+  /// 並存）的股票不進排行；歷史不足視窗需求（d20／d5 需 21／6 筆；d1 用
+  /// 漲跌價差，空值才退回前後收盤、那時需 2 筆）的成員不計入。
   /// 成員數少於 [SectorParams.rankingMinMembers] 的產業整組略過。
   /// [window]：d1＝今日快照（UI 預設）、d20＝輪動主視角、d5＝轉折視角。
   List<IndustryRanking> rank({
@@ -36,7 +37,11 @@ class IndustryRankingService {
     final retOf = switch (window) {
       RankingWindow.d20 => PriceCalculator.ret20d,
       RankingWindow.d5 => PriceCalculator.ret5d,
-      RankingWindow.d1 => PriceCalculator.ret1d,
+      // 今日＝漲跌價差優先（除權息日不含股息），空值才退回前後收盤
+      RankingWindow.d1 =>
+        (List<DailyPriceEntry>? h) => h == null || h.isEmpty
+            ? null
+            : PriceCalculator.calculatePriceChange(h, h.last),
     };
 
     // 產業 → 成員 (symbol, 選定視窗報酬)

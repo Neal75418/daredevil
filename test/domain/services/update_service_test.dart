@@ -3,6 +3,7 @@ import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/constants/default_stocks.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/constants/rule_enums.dart';
+import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/tdcc_client.dart';
@@ -24,7 +25,7 @@ import 'package:daredevil/domain/models/scoring_batch_data.dart';
 import 'package:daredevil/domain/repositories/news_repository.dart'
     show NewsSyncResult;
 import 'package:daredevil/domain/repositories/price_repository.dart'
-    show MarketSyncResult;
+    show BasePriceFetch, BasePriceStatus, MarketSyncResult;
 import 'package:daredevil/domain/services/scoring_service.dart';
 import 'package:daredevil/domain/services/update/market_day_refetcher.dart';
 import 'package:daredevil/domain/services/update/dividend_backfiller.dart';
@@ -2195,6 +2196,261 @@ void main() {
           ledger: any(named: 'ledger'),
         ),
       );
+    });
+  });
+  group('平盤價狀態（除權息漲跌修正，spec 呼叫端表）', () {
+    MarketSyncResult withTwse(BasePriceStatus s) => MarketSyncResult(
+      count: 2,
+      candidates: const ['2330'],
+      dataDate: tradingDay,
+      basePrices: {
+        MarketCode.twse: s,
+        MarketCode.tpex: BasePriceStatus.notNeeded,
+      },
+    );
+    void stubSync(MarketSyncResult r) => when(
+      () => mockPriceRepo.syncAllPricesForDate(
+        any(),
+        force: any(named: 'force'),
+        ledger: any(named: 'ledger'),
+      ),
+    ).thenAnswer((_) async => r);
+
+    // 歷史價格同步（步驟 3.5）是 rateLimitedAbort 之後第一個被跳過的
+    // API-heavy 步驟：它一進來就查各市場的股票清單，用它當「有沒有跳過」的訊號
+    setUp(() {
+      when(() => mockDb.getStocksByMarket(any())).thenAnswer((_) async => []);
+      when(
+        () => mockDb.getPriceCoverageBatch(
+          any(),
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenAnswer((_) async => const <String, PriceCoverage>{});
+    });
+
+    test(
+      '🚨 缺 → 先照常處理回傳值再 recordError、本輪 PARTIAL、不設 rateLimitedAbort',
+      () async {
+        stubSync(
+          withTwse(
+            const BasePriceStatus(
+              fetch: BasePriceFetch.failed,
+              missing: 3,
+              withheld: true,
+              reason: '網路錯誤',
+            ),
+          ),
+        );
+        final result = await buildService().runDailyUpdate(forDate: tradingDay);
+        expect(
+          result.pricesUpdated,
+          greaterThanOrEqualTo(2),
+          reason: '回傳值照常處理（count 之外還會加上歷史同步的列數）',
+        );
+        expect(
+          result.errors,
+          anyElement(allOf(contains('TWSE'), contains('平盤價缺 3 列'))),
+        );
+        expect(result.hasRateLimitError, isFalse);
+        expect(result.hasWarnings, isTrue);
+        verify(() => mockDb.getStocksByMarket(any())).called(greaterThan(0));
+      },
+    );
+
+    test(
+      '🚨 限流（Review Focus 4：上市 fetched、上櫃 exDailyQ 限流）→ 照常處理回傳值後設 rateLimitedAbort；後續 API 步驟跳過',
+      () async {
+        stubSync(
+          MarketSyncResult(
+            count: 2,
+            candidates: const ['2330'],
+            dataDate: tradingDay,
+            basePrices: const {
+              MarketCode.twse: BasePriceStatus(fetch: BasePriceFetch.fetched),
+              MarketCode.tpex: BasePriceStatus(
+                fetch: BasePriceFetch.rateLimited,
+                missing: 1,
+                withheld: true,
+                reason: '限流',
+                error: RateLimitException('r'),
+              ),
+            },
+          ),
+        );
+        final result = await buildService().runDailyUpdate(forDate: tradingDay);
+        expect(result.pricesUpdated, 2, reason: '回傳值照常處理；限流後歷史同步跳過，列數固定');
+        expect(result.hasRateLimitError, isTrue);
+        expect(
+          result.errors,
+          anyElement(allOf(contains('TPEx'), contains('rate limit'))),
+        );
+        expect(
+          result.errors.where((e) => e.contains('TWSE') && e.contains('平盤價')),
+          isEmpty,
+        );
+        verifyNever(() => mockDb.getStocksByMarket(any()));
+      },
+    );
+
+    test('fetched／N>0 不 withheld、failed／N=0 → 不記 errors', () async {
+      for (final s in const [
+        BasePriceStatus(fetch: BasePriceFetch.fetched, missing: 2),
+        BasePriceStatus(fetch: BasePriceFetch.failed),
+      ]) {
+        stubSync(withTwse(s));
+        final result = await buildService().runDailyUpdate(forDate: tradingDay);
+        expect(
+          result.errors.where((e) => e.contains('平盤價')),
+          isEmpty,
+          reason: '$s',
+        );
+      }
+    });
+  });
+
+  group('每輪摘要計數（缺平盤價的列；除權息漲跌修正 spec 第 3 節）', () {
+    test('runOutcome：有缺時訊息尾巴接在交易日曆提醒之後；沒缺不附', () {
+      final both = UpdateService.runOutcome(
+        const [],
+        calendarStale: true,
+        basePriceNotice: '上市 4 列、上櫃 1256 列漲跌缺平盤價（最早 2025-06-10、最近 2026-10-22）',
+      );
+      expect(
+        both.message,
+        '更新完成；交易日曆待更新；上市 4 列、上櫃 1256 列漲跌缺平盤價（最早 2025-06-10、最近 2026-10-22）',
+      );
+      expect(both.status, UpdateStatus.success.code, reason: '不算錯誤');
+      final none = UpdateService.runOutcome(const [], calendarStale: false);
+      expect(none.message, '更新完成');
+      final errorsOnly = UpdateService.runOutcome(
+        const ['x'],
+        calendarStale: false,
+        basePriceNotice: 'n',
+      );
+      expect(errorsOnly.message, endsWith('x；n'));
+      expect(errorsOnly.status, UpdateStatus.partial.code);
+    });
+
+    test('summary 附完整句；不進 errors、不影響 hasErrors', () {
+      final result = UpdateResult(date: tradingDay)
+        ..success = true
+        ..stocksAnalyzed = 3
+        ..basePriceNotice =
+            '上市 4 列、上櫃 1256 列漲跌缺平盤價（最早 2025-06-10、最近 2026-10-22）';
+      expect(
+        result.summary,
+        '分析 3 檔；上市 4 列、上櫃 1256 列漲跌缺平盤價（最早 2025-06-10、最近 2026-10-22）',
+      );
+      expect(result.hasErrors, isFalse);
+      final withCalendar = UpdateResult(date: tradingDay)
+        ..success = true
+        ..stocksAnalyzed = 3
+        ..calendarNotice = 'c'
+        ..basePriceNotice = 'b';
+      expect(withCalendar.summary, '分析 3 檔；交易日曆待更新；b');
+    });
+
+    test('🚨 每輪從 DB 算：有缺 → basePriceNotice 與列數；全 0 → null', () async {
+      when(() => mockDb.getBasePriceGap()).thenAnswer(
+        (_) async => (
+          twseRows: 4,
+          tpexRows: 1256,
+          earliest: DateTime(2025, 6, 10),
+          latest: DateTime(2026, 10, 22),
+        ),
+      );
+      var result = await buildService().runDailyUpdate(forDate: tradingDay);
+      const notice = '上市 4 列、上櫃 1256 列漲跌缺平盤價（最早 2025-06-10、最近 2026-10-22）';
+      expect(result.basePriceNotice, notice);
+      expect(result.basePriceGapRows, 1260);
+      expect(result.errors.where((e) => e.contains('平盤價')), isEmpty);
+      // update_run 那一面：訊息尾巴與寫進 DB 的訊息都要有（接線在
+      // _finishUpdate 之前算、runOutcome 帶 basePriceNotice）
+      expect(result.message, endsWith('；$notice'));
+      final written =
+          verify(
+                () => mockDb.finishUpdateRun(
+                  any(),
+                  any(),
+                  message: captureAny(named: 'message'),
+                ),
+              ).captured.single
+              as String?;
+      expect(written, endsWith('；$notice'));
+
+      when(() => mockDb.getBasePriceGap()).thenAnswer(
+        (_) async => (twseRows: 0, tpexRows: 0, earliest: null, latest: null),
+      );
+      result = await buildService().runDailyUpdate(forDate: tradingDay);
+      expect(result.basePriceNotice, isNull);
+      expect(result.basePriceGapRows, 0);
+    });
+
+    test('計數查詢失敗 → 只記 warning、不影響更新結果（fail-safe，同其他 Post-Update）', () async {
+      when(() => mockDb.getBasePriceGap()).thenThrow(StateError('db corrupt'));
+      final result = await buildService().runDailyUpdate(forDate: tradingDay);
+      expect(result.success, isTrue);
+      expect(result.basePriceNotice, isNull);
+      expect(result.errors.where((e) => e.contains('平盤價')), isEmpty);
+    });
+  });
+
+  group('漲跌幅提醒用漲跌價差（除權息漲跌修正 spec 第 5 節）', () {
+    final prevDay = tradingDay.subtract(const Duration(days: 1));
+    DailyPriceEntry entry(DateTime date, double close, {double? change}) =>
+        DailyPriceEntry(
+          symbol: '9901',
+          date: date,
+          close: close,
+          priceChange: change,
+        );
+    void stubAlert(double? change) {
+      when(() => mockDb.getActiveAlerts()).thenAnswer(
+        (_) async => [
+          PriceAlertEntry(
+            id: 1,
+            symbol: '9901',
+            alertType: 'above',
+            targetValue: 30,
+            isActive: true,
+            createdAt: tradingDay,
+          ),
+        ],
+      );
+      when(() => mockDb.getLatestPricesBatch(any())).thenAnswer(
+        (_) async => {'9901': entry(tradingDay, 32.12, change: change)},
+      );
+      when(
+        () => mockDb.getPriceHistoryBatch(
+          any(),
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          '9901': [
+            entry(prevDay, 33.94),
+            entry(tradingDay, 32.12, change: change),
+          ],
+        },
+      );
+    }
+
+    test(
+      '🚨 除權息日：priceChange −0.32、收盤 32.12 → −0.986%，不是前後收盤的 −5.36%',
+      () async {
+        stubAlert(-0.32);
+        final result = await buildService().runDailyUpdate(forDate: tradingDay);
+        expect(result.currentPrices['9901'], 32.12);
+        expect(result.priceChanges['9901'], closeTo(-0.986, 0.001));
+      },
+    );
+
+    test('priceChange 空值時退回前後收盤（行為同 PriceCalculator）', () async {
+      stubAlert(null);
+      final result = await buildService().runDailyUpdate(forDate: tradingDay);
+      expect(result.priceChanges['9901'], closeTo(-5.362, 0.001));
     });
   });
 }

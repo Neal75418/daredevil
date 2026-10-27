@@ -17,6 +17,9 @@ import '../../tool/refetch_market_days.dart';
 
 class _MockPriceRepository extends Mock implements IPriceRepository {}
 
+MarketDayBackfillResult _backfilled(int rows) =>
+    MarketDayBackfillResult(rows: rows, basePrice: BasePriceStatus.skipped);
+
 void main() {
   List<String> errs = [];
   RefetchArgs? parse(List<String> a, {DateTime? today}) {
@@ -464,7 +467,7 @@ void main() {
       ).thenAnswer((inv) async {
         final date = inv.namedArguments[#date] as DateTime;
         if (date == stoppedDay) throw const RateLimitException('429');
-        return 1;
+        return _backfilled(1);
       });
       final refetcher = MarketDayRefetcher(
         database: db,
@@ -486,6 +489,148 @@ void main() {
       );
       expect(notAttempted.length, 1);
       expect(notAttempted.first, stoppedDay);
+    });
+
+    test('🚨 已定案的日子遇平盤價限流（不是最舊一天）→ 續跑提示從下一天列起', () async {
+      await db.upsertStocks([
+        StockMasterCompanion.insert(
+          symbol: '1101',
+          name: 'a',
+          market: MarketCode.twse,
+        ),
+      ]);
+      final days = tradingDaysEndingAt(DateTime(2026, 9, 24), 3);
+      final ledger = MarketDayFetchLedger(
+        database: db,
+        fetchedAt: DateTime(2026, 9, 25),
+      );
+      when(
+        () => price.backfillTwsePricesByDate(
+          date: any(named: 'date'),
+          targetSymbols: any(named: 'targetSymbols'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer((inv) async {
+        final date = inv.namedArguments[#date] as DateTime;
+        if (date == days.first) {
+          await ledger.report(
+            dataset: MarketDataset.prices,
+            market: MarketCode.twse,
+            date: date,
+            rows: 1,
+          );
+          return const MarketDayBackfillResult(
+            rows: 1,
+            basePrice: BasePriceStatus(
+              fetch: BasePriceFetch.rateLimited,
+              reason: '限流',
+              error: RateLimitException('429'),
+            ),
+          );
+        }
+        return _backfilled(1);
+      });
+      final refetcher = MarketDayRefetcher(
+        database: db,
+        priceRepository: price,
+        callDelay: Duration.zero,
+      );
+      final summary = await refetcher.refetchRange(
+        dataset: MarketDataset.prices,
+        market: MarketCode.twse,
+        from: days.last,
+        to: days.first,
+        ledger: ledger,
+      );
+      expect(summary.rateLimited, isTrue);
+      expect(summary.finalized[group], 1, reason: '那天已定案');
+      final notAttempted = computeNotAttempted(
+        days: days,
+        attempted: summary.attempted[group] ?? 0,
+        stoppedAt: summary.stoppedAt,
+      );
+      expect(notAttempted, [days[1], days[2]]);
+      expect(
+        resumeHint(
+          days: days,
+          dataset: MarketDataset.prices,
+          market: MarketCode.twse,
+          summary: summary,
+        ),
+        contains('--to ${DateContext.formatYmd(days[1])}'),
+      );
+    });
+
+    test('已定案的最後一天（最舊）遇平盤價限流 → 已全部嘗試', () async {
+      await db.upsertStocks([
+        StockMasterCompanion.insert(
+          symbol: '1101',
+          name: 'a',
+          market: MarketCode.twse,
+        ),
+      ]);
+      final days = tradingDaysEndingAt(DateTime(2026, 9, 24), 3);
+      final ledger = MarketDayFetchLedger(
+        database: db,
+        fetchedAt: DateTime(2026, 9, 25),
+      );
+      when(
+        () => price.backfillTwsePricesByDate(
+          date: any(named: 'date'),
+          targetSymbols: any(named: 'targetSymbols'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer((inv) async {
+        final date = inv.namedArguments[#date] as DateTime;
+        if (date == days.last) {
+          await ledger.report(
+            dataset: MarketDataset.prices,
+            market: MarketCode.twse,
+            date: date,
+            rows: 1,
+          );
+          return const MarketDayBackfillResult(
+            rows: 1,
+            basePrice: BasePriceStatus(
+              fetch: BasePriceFetch.rateLimited,
+              reason: '限流',
+              error: RateLimitException('429'),
+            ),
+          );
+        }
+        return _backfilled(1);
+      });
+      final refetcher = MarketDayRefetcher(
+        database: db,
+        priceRepository: price,
+        callDelay: Duration.zero,
+      );
+      final summary = await refetcher.refetchRange(
+        dataset: MarketDataset.prices,
+        market: MarketCode.twse,
+        from: days.last,
+        to: days.first,
+        ledger: ledger,
+      );
+      expect(summary.rateLimited, isTrue);
+      expect(summary.stoppedAt, isNull);
+      expect(
+        computeNotAttempted(
+          days: days,
+          attempted: summary.attempted[group] ?? 0,
+          stoppedAt: summary.stoppedAt,
+        ),
+        isEmpty,
+      );
+      expect(
+        resumeHint(
+          days: days,
+          dataset: MarketDataset.prices,
+          market: MarketCode.twse,
+          summary: summary,
+        ),
+        contains('已全部嘗試'),
+      );
     });
 
     test('🚨 只有 1 天、那天被限流 → 未嘗試 1 日（不是「已全部嘗試」）', () async {
@@ -531,7 +676,7 @@ void main() {
       ).thenAnswer((inv) async {
         final date = inv.namedArguments[#date] as DateTime;
         if (date == stoppedDay) throw const NetworkException('x');
-        return 1;
+        return _backfilled(1);
       });
       final refetcher = MarketDayRefetcher(
         database: db,

@@ -77,11 +77,17 @@ void main() {
     when(() => tpex.getAllDailyPrices(date: any(named: 'date'))).thenAnswer(
       (_) async => [tpexPrice('3624', 4000), tpexPrice('6488', 5000)],
     );
+    // 平盤價（除權息漲跌修正）：價格 change 0 的列需要平盤價，沒 stub 會被
+    // 當成抓取失敗而不記定案。給等於收盤的平盤價，漲跌維持 0、語意不變。
+    when(
+      () => twse.getOpeningBasePrices(any()),
+    ).thenAnswer((_) async => {'1101': 10, '1102': 10});
     repo = PriceRepository(
       database: db,
       finMindClient: MockFinMindClient(),
       twseClient: twse,
       tpexClient: tpex,
+      basePriceDelay: Duration.zero,
     );
   });
 

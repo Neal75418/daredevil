@@ -192,6 +192,9 @@ abstract final class ApiConfig {
   /// 一個缺漏市場日 = 1 次 TWSE MI_INDEX 或 TPEx afterTrading 呼叫，
   /// 即可補齊該市場**全部**股票當日價格。30 × 每日更新 → 380 天窗
   /// 全缺（fresh DB）約 17 個更新日收斂。
+  /// 除權息漲跌修正（2026-10）後上市每一天是 2 個請求（MI_INDEX＋TWT84U
+  /// 平盤價，之間等 [basePriceCallDelayMs]）；上櫃只有除權息列才多 1 個。
+  /// 上限仍以（日, 市場）計。
   static const int historicalMarketDayMaxCallsPerRun = 30;
 
   /// 市場日快照回補：單日覆蓋率低於此比例（相對股票主檔市場股數）
@@ -263,6 +266,19 @@ abstract final class ApiConfig {
 
   /// 未定案日重抓的呼叫間隔（毫秒）
   static const int finalityRefetchCallDelayMs = 1000;
+
+  /// 平盤價請求（上市 TWT84U、上櫃 exDailyQ 單日）前的等待（毫秒）：市場日
+  /// 價格寫入在價格請求之後緊接著打第二個請求。保守值同
+  /// [finalityRefetchCallDelayMs]；已知 0.5 秒間隔連打約 50 次會被證交所擋
+  /// （2026-07-16）。測試注入 `Duration.zero`。
+  static const int basePriceCallDelayMs = 1000;
+
+  /// 修復工具（`tool/backfill_base_prices.dart`）判「那一天做過沒」的門檻：該日
+  /// 上市列有平盤價的比例達此值才算做過。不用「有任何一列」——上櫃那一輪會把
+  /// 平盤價寫進主檔已轉上市的轉市場列（8908 型），一列就讓那天被當成做過、
+  /// 永遠漏修。副本實測套用後覆蓋 1,229/1,230、1,172/1,173，8908 型每天最多
+  /// 1 列，門檻不敏感；判錯的方向是「每次都重抓同一天」，看得見。
+  static const double basePriceBackfillDoneRatio = 0.5;
 
   /// 列數未達門檻但達門檻此比例以上時，視為「near miss」升級為 warning
   /// （例如上櫃法人／當沖 headroom 僅約 1.1×，738–748 列 vs 門檻 664）

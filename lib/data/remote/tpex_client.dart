@@ -192,12 +192,20 @@ class TpexClient {
         final code = row[0]?.toString().trim() ?? '';
         // isTpexPriceCode：含上櫃 ETF（2026-07-23 稽核修復，與歷史回補一致）
         if (code.isEmpty || !StockPatterns.isTpexPriceCode(code)) return null;
+        final rawChange = row[3]?.toString().trim() ?? '';
+        final change = TwParseUtils.parseFormattedDouble(rawChange);
         return TpexDailyPrice(
           date: date,
           code: code,
           name: row[1]?.toString().trim() ?? '',
           close: TwParseUtils.parsePrice(row[2]),
-          change: TwParseUtils.parseFormattedDouble(row[3]),
+          change: change,
+          // 文字（除息／除權／除權息）＝不比價；`---`、`--`、空白是沒成交
+          noComparison:
+              change == null &&
+              rawChange.isNotEmpty &&
+              rawChange != '---' &&
+              rawChange != '--',
           open: TwParseUtils.parsePrice(row[4]),
           high: TwParseUtils.parsePrice(row[5]),
           low: TwParseUtils.parsePrice(row[6]),
@@ -777,6 +785,9 @@ class TpexClient {
     final cols = [dateCol, codeCol, cashCol, sharesCol, closeCol, referenceCol];
     if (cols.any((i) => i < 0)) return null;
     final minLength = cols.reduce((a, b) => a > b ? a : b) + 1;
+    // 開始交易基準價（除權息日的平盤價）是可選欄：沒有這欄或單列解析不了
+    // 都存 null、不拒收——它只服務漲跌修正，不能拖垮股利同步
+    final baseCol = fields.indexOf('開始交易基準價');
 
     ExRightResult? parseRow(List<dynamic> row) {
       final exDate = TwParseUtils.parseSlashRocDate(
@@ -795,6 +806,9 @@ class TpexClient {
         stockSharesPerThousand: shares,
         closeBefore: TwParseUtils.parseFormattedDouble(row[closeCol]),
         referencePrice: TwParseUtils.parseFormattedDouble(row[referenceCol]),
+        tradingBasePrice: baseCol >= 0 && row.length > baseCol
+            ? TwParseUtils.parseFormattedDouble(row[baseCol])
+            : null,
       );
     }
 

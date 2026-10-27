@@ -98,6 +98,10 @@ class RefetchSummary {
   ///
   /// ⚠️ 多組（dataset, market）同時跑時（例如法人一次涵蓋兩市場），這個
   /// 欄位只代表**第一個**中止的日子，不區分是哪一組先中止。
+  ///
+  /// 語意是「第一個沒抓完的日子」：價格的平盤價限流發生在已定案的那天時，
+  /// 那天已抓完，這裡記的是清單上下一個要抓的日子（days 新→舊，即更舊的
+  /// 那天；沒有就 null）。
   DateTime? stoppedAt;
 
   bool get rateLimited => rateLimitError != null;
@@ -280,18 +284,22 @@ class MarketDayRefetcher {
     }
 
     var calls = 0;
+    // [fetch] 回 `MarketDayBackfillResult`（價格）時另看平盤價狀態；其他
+    // 資料集的回傳值不看。用 dynamic 而不改七個呼叫點的閉包型別。
     Future<_AttemptOutcome> attempt(
       List<FinalityGroup> groups,
       DateTime day,
-      Future<void> Function() fetch,
+      Future<dynamic> Function() fetch,
     ) async {
       if (calls > 0) await Future<void>.delayed(callDelay);
       calls++;
       for (final g in groups) {
         summary.attempted[g] = (summary.attempted[g] ?? 0) + 1;
       }
+      BasePriceStatus? basePrice;
       try {
-        await fetch();
+        final result = await fetch();
+        if (result is MarketDayBackfillResult) basePrice = result.basePrice;
       } on RateLimitException catch (e) {
         summary.rateLimitError = e;
         summary.stoppedAt ??= day;
@@ -313,6 +321,7 @@ class MarketDayRefetcher {
           '${DateContext.formatYmd(day)}: $e',
         );
       }
+      var finalizedToday = false;
       for (final g in groups) {
         // 🚨 M1：有回報不等於已定案——回報只代表這次寫入達到覆蓋率門檻，
         // 定案仍要看抓取時間是否晚於資料日（isFetchFinal，spec §4.1）。
@@ -326,6 +335,28 @@ class MarketDayRefetcher {
         if (done &&
             isFetchFinal(dataDate: day, fetchedAtTaipei: ledger.fetchedAt)) {
           summary.finalized[g] = (summary.finalized[g] ?? 0) + 1;
+          finalizedToday = true;
+        }
+      }
+      // 平盤價狀態（除權息漲跌修正 spec 第 3 節呼叫端表）：先算完定案數再處理。
+      // 限流 → 同價格限流中止；stoppedAt 只在這天沒定案時才設，否則修復工具的
+      // 續跑提示會把已定案的這天誤列成沒抓完。缺 → 記 errors，這天沒定案、
+      // 下一輪再抓。
+      if (basePrice != null) {
+        if (basePrice.rateLimited) {
+          final error = basePrice.error;
+          summary.rateLimitError = error is RateLimitException
+              ? error
+              : RateLimitException('平盤價限流: $error');
+          if (!finalizedToday) summary.stoppedAt ??= day;
+          return _AttemptOutcome.rateLimitAbort;
+        }
+        if (basePrice.shouldRecordError) {
+          summary.errors.add(
+            '${groups.map((g) => '${g.dataset.code}/${g.market}').join('+')} '
+            '${DateContext.formatYmd(day)}: 平盤價缺 ${basePrice.missing} 列，'
+            '漲跌暫存空值（${basePrice.reason}）',
+          );
         }
       }
       return _AttemptOutcome.ok;
@@ -341,7 +372,8 @@ class MarketDayRefetcher {
       final symbols = {
         for (final s in await _db.getStocksByMarket(market)) s.symbol,
       };
-      for (final day in days) {
+      for (var i = 0; i < days.length; i++) {
+        final day = days[i];
         final outcome = await attempt(
           [(dataset: MarketDataset.prices, market: market)],
           day,
@@ -357,7 +389,16 @@ class MarketDayRefetcher {
                   ledger: ledger,
                 ),
         );
-        if (outcome == _AttemptOutcome.rateLimitAbort) return;
+        if (outcome == _AttemptOutcome.rateLimitAbort) {
+          // 平盤價限流而這天已定案時 attempt 不設 stoppedAt（這天已抓完）：
+          // 續跑提示要從清單上下一個日子（days 新→舊，即更舊的那天）列起；
+          // 沒有下一個就維持 null，修復工具的後備
+          // 算法（attempted == days.length）會算成已全部嘗試，正確。
+          if (summary.stoppedAt == null && i + 1 < days.length) {
+            summary.stoppedAt = days[i + 1];
+          }
+          return;
+        }
         if (outcome == _AttemptOutcome.networkStop) break;
       }
     }

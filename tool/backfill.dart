@@ -906,10 +906,13 @@ class Backfiller {
       }
 
       try {
-        final count = await deps.priceRepo.backfillTwsePricesByDate(
+        // 校準 DB 不抓平盤價：tool/ 不讀 price_change，而且範圍常超出
+        // 已驗證的日期（除權息漲跌修正 spec 第 3 節）；不傳 ledger
+        final count = (await deps.priceRepo.backfillTwsePricesByDate(
           date: current,
           targetSymbols: targetSet,
-        );
+          withBasePrices: false,
+        )).rows;
         rowsInserted += count;
         daysSucceeded++;
         if (count == 0) {
@@ -1028,10 +1031,13 @@ class Backfiller {
       }
 
       try {
-        final count = await deps.priceRepo.backfillTpexPricesByDate(
+        // 校準 DB 不抓平盤價：tool/ 不讀 price_change，而且範圍常超出
+        // 已驗證的日期（除權息漲跌修正 spec 第 3 節）；不傳 ledger
+        final count = (await deps.priceRepo.backfillTpexPricesByDate(
           date: current,
           targetSymbols: targetSet,
-        );
+          withBasePrices: false,
+        )).rows;
         rowsInserted += count;
         daysSucceeded++;
         if (count == 0) {

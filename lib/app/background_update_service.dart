@@ -234,6 +234,10 @@ int _generateNotificationId() {
           : '${result.errors.length} warnings',
     if (result.calendarNotice != null)
       isChinese ? '交易日曆待更新' : 'trading calendar needs update',
+    if (result.basePriceGapRows > 0)
+      isChinese
+          ? '${result.basePriceGapRows} 筆漲跌缺平盤價'
+          : '${result.basePriceGapRows} price changes missing base price',
   ];
   return (
     title: isChinese ? '盤後資料已更新' : 'Market data updated',

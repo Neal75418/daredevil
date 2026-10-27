@@ -106,6 +106,44 @@ void main() {
               '0',
               '0.00',
             ],
+            // 不比價（除權息、減資恢復買賣、前一天沒成交等）：方向欄 X
+            [
+              '9998',
+              '不比價股',
+              '1,000',
+              '10',
+              '14,200',
+              '14.20',
+              '14.20',
+              '14.20',
+              '14.20',
+              '<p>X</p>',
+              '0.00',
+              '14.15',
+              '1',
+              '14.20',
+              '1',
+              '0.00',
+            ],
+            // 真的平盤：方向欄空白、價差 0.00
+            [
+              '9997',
+              '平盤股',
+              '1,000',
+              '10',
+              '10,000',
+              '10.00',
+              '10.00',
+              '10.00',
+              '10.00',
+              '<p> </p>',
+              '0.00',
+              '9.99',
+              '1',
+              '10.00',
+              '1',
+              '0.00',
+            ],
           ],
         },
       ],
@@ -116,7 +154,7 @@ void main() {
         fixture,
         DateTime(2024, 3, 15),
       );
-      expect(prices.length, 3);
+      expect(prices.length, 5);
 
       final tsmc = prices.firstWhere((p) => p.code == '2330');
       expect(tsmc.date, DateTime(2024, 3, 15));
@@ -139,6 +177,19 @@ void main() {
       final halted = prices.firstWhere((p) => p.code == '9999');
       expect(halted.close, isNull);
       expect(halted.open, isNull);
+    });
+
+    test('🚨 方向 X（不比價）→ change null；空白（真的平盤）→ 0.0', () {
+      final prices = TwseClient.parseMiIndexDailyPrices(
+        fixture,
+        DateTime(2024, 3, 15),
+      );
+      expect(
+        prices.firstWhere((p) => p.code == '9998').change,
+        isNull,
+        reason: 'X 是不比價：價差欄的 0.00 不是漲跌，真實漲跌由平盤價決定（可能剛好是 0）',
+      );
+      expect(prices.firstWhere((p) => p.code == '9997').change, 0.0);
     });
 
     test('回應日期 ≠ 請求日期 → 回空（端點失效防護，同 backfill 原則）', () {

@@ -376,6 +376,119 @@ void main() {
 
     // ── getRecentTurnoverByMarket ──────────────────────────
 
+    group('除權息日的列不算家數（官方「無比價」；除權息漲跌修正 spec 第 5 節）', () {
+      // 9901 除息日（配發表有列）、9902 一般日、9903 只有現金增資的 0／0 列、
+      // 9904 除息日剛好平盤（漲跌 0，釘住 unchanged 那格；沒產業，不進產業表現）
+      Future<void> seed() async {
+        await db.upsertStocks([
+          for (final s in ['9901', '9902', '9903'])
+            StockMasterCompanion.insert(
+              symbol: s,
+              name: s,
+              market: 'TWSE',
+              industry: const Value('半導體業'),
+            ),
+          StockMasterCompanion.insert(
+            symbol: '9904',
+            name: '9904',
+            market: 'TWSE',
+          ),
+        ]);
+        await db.insertPrices([
+          DailyPriceCompanion.insert(
+            symbol: '9901',
+            date: today,
+            close: const Value(32.12),
+            volume: const Value(1000),
+            priceChange: const Value(3),
+          ),
+          DailyPriceCompanion.insert(
+            symbol: '9902',
+            date: today,
+            close: const Value(100),
+            volume: const Value(1000),
+            priceChange: const Value(10),
+          ),
+          DailyPriceCompanion.insert(
+            symbol: '9903',
+            date: today,
+            close: const Value(50),
+            volume: const Value(1000),
+            priceChange: const Value(-1),
+          ),
+          DailyPriceCompanion.insert(
+            symbol: '9904',
+            date: today,
+            close: const Value(20),
+            volume: const Value(1000),
+            priceChange: const Value(0),
+          ),
+        ]);
+        await db.upsertDividendDistributions([
+          DividendDistributionCompanion.insert(
+            symbol: '9904',
+            exDate: today,
+            cashDividend: 1,
+            stockSharesPerThousand: 0,
+          ),
+          DividendDistributionCompanion.insert(
+            symbol: '9901',
+            exDate: today,
+            cashDividend: 1,
+            stockSharesPerThousand: 0,
+          ),
+          DividendDistributionCompanion.insert(
+            symbol: '9903',
+            exDate: today,
+            cashDividend: 0,
+            stockSharesPerThousand: 0,
+          ),
+        ]);
+      }
+
+      test('🚨 漲跌家數排除配發表有這檔這天的列（含 0／0 列）', () async {
+        await seed();
+        final r = (await db.getAdvanceDeclineCountsByMarket(today))['TWSE']!;
+        expect((r.advance, r.decline, r.unchanged), (1, 0, 0));
+      });
+
+      test('🚨 漲跌停家數排除', () async {
+        await seed();
+        final r = (await db.getLimitUpDownCountsByMarket(today))['TWSE']!;
+        expect(
+          (r.limitUp, r.limitDown),
+          (1, 0),
+          reason: '9901 +10.3% 不算，9902 +11.1% 算',
+        );
+      });
+
+      test('🚨 漲跌家數歷史與上漲／下跌成交值排除', () async {
+        await seed();
+        final rows = (await db.getRecentAdvanceDeclineByMarket(
+          today,
+          minCoverage: 3, // 覆蓋率算全部列（4 列）；排除若改放 WHERE 會掉到 1
+        ))['TWSE']!;
+        final r = rows.single;
+        expect((r.advance, r.decline, r.unchanged), (1, 0, 0));
+        expect(r.upTurnover, 100000.0, reason: '只含 9902');
+        expect(r.downTurnover, 0);
+      });
+
+      test('🚨 產業表現：平均漲跌幅與檔數門檻含全部列、漲跌家數排除', () async {
+        await seed();
+        final rows = await db.getIndustrySummaryByMarket(
+          today,
+          'TWSE',
+          minStockCount: 3,
+        );
+        final r = rows.singleWhere((e) => e.industry == '半導體業');
+        expect(r.stockCount, 3);
+        // (3/29.12 + 10/90 + (−1)/51) × 100 ÷ 3
+        expect(r.avgChangePct, closeTo(6.4842, 0.001));
+        expect((r.advance, r.decline), (1, 0));
+      });
+    });
+
     group('getRecentTurnoverByMarket', () {
       test('returns daily turnover per market, date descending', () async {
         for (var i = 0; i < 3; i++) {

@@ -324,6 +324,21 @@ void main() {
         expect(result['2330'], isNotNull);
         expect(result['9999'], isNull);
       });
+
+      test('帶 basePrice（手動組 entry 的欄位不可漏）', () async {
+        await db.insertPrices([
+          DailyPriceCompanion.insert(
+            symbol: '2330',
+            date: today,
+            close: const Value(110.0),
+            basePrice: const Value(105.0),
+          ),
+        ]);
+
+        final result = await db.getLatestPricesBatch(['2330']);
+
+        expect(result['2330']!.basePrice, 105.0);
+      });
     });
 
     group('getPriceHistoryBatch', () {

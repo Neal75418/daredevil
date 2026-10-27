@@ -27,6 +27,32 @@ void main() {
     expect(text.body, '分析 5 檔');
   });
 
+  test('缺平盤價的列數附短句（zh／en）；為 0 時不附', () {
+    final result = ok()
+      ..basePriceNotice = '上市 4 列、上櫃 1256 列漲跌缺平盤價（最早 2025-06-10、最近 2026-10-22）'
+      ..basePriceGapRows = 1260;
+    expect(
+      updateNotificationText(result, isChinese: true).body,
+      '分析 5 檔，1260 筆漲跌缺平盤價',
+    );
+    expect(
+      updateNotificationText(result, isChinese: false).body,
+      '5 stocks analyzed, 1260 price changes missing base price',
+    );
+    expect(updateNotificationText(ok(), isChinese: true).body, '分析 5 檔');
+  });
+
+  test('交易日曆與缺平盤價都有時，日曆在前', () {
+    final result = ok()
+      ..calendarNotice = 'c'
+      ..basePriceNotice = 'b'
+      ..basePriceGapRows = 7;
+    expect(
+      updateNotificationText(result, isChinese: true).body,
+      '分析 5 檔，交易日曆待更新，7 筆漲跌缺平盤價',
+    );
+  });
+
   // 抽成函式前後三個分支的文字必須一致
   test('非交易日跳過：沿用 result.message', () {
     final result = UpdateResult(date: DateTime(2026, 12, 5))

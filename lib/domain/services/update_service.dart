@@ -12,6 +12,7 @@ import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/core/utils/date_context.dart';
+import 'package:daredevil/domain/services/price_calculator.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
@@ -413,6 +414,9 @@ class UpdateService {
         AppLogger.warning('UpdateService', calendarNotice);
         result.calendarNotice = calendarNotice;
       }
+      // 缺平盤價而漲跌空值的列（除權息漲跌修正 spec 第 3 節）：同交易日曆
+      // 提醒，進摘要不進 errors；查詢失敗 fail-safe
+      await _attachBasePriceGapNotice(result);
 
       await _finishUpdate(ctx, result);
 
@@ -475,8 +479,11 @@ class UpdateService {
   static ({String status, String message}) runOutcome(
     List<String> errors, {
     required bool calendarStale,
+    String? basePriceNotice,
   }) {
-    final suffix = calendarStale ? '；交易日曆待更新' : '';
+    final suffix =
+        '${calendarStale ? '；交易日曆待更新' : ''}'
+        '${basePriceNotice == null ? '' : '；$basePriceNotice'}';
     final limit = 500 - suffix.length;
     final body = errors.isEmpty
         ? '更新完成'
@@ -808,6 +815,32 @@ class UpdateService {
         final markets = syncResult.emptyMarkets.join('/');
         AppLogger.warning('UpdateService', '價格同步缺市場: $markets');
         ctx.result.recordError('$markets 當日價格為零筆，評分資料不完整');
+      }
+
+      // 平盤價狀態（除權息漲跌修正 spec 第 3 節呼叫端表）：平盤價的錯誤不拋
+      // （價格與平盤價寫進同一個 transaction，拋出會連價格都寫不進去），放在
+      // 回傳值；先照常處理完回傳值再記 errors／設旗標。
+      // 「缺」＝沒回報定案而且不是限流：這天會被步驟 5.5 重抓，本輪 PARTIAL。
+      for (final entry in syncResult.basePrices.entries) {
+        final market = entry.key;
+        final status = entry.value;
+        if (status.rateLimited) {
+          ctx.rateLimitedAbort = true;
+          AppLogger.warning(
+            'UpdateService',
+            '$market 平盤價抓取失敗 (rate limit)',
+            status.error,
+          );
+          ctx.result.recordError(
+            '$market 平盤價抓取失敗 (rate limit): ${status.error}',
+            status.error,
+          );
+        } else if (status.shouldRecordError) {
+          ctx.result.recordError(
+            '$market 平盤價缺 ${status.missing} 列，漲跌暫存空值'
+            '（${status.reason}）',
+          );
+        }
       }
     } on RateLimitException catch (e) {
       ctx.rateLimitedAbort = true;
@@ -1334,6 +1367,7 @@ class UpdateService {
     final (:status, :message) = runOutcome(
       result.errors,
       calendarStale: result.calendarNotice != null,
+      basePriceNotice: result.basePriceNotice,
     );
     await _db.finishUpdateRun(ctx.runId, status, message: message);
 
@@ -1414,6 +1448,30 @@ class UpdateService {
     }
   }
 
+  /// 每輪摘要的缺平盤價計數（除權息漲跌修正 spec 第 3 節）。修復工具跑完之前
+  /// 會一直出現（上櫃約 1,256 列、上市 7 列），新裝機在 Phase 0 收斂前也會。
+  /// fail-safe：查詢失敗只記 warning，不影響更新結果。
+  Future<void> _attachBasePriceGapNotice(UpdateResult result) async {
+    try {
+      final sw = Stopwatch()..start();
+      final gap = await _db.getBasePriceGap();
+      AppLogger.debug(
+        'UpdateService',
+        '缺平盤價計數 ${sw.elapsedMilliseconds}ms（上市 ${gap.twseRows}、上櫃 ${gap.tpexRows}）',
+      );
+      final total = gap.twseRows + gap.tpexRows;
+      if (total == 0 || gap.earliest == null || gap.latest == null) return;
+      result.basePriceGapRows = total;
+      result.basePriceNotice =
+          '上市 ${gap.twseRows} 列、上櫃 ${gap.tpexRows} 列漲跌缺平盤價'
+          '（最早 ${DateContext.formatYmd(gap.earliest!)}、'
+          '最近 ${DateContext.formatYmd(gap.latest!)}）';
+      AppLogger.warning('UpdateService', result.basePriceNotice!);
+    } catch (e, st) {
+      AppLogger.warning('UpdateService', '缺平盤價計數失敗（fail-safe）', e, st);
+    }
+  }
+
   Future<void> _fetchAlertPrices(
     _UpdateContext ctx,
     UpdateResult result,
@@ -1435,18 +1493,17 @@ class UpdateService {
         );
 
         for (final symbol in alertSymbols) {
-          final price = latestPrices[symbol]?.close;
+          final latest = latestPrices[symbol];
+          final price = latest?.close;
           if (price != null) {
             result.currentPrices[symbol] = price;
-
-            final history = priceHistories[symbol];
-            if (history != null && history.length >= 2) {
-              final previousClose = history[history.length - 2].close;
-              if (previousClose != null && previousClose > 0) {
-                result.priceChanges[symbol] =
-                    ((price - previousClose) / previousClose) * 100;
-              }
-            }
+            // 漲跌價差優先、空值才退回前後收盤，與個股卡片同一口徑（除權息
+            // 漲跌修正 spec 第 5 節：除權息日不把股息算成跌幅）
+            final pct = PriceCalculator.calculatePriceChange(
+              priceHistories[symbol] ?? const [],
+              latest,
+            );
+            if (pct != null) result.priceChanges[symbol] = pct;
           }
         }
       }
@@ -1533,12 +1590,20 @@ class UpdateResult {
   /// 不算錯誤、不影響 [hasErrors]
   String? calendarNotice;
 
+  /// 缺平盤價而漲跌空值的列（除權息漲跌修正 spec 第 3 節的每輪摘要計數）：
+  /// 完整句進 [summary] 與 update_run 訊息，列數給通知的短句；不算錯誤
+  String? basePriceNotice;
+  int basePriceGapRows = 0;
+
   String get summary {
     if (skipped) return message ?? '跳過更新';
     if (!success) return '更新失敗: ${errors.join(', ')}';
     final base = errors.isNotEmpty
         ? '分析 $stocksAnalyzed 檔（${errors.length} 項警告）'
         : '分析 $stocksAnalyzed 檔';
-    return calendarNotice == null ? base : '$base；交易日曆待更新';
+    final buffer = StringBuffer(base);
+    if (calendarNotice != null) buffer.write('；交易日曆待更新');
+    if (basePriceNotice != null) buffer.write('；$basePriceNotice');
+    return buffer.toString();
   }
 }

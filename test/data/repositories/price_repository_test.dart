@@ -30,6 +30,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(MarketDataset.prices);
     registerFallbackValue(<String>{});
+    registerFallbackValue(DateTime(2026));
   });
 
   setUp(() {
@@ -54,12 +55,24 @@ void main() {
     when(() => mockDb.transaction<void>(any())).thenAnswer((inv) async {
       await (inv.positionalArguments[0] as Future<void> Function())();
     });
+    // 平盤價（除權息漲跌修正）：本檔的測試不看平盤價，給空清單與 0 缺列；
+    // 行為細節在 price_repository_base_price_*_test.dart（真 DB）
+    when(
+      () => mockTwseClient.getOpeningBasePrices(any()),
+    ).thenAnswer((_) async => {});
+    when(
+      () => mockDb.countMissingBasePrice(
+        date: any(named: 'date'),
+        symbols: any(named: 'symbols'),
+      ),
+    ).thenAnswer((_) async => 0);
 
     repository = PriceRepository(
       database: mockDb,
       finMindClient: mockFinMindClient,
       twseClient: mockTwseClient,
       tpexClient: mockTpexClient,
+      basePriceDelay: Duration.zero,
     );
   });
 
@@ -245,7 +258,8 @@ void main() {
 
         expect(result.count, equals(2));
         expect(result.candidates, isNotEmpty);
-        verify(() => mockDb.insertPrices(any())).called(1);
+        // 除權息漲跌修正後兩市場各寫一批（平盤價合併後分開 upsert）
+        verify(() => mockDb.insertPrices(any())).called(2);
       });
 
       test('returns empty result when both APIs fail', () async {
@@ -526,7 +540,7 @@ void main() {
         final insertedSymbols = captured.map((e) => e.symbol.value).toSet();
         expect(insertedSymbols, equals({'2330', '3296'}));
         expect(insertedSymbols.contains('2317'), isFalse);
-        expect(inserted, equals(2));
+        expect(inserted.rows, equals(2));
       });
 
       test('response 日期 ≠ 請求日期（端點忽略 date 參數）→ 丟棄、回 0、不寫 DB', () async {
@@ -558,7 +572,7 @@ void main() {
           targetSymbols: {'2330'},
         );
 
-        expect(inserted, 0);
+        expect(inserted.rows, 0);
         verifyNever(() => mockDb.insertPrices(any()));
       });
 
@@ -573,7 +587,7 @@ void main() {
           targetSymbols: {'2330'},
         );
 
-        expect(inserted, equals(0));
+        expect(inserted.rows, equals(0));
         verifyNever(() => mockDb.insertPrices(any()));
       });
 
@@ -602,7 +616,7 @@ void main() {
           targetSymbols: {'9999'},
         );
 
-        expect(inserted, equals(0));
+        expect(inserted.rows, equals(0));
         verifyNever(() => mockDb.insertPrices(any()));
       });
 
@@ -702,7 +716,7 @@ void main() {
           targetSymbols: {'5347'},
         );
 
-        expect(inserted, 0);
+        expect(inserted.rows, 0);
         verifyNever(() => mockDb.insertPrices(any()));
       });
 
@@ -780,7 +794,7 @@ void main() {
         final insertedSymbols = captured.map((e) => e.symbol.value).toSet();
         expect(insertedSymbols, equals({'6488', '8905'}));
         expect(insertedSymbols.contains('8086'), isFalse);
-        expect(inserted, equals(2));
+        expect(inserted.rows, equals(2));
       });
 
       test(
@@ -797,7 +811,7 @@ void main() {
             targetSymbols: {'6488'},
           );
 
-          expect(inserted, equals(0));
+          expect(inserted.rows, equals(0));
           // batch endpoint 仍被呼叫一次（caller 用 TaiwanCalendar 預過濾才是
           // 最佳實踐，但 repository 不主動 skip non-trading day）
           verifyNever(() => mockDb.insertPrices(any()));
@@ -832,7 +846,7 @@ void main() {
             targetSymbols: {'9999'}, // 不在 batch 內
           );
 
-          expect(inserted, equals(0));
+          expect(inserted.rows, equals(0));
           verifyNever(() => mockDb.insertPrices(any()));
         },
       );

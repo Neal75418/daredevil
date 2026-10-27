@@ -54,6 +54,12 @@ abstract final class ApiEndpoints {
   /// 每千股無償配股、現金增資
   static const String twseExRightDetail = '/rwd/zh/exRight/TWT49UDetail';
 
+  /// TWSE 股價升降幅度（TWT84U）：每檔當天的漲停價、開盤競價基準（平盤價）、
+  /// 跌停價。帶 `date=YYYYMMDD&selectType=ALLBUT0999&response=json`（不含
+  /// 權證，約 136 KB；`ALL` 含權證約 3.6 MB）。可查歷史（2025-06-10 起實測），
+  /// 當天中午已有。上市所有情況的平盤價來源（除權息漲跌修正，2026-10-27）。
+  static const String twsePriceLimits = '/exchangeReport/TWT84U';
+
   /// TWSE 停資停券預告表（openapi BFI84U）
   static const String twseShortSuspension =
       'https://openapi.twse.com.tw/v1/exchangeReport/BFI84U';

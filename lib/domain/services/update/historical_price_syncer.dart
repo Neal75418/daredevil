@@ -246,12 +246,13 @@ class HistoricalPriceSyncer {
     var totalRows = 0;
     var consecutiveZero = 0;
     var processed = 0;
+    var missingBaseDays = 0;
     for (final (day, market) in tasks) {
       if (processed > 0) await Future.delayed(marketDayCallDelay);
       processed++;
       onProgress?.call('市場日回補 ($processed/${tasks.length})');
       try {
-        final added = market == MarketCode.twse
+        final backfilled = market == MarketCode.twse
             ? await _priceRepo.backfillTwsePricesByDate(
                 date: day,
                 targetSymbols: targets[market]!,
@@ -262,12 +263,26 @@ class HistoricalPriceSyncer {
                 targetSymbols: targets[market]!,
                 ledger: ledger,
               );
+        final added = backfilled.rows;
         if (added > 0) {
           totalRows += added;
           consecutiveZero = 0;
         } else {
           consecutiveZero++;
         }
+        // 平盤價狀態（除權息漲跌修正 spec 第 3 節呼叫端表）：限流同價格限流
+        // 中止 phase 0；缺只記 warning、不進 errors（同其他單日失敗），之後由
+        // 每輪摘要計數追蹤（這些日子多在追蹤起始日前，步驟 5.5 不重抓）
+        final basePrice = backfilled.basePrice;
+        if (basePrice.rateLimited) {
+          AppLogger.warning(
+            'HistoricalPriceSyncer',
+            '市場日回補平盤價限流，中止 phase 0（phase 1 照常）',
+            basePrice.error,
+          );
+          break;
+        }
+        if (basePrice.shouldRecordError) missingBaseDays++;
       } on RateLimitException {
         AppLogger.warning(
           'HistoricalPriceSyncer',
@@ -299,6 +314,12 @@ class HistoricalPriceSyncer {
       }
     }
 
+    if (missingBaseDays > 0) {
+      AppLogger.warning(
+        'HistoricalPriceSyncer',
+        '市場日回補：$missingBaseDays 天平盤價缺，漲跌暫存空值，由每輪摘要計數追蹤',
+      );
+    }
     AppLogger.info(
       'HistoricalPriceSyncer',
       '市場日快照回補完成: +$totalRows 列（$processed/${tasks.length} 日）',

@@ -118,6 +118,12 @@ class TwsePriceSource {
     return _client.getAllDailyPrices(date: date);
   }
 
+  /// [date] 當天每檔的開盤競價基準（平盤價；TWT84U）。回應不可信拋
+  /// [ApiException]（見 [TwseClient.getOpeningBasePrices]）。
+  Future<Map<String, double>> fetchOpeningBasePrices(DateTime date) {
+    return _client.getOpeningBasePrices(date);
+  }
+
   /// 歷史全市場行情（MI_INDEX；backfill 用——STOCK_DAY_ALL 不支援歷史）
   Future<List<TwseDailyPrice>> fetchAllDailyPricesHistorical(DateTime date) {
     return _client.getAllDailyPricesHistorical(date);

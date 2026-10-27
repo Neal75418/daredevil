@@ -83,6 +83,18 @@ class TpexPriceSource {
     return _client.getAllDailyPricesHistorical(date);
   }
 
+  /// [day] 當天除權息列的開始交易基準價（平盤價；exDailyQ 單日，
+  /// `startDate == endDate`）。只收除權息日就是 [day] 且有基準價的列；回應
+  /// 不可信拋 [ApiException]（見 [TpexClient.getExRightResults]）。
+  Future<Map<String, double>> fetchTradingBasePrices(DateTime day) async {
+    final rows = await _client.getExRightResults(startDate: day, endDate: day);
+    return {
+      for (final r in rows)
+        if (DateContext.isSameDay(r.exDate, day) && r.tradingBasePrice != null)
+          r.symbol: r.tradingBasePrice!,
+    };
+  }
+
   /// 將原始上櫃股票資料轉換為 DB 格式（價格 + 股票主檔 + 候選股）
   ({
     List<DailyPriceCompanion> priceEntries,

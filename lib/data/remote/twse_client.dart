@@ -199,8 +199,11 @@ class TwseClient {
 
       final changeAbs = TwParseUtils.parseFormattedDouble(raw[10]?.toString());
       final signHtml = raw[9]?.toString() ?? '';
+      // X＝不比價（除權息、減資恢復買賣、前一天沒成交等）：價差欄的 0.00
+      // 不是漲跌，真實漲跌由當天的平盤價決定（可能剛好是 0，例 2330
+      // 2026-09-16；除權息漲跌修正，2026-10）；空白才是真的平盤
       double? change;
-      if (changeAbs != null) {
+      if (changeAbs != null && !signHtml.contains('X')) {
         if (signHtml.contains('-')) {
           change = -changeAbs;
         } else if (signHtml.contains('+')) {
@@ -263,6 +266,102 @@ class TwseClient {
       _cache.put(cacheKey, result);
       return result;
     });
+  }
+
+  /// 股價升降幅度（TWT84U）：[date] 當天每檔的開盤競價基準（平盤價）。
+  ///
+  /// 上市所有情況（一般日、除權息、只有現金增資的除權、減資恢復買賣、新股
+  /// 首日、前一天沒成交）的平盤價來源（除權息漲跌修正 spec「平盤價來源」）。
+  /// 回應不可信時拋 [ApiException]，不回空 Map——空 Map 代表沒有任何可解析
+  /// 的列，兩者不能混。
+  Future<Map<String, double>> getOpeningBasePrices(DateTime date) {
+    return MarketClientMixin.executeRequest(_tag, '股價升降幅度', () async {
+      final dateStr = TwParseUtils.formatDateCompact(date);
+      final cacheKey = 'openingBase:$dateStr';
+      final cached = _cache.get(cacheKey) as Map<String, double>?;
+      if (cached != null) return cached;
+
+      final response = await _dio.get(
+        ApiEndpoints.twsePriceLimits,
+        queryParameters: {
+          'date': dateStr,
+          'selectType': 'ALLBUT0999',
+          'response': 'json',
+        },
+      );
+      if (response.statusCode != 200) {
+        throw ApiException(
+          '$_tag API error: ${response.statusCode}',
+          response.statusCode,
+        );
+      }
+      final data = MarketClientMixin.decodeResponseData(
+        response.data,
+        _tag,
+        '股價升降幅度',
+      );
+      final result = data == null ? null : parseOpeningBasePrices(data, date);
+      final ymd = TwParseUtils.formatDateYmd(date);
+      if (result == null) {
+        throw ApiException('$_tag 股價升降幅度: 回應不可信 ($ymd)', response.statusCode);
+      }
+      AppLogger.info(_tag, '股價升降幅度: ${result.length} 檔 ($ymd)');
+      _cache.put(cacheKey, result);
+      return result;
+    });
+  }
+
+  /// TWT84U 回應 → 代號對開盤競價基準。
+  ///
+  /// 欄位名「開盤競價基準」出現兩次（本日、前日），以 `groups` 裡 title 為
+  /// 「本日」的那一組定位，不能只靠欄位名。回 null＝回應不可信：stat 非 OK、
+  /// `date` 與請求不符、沒有本日組或組內沒有該欄、`total` 與列數不符（可能
+  /// 被截斷）。單列代號空或基準不可解析（`--`）→ 略過該列、不拒收整批。
+  /// public 供測試。
+  static Map<String, double>? parseOpeningBasePrices(
+    Map<dynamic, dynamic> json,
+    DateTime requestedDate,
+  ) {
+    if (json['stat']?.toString().toUpperCase() != 'OK') return null;
+    if (json['date']?.toString() !=
+        TwParseUtils.formatDateCompact(requestedDate)) {
+      return null;
+    }
+    final fields = json['fields'];
+    final rows = json['data'];
+    final groups = json['groups'];
+    if (fields is! List || rows is! List || groups is! List) return null;
+    if (int.tryParse(json['total']?.toString() ?? '') != rows.length) {
+      return null;
+    }
+
+    int? baseCol;
+    for (final group in groups) {
+      if (group is! Map || group['title']?.toString().trim() != '本日') {
+        continue;
+      }
+      final start = int.tryParse(group['start']?.toString() ?? '');
+      final span = int.tryParse(group['span']?.toString() ?? '');
+      if (start == null || span == null) return null;
+      for (var i = start; i < start + span && i < fields.length; i++) {
+        if (fields[i].toString().trim() == '開盤競價基準') {
+          baseCol = i;
+          break;
+        }
+      }
+      break;
+    }
+    if (baseCol == null) return null;
+
+    final result = <String, double>{};
+    for (final raw in rows) {
+      if (raw is! List || raw.length <= baseCol) continue;
+      final code = raw[0]?.toString().trim() ?? '';
+      final base = TwParseUtils.parsePrice(raw[baseCol]?.toString());
+      if (code.isEmpty || base == null) continue;
+      result[code] = base;
+    }
+    return result;
   }
 
   /// 解析每日價格資料列
