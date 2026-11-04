@@ -326,6 +326,169 @@ void main() {
         );
       });
 
+      // 上櫃全市場行情（約 2 MB）常在傳輸中被切斷：一邊的網路錯誤不得連帶讓
+      // 另一個已抓到的市場也不寫。兩邊都斷、或另一邊也沒資料時才往上拋；限流
+      // 不論哪一邊都往上拋。
+      group('單一市場網路錯誤', () {
+        TwseDailyPrice twseRow() => TwseDailyPrice(
+          code: '9901',
+          name: '測試上市',
+          date: DateTime(2024, 6, 15),
+          open: 100.0,
+          high: 101.0,
+          low: 99.0,
+          close: 100.5,
+          change: 0.5,
+          volume: 1000000,
+        );
+        TpexDailyPrice tpexRow() => TpexDailyPrice(
+          code: '9902',
+          name: '測試上櫃',
+          date: DateTime(2024, 6, 15),
+          open: 50.0,
+          high: 51.0,
+          low: 49.0,
+          close: 50.5,
+          change: 0.5,
+          volume: 500000,
+        );
+        const network = NetworkException('TPEX request failed after 2 retries');
+
+        setUp(() {
+          when(
+            () => mockDb.getPriceCountForDate(any()),
+          ).thenAnswer((_) async => 0);
+          when(() => mockDb.upsertStocks(any())).thenAnswer((_) async {});
+          when(() => mockDb.insertPrices(any())).thenAnswer((_) async {});
+        });
+
+        test('上櫃網路錯誤、上市有資料 → 上市照寫、回報 networkErrors、不拋', () async {
+          when(
+            () => mockTwseClient.getAllDailyPrices(),
+          ).thenAnswer((_) async => [twseRow()]);
+          when(
+            () => mockTpexClient.getAllDailyPrices(date: any(named: 'date')),
+          ).thenAnswer((_) async => throw network);
+
+          final result = await repository.syncAllPricesForDate(
+            DateTime(2024, 6, 15),
+          );
+
+          expect(result.count, 1);
+          verify(() => mockDb.insertPrices(any())).called(1);
+          expect(result.networkErrors.keys, [MarketCode.tpex]);
+          expect(result.networkErrors[MarketCode.tpex], same(network));
+          expect(
+            result.emptyMarkets,
+            isEmpty,
+            reason: '網路錯誤另外回報；「當日價格為零筆」會把原因寫錯',
+          );
+        });
+
+        test('上市網路錯誤、上櫃有資料 → 上櫃照寫、回報 networkErrors', () async {
+          when(
+            () => mockTwseClient.getAllDailyPrices(),
+          ).thenAnswer((_) async => throw network);
+          when(
+            () => mockTpexClient.getAllDailyPrices(date: any(named: 'date')),
+          ).thenAnswer((_) async => [tpexRow()]);
+
+          final result = await repository.syncAllPricesForDate(
+            DateTime(2024, 6, 15),
+          );
+
+          expect(result.count, 1);
+          expect(result.networkErrors.keys, [MarketCode.twse]);
+          expect(result.emptyMarkets, isEmpty);
+        });
+
+        test('兩個市場都網路錯誤 → 往上拋 NetworkException', () async {
+          when(
+            () => mockTwseClient.getAllDailyPrices(),
+          ).thenAnswer((_) async => throw network);
+          when(
+            () => mockTpexClient.getAllDailyPrices(date: any(named: 'date')),
+          ).thenAnswer((_) async => throw network);
+
+          await expectLater(
+            () => repository.syncAllPricesForDate(DateTime(2024, 6, 15)),
+            throwsA(isA<NetworkException>()),
+          );
+          verifyNever(() => mockDb.insertPrices(any()));
+        });
+
+        test('上櫃網路錯誤、上市成功但零筆 → 往上拋（不得把網路錯誤寫成零筆）', () async {
+          when(
+            () => mockTwseClient.getAllDailyPrices(),
+          ).thenAnswer((_) async => []);
+          when(
+            () => mockTpexClient.getAllDailyPrices(date: any(named: 'date')),
+          ).thenAnswer((_) async => throw network);
+
+          await expectLater(
+            () => repository.syncAllPricesForDate(DateTime(2024, 6, 15)),
+            throwsA(isA<NetworkException>()),
+          );
+        });
+
+        test('上櫃網路錯誤、上市非網路錯誤 → 往上拋 NetworkException', () async {
+          when(
+            () => mockTwseClient.getAllDailyPrices(),
+          ).thenAnswer((_) async => throw Exception('parse error'));
+          when(
+            () => mockTpexClient.getAllDailyPrices(date: any(named: 'date')),
+          ).thenAnswer((_) async => throw network);
+
+          await expectLater(
+            () => repository.syncAllPricesForDate(DateTime(2024, 6, 15)),
+            throwsA(isA<NetworkException>()),
+          );
+        });
+
+        test('上櫃限流、上市有資料 → 往上拋 RateLimitException', () async {
+          when(
+            () => mockTwseClient.getAllDailyPrices(),
+          ).thenAnswer((_) async => [twseRow()]);
+          when(
+            () => mockTpexClient.getAllDailyPrices(date: any(named: 'date')),
+          ).thenAnswer((_) async => throw const RateLimitException());
+
+          await expectLater(
+            () => repository.syncAllPricesForDate(DateTime(2024, 6, 15)),
+            throwsA(isA<RateLimitException>()),
+          );
+          verifyNever(() => mockDb.insertPrices(any()));
+        });
+
+        test('上市限流、上櫃有資料 → 往上拋 RateLimitException', () async {
+          when(
+            () => mockTwseClient.getAllDailyPrices(),
+          ).thenAnswer((_) async => throw const RateLimitException());
+          when(
+            () => mockTpexClient.getAllDailyPrices(date: any(named: 'date')),
+          ).thenAnswer((_) async => [tpexRow()]);
+
+          await expectLater(
+            () => repository.syncAllPricesForDate(DateTime(2024, 6, 15)),
+            throwsA(isA<RateLimitException>()),
+          );
+        });
+
+        test('一邊限流、另一邊網路錯誤 → 限流優先往上拋', () async {
+          when(
+            () => mockTwseClient.getAllDailyPrices(),
+          ).thenAnswer((_) async => throw const RateLimitException());
+          when(
+            () => mockTpexClient.getAllDailyPrices(date: any(named: 'date')),
+          ).thenAnswer((_) async => throw network);
+
+          await expectLater(
+            () => repository.syncAllPricesForDate(DateTime(2024, 6, 15)),
+            throwsA(isA<RateLimitException>()),
+          );
+        });
+      });
+
       test('兩個市場都有資料時 emptyMarkets 為空', () async {
         when(
           () => mockDb.getPriceCountForDate(any()),

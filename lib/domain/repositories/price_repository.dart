@@ -1,3 +1,4 @@
+import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/repositories/market_day_fetch_ledger.dart';
 
@@ -190,6 +191,7 @@ class MarketSyncResult {
     this.skipped = false,
     this.emptyMarkets = const [],
     this.basePrices = const {},
+    this.networkErrors = const {},
   });
 
   final int count;
@@ -213,4 +215,11 @@ class MarketSyncResult {
   /// 交易日空清單才代表異常——非交易日 TPEx 本就回零筆，故僅在有實際
   /// 抓取行為時填入（快取路徑不填）。
   final List<String> emptyMarkets;
+
+  /// 本輪因網路錯誤沒抓到的市場（`MarketCode` → 原始例外）
+  ///
+  /// 只在另一個市場成功且有資料時出現：那個市場照寫，這個市場不寫、也不列進
+  /// [emptyMarkets]。兩個市場都斷、或另一個市場也沒資料時往上拋。呼叫端必須
+  /// 據此 `recordError`（不論日期是否回滾），否則斷線無聲。
+  final Map<String, NetworkException> networkErrors;
 }

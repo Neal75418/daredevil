@@ -799,8 +799,18 @@ class UpdateService {
       ctx.result.pricesUpdated = syncResult.count;
       ctx.marketCandidates = syncResult.candidates;
 
-      // 缺整個市場的當日價格必須可見：來源失敗被 safeAwait 吞成空清單，
-      // 只有兩市場皆空才會拋錯；僅單一市場掛掉時流程照常走完，規則層仍以
+      // 單一市場網路錯誤：另一個市場已照寫，這個市場本輪沒有資料。同一天
+      // 稍後那輪的每日抓取會補上；當天最後一輪也失敗時，下一個交易日那輪補回
+      // （當天完全沒寫入的是 Phase 0 的缺漏日回補，有較早一輪初值的是步驟
+      // 5.5 定案重抓——兩者的候選日都從昨天算起）。不論日期是否回滾都要記：
+      // 網路錯誤是真的失敗，不是盤前未發布那種預期的零筆。
+      for (final MapEntry(key: market, value: error)
+          in syncResult.networkErrors.entries) {
+        ctx.result.recordError('$market 價格取得失敗（網路錯誤），另一個市場照常寫入: $error', error);
+      }
+
+      // 缺整個市場的當日價格必須可見：非網路的來源失敗被當成零筆，兩市場
+      // 皆空時 repository 提早回傳；僅單一市場零筆時流程照常走完，規則層仍以
       // `prices.last` 當「今日」，等於拿昨日 K 棒算今日訊號、UI 綠燈零警告。
       //
       // 兩個不回報的情況：

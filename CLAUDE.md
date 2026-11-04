@@ -93,6 +93,7 @@ Data 層提供實作；`domain/repositories/` 介面**只保留有真消費者�
 `RateLimitException` / `NetworkException` 必須 rethrow，其餘包裝為 `DatabaseException`。
 例外：`UpdateService`（頂層 orchestrator）改以 `rateLimitedAbort` 旗標 + `recordError` 終止流程，不再往上拋
 例外：市場日價格寫入的平盤價抓取（`PriceRepository._fetchTwseBasePrices`／`_fetchTpexBasePrices`）把限流與失敗放進回傳的 `BasePriceStatus`、不拋——平盤價在 transaction 之前抓，價格已抓到、要和平盤價寫進同一個 transaction；在這裡拋出，價格也寫不進去、呼叫端也拿不到回傳值（呼叫端怎麼處理見 `.claude/rules/update-pipeline.md`「平盤價」）
+例外：每日全市場價格（`PriceRepository.syncAllPricesForDate`）一邊成功且有資料時，另一邊的 `NetworkException` 不往上拋——放進 `MarketSyncResult.networkErrors`、由 `UpdateService._syncDailyPrices` 記錯（本輪 PARTIAL），已抓到的市場照寫（上櫃全市場行情約 2 MB，常在傳輸中被切斷）；兩邊都斷、或另一邊也沒資料時照舊往上拋
 
 ### Isolate 通訊
 

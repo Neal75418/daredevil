@@ -416,19 +416,15 @@ class PriceRepository implements IPriceRepository {
 
       // 平行取得上市與上櫃價格資料（錯誤隔離，允許部分成功）
       // 兩市場的每日端點都忽略日期參數、回最新交易日；落庫日期取自回應本身
-      // （歷史日期走各自的 historical 端點）
-      // safeAwaitPair(2026-07-30):雙來源同時 rethrow 型失敗(斷網/同時
-      // 限流)在舊「先啟動再逐一 await」寫法下,第二個 future 的 rejection
-      // 無人監聽 → zone unhandled;pair 版啟動當下就掛好兩邊 listener
-      final (twsePrices, tpexPrices) = await safeAwaitPair(
+      // （歷史日期走各自的 historical 端點）。awaitPairSettled 啟動當下就掛好
+      // 兩邊 listener（「先啟動再逐一 await」會讓第二個 future 的 rejection
+      // 無人監聽）；成敗的判定見 [_settleDailyPricePair]
+      final (twseSettled, tpexSettled) = await awaitPairSettled(
         _twseSource.fetchAllDailyPrices(),
         _tpexSource.fetchAllDailyPrices(date: normalizedDate),
-        firstDefault: <TwseDailyPrice>[],
-        secondDefault: <TpexDailyPrice>[],
-        tag: 'PriceRepo',
-        firstDescription: '上市價格取得失敗，繼續處理上櫃',
-        secondDescription: '上櫃價格取得失敗，繼續處理上市',
       );
+      final (twse: twsePrices, tpex: tpexPrices, networkErrors: networkErrors) =
+          _settleDailyPricePair(twseSettled, tpexSettled);
 
       if (twsePrices.isEmpty && tpexPrices.isEmpty) {
         AppLogger.warning('PriceRepo', '價格同步: 無資料');
@@ -540,8 +536,9 @@ class PriceRepository implements IPriceRepository {
             '候選 ${allCandidates.length})',
       );
 
-      // 回報零筆的市場：safeAwait 把來源失敗吞成空清單，只有兩市場皆空才會
-      // 被上方分支攔下；僅單一市場掛掉時流程照常走完，必須讓呼叫端看得見。
+      // 回報零筆的市場：[_settleDailyPricePair] 把非網路的來源失敗當零筆，
+      // 兩市場皆空時由上方分支提早回傳；僅單一市場零筆時流程照常走完，必須讓
+      // 呼叫端看得見。
       //
       // **半市場日刻意不擋整天出榜**（2026-07-26 稽核否決過「全市場列數
       // < 1500 就整天不出榜」，三條理由）：
@@ -553,9 +550,16 @@ class PriceRepository implements IPriceRepository {
       //     不出榜是替使用者做決定。
       //  3. 門檻須綁定當下市場規模（當時 2,129 檔）。規模漂移後會開始靜默
       //     丟棄健康日的資料，是難以察覺的迴歸。
+      //
+      // 網路錯誤的市場另外放在 networkErrors，不列進這裡：「當日價格為零筆」
+      // 會把原因寫錯，而且呼叫端在日期回滾時不報零筆。
       final emptyMarkets = <String>[
-        if (twseResult.priceEntries.isEmpty) MarketCode.twse,
-        if (tpexResult.priceEntries.isEmpty) MarketCode.tpex,
+        if (twseResult.priceEntries.isEmpty &&
+            !networkErrors.containsKey(MarketCode.twse))
+          MarketCode.twse,
+        if (tpexResult.priceEntries.isEmpty &&
+            !networkErrors.containsKey(MarketCode.tpex))
+          MarketCode.tpex,
       ];
 
       return MarketSyncResult(
@@ -564,6 +568,7 @@ class PriceRepository implements IPriceRepository {
         dataDate: dataDate,
         emptyMarkets: emptyMarkets,
         basePrices: basePrices,
+        networkErrors: networkErrors,
       );
     } on RateLimitException {
       rethrow;
@@ -712,6 +717,61 @@ class PriceRepository implements IPriceRepository {
       error: base.error,
     );
   }
+}
+
+/// 每日全市場價格兩個來源的成敗判定：
+///
+/// - 任一邊限流 → 往上拋 [RateLimitException]（優先於網路錯誤）。
+/// - 一邊 [NetworkException]、另一邊成功且有資料 → 不拋：失敗那邊當零筆，
+///   錯誤放進 `networkErrors` 交給呼叫端記錄。上櫃全市場行情（約 2 MB）常在
+///   傳輸中被切斷，不能連帶讓已抓到的上市也不寫。
+/// - 一邊 [NetworkException]、另一邊也沒拿到資料（兩邊都斷、另一邊零筆或
+///   其他錯誤）→ 往上拋 [NetworkException]。不拋的話會走「兩市場皆空」的提早
+///   回傳：那條路不帶 `networkErrors`，網路錯誤會遺失、原因被寫成「零筆」。
+/// - 其他錯誤 → 記 warning、當零筆（由 `emptyMarkets` 回報）。
+({
+  List<TwseDailyPrice> twse,
+  List<TpexDailyPrice> tpex,
+  Map<String, NetworkException> networkErrors,
+})
+_settleDailyPricePair(
+  SettledResult<List<TwseDailyPrice>> twse,
+  SettledResult<List<TpexDailyPrice>> tpex,
+) {
+  for (final r in [twse, tpex]) {
+    final e = r.error;
+    if (e is RateLimitException) {
+      Error.throwWithStackTrace(e, r.stackTrace ?? StackTrace.current);
+    }
+  }
+  bool hasData(SettledResult<List<Object>> r) =>
+      r.error == null && (r.value?.isNotEmpty ?? false);
+  final pairs = [(twse, tpex), (tpex, twse)];
+  for (final (self, other) in pairs) {
+    final e = self.error;
+    if (e is NetworkException && !hasData(other)) {
+      Error.throwWithStackTrace(e, self.stackTrace ?? StackTrace.current);
+    }
+  }
+
+  final networkErrors = <String, NetworkException>{};
+  List<T> valueOf<T>(SettledResult<List<T>> r, String market, String label) {
+    final e = r.error;
+    if (e == null) return r.value ?? <T>[];
+    if (e is NetworkException) {
+      networkErrors[market] = e;
+      AppLogger.warning('PriceRepo', '$label價格取得失敗（網路錯誤），另一個市場照常寫入', e);
+    } else {
+      AppLogger.warning('PriceRepo', '$label價格取得失敗，繼續處理另一個市場', e);
+    }
+    return <T>[];
+  }
+
+  return (
+    twse: valueOf(twse, MarketCode.twse, '上市'),
+    tpex: valueOf(tpex, MarketCode.tpex, '上櫃'),
+    networkErrors: networkErrors,
+  );
 }
 
 /// 平盤價抓取的結果（transaction 外）

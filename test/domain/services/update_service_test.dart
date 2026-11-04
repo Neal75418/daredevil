@@ -699,6 +699,67 @@ void main() {
       );
     });
 
+    test('單一市場網路錯誤必須記錯：訊息帶市場與原始錯誤', () async {
+      // 上櫃行情斷線時 repository 不再整個拋出（上市照寫），改把錯誤放在
+      // networkErrors；呼叫端不轉發就等於斷線無聲。
+      when(
+        () => mockPriceRepo.syncAllPricesForDate(
+          any(),
+          force: any(named: 'force'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer(
+        (_) async => MarketSyncResult(
+          count: 1200,
+          candidates: const [],
+          dataDate: tradingDay,
+          networkErrors: const {
+            'TPEx': NetworkException('TPEX request failed after 2 retries'),
+          },
+        ),
+      );
+
+      final service = buildService();
+      final result = await service.runDailyUpdate(forDate: tradingDay);
+
+      expect(
+        result.errors,
+        anyElement(
+          allOf(
+            contains('TPEx'),
+            contains('TPEX request failed after 2 retries'),
+          ),
+        ),
+      );
+    });
+
+    test('🚨 日期回滾時單一市場網路錯誤仍要記錯', () async {
+      // 「日期回滾不報缺市場」只適用於零筆（預期的未發布），網路錯誤是真的失敗
+      final prevDay = tradingDay.subtract(const Duration(days: 1));
+      when(() => mockDb.updateRunDate(any(), any())).thenAnswer((_) async {});
+      when(
+        () => mockPriceRepo.syncAllPricesForDate(
+          any(),
+          force: any(named: 'force'),
+          ledger: any(named: 'ledger'),
+        ),
+      ).thenAnswer(
+        (_) async => MarketSyncResult(
+          count: 1200,
+          candidates: const [],
+          dataDate: prevDay,
+          networkErrors: const {
+            'TPEx': NetworkException('TPEX request failed after 2 retries'),
+          },
+        ),
+      );
+
+      final service = buildService();
+      final result = await service.runDailyUpdate(forDate: tradingDay);
+
+      expect(result.errors, anyElement(contains('TPEx')));
+    });
+
     test('兩個市場都有資料時不得誤報錯誤', () async {
       final service = buildService();
       final result = await service.runDailyUpdate(forDate: tradingDay);
