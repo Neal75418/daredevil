@@ -17,8 +17,16 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/rule_params.dart';
+import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/services/alert/trailing_ma_alert_service.dart';
+
+class _FixedClock implements AppClock {
+  const _FixedClock(this.fixed);
+  final DateTime fixed;
+  @override
+  DateTime now() => fixed;
+}
 
 void main() {
   group('resolveTier(純函數):四階狀態機', () {
@@ -121,7 +129,14 @@ void main() {
 
     setUp(() async {
       db = AppDatabase.forTesting();
-      service = TrailingMaAlertService(database: db);
+      // 固定時鐘：服務從「現在」往回抓 lookbackCalendarDays（150）天，種子資料
+      // 是 6/1～7/30 的 60 天。用系統時鐘的話，一旦現在晚於種子首日加 150 天，
+      // 6/1 就滑出窗口、只剩 59 筆，季線（ma60）算不出來、resolveTier 回 null，
+      // 提醒停在原階，「跌破後改監控月線」變紅。
+      service = TrailingMaAlertService(
+        database: db,
+        clock: _FixedClock(DateTime(2026, 7, 31, 16)),
+      );
       await db.upsertStocks([
         StockMasterCompanion.insert(
           symbol: '2330',
