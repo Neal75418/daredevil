@@ -519,3 +519,10 @@
   21:30，log 皆為上櫃「Connection closed while receiving data」）；兩市場一起失敗的原因是 `safeAwaitPair` 對網路錯誤直接拋出，上櫃端點
   為什麼斷線未追查。另一項：`UpdateService._fetchAlertPrices` 不看 `price_change`、一律用前一筆收盤算漲跌幅提醒，除權息日會把股息
   算成跌幅（不是畫面，交給除權息漲跌修正盤點）。
+  - 2026-11-04 附註：
+    - 第二項已由 `fa42d01c`（除權息漲跌修正）修好：`_fetchAlertPrices` 改用 `PriceCalculator.calculatePriceChange`，漲跌價差優先、
+      空值才退回前後收盤。
+    - 第一項仍在發生（例：10/30 21:30）。上櫃端點斷線的追查結果寫在 `2026-11-04-market-heatmap-1-plan.md`「順帶發現」：
+      往櫃買的大回應會在傳輸途中被切斷（1.1 MB 以上的四支有斷、157 KB 以下的沒有）；同一個熱點出口下載 Cloudflare、證交所的對照組
+      都正常，最可能在櫃買端。
+      修法未排程。
