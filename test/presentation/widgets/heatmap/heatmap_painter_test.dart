@@ -49,6 +49,9 @@ String _otherLabel(int count) => 'other:$count';
 String _wholeLabel(int count) => 'all:$count';
 String _otherSemantics(HeatmapIndustryLayout l, HeatmapOtherLayout o) =>
     'other:${l.industry.key}:${o.members.length}';
+String _groupLabel(int count) => 'group:$count';
+String _groupSemantics(HeatmapIndustryGroupLayout g) =>
+    'group:${g.members.length}';
 
 const _labels = HeatmapPaintLabels(
   uncategorized: '未分類',
@@ -58,10 +61,14 @@ const _labels = HeatmapPaintLabels(
   otherShortLabel: 'oth',
   wholeLabel: _wholeLabel,
   otherSemantics: _otherSemantics,
+  groupLabel: _groupLabel,
+  groupShortLabel: 'grp',
+  groupSemantics: _groupSemantics,
 );
 
 void _ignore(String _) {}
 void _ignoreOther(HeatmapIndustryLayout _, HeatmapOtherLayout _) {}
+void _ignoreGroup(HeatmapIndustryGroupLayout _) {}
 
 HeatmapPainter _painter(
   List<HeatmapIndustryLayout> layout, {
@@ -71,10 +78,14 @@ HeatmapPainter _painter(
   ValueChanged<String> onIndustryTap = _ignore,
   ValueChanged<String> onTileTap = _ignore,
   HeatmapOtherTap onOtherTap = _ignoreOther,
+  HeatmapIndustryGroupLayout? smallIndustries,
+  ValueChanged<HeatmapIndustryGroupLayout> onSmallIndustriesTap = _ignoreGroup,
   String? fontFamily,
   List<String>? fontFamilyFallback,
 }) => HeatmapPainter(
   layout: layout,
+  smallIndustries: smallIndustries,
+  onSmallIndustriesTap: onSmallIndustriesTap,
   brightness: brightness,
   zoomed: zoomed,
   labels: labels ?? _labels,
@@ -178,6 +189,9 @@ void main() {
         otherShortLabel: 'oth',
         wholeLabel: _wholeLabel,
         otherSemantics: _otherSemantics,
+        groupLabel: _groupLabel,
+        groupShortLabel: 'grp',
+        groupSemantics: _groupSemantics,
       );
       expect(
         _painter(layout, labels: other).shouldRepaint(_painter(layout)),
@@ -196,6 +210,9 @@ void main() {
       otherShortLabel: 'oth',
       wholeLabel: _wholeLabel,
       otherSemantics: _otherSemantics,
+      groupLabel: _groupLabel,
+      groupShortLabel: 'grp',
+      groupSemantics: _groupSemantics,
     );
     expect(
       _painter(layout, labels: other).shouldRepaint(_painter(layout)),
@@ -458,10 +475,11 @@ void main() {
       double? pct = 1,
       bool whole = false,
       int count = 3,
+      int mine = 0,
     }) => HeatmapOtherLayout(
       members: [
         for (var i = 0; i < count; i++)
-          _tile('${9950 + i}', 1, const TileChangeValue(1)),
+          _tile('${9950 + i}', 1, const TileChangeValue(1), isMine: i < mine),
       ],
       bounds: box(r),
       paint: box(r),
@@ -499,6 +517,36 @@ void main() {
       final fn = _paintFn(withOther(other(r)));
       expect(fn, paints..rect(rect: r, color: fill));
       expect(fn, paintsExactlyCountTimes(#drawParagraph, 2));
+    });
+
+    test('成員有自選或持股：整塊加自選框（與格子同樣的雙線）', () {
+      const r = Rect.fromLTWH(0, 0, 200, 100);
+      final fill = heatmapTileStyle(
+        const TileChangeValue(1),
+        Brightness.light,
+      ).fill!;
+      final fn = _paintFn(withOther(other(r, mine: 1)));
+      expect(
+        fn,
+        paints
+          ..rect(rect: r, color: fill, style: PaintingStyle.fill)
+          ..rect(
+            rect: r.deflate(0.5),
+            color: HeatmapColors.mineOuter,
+            style: PaintingStyle.stroke,
+          )
+          ..rect(
+            rect: r.deflate(1.5),
+            color: HeatmapColors.mineInner,
+            style: PaintingStyle.stroke,
+          ),
+      );
+      expect(fn, paintsExactlyCountTimes(#drawRect, 3));
+      expect(
+        _paintFn(withOther(other(r))),
+        paintsExactlyCountTimes(#drawRect, 1),
+        reason: '沒有自選或持股不畫框',
+      );
     });
 
     test('成員全是空心：只畫邊框、只寫標籤', () {
@@ -541,6 +589,9 @@ void main() {
         otherShortLabel: 'y' * 30,
         wholeLabel: _wholeLabel,
         otherSemantics: _otherSemantics,
+        groupLabel: _groupLabel,
+        groupShortLabel: 'grp',
+        groupSemantics: _groupSemantics,
       );
       expect(
         (Canvas canvas) => _painter(
@@ -573,6 +624,9 @@ void main() {
         otherShortLabel: 'oth',
         wholeLabel: (count) => 'x' * 30,
         otherSemantics: _otherSemantics,
+        groupLabel: _groupLabel,
+        groupShortLabel: 'grp',
+        groupSemantics: _groupSemantics,
       );
       // 標題列 200 寬：「甲業」＋「 +1.00%」兩段；合併塊只寫漲跌幅一段
       expect(
@@ -605,6 +659,9 @@ void main() {
             return 'all:$count';
           },
           otherSemantics: _otherSemantics,
+          groupLabel: _groupLabel,
+          groupShortLabel: 'grp',
+          groupSemantics: _groupSemantics,
         ),
       );
     }
@@ -654,6 +711,187 @@ void main() {
       expect(tapped?.$1, layout.single);
       expect(tapped?.$2, layout.single.other);
       expect(_semanticLabels(_painter(layout)), ['industry:甲業']);
+    });
+  });
+
+  group('小產業合併塊', () {
+    HeatmapBox box(Rect r) =>
+        (left: r.left, top: r.top, width: r.width, height: r.height);
+
+    HeatmapIndustryGroupLayout group(
+      Rect r, {
+      double? pct = 1,
+      int mine = 0,
+      bool interactive = true,
+    }) => HeatmapIndustryGroupLayout(
+      members: [
+        for (var i = 0; i < 3; i++)
+          HeatmapIndustry(
+            name: 'S$i',
+            marketCap: 1,
+            weightedChangePercent: pct,
+            tiles: [
+              _tile(
+                '${9960 + i}',
+                1,
+                const TileChangeValue(1),
+                isMine: i < mine,
+              ),
+            ],
+          ),
+      ],
+      bounds: box(r),
+      paint: box(r),
+      interactive: interactive,
+      marketCap: 3,
+      weightedChangePercent: pct,
+      breadth: (up: 3, down: 0, flat: 0, hollow: 0),
+    );
+
+    void Function(Canvas) paintGroup(HeatmapIndustryGroupLayout g) =>
+        (canvas) => _painter(
+          const [],
+          smallIndustries: g,
+        ).paint(canvas, const Size(400, 300));
+
+    test('照加權漲跌填色，寫「其他 N 個產業」與漲跌幅', () {
+      const r = Rect.fromLTWH(0, 0, 200, 100);
+      final fill = heatmapTileStyle(
+        const TileChangeValue(1),
+        Brightness.light,
+      ).fill!;
+      final fn = paintGroup(group(r));
+      expect(fn, paints..rect(rect: r, color: fill));
+      expect(fn, paintsExactlyCountTimes(#drawRect, 1));
+      expect(fn, paintsExactlyCountTimes(#drawParagraph, 2));
+    });
+
+    test('成員全是空心：只畫邊框', () {
+      const r = Rect.fromLTWH(0, 0, 200, 100);
+      expect(
+        paintGroup(group(r, pct: null)),
+        paints..rect(
+          rect: r.deflate(0.5),
+          color: HeatmapColors.hollowBorder(Brightness.light),
+          style: PaintingStyle.stroke,
+        ),
+      );
+    });
+
+    test('「其他 N 個產業」寫不下退成「其他產業」，再寫不下不寫', () {
+      // 「group:3」7 字 × 11 = 77、「grp」33；60 寬可用 56、36 寬可用 32
+      expect(
+        paintGroup(group(const Rect.fromLTWH(0, 0, 60, 60))),
+        paintsExactlyCountTimes(#drawParagraph, 1),
+      );
+      expect(
+        paintGroup(group(const Rect.fromLTWH(0, 0, 36, 60))),
+        paintsExactlyCountTimes(#drawParagraph, 0),
+      );
+    });
+
+    test('成員有自選或持股：整塊加自選框', () {
+      const r = Rect.fromLTWH(0, 0, 200, 100);
+      expect(
+        paintGroup(group(r, mine: 1)),
+        paints
+          ..rect(rect: r, style: PaintingStyle.fill)
+          ..rect(
+            rect: r.deflate(0.5),
+            color: HeatmapColors.mineOuter,
+            style: PaintingStyle.stroke,
+          )
+          ..rect(
+            rect: r.deflate(1.5),
+            color: HeatmapColors.mineInner,
+            style: PaintingStyle.stroke,
+          ),
+      );
+    });
+
+    test('全市場時有無障礙節點，點它交給回呼；不可互動時沒有', () {
+      final g = group(const Rect.fromLTWH(0, 200, 200, 100));
+      HeatmapIndustryGroupLayout? tapped;
+      final nodes = _painter(
+        layout,
+        smallIndustries: g,
+        onSmallIndustriesTap: (x) => tapped = x,
+      ).semanticsBuilder(const Size(400, 300));
+      expect(nodes.map((n) => n.properties.label), [
+        'industry:A',
+        'industry:B',
+        'group:3',
+      ]);
+      nodes.last.properties.onTap!();
+      expect(tapped, g);
+      expect(
+        _semanticLabels(
+          _painter(
+            layout,
+            smallIndustries: group(
+              const Rect.fromLTWH(0, 200, 200, 2),
+              interactive: false,
+            ),
+          ),
+        ),
+        ['industry:A', 'industry:B'],
+      );
+    });
+
+    test('合併塊換了要重畫；回呼換了要重建無障礙節點', () {
+      final g = group(const Rect.fromLTWH(0, 200, 200, 100));
+      expect(
+        _painter(layout, smallIndustries: g).shouldRepaint(_painter(layout)),
+        isTrue,
+      );
+      void other(HeatmapIndustryGroupLayout _) {}
+      final next = _painter(layout, onSmallIndustriesTap: other);
+      expect(next.shouldRepaint(_painter(layout)), isFalse);
+      expect(next.shouldRebuildSemantics(_painter(layout)), isTrue);
+    });
+
+    test('labels 換了合併塊的標籤也要重畫', () {
+      const other = HeatmapPaintLabels(
+        uncategorized: '未分類',
+        industrySemantics: _industryLabel,
+        tileSemantics: _tileLabel,
+        otherLabel: _otherLabel,
+        otherShortLabel: 'oth',
+        wholeLabel: _wholeLabel,
+        otherSemantics: _otherSemantics,
+        groupLabel: _groupLabel,
+        groupShortLabel: 'x',
+        groupSemantics: _groupSemantics,
+      );
+      expect(other == _labels, isFalse);
+      String g2(int c) => 'g2';
+      final other2 = HeatmapPaintLabels(
+        uncategorized: '未分類',
+        industrySemantics: _industryLabel,
+        tileSemantics: _tileLabel,
+        otherLabel: _otherLabel,
+        otherShortLabel: 'oth',
+        wholeLabel: _wholeLabel,
+        otherSemantics: _otherSemantics,
+        groupLabel: g2,
+        groupShortLabel: 'grp',
+        groupSemantics: _groupSemantics,
+      );
+      expect(other2 == _labels, isFalse);
+      String s2(HeatmapIndustryGroupLayout g) => 's2';
+      final other3 = HeatmapPaintLabels(
+        uncategorized: '未分類',
+        industrySemantics: _industryLabel,
+        tileSemantics: _tileLabel,
+        otherLabel: _otherLabel,
+        otherShortLabel: 'oth',
+        wholeLabel: _wholeLabel,
+        otherSemantics: _otherSemantics,
+        groupLabel: _groupLabel,
+        groupShortLabel: 'grp',
+        groupSemantics: s2,
+      );
+      expect(other3 == _labels, isFalse);
     });
   });
 

@@ -58,7 +58,7 @@ class HeatmapTooltip extends StatelessWidget {
 }
 
 /// 合併塊的提示：標籤（整個產業時是產業名稱）、所屬產業（整個產業時是檔數）、
-/// 漲跌家數、市值加權漲跌、市值
+/// 含幾檔自選或持股（有才寫）、漲跌家數、市值加權漲跌、市值
 class HeatmapOtherTooltip extends StatelessWidget {
   const HeatmapOtherTooltip({
     super.key,
@@ -76,13 +76,7 @@ class HeatmapOtherTooltip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final b = other.breadth;
-    final counts = {'up': '${b.up}', 'down': '${b.down}', 'flat': '${b.flat}'};
-    final breadth = b.hollow > 0
-        ? 'marketHeatmap.tooltipBreadthWithHollow'.tr(
-            namedArgs: {...counts, 'hollow': '${b.hollow}'},
-          )
-        : 'marketHeatmap.tooltipBreadth'.tr(namedArgs: counts);
+    final breadth = heatmapBreadthText(other.breadth);
     final percent = other.weightedChangePercent;
     final cap = formatHeatmapCap(
       other.marketCap,
@@ -99,6 +93,14 @@ class HeatmapOtherTooltip extends StatelessWidget {
               : industryName,
           style: theme.textTheme.bodySmall,
         ),
+        // 合併塊的自選框表示「你的股票在裡面」：說是幾檔
+        if (other.mineCount > 0)
+          Text(
+            'marketHeatmap.tooltipMine'.tr(
+              namedArgs: {'count': '${other.mineCount}'},
+            ),
+            style: theme.textTheme.bodySmall,
+          ),
         Text(breadth, style: theme.textTheme.bodySmall),
         Text(
           '${'marketHeatmap.tooltipWeighted'.tr()} '
@@ -112,6 +114,72 @@ class HeatmapOtherTooltip extends StatelessWidget {
       ],
     );
   }
+}
+
+/// 小產業合併塊的提示：「其他 N 個產業」、檔數、含幾檔自選或持股（有才寫）、
+/// 漲跌家數、市值加權漲跌、市值
+class HeatmapIndustryGroupTooltip extends StatelessWidget {
+  const HeatmapIndustryGroupTooltip({
+    super.key,
+    required this.group,
+    required this.title,
+  });
+
+  final HeatmapIndustryGroupLayout group;
+
+  /// 「其他 N 個產業」
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodySmall;
+    final percent = group.weightedChangePercent;
+    return _TooltipCard(
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleSmall),
+        Text(
+          'marketHeatmap.tooltipStocks'.tr(
+            namedArgs: {'count': '${group.stockCount}'},
+          ),
+          style: style,
+        ),
+        if (group.mineCount > 0)
+          Text(
+            'marketHeatmap.tooltipMine'.tr(
+              namedArgs: {'count': '${group.mineCount}'},
+            ),
+            style: style,
+          ),
+        Text(heatmapBreadthText(group.breadth), style: style),
+        Text(
+          '${'marketHeatmap.tooltipWeighted'.tr()} '
+          '${percent == null ? 'marketHeatmap.hollowNoChange'.tr() : formatHeatmapPercent(percent)}',
+          style: style,
+        ),
+        Text(
+          'marketHeatmap.tooltipCap'.tr(
+            namedArgs: {
+              'value': formatHeatmapCap(
+                group.marketCap,
+                Localizations.localeOf(context),
+              ),
+            },
+          ),
+          style: style,
+        ),
+      ],
+    );
+  }
+}
+
+/// 漲跌家數（有空心時另寫無漲跌資料的檔數）：提示與清單共用
+String heatmapBreadthText(HeatmapBreadth b) {
+  final counts = {'up': '${b.up}', 'down': '${b.down}', 'flat': '${b.flat}'};
+  return b.hollow > 0
+      ? 'marketHeatmap.tooltipBreadthWithHollow'.tr(
+          namedArgs: {...counts, 'hollow': '${b.hollow}'},
+        )
+      : 'marketHeatmap.tooltipBreadth'.tr(namedArgs: counts);
 }
 
 class _TooltipCard extends StatelessWidget {

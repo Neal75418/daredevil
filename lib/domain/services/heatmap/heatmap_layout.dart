@@ -78,6 +78,9 @@ class HeatmapOtherLayout {
   final double? weightedChangePercent;
   final HeatmapBreadth breadth;
 
+  /// 成員中自選或持股的檔數（> 0 時合併塊畫自選框）
+  int get mineCount => members.where((t) => t.isMine).length;
+
   @override
   bool operator ==(Object other) =>
       other is HeatmapOtherLayout &&
@@ -147,6 +150,148 @@ class HeatmapIndustryLayout {
   );
 }
 
+/// 合併的小產業：全市場圖上預期面積放不下標題列的產業合成一塊（見
+/// [layoutHeatmapMarket]）
+@immutable
+class HeatmapIndustryGroupLayout {
+  const HeatmapIndustryGroupLayout({
+    required this.members,
+    required this.bounds,
+    required this.paint,
+    required this.interactive,
+    required this.marketCap,
+    required this.weightedChangePercent,
+    required this.breadth,
+  });
+
+  /// 被合併的產業（與輸入同序，市值降冪）
+  final List<HeatmapIndustry> members;
+
+  /// 切間隔前的矩形：面積與成員市值合計成比例
+  final HeatmapBox bounds;
+
+  /// 內縮半個產業間隔後實際畫的矩形
+  final HeatmapBox paint;
+  final bool interactive;
+
+  /// 成員市值合計
+  final double marketCap;
+
+  /// 成員的個股以平盤市值加權的漲跌幅；全是空心或結果不是有限數時為 null
+  final double? weightedChangePercent;
+
+  /// 成員所有個股的漲跌家數
+  final HeatmapBreadth breadth;
+
+  /// 成員的個股檔數
+  int get stockCount => members.fold(0, (a, i) => a + i.tiles.length);
+
+  /// 成員中自選或持股的檔數（> 0 時合併塊畫自選框）
+  int get mineCount =>
+      members.fold(0, (a, i) => a + i.tiles.where((t) => t.isMine).length);
+
+  @override
+  bool operator ==(Object other) =>
+      other is HeatmapIndustryGroupLayout &&
+      const ListEquality<HeatmapIndustry>().equals(other.members, members) &&
+      other.bounds == bounds &&
+      other.paint == paint &&
+      other.interactive == interactive &&
+      other.marketCap == marketCap &&
+      other.weightedChangePercent == weightedChangePercent &&
+      other.breadth == breadth;
+
+  @override
+  int get hashCode => Object.hash(
+    const ListEquality<HeatmapIndustry>().hash(members),
+    bounds,
+    paint,
+    interactive,
+    marketCap,
+    weightedChangePercent,
+    breadth,
+  );
+}
+
+/// 全市場圖的佈局：各產業區塊，加上合併的小產業（沒有要合併的時為 null）
+@immutable
+class HeatmapMarketLayout {
+  const HeatmapMarketLayout({required this.industries, this.smallIndustries});
+
+  static const empty = HeatmapMarketLayout(industries: []);
+
+  final List<HeatmapIndustryLayout> industries;
+  final HeatmapIndustryGroupLayout? smallIndustries;
+}
+
+/// 全市場圖：預期面積（市值占比 × 圖區面積）小於
+/// 「[HeatmapParams.industryFoldMinSide]² × [HeatmapParams.foldAspectAllowance]」
+/// 的產業合成一塊，其餘照 [layoutHeatmap]。只有一個產業太小、或每個產業都
+/// 太小時不合併。放大單一產業時用 [layoutHeatmap]。
+HeatmapMarketLayout layoutHeatmapMarket(
+  List<HeatmapIndustry> industries, {
+  required double width,
+  required double height,
+}) {
+  HeatmapMarketLayout plain() => HeatmapMarketLayout(
+    industries: layoutHeatmap(industries, width: width, height: height),
+  );
+  final area = width * height;
+  final total = industries.fold(0.0, (a, i) => a + i.marketCap);
+  if (!(width > 0) ||
+      !(height > 0) ||
+      !area.isFinite ||
+      !(total > 0) ||
+      !total.isFinite) {
+    return plain();
+  }
+  const minArea =
+      HeatmapParams.industryFoldMinSide *
+      HeatmapParams.industryFoldMinSide *
+      HeatmapParams.foldAspectAllowance;
+  bool tooSmall(HeatmapIndustry i) => i.marketCap / total * area < minArea;
+  final small = [
+    for (final i in industries)
+      if (tooSmall(i)) i,
+  ];
+  final kept = [
+    for (final i in industries)
+      if (!tooSmall(i)) i,
+  ];
+  if (small.length < 2 || kept.isEmpty) return plain();
+  // 合併塊照市值排進降冪序列，與產業區塊一起切
+  final groupCap = small.fold(0.0, (a, i) => a + i.marketCap);
+  final firstSmaller = kept.indexWhere((i) => i.marketCap < groupCap);
+  final at = firstSmaller < 0 ? kept.length : firstSmaller;
+  final boxes = [
+    ...squarify([for (final i in kept) i.marketCap]..insert(at, groupCap), (
+      left: 0,
+      top: 0,
+      width: width,
+      height: height,
+    )),
+  ];
+  final groupBox = boxes.removeAt(at);
+  final groupPaint = _inset(groupBox, HeatmapParams.industryGap / 2);
+  final tiles = [for (final i in small) ...i.tiles];
+  return HeatmapMarketLayout(
+    industries: List.unmodifiable([
+      for (var k = 0; k < kept.length; k++) _layoutIndustry(kept[k], boxes[k]),
+    ]),
+    smallIndustries: HeatmapIndustryGroupLayout(
+      members: List.unmodifiable(small),
+      bounds: groupBox,
+      paint: groupPaint,
+      interactive:
+          math.min(groupPaint.width, groupPaint.height) >=
+          HeatmapParams.minInteractiveSide,
+      marketCap: groupCap,
+      weightedChangePercent: _weightedChange(tiles),
+      breadth: _breadth(tiles),
+    ),
+  );
+}
+
 /// 兩層 squarified 佈局：先依產業市值切產業區塊，再在區塊內（扣掉標題列）依
 /// 個股市值切格子。圖區 ≤ 0 或面積不是有限數（父層高度無上限、溢位）、沒有
 /// 產業、或總市值不是有限正數時回空。
@@ -206,9 +351,10 @@ HeatmapIndustryLayout _layoutIndustry(
       HeatmapParams.foldMinSide *
       HeatmapParams.foldAspectAllowance;
   final canFold = total > 0 && total.isFinite && contentArea.isFinite;
-  // 自選或持股不合併：使用者自己的股票要一直看得到
+  // 自選或持股照樣合併：留成小格子寫不下名稱、認不出是哪一檔，改由合併塊的
+  // 自選框與清單標示
   bool tooSmall(HeatmapTile t) =>
-      canFold && !t.isMine && t.marketCap / total * contentArea < minArea;
+      canFold && t.marketCap / total * contentArea < minArea;
   final folded = [
     for (final t in tiles)
       if (tooSmall(t)) t,
@@ -480,6 +626,17 @@ HeatmapTileLayout? tileAt(
     return null;
   }
   return null;
+}
+
+/// 點擊或滑鼠位置對應的小產業合併塊（只回可互動的）
+HeatmapIndustryGroupLayout? smallIndustriesAt(
+  HeatmapMarketLayout layout,
+  double x,
+  double y,
+) {
+  final group = layout.smallIndustries;
+  if (group == null || !group.interactive) return null;
+  return _contains(group.paint, x, y) ? group : null;
 }
 
 /// 點擊位置對應的產業標題列

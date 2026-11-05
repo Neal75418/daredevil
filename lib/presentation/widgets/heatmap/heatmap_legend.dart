@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/theme/heatmap_colors.dart';
+import 'package:daredevil/presentation/widgets/heatmap/heatmap_mine_mark.dart';
 
 /// 熱力圖圖例：13 格色階（跌 6 階、平盤、漲 6 階，兩端寫「跌／漲 ≥ 最深一階」）、
 /// 自選雙線框、空心格子、產業漲跌的算法
@@ -60,20 +61,7 @@ class HeatmapLegend extends StatelessWidget {
           ],
         ),
         _item(
-          // 外深內淺各 1px，與格子上的自選框相同
-          Container(
-            width: HeatmapParams.legendSwatchSize,
-            height: HeatmapParams.legendSwatchSize,
-            decoration: BoxDecoration(
-              color: HeatmapColors.flat(brightness),
-              border: Border.all(color: HeatmapColors.mineOuter),
-            ),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border.all(color: HeatmapColors.mineInner),
-              ),
-            ),
-          ),
+          HeatmapMineMark(fill: HeatmapColors.flat(brightness)),
           'marketHeatmap.legendMine'.tr(),
           style,
         ),

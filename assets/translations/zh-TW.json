@@ -164,7 +164,13 @@
     "tooltipPrice": "價格",
     "tooltipChange": "漲跌幅",
     "tooltipCap": "市值 {value} 億",
-    "hollowNoChange": "無漲跌資料"
+    "hollowNoChange": "無漲跌資料",
+    "tooltipMine": "含自選或持股 {count} 檔",
+    "semWithMine": "{base}，含自選或持股 {count} 檔",
+    "mineMark": "自選或持股",
+    "groupLabel": "其他 {count} 個產業",
+    "groupShort": "其他產業",
+    "semGroupLabel": "{label}，共 {count} 檔"
   },
   "marketOverview": {
     "title": "大盤總覽",

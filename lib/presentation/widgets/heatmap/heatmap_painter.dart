@@ -138,6 +138,9 @@ class HeatmapPaintLabels {
     required this.otherShortLabel,
     required this.wholeLabel,
     required this.otherSemantics,
+    required this.groupLabel,
+    required this.groupShortLabel,
+    required this.groupSemantics,
   });
 
   /// 產業別為空時的產業名稱
@@ -159,47 +162,65 @@ class HeatmapPaintLabels {
   )
   otherSemantics;
 
+  /// 小產業合併塊的標籤（「其他 N 個產業」）
+  final String Function(int count) groupLabel;
+
+  /// 「其他 N 個產業」寫不下時退用的短標籤（「其他產業」）
+  final String groupShortLabel;
+  final String Function(HeatmapIndustryGroupLayout group) groupSemantics;
+
   @override
   bool operator ==(Object other) =>
       other is HeatmapPaintLabels &&
       other.uncategorized == uncategorized &&
       other.otherShortLabel == otherShortLabel &&
+      other.groupShortLabel == groupShortLabel &&
       identical(other.industrySemantics, industrySemantics) &&
       identical(other.tileSemantics, tileSemantics) &&
       identical(other.otherLabel, otherLabel) &&
       identical(other.wholeLabel, wholeLabel) &&
-      identical(other.otherSemantics, otherSemantics);
+      identical(other.otherSemantics, otherSemantics) &&
+      identical(other.groupLabel, groupLabel) &&
+      identical(other.groupSemantics, groupSemantics);
 
   @override
   int get hashCode => Object.hash(
     uncategorized,
     otherShortLabel,
+    groupShortLabel,
     identityHashCode(industrySemantics),
     identityHashCode(tileSemantics),
     identityHashCode(otherLabel),
     identityHashCode(wholeLabel),
     identityHashCode(otherSemantics),
+    identityHashCode(groupLabel),
+    identityHashCode(groupSemantics),
   );
 }
 
 /// 一次畫完全部格子（上千個 widget 太重）。
 ///
-/// 無障礙分層：全市場只描述產業；放大到單一產業時才描述每個可互動格子
-/// （上千段描述讓螢幕閱讀器無法使用）。
+/// 無障礙分層：全市場只描述產業（與小產業合併塊）；放大到單一產業時才描述
+/// 每個可互動格子（上千段描述讓螢幕閱讀器無法使用）。
 class HeatmapPainter extends CustomPainter {
   HeatmapPainter({
     required this.layout,
+    required this.smallIndustries,
     required this.brightness,
     required this.zoomed,
     required this.labels,
     required this.onIndustryTap,
     required this.onTileTap,
     required this.onOtherTap,
+    required this.onSmallIndustriesTap,
     this.fontFamily,
     this.fontFamilyFallback,
   });
 
   final List<HeatmapIndustryLayout> layout;
+
+  /// 全市場圖上合併的小產業（見 [layoutHeatmapMarket]）；沒有時為 null
+  final HeatmapIndustryGroupLayout? smallIndustries;
   final Brightness brightness;
   final bool zoomed;
   final HeatmapPaintLabels labels;
@@ -209,6 +230,7 @@ class HeatmapPainter extends CustomPainter {
   final ValueChanged<String> onIndustryTap;
   final ValueChanged<String> onTileTap;
   final HeatmapOtherTap onOtherTap;
+  final ValueChanged<HeatmapIndustryGroupLayout> onSmallIndustriesTap;
 
   /// 圖上文字的字族，由畫面依 App 主題傳入（只取字族，字級與顏色由 painter
   /// 決定）；null 用引擎預設字型
@@ -226,6 +248,8 @@ class HeatmapPainter extends CustomPainter {
       final other = industry.other;
       if (other != null) _paintOther(canvas, industry, other);
     }
+    final group = smallIndustries;
+    if (group != null) _paintGroup(canvas, group);
   }
 
   void _paintHeader(
@@ -288,10 +312,7 @@ class HeatmapPainter extends CustomPainter {
     } else {
       _stroke(canvas, rect, style.border!);
     }
-    if (tile.tile.isMine) {
-      _stroke(canvas, rect, HeatmapColors.mineOuter);
-      _stroke(canvas, rect.deflate(1), HeatmapColors.mineInner);
-    }
+    if (tile.tile.isMine) _paintMineFrame(canvas, rect);
     final change = tile.tile.change;
     _paintLabel(
       canvas,
@@ -305,7 +326,7 @@ class HeatmapPainter extends CustomPainter {
 
   /// 合併塊：照成員的加權漲跌上色（全是空心時畫空心），寫「其他 N 檔」；
   /// 整個產業都合併時，有標題列寫「共 N 檔」（名稱已在標題列），沒有才寫
-  /// 產業名稱。不畫自選框（自選股不會被合併）。
+  /// 產業名稱。成員有自選或持股時整塊加自選框。
   void _paintOther(
     Canvas canvas,
     HeatmapIndustryLayout industry,
@@ -314,6 +335,70 @@ class HeatmapPainter extends CustomPainter {
     final rect = _rect(other.paint);
     if (rect.width <= 0 || rect.height <= 0) return;
     final percent = other.weightedChangePercent;
+    final textColor = _paintFoldBlock(canvas, rect, percent, other.mineCount);
+    final count = other.members.length;
+    if (!other.wholeIndustry) {
+      // 「其他 N 檔」縮短後看不懂：寫不下就退成「其他」，再寫不下就不寫
+      // （不只寫一個數字，免得被當成一檔股票）
+      _paintLabel(
+        canvas,
+        rect,
+        textColor,
+        name: labels.otherLabel(count),
+        fallbackNames: [labels.otherShortLabel],
+        percent: percent,
+        shortenName: false,
+      );
+    } else if (industry.header != null) {
+      // 產業名稱已在標題列（標題列太窄時常寫不下漲跌幅）：「共 N 檔」寫不下
+      // 就只寫漲跌幅
+      _paintLabel(
+        canvas,
+        rect,
+        textColor,
+        name: labels.wholeLabel(count),
+        percent: percent,
+        shortenName: false,
+        percentWithoutName: true,
+      );
+    } else {
+      _paintLabel(
+        canvas,
+        rect,
+        textColor,
+        name: industry.industry.name ?? labels.uncategorized,
+        percent: percent,
+        shortenName: true,
+      );
+    }
+  }
+
+  /// 小產業合併塊：照成員的加權漲跌上色，寫「其他 N 個產業」；寫不下退成
+  /// 「其他產業」，再寫不下就不寫。成員有自選或持股時整塊加自選框。
+  void _paintGroup(Canvas canvas, HeatmapIndustryGroupLayout group) {
+    final rect = _rect(group.paint);
+    if (rect.width <= 0 || rect.height <= 0) return;
+    final percent = group.weightedChangePercent;
+    final textColor = _paintFoldBlock(canvas, rect, percent, group.mineCount);
+    _paintLabel(
+      canvas,
+      rect,
+      textColor,
+      name: labels.groupLabel(group.members.length),
+      fallbackNames: [labels.groupShortLabel],
+      percent: percent,
+      shortenName: false,
+    );
+  }
+
+  /// 合併塊的底：照加權漲跌上色（null 時畫空心），含自選或持股時加自選框；
+  /// 回傳文字色
+  Color _paintFoldBlock(
+    Canvas canvas,
+    Rect rect,
+    double? percent,
+    int mineCount,
+  ) {
     final style = heatmapTileStyle(
       percent == null
           ? const TileChangeHollow(HollowReason.noChangeData)
@@ -326,41 +411,8 @@ class HeatmapPainter extends CustomPainter {
     } else {
       _stroke(canvas, rect, style.border!);
     }
-    final count = other.members.length;
-    if (!other.wholeIndustry) {
-      // 「其他 N 檔」縮短後看不懂：寫不下就退成「其他」，再寫不下就不寫
-      // （不只寫一個數字，免得被當成一檔股票）
-      _paintLabel(
-        canvas,
-        rect,
-        style.text,
-        name: labels.otherLabel(count),
-        fallbackNames: [labels.otherShortLabel],
-        percent: percent,
-        shortenName: false,
-      );
-    } else if (industry.header != null) {
-      // 產業名稱已在標題列（標題列太窄時常寫不下漲跌幅）：「共 N 檔」寫不下
-      // 就只寫漲跌幅
-      _paintLabel(
-        canvas,
-        rect,
-        style.text,
-        name: labels.wholeLabel(count),
-        percent: percent,
-        shortenName: false,
-        percentWithoutName: true,
-      );
-    } else {
-      _paintLabel(
-        canvas,
-        rect,
-        style.text,
-        name: industry.industry.name ?? labels.uncategorized,
-        percent: percent,
-        shortenName: true,
-      );
-    }
+    if (mineCount > 0) _paintMineFrame(canvas, rect);
+    return style.text;
   }
 
   /// 格子文字：名稱優先，第二行放得下才加漲跌幅（見 [heatmapTileLines]）；
@@ -438,6 +490,12 @@ class HeatmapPainter extends CustomPainter {
     }
   }
 
+  /// 自選或持股的雙線框（外深內淺各 1px）
+  void _paintMineFrame(Canvas canvas, Rect rect) {
+    _stroke(canvas, rect, HeatmapColors.mineOuter);
+    _stroke(canvas, rect.deflate(1), HeatmapColors.mineInner);
+  }
+
   void _stroke(Canvas canvas, Rect rect, Color color) {
     canvas.drawRect(
       rect.deflate(0.5),
@@ -473,6 +531,7 @@ class HeatmapPainter extends CustomPainter {
   @override
   bool shouldRepaint(HeatmapPainter oldDelegate) =>
       !identical(oldDelegate.layout, layout) ||
+      !identical(oldDelegate.smallIndustries, smallIndustries) ||
       oldDelegate.brightness != brightness ||
       oldDelegate.zoomed != zoomed ||
       oldDelegate.labels != labels ||
@@ -491,6 +550,16 @@ class HeatmapPainter extends CustomPainter {
               textDirection: TextDirection.ltr,
               button: true,
               onTap: () => onIndustryTap(industry.industry.key),
+            ),
+          ),
+        if (smallIndustries case final group? when group.interactive)
+          CustomPainterSemantics(
+            rect: _rect(group.paint),
+            properties: SemanticsProperties(
+              label: labels.groupSemantics(group),
+              textDirection: TextDirection.ltr,
+              button: true,
+              onTap: () => onSmallIndustriesTap(group),
             ),
           ),
       ];
@@ -527,5 +596,6 @@ class HeatmapPainter extends CustomPainter {
       shouldRepaint(oldDelegate) ||
       oldDelegate.onIndustryTap != onIndustryTap ||
       oldDelegate.onTileTap != onTileTap ||
-      oldDelegate.onOtherTap != onOtherTap;
+      oldDelegate.onOtherTap != onOtherTap ||
+      oldDelegate.onSmallIndustriesTap != onSmallIndustriesTap;
 }

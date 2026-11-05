@@ -6,11 +6,14 @@ import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/services/heatmap/heatmap_layout.dart';
+import 'package:daredevil/presentation/widgets/heatmap/heatmap_mine_mark.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_painter.dart';
+import 'package:daredevil/presentation/widgets/heatmap/heatmap_tooltip.dart';
 
-/// 「其他 N 檔」的成員清單（從畫面下方拉出）：依漲跌幅排序（漲最多在上，
-/// 沒有漲跌資料的放最後），點一列進個股頁。合併的都是小型股，打開清單是想找
-/// 「誰在動」，所以不照市值排；每列仍寫市值。
+/// 「其他 N 檔」的成員清單（從畫面下方拉出）：自選或持股排最前面並加雙線框
+/// 標記（合併塊的自選框表示它們在裡面，打開就要看得到），其餘依漲跌幅排序
+/// （漲最多在上，沒有漲跌資料的放最後），點一列進個股頁。合併的都是小型股，
+/// 打開清單是想找「誰在動」，所以不照市值排；每列仍寫市值。
 class HeatmapOtherSheet extends StatelessWidget {
   const HeatmapOtherSheet({
     super.key,
@@ -35,13 +38,7 @@ class HeatmapOtherSheet extends StatelessWidget {
       color: theme.colorScheme.onSurfaceVariant,
     );
     final locale = Localizations.localeOf(context);
-    final b = other.breadth;
-    final counts = {'up': '${b.up}', 'down': '${b.down}', 'flat': '${b.flat}'};
-    final breadth = b.hollow > 0
-        ? 'marketHeatmap.tooltipBreadthWithHollow'.tr(
-            namedArgs: {...counts, 'hollow': '${b.hollow}'},
-          )
-        : 'marketHeatmap.tooltipBreadth'.tr(namedArgs: counts);
+    final breadth = heatmapBreadthText(other.breadth);
     final weighted = other.weightedChangePercent;
     final members = sortHeatmapOtherMembers(other.members);
     return ListView.builder(
@@ -76,7 +73,17 @@ class HeatmapOtherSheet extends StatelessWidget {
           namedArgs: {'value': formatHeatmapCap(tile.marketCap, locale)},
         );
         return ListTile(
-          title: Text(tile.name),
+          title: tile.isMine
+              ? Row(
+                  children: [
+                    Flexible(child: Text(tile.name)),
+                    const SizedBox(width: DesignTokens.spacing6),
+                    HeatmapMineMark(
+                      semanticLabel: 'marketHeatmap.mineMark'.tr(),
+                    ),
+                  ],
+                )
+              : Text(tile.name),
           subtitle: Text('${tile.symbol} · $cap'),
           trailing: switch (change) {
             TileChangeValue(:final percent) => Text(
@@ -99,8 +106,9 @@ class HeatmapOtherSheet extends StatelessWidget {
   }
 }
 
-/// 清單順序：有漲跌的依漲跌幅由高到低（看四捨五入到 2 位後、畫面上顯示的
-/// 值；同值依市值），沒有漲跌資料的放最後（依市值）
+/// 清單順序：自選或持股在前、其餘在後；兩組內各自有漲跌的依漲跌幅由高到低
+/// （看四捨五入到 2 位後、畫面上顯示的值；同值依市值），沒有漲跌資料的放
+/// 最後（依市值）
 @visibleForTesting
 List<HeatmapTile> sortHeatmapOtherMembers(List<HeatmapTile> members) {
   double? percentOf(HeatmapTile t) => switch (t.change) {
@@ -108,6 +116,7 @@ List<HeatmapTile> sortHeatmapOtherMembers(List<HeatmapTile> members) {
     TileChangeHollow() => null,
   };
   return [...members]..sort((a, b) {
+    if (a.isMine != b.isMine) return a.isMine ? -1 : 1;
     final pa = percentOf(a);
     final pb = percentOf(b);
     if (pa == null || pb == null) {

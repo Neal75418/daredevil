@@ -18,6 +18,7 @@ import 'package:daredevil/presentation/providers/market_index_live_provider.dart
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
+import 'package:daredevil/presentation/widgets/heatmap/heatmap_industry_group_sheet.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_legend.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_other_sheet.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_painter.dart';
@@ -60,6 +61,9 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
         otherShortLabel: 'marketHeatmap.otherShort'.tr(),
         wholeLabel: _wholeLabel,
         otherSemantics: _otherSemantics,
+        groupLabel: _groupLabel,
+        groupShortLabel: 'marketHeatmap.groupShort'.tr(),
+        groupSemantics: _groupSemantics,
       );
     }
   }
@@ -94,6 +98,30 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
           onStockTap: (symbol) {
             Navigator.of(sheetContext).pop();
             _openStock(symbol);
+          },
+        ),
+      ),
+    );
+  }
+
+  /// 「其他 N 個產業」的產業清單；點一個先收起清單再放大該產業
+  void _showSmallIndustries(HeatmapIndustryGroupLayout group) {
+    showAppBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        builder: (_, controller) => HeatmapIndustryGroupSheet(
+          title: _groupLabel(group.members.length),
+          group: group,
+          scrollController: controller,
+          onIndustryTap: (key) {
+            Navigator.of(sheetContext).pop();
+            _zoomTo(key);
           },
         ),
       ),
@@ -193,6 +221,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
                 onIndustryTap: _zoomTo,
                 onTileTap: _openStock,
                 onOtherTap: _showOther,
+                onSmallIndustriesTap: _showSmallIndustries,
                 labels: _labels!,
               ),
             ),
@@ -285,7 +314,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
   );
 
   /// 產業選單：第一項全市場，其餘依市值排序並帶市值加權漲跌。小產業在全市場
-  /// 圖上放不下標題列，這是它們唯一的放大入口。
+  /// 圖上合成「其他 N 個產業」，也可以從這裡直接放大。
   Widget _industryMenu(HeatmapMarketData? data) {
     final industries = [...?data?.industries]
       ..sort((a, b) {
@@ -360,21 +389,64 @@ String _industrySemantics(HeatmapIndustryLayout layout) {
 String _otherLabel(int count) =>
     'marketHeatmap.otherLabel'.tr(namedArgs: {'count': '$count'});
 
+String _groupLabel(int count) =>
+    'marketHeatmap.groupLabel'.tr(namedArgs: {'count': '$count'});
+
+/// 小產業合併塊的描述：「其他 N 個產業」、共幾檔（標籤以產業為單位，後面的
+/// 家數是檔，先說總檔數才聽得懂）、市值加權漲跌與漲跌家數；含自選或持股時
+/// 補上檔數。全是空心時的句型本來就寫檔數，不重複。
+String _groupSemantics(HeatmapIndustryGroupLayout group) {
+  final label = _groupLabel(group.members.length);
+  final percent = group.weightedChangePercent;
+  return _withMine(
+    _foldSemantics(
+      label: percent == null
+          ? label
+          : 'marketHeatmap.semGroupLabel'.tr(
+              namedArgs: {'label': label, 'count': '${group.stockCount}'},
+            ),
+      count: group.stockCount,
+      percent: percent,
+      breadth: group.breadth,
+    ),
+    group.mineCount,
+  );
+}
+
 String _wholeLabel(int count) =>
     'marketHeatmap.tooltipStocks'.tr(namedArgs: {'count': '$count'});
 
-/// 合併塊的描述：標籤（整個產業時是產業名稱）、市值加權漲跌與漲跌家數
+/// 合併塊的描述：標籤（整個產業時是產業名稱）、市值加權漲跌與漲跌家數；
+/// 含自選或持股時補上檔數（畫面上是自選框）
 String _otherSemantics(HeatmapIndustryLayout layout, HeatmapOtherLayout other) {
   final label = other.wholeIndustry
       ? layout.industry.name ?? 'marketHeatmap.uncategorized'.tr()
       : _otherLabel(other.members.length);
-  final pct = other.weightedChangePercent;
+  return _withMine(
+    _foldSemantics(
+      label: label,
+      count: other.members.length,
+      percent: other.weightedChangePercent,
+      breadth: other.breadth,
+    ),
+    other.mineCount,
+  );
+}
+
+/// 合併塊共用的描述句：標籤、市值加權漲跌、漲跌家數（全是空心時寫檔數）
+String _foldSemantics({
+  required String label,
+  required int count,
+  required double? percent,
+  required HeatmapBreadth breadth,
+}) {
+  final pct = percent;
   if (pct == null) {
     return 'marketHeatmap.semOtherNoChange'.tr(
-      namedArgs: {'label': label, 'count': '${other.members.length}'},
+      namedArgs: {'label': label, 'count': '$count'},
     );
   }
-  final b = other.breadth;
+  final b = breadth;
   final args = {
     'label': label,
     'dir': _directionKey(pct).tr(),
@@ -389,6 +461,12 @@ String _otherSemantics(HeatmapIndustryLayout layout, HeatmapOtherLayout other) {
         )
       : 'marketHeatmap.semOther'.tr(namedArgs: args);
 }
+
+String _withMine(String base, int mineCount) => mineCount > 0
+    ? 'marketHeatmap.semWithMine'.tr(
+        namedArgs: {'base': base, 'count': '$mineCount'},
+      )
+    : base;
 
 String _tileSemantics(HeatmapTileLayout layout) {
   final tile = layout.tile;

@@ -19,6 +19,7 @@ class HeatmapView extends StatefulWidget {
     required this.onIndustryTap,
     required this.onTileTap,
     required this.onOtherTap,
+    required this.onSmallIndustriesTap,
     required this.labels,
   });
 
@@ -32,19 +33,23 @@ class HeatmapView extends StatefulWidget {
   /// 點「其他 N 檔」（部分合併）：列出成員。整個產業合成的那塊照點產業標題，
   /// 呼叫 [onIndustryTap]
   final HeatmapOtherTap onOtherTap;
+
+  /// 點全市場圖上的小產業合併塊（「其他 N 個產業」）：列出這些產業
+  final ValueChanged<HeatmapIndustryGroupLayout> onSmallIndustriesTap;
   final HeatmapPaintLabels labels;
 
   @override
   State<HeatmapView> createState() => _HeatmapViewState();
 }
 
-/// 提示：指著的格子或合併塊（兩者擇一）、所屬產業、位置，以及算出它的那份
-/// 佈局（佈局換了就不畫）
+/// 提示：指著的格子、產業內的合併塊或小產業合併塊（三者擇一）、所屬產業
+/// （小產業合併塊沒有）、位置，以及算出它的那份佈局（佈局換了就不畫）
 typedef _Hover = ({
-  List<HeatmapIndustryLayout> layout,
-  HeatmapIndustryLayout industry,
+  HeatmapMarketLayout layout,
+  HeatmapIndustryLayout? industry,
   HeatmapTileLayout? tile,
   HeatmapOtherLayout? other,
+  HeatmapIndustryGroupLayout? group,
   Offset at,
 });
 
@@ -54,7 +59,7 @@ class _HeatmapViewState extends State<HeatmapView> {
   HeatmapMarketData? _cachedData;
   String? _cachedZoom;
   Size? _cachedSize;
-  List<HeatmapIndustryLayout> _layout = const [];
+  HeatmapMarketLayout _layout = HeatmapMarketLayout.empty;
 
   @override
   void dispose() {
@@ -62,21 +67,31 @@ class _HeatmapViewState extends State<HeatmapView> {
     super.dispose();
   }
 
-  List<HeatmapIndustryLayout> _layoutFor(Size size) {
+  /// 全市場合併放不下標題列的小產業；放大單一產業時不合併
+  HeatmapMarketLayout _layoutFor(Size size) {
     if (identical(_cachedData, widget.data) &&
         _cachedZoom == widget.zoomIndustryKey &&
         _cachedSize == size) {
       return _layout;
     }
     final zoom = widget.zoomIndustryKey;
-    final industries = zoom == null
-        ? widget.data.industries
-        : [
-            for (final i in widget.data.industries)
-              if (i.key == zoom) i,
-          ];
     final watch = Stopwatch()..start();
-    _layout = layoutHeatmap(industries, width: size.width, height: size.height);
+    _layout = zoom == null
+        ? layoutHeatmapMarket(
+            widget.data.industries,
+            width: size.width,
+            height: size.height,
+          )
+        : HeatmapMarketLayout(
+            industries: layoutHeatmap(
+              [
+                for (final i in widget.data.industries)
+                  if (i.key == zoom) i,
+              ],
+              width: size.width,
+              height: size.height,
+            ),
+          );
     watch.stop();
     AppLogger.debug(
       'MarketHeatmap',
@@ -88,10 +103,11 @@ class _HeatmapViewState extends State<HeatmapView> {
     return _layout;
   }
 
-  void _showAt(List<HeatmapIndustryLayout> layout, Offset at) {
-    final tile = tileAt(layout, at.dx, at.dy);
+  void _showAt(HeatmapMarketLayout layout, Offset at) {
+    final industries = layout.industries;
+    final tile = tileAt(industries, at.dx, at.dy);
     if (tile != null) {
-      final industry = layout.firstWhere(
+      final industry = industries.firstWhere(
         (l) => l.tiles.any((t) => identical(t, tile)),
       );
       _hover.value = (
@@ -99,18 +115,32 @@ class _HeatmapViewState extends State<HeatmapView> {
         industry: industry,
         tile: tile,
         other: null,
+        group: null,
         at: at,
       );
       return;
     }
-    final hit = otherAt(layout, at.dx, at.dy);
-    _hover.value = hit == null
+    final hit = otherAt(industries, at.dx, at.dy);
+    if (hit != null) {
+      _hover.value = (
+        layout: layout,
+        industry: hit.industry,
+        tile: null,
+        other: hit.other,
+        group: null,
+        at: at,
+      );
+      return;
+    }
+    final group = smallIndustriesAt(layout, at.dx, at.dy);
+    _hover.value = group == null
         ? null
         : (
             layout: layout,
-            industry: hit.industry,
+            industry: null,
             tile: null,
-            other: hit.other,
+            other: null,
+            group: group,
             at: at,
           );
   }
@@ -118,6 +148,8 @@ class _HeatmapViewState extends State<HeatmapView> {
   // 無障礙節點的點擊：穩定的方法 tear-off，painter 比較時才相等
   void _semanticIndustryTap(String key) => widget.onIndustryTap(key);
   void _semanticTileTap(String symbol) => widget.onTileTap(symbol);
+  void _semanticGroupTap(HeatmapIndustryGroupLayout group) =>
+      widget.onSmallIndustriesTap(group);
 
   /// 合併塊的點擊（手勢與無障礙共用）：全市場圖上整個產業合成的那塊放大
   /// 該產業；其餘（包括已放大後仍整個合成一塊的）列出成員
@@ -129,19 +161,25 @@ class _HeatmapViewState extends State<HeatmapView> {
     }
   }
 
-  void _tap(List<HeatmapIndustryLayout> layout, Offset at) {
-    final header = industryHeaderAt(layout, at.dx, at.dy);
+  void _tap(HeatmapMarketLayout layout, Offset at) {
+    final industries = layout.industries;
+    final header = industryHeaderAt(industries, at.dx, at.dy);
     if (header != null) {
       widget.onIndustryTap(header.industry.key);
       return;
     }
-    final tile = tileAt(layout, at.dx, at.dy);
+    final tile = tileAt(industries, at.dx, at.dy);
     if (tile != null) {
       widget.onTileTap(tile.tile.symbol);
       return;
     }
-    final hit = otherAt(layout, at.dx, at.dy);
-    if (hit != null) _otherTap(hit.industry, hit.other);
+    final hit = otherAt(industries, at.dx, at.dy);
+    if (hit != null) {
+      _otherTap(hit.industry, hit.other);
+      return;
+    }
+    final group = smallIndustriesAt(layout, at.dx, at.dy);
+    if (group != null) widget.onSmallIndustriesTap(group);
   }
 
   @override
@@ -165,13 +203,15 @@ class _HeatmapViewState extends State<HeatmapView> {
                 child: RepaintBoundary(
                   child: CustomPaint(
                     painter: HeatmapPainter(
-                      layout: layout,
+                      layout: layout.industries,
+                      smallIndustries: layout.smallIndustries,
                       brightness: brightness,
                       zoomed: widget.zoomIndustryKey != null,
                       labels: widget.labels,
                       onIndustryTap: _semanticIndustryTap,
                       onTileTap: _semanticTileTap,
                       onOtherTap: _otherTap,
+                      onSmallIndustriesTap: _semanticGroupTap,
                       fontFamily: font?.fontFamily,
                       fontFamilyFallback: font?.fontFamilyFallback,
                     ),
@@ -232,8 +272,15 @@ class _HeatmapViewState extends State<HeatmapView> {
   }
 
   Widget _tooltip(_Hover hover) {
+    final group = hover.group;
+    if (group != null) {
+      return HeatmapIndustryGroupTooltip(
+        group: group,
+        title: widget.labels.groupLabel(group.members.length),
+      );
+    }
     final industryName =
-        hover.industry.industry.name ?? widget.labels.uncategorized;
+        hover.industry!.industry.name ?? widget.labels.uncategorized;
     final tile = hover.tile;
     if (tile != null) {
       return HeatmapTooltip(tile: tile.tile, industryName: industryName);

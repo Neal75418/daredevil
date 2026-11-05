@@ -458,13 +458,20 @@ void main() {
       expect(l.tiles, hasLength(2));
     });
 
-    test('自選或持股不合併', () {
+    test('自選或持股照樣合併，合併塊數得出含幾檔', () {
+      // 太小的自選格子寫不下名稱、認不出是哪一檔：一起合併，由合併塊標示
       final l = only([
-        tile('A0', 1000),
+        tile('A0', 1000, mine: true),
         for (var i = 0; i < 30; i++) tile('S$i', 1, mine: i < 2),
       ]);
-      expect(l.other!.members, hasLength(28));
-      expect(l.tiles.map((t) => t.tile.symbol), ['A0', 'S0', 'S1']);
+      expect(l.other!.members, hasLength(30));
+      expect(l.tiles.map((t) => t.tile.symbol), ['A0'], reason: '夠大的照舊單獨畫');
+      expect(l.other!.mineCount, 2);
+      final none = only([
+        tile('A0', 1000),
+        for (var i = 0; i < 30; i++) tile('S$i', 1),
+      ]);
+      expect(none.other!.mineCount, 0);
     });
 
     test('整個產業都太小：只有一塊、標成整個產業', () {
@@ -567,6 +574,199 @@ void main() {
       expect(p.width * p.height, greaterThan(0), reason: '前提：有面積');
       expect(
         otherAt(layout, p.left + p.width / 2, p.top + p.height / 2),
+        isNull,
+      );
+    });
+  });
+
+  group('小產業合成一塊（全市場）', () {
+    const minArea =
+        HeatmapParams.industryFoldMinSide *
+        HeatmapParams.industryFoldMinSide *
+        HeatmapParams.foldAspectAllowance;
+
+    HeatmapTile stock(
+      String symbol,
+      double cap, {
+      TileChange change = const TileChangeValue(1),
+      bool mine = false,
+    }) => HeatmapTile(
+      symbol: symbol,
+      name: symbol,
+      close: 100,
+      marketCap: cap,
+      change: change,
+      isMine: mine,
+    );
+
+    HeatmapIndustry ind(String name, List<HeatmapTile> tiles) =>
+        HeatmapIndustry(
+          name: name,
+          marketCap: tiles.fold(0.0, (a, t) => a + t.marketCap),
+          weightedChangePercent: 1,
+          tiles: tiles,
+        );
+
+    HeatmapIndustry one(String name, double cap) =>
+        ind(name, [stock('${name}0', cap)]);
+
+    test('預期面積放不下標題列的產業合成一塊，面積＝它們市值的占比', () {
+      // 400×300＝120,000：B 占 7%（8,400）留著；S 各占 1%（1,200）合併
+      final l = layoutHeatmapMarket(
+        [
+          one('A', 900),
+          one('B', 70),
+          one('S1', 10),
+          one('S2', 10),
+          one('S3', 10),
+        ],
+        width: 400,
+        height: 300,
+      );
+      expect(l.industries.map((i) => i.industry.key), ['A', 'B']);
+      final g = l.smallIndustries!;
+      expect(g.members.map((i) => i.key), ['S1', 'S2', 'S3']);
+      expect(g.marketCap, 30);
+      expect(_area(g.bounds), closeTo(120000 * 30 / 1000, 1e-6));
+      // 與產業區塊不重疊、一起鋪滿圖區
+      for (final i in l.industries) {
+        expect(_overlap(g.bounds, i.bounds), closeTo(0, 1e-9));
+      }
+      expect(
+        l.industries.fold(0.0, (a, i) => a + _area(i.bounds)) + _area(g.bounds),
+        closeTo(120000, 1e-6),
+      );
+      // 畫的範圍與產業區塊一樣內縮半個產業間隔
+      const d = HeatmapParams.industryGap / 2;
+      expect(g.paint, (
+        left: g.bounds.left + d,
+        top: g.bounds.top + d,
+        width: g.bounds.width - 2 * d,
+        height: g.bounds.height - 2 * d,
+      ));
+      expect(g.interactive, isTrue);
+    });
+
+    test('門檻含等號：預期面積剛好等於門檻不合併、略小就合併', () {
+      // 880×440＝387,200：占比 1/100 的預期面積剛好是 3,872（浮點數也剛好）
+      HeatmapMarketLayout at(List<double> caps) => layoutHeatmapMarket(
+        [for (var i = 0; i < caps.length; i++) one('I$i', caps[i])],
+        width: 880,
+        height: 440,
+      );
+      expect(1 / 100 * (880 * 440), minArea, reason: '前提：浮點數剛好等於門檻');
+      expect(at([98, 1, 1]).smallIndustries, isNull);
+      expect(at([98.02, 0.99, 0.99]).smallIndustries!.members, hasLength(2));
+    });
+
+    test('只有一個產業太小時不合併', () {
+      final l = layoutHeatmapMarket(
+        [one('A', 900), one('B', 90), one('S', 10)],
+        width: 400,
+        height: 300,
+      );
+      expect(l.smallIndustries, isNull);
+      expect(l.industries.map((i) => i.industry.key), ['A', 'B', 'S']);
+    });
+
+    test('每個產業都太小時不合併（沒有別的產業可以並排）', () {
+      // 50×50＝2,500，連整張圖都小於門檻
+      final l = layoutHeatmapMarket(
+        [one('A', 60), one('B', 40)],
+        width: 50,
+        height: 50,
+      );
+      expect(l.smallIndustries, isNull);
+      expect(l.industries, hasLength(2));
+    });
+
+    test('沒有要合併的時候，產業佈局與 layoutHeatmap 相同', () {
+      final industries = [one('A', 600), one('B', 400)];
+      expect(
+        layoutHeatmapMarket(industries, width: 400, height: 300).industries,
+        layoutHeatmap(industries, width: 400, height: 300),
+      );
+    });
+
+    test('合併塊的漲跌：成員的個股以平盤市值加權；家數、檔數、自選檔數', () {
+      const hollow = TileChangeHollow(HollowReason.noChangeData);
+      final l = layoutHeatmapMarket(
+        [
+          one('A', 1e6),
+          // 平盤市值各 100：+10% 與 −10% 加權後 0
+          ind('S1', [
+            stock('S1a', 110, change: const TileChangeValue(10), mine: true),
+            stock('S1b', 0.0001, change: hollow),
+          ]),
+          ind('S2', [
+            stock('S2a', 90, change: const TileChangeValue(-10)),
+            stock('S2b', 0.0001, change: const TileChangeValue(0.004)),
+          ]),
+        ],
+        width: 400,
+        height: 300,
+      );
+      final g = l.smallIndustries!;
+      expect(g.weightedChangePercent, closeTo(0, 1e-6));
+      expect(g.breadth, (up: 1, down: 1, flat: 1, hollow: 1));
+      expect(g.stockCount, 4);
+      expect(g.mineCount, 1);
+    });
+
+    test('合併塊照市值排進降冪序列（比它小的產業排在它後面）', () {
+      // 合併塊 80 比 B 的 50 大：切的順序是 850、80、50
+      final m = layoutHeatmapMarket(
+        [
+          one('A', 850),
+          one('B', 50),
+          one('S1', 30),
+          one('S2', 25),
+          one('S3', 25),
+        ],
+        width: 400,
+        height: 300,
+      );
+      expect(m.smallIndustries!.members.map((i) => i.key), ['S1', 'S2', 'S3']);
+      final boxes = squarify(
+        [850, 80, 50],
+        (left: 0, top: 0, width: 400, height: 300),
+      );
+      expect(m.smallIndustries!.bounds, boxes[1]);
+      expect(m.industries.map((i) => i.bounds), [boxes[0], boxes[2]]);
+    });
+
+    test('smallIndustriesAt：合併塊被擠成細條、不可互動時回 null', () {
+      // 一個很大的產業加合併塊：合併塊只占約 1.5%，排成約 6px 寬的細條（內縮
+      // 半個產業間隔後約 2px）
+      final l = layoutHeatmapMarket(
+        [one('A', 1e6), one('S1', 7500), one('S2', 7500)],
+        width: 400,
+        height: 300,
+      );
+      final g = l.smallIndustries!;
+      expect(g.interactive, isFalse);
+      final p = g.paint;
+      expect(p.width * p.height, greaterThan(0), reason: '前提：有面積');
+      expect(
+        smallIndustriesAt(l, p.left + p.width / 2, p.top + p.height / 2),
+        isNull,
+      );
+    });
+
+    test('smallIndustriesAt：點在合併塊上回它；產業上回 null', () {
+      final l = layoutHeatmapMarket(
+        [one('A', 900), one('B', 70), one('S1', 15), one('S2', 15)],
+        width: 400,
+        height: 300,
+      );
+      final p = l.smallIndustries!.paint;
+      expect(
+        smallIndustriesAt(l, p.left + p.width / 2, p.top + p.height / 2),
+        l.smallIndustries,
+      );
+      final a = l.industries.first.bounds;
+      expect(
+        smallIndustriesAt(l, a.left + a.width / 2, a.top + a.height / 2),
         isNull,
       );
     });

@@ -57,6 +57,13 @@ abstract final class HeatmapParams {
   static const double foldMinSide = 24.0;
   static const double foldAspectAllowance = 2.0;
 
+  /// 小產業合併：產業的預期面積（市值占比 × 圖區面積）小於
+  /// 「[industryFoldMinSide]² × [foldAspectAllowance]」就在全市場圖上合成
+  /// 一塊「其他 N 個產業」。放不下標題列的產業認不出是哪個產業，格子多半也
+  /// 寫不下字；邊長＝標題列門檻加上四邊各半個產業間隔。
+  static const double industryFoldMinSide =
+      industryHeaderMinWidth + industryGap;
+
   /// 標題列的字級，也是格子字級的下限
   static const double labelFontSize = 11.0;
 

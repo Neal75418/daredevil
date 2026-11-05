@@ -53,11 +53,15 @@ final _data = HeatmapMarketData(
         _tile('9903', '測試丙', 1, const TileChangeValue(1)),
       ],
     ),
+    // 只有一檔太小時不合併：9912 排成有面積、邊長不到 4 的細條，不可互動
     HeatmapIndustry(
       name: 'B',
-      marketCap: 80000000000,
+      marketCap: 80500000000,
       weightedChangePercent: -0.4,
-      tiles: [_tile('9911', '測試丁', 80000000000, const TileChangeValue(-0.4))],
+      tiles: [
+        _tile('9911', '測試丁', 80000000000, const TileChangeValue(-0.4)),
+        _tile('9912', '測試戊', 500000000, const TileChangeValue(-0.4)),
+      ],
     ),
     // 一檔大的加 30 檔太小的：小的合併成一塊「其他」
     HeatmapIndustry(
@@ -70,20 +74,33 @@ final _data = HeatmapMarketData(
           _tile('${9970 + i}', '微$i', 100000000, const TileChangeValue(1)),
       ],
     ),
-    // 小產業：格子有面積但邊長不到 4，不可互動（自選不合併，才留得下來）
+    // 小產業：20 檔都太小，整個產業合成一塊
     HeatmapIndustry(
       name: 'C',
       marketCap: 400000000,
       weightedChangePercent: 0.5,
       tiles: [
         for (var i = 0; i < 20; i++)
-          _tile(
-            '${9921 + i}',
-            '小$i',
-            20000000,
-            const TileChangeValue(0.5),
-            mine: true,
-          ),
+          _tile('${9921 + i}', '小$i', 20000000, const TileChangeValue(0.5)),
+      ],
+    ),
+  ],
+);
+
+/// 再加一個小產業 E（含一檔自選）：C 與 E 在全市場圖上合成一塊
+final _dataSmall = HeatmapMarketData(
+  market: 'TWSE',
+  dataDate: DateTime(2026, 10, 7),
+  excludedForShares: 0,
+  industries: [
+    ..._data.industries,
+    HeatmapIndustry(
+      name: 'E',
+      marketCap: 300000000,
+      weightedChangePercent: -1,
+      tiles: [
+        _tile('9951', '測試庚', 200000000, const TileChangeValue(-1), mine: true),
+        _tile('9952', '測試辛', 100000000, const TileChangeValue(-1)),
       ],
     ),
   ],
@@ -95,6 +112,9 @@ String _otherLabel(int count) => 'other:$count';
 String _wholeLabel(int count) => 'all:$count';
 String _otherSemantics(HeatmapIndustryLayout l, HeatmapOtherLayout o) =>
     'other:${l.industry.key}';
+String _groupLabel(int count) => '其他 $count 個產業';
+String _groupSemantics(HeatmapIndustryGroupLayout g) =>
+    'group:${g.members.length}';
 
 const _labels = HeatmapPaintLabels(
   uncategorized: '未分類',
@@ -104,6 +124,9 @@ const _labels = HeatmapPaintLabels(
   otherShortLabel: 'oth',
   wholeLabel: _wholeLabel,
   otherSemantics: _otherSemantics,
+  groupLabel: _groupLabel,
+  groupShortLabel: '其他產業',
+  groupSemantics: _groupSemantics,
 );
 
 HeatmapView _view({
@@ -111,6 +134,7 @@ HeatmapView _view({
   ValueChanged<String>? onTile,
   ValueChanged<String>? onIndustry,
   HeatmapOtherTap? onOther,
+  ValueChanged<HeatmapIndustryGroupLayout>? onGroup,
   HeatmapMarketData? data,
 }) => HeatmapView(
   data: data ?? _data,
@@ -118,6 +142,7 @@ HeatmapView _view({
   onIndustryTap: onIndustry ?? (_) {},
   onTileTap: onTile ?? (_) {},
   onOtherTap: onOther ?? (_, _) {},
+  onSmallIndustriesTap: onGroup ?? (_) {},
   labels: _labels,
 );
 
@@ -130,6 +155,7 @@ Widget _app({
   ValueChanged<String>? onTile,
   ValueChanged<String>? onIndustry,
   HeatmapOtherTap? onOther,
+  ValueChanged<HeatmapIndustryGroupLayout>? onGroup,
   HeatmapMarketData? data,
   double width = _width,
   double height = _height,
@@ -144,6 +170,7 @@ Widget _app({
         onTile: onTile,
         onIndustry: onIndustry,
         onOther: onOther,
+        onGroup: onGroup,
         data: data,
       ),
     ),
@@ -307,6 +334,7 @@ void main() {
               onIndustryTap: (_) {},
               onTileTap: (_) {},
               onOtherTap: (_, _) {},
+              onSmallIndustriesTap: (_) {},
               labels: _labels,
             ),
           ),
@@ -337,10 +365,17 @@ void main() {
       bool whole = false,
       double? pct = 1,
       HeatmapBreadth breadth = (up: 2, down: 1, flat: 0, hollow: 1),
+      int mine = 0,
     }) => HeatmapOtherLayout(
       members: [
         for (var i = 0; i < 4; i++)
-          _tile('${9990 + i}', '微$i', 1e8, const TileChangeValue(1)),
+          _tile(
+            '${9990 + i}',
+            '微$i',
+            1e8,
+            const TileChangeValue(1),
+            mine: i < mine,
+          ),
       ],
       bounds: (left: 0, top: 0, width: 100, height: 100),
       paint: (left: 0, top: 0, width: 100, height: 100),
@@ -365,6 +400,19 @@ void main() {
       expect(find.text('D'), findsOneWidget);
       expect(find.text('漲 2、跌 1、平 0、無漲跌資料 1'), findsOneWidget);
       expect(find.text('市值 4.0 億'), findsOneWidget);
+      expect(find.textContaining('自選'), findsNothing);
+    });
+
+    testWidgets('成員有自選或持股：寫含幾檔', (tester) async {
+      await pumpTooltip(
+        tester,
+        HeatmapOtherTooltip(
+          other: other(mine: 2),
+          title: '其他 4 檔',
+          industryName: 'D',
+        ),
+      );
+      expect(find.text('含自選或持股 2 檔'), findsOneWidget);
     });
 
     testWidgets('整個產業都合併：第二行寫檔數', (tester) async {
@@ -392,6 +440,65 @@ void main() {
         ),
       );
       expect(find.text('市值加權 無漲跌資料'), findsOneWidget);
+    });
+  });
+
+  group('小產業合併塊', () {
+    final market = layoutHeatmapMarket(
+      _dataSmall.industries,
+      width: _width,
+      height: _height,
+    );
+
+    testWidgets('全市場：放不下標題列的小產業合成一塊交給 painter；放大後沒有', (tester) async {
+      bigViewport(tester);
+      await tester.pumpWidget(_app(data: _dataSmall));
+      await tester.pumpAndSettle();
+      expect(_painterOf(tester).smallIndustries?.members.map((i) => i.key), [
+        'C',
+        'E',
+      ]);
+      expect(_painterOf(tester).layout.map((l) => l.industry.key), [
+        'A',
+        'B',
+        'D',
+      ]);
+      await tester.pumpWidget(_app(data: _dataSmall, zoom: 'A'));
+      await tester.pumpAndSettle();
+      expect(_painterOf(tester).smallIndustries, isNull);
+    });
+
+    testWidgets('點合併塊交給回呼，不放大、不進個股', (tester) async {
+      bigViewport(tester);
+      HeatmapIndustryGroupLayout? group;
+      String? industry;
+      String? tapped;
+      await tester.pumpWidget(
+        _app(
+          data: _dataSmall,
+          onGroup: (g) => group = g,
+          onIndustry: (k) => industry = k,
+          onTile: (s) => tapped = s,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(market.smallIndustries!.interactive, isTrue, reason: '前提');
+      await tester.tapAt(_center(tester, market.smallIndustries!.paint));
+      expect(group?.members.map((i) => i.key), ['C', 'E']);
+      expect(industry, isNull);
+      expect(tapped, isNull);
+    });
+
+    testWidgets('滑鼠移到合併塊：提示寫「其他 N 個產業」、檔數、含自選、家數', (tester) async {
+      bigViewport(tester);
+      await tester.pumpWidget(_app(data: _dataSmall));
+      await tester.pumpAndSettle();
+      await _hover(tester, _center(tester, market.smallIndustries!.paint));
+      expect(find.text('其他 2 個產業'), findsOneWidget);
+      expect(find.text('共 22 檔'), findsOneWidget);
+      expect(find.text('含自選或持股 1 檔'), findsOneWidget);
+      expect(find.text('漲 20、跌 2、平 0'), findsOneWidget);
+      expect(find.text('市值 7.0 億'), findsOneWidget);
     });
   });
 
