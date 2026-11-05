@@ -77,17 +77,21 @@ jobs:
       - name: Analyze project source
         run: flutter analyze
 
-  # ── Job 2: 測試 shards（3 個並行）──────────────────────────────────
+  # ── Job 2: 測試 shards（5 個並行）──────────────────────────────────
   test:
     runs-on: ubuntu-latest
     # 10 → 15（2026-09-25）：正常 run 已用 456–550s（上限的 76–92%）；
     # Flutter SDK 快取閒置 7 天即被清，再多 ~40s 下載就超時被取消（測試其實全過）。
     # 卡死防護不靠這裡：Codecov 步驟另有 3 分鐘的步驟級 timeout。
+    # shards 3 → 5（2026-11-05）：最慢的 shard 測試步驟 12m34s、整個 job 15m02s，
+    # 收尾步驟被逾時取消（測試其實全過）；10/27 已用到 14m38s。測試數量持續成長，
+    # 改加 shard 而不是再拉高上限：上限仍是卡死時的上界，等待時間也跟著變短
+    #（公開 repo 的 Actions 不計費，多出的每 shard 約 2 分多鐘準備時間不花錢）。
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2]
+        shard: [0, 1, 2, 3, 4]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -134,7 +138,7 @@ jobs:
           exit 1
 
       - name: Run tests
-        run: flutter test --coverage --exclude-tags golden --total-shards=3 --shard-index=${{ matrix.shard }}
+        run: flutter test --coverage --exclude-tags golden --total-shards=5 --shard-index=${{ matrix.shard }}
 
       # 各 shard 分別上傳 partial report，Codecov 後端依 commit 自動合併；
       # 生成碼排除由 repo 根目錄 codecov.yml 的 ignore 規則處理。

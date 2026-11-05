@@ -7,7 +7,7 @@ ignore:
 
 coverage:
   status:
-    # 3 個 test shard 各自上傳 partial report，全部到齊再評狀態
+    # 5 個 test shard 各自上傳 partial report，全部到齊再評狀態
     project:
       default:
         # 覆蓋率不作為 CI gate（僅追蹤趨勢），避免 shard 合併時序造成假紅
@@ -18,4 +18,4 @@ coverage:
 
 comment:
   # PR 留言等全部 shard 上傳完成後再發
-  after_n_builds: 3
+  after_n_builds: 5
