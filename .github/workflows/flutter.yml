@@ -83,10 +83,9 @@ jobs:
     # 10 → 15（2026-09-25）：正常 run 已用 456–550s（上限的 76–92%）；
     # Flutter SDK 快取閒置 7 天即被清，再多 ~40s 下載就超時被取消（測試其實全過）。
     # 卡死防護不靠這裡：Codecov 步驟另有 3 分鐘的步驟級 timeout。
-    # shards 3 → 5（2026-11-05）：最慢的 shard 測試步驟 12m34s、整個 job 15m02s，
-    # 收尾步驟被逾時取消（測試其實全過）；10/27 已用到 14m38s。測試數量持續成長，
-    # 改加 shard 而不是再拉高上限：上限仍是卡死時的上界，等待時間也跟著變短
-    #（公開 repo 的 Actions 不計費，多出的每 shard 約 2 分多鐘準備時間不花錢）。
+    # 2026-11-05：3 個 shard 時最慢的 shard 測試步驟 12m34s、整個 job 15m02s，收尾
+    # 步驟被逾時取消（測試其實全過）。只把 shard 加到 5 個幾乎沒用（最慢 12m12s）：
+    # 見下方「Run tests」，改成依測試檔分 shard。上限維持 15 分鐘，作為卡死時的上界。
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -137,8 +136,17 @@ jobs:
           done
           exit 1
 
+      # 依測試檔分 shard，不用 flutter test 的 --total-shards：後者在「每個測試檔內」
+      # 切測試（test_core 0.6.12 runner.dart 的 _shardSuite），每個 shard 仍要編譯、
+      # 載入全部測試檔，加 shard 幾乎省不了時間。依路徑排序後輪流分配檔案，每個
+      # shard 只編譯自己的檔案（本機冷快取、同為約五分之一的測試：依檔案 40s、
+      # 依 --total-shards 122s）。測試路徑沒有空白，可直接拆成參數。
       - name: Run tests
-        run: flutter test --coverage --exclude-tags golden --total-shards=5 --shard-index=${{ matrix.shard }}
+        run: |
+          files=$(find test -name '*_test.dart' | sort | awk -v n=${{ strategy.job-total }} -v i=${{ matrix.shard }} '(NR - 1) % n == i')
+          [ -n "$files" ] || { echo "shard ${{ matrix.shard }}: no test files"; exit 1; }
+          echo "shard ${{ matrix.shard }}: $(echo "$files" | wc -l) test files"
+          flutter test --coverage --exclude-tags golden $files
 
       # 各 shard 分別上傳 partial report，Codecov 後端依 commit 自動合併；
       # 生成碼排除由 repo 根目錄 codecov.yml 的 ignore 規則處理。
