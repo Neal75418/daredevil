@@ -401,7 +401,7 @@ void main() {
           tester.getTopLeft(find.byKey(HeatmapLegend.swatchKey(12))).dx,
         ),
       );
-      expect(find.text('雙線框＝自選或持股'), findsOneWidget);
+      expect(find.text('雙線框＝含自選或持股'), findsOneWidget);
       expect(find.text('空心＝沒有今日漲跌'), findsOneWidget);
       expect(find.text('產業漲跌為市值加權'), findsOneWidget);
 
@@ -416,7 +416,7 @@ void main() {
         for (final text in [
           '跌 ≥ 9.5%',
           '漲 ≥ 9.5%',
-          '雙線框＝自選或持股',
+          '雙線框＝含自選或持股',
           '空心＝沒有今日漲跌',
           '產業漲跌為市值加權',
         ])

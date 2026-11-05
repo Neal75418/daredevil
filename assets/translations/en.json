@@ -147,7 +147,7 @@
     "closeOf": "Close {date}",
     "legendDown": "Down ≥ {value}%",
     "legendUp": "Up ≥ {value}%",
-    "legendMine": "Double border = watchlist or holding",
+    "legendMine": "Double border = includes watchlist stocks or holdings",
     "legendHollow": "Hollow = no change today",
     "legendWeighted": "Industry change is market-cap weighted",
     "footerExcluded": "{count} stocks not shown: share count missing or inconsistent",

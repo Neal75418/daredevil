@@ -147,7 +147,7 @@
     "closeOf": "{date} 收盤",
     "legendDown": "跌 ≥ {value}%",
     "legendUp": "漲 ≥ {value}%",
-    "legendMine": "雙線框＝自選或持股",
+    "legendMine": "雙線框＝含自選或持股",
     "legendHollow": "空心＝沒有今日漲跌",
     "legendWeighted": "產業漲跌為市值加權",
     "footerExcluded": "{count} 檔缺股數或股數不一致，未列入",
