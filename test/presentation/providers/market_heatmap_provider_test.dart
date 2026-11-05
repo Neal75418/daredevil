@@ -32,7 +32,11 @@ final _d1008 = DateTime(2026, 10, 8);
 HeatmapFingerprint _fp(DateTime date, {double closeSum = 100}) =>
     (date: date, rows: 2, changeRows: 2, changeSum: 1.0, closeSum: closeSum);
 
-HeatmapMarketInput _input(String market, DateTime date) => HeatmapMarketInput(
+HeatmapMarketInput _input(
+  String market,
+  DateTime date, {
+  Set<String> mine = const {},
+}) => HeatmapMarketInput(
   market: market,
   dataDate: date,
   stocks: [
@@ -45,7 +49,7 @@ HeatmapMarketInput _input(String market, DateTime date) => HeatmapMarketInput(
       foreign: (shares: 1000, date: date),
     ),
   ],
-  mine: const {},
+  mine: mine,
 );
 
 /// 假 repository 的狀態：每個市場的指紋、讀取是否失敗、呼叫次數
@@ -67,7 +71,13 @@ class _Repo {
       final hook = onLoad;
       if (hook != null) await hook(market);
       if (loadThrows.contains(market)) throw StateError('load $market');
-      return _input(market, date);
+      return _input(market, date, mine: Set.of(mine));
+    });
+    when(() => mock.mineSymbols()).thenAnswer((_) async {
+      mineCalls++;
+      if (mineThrows) throw StateError('mine');
+      // 每次回新的集合：比對要比內容，不能比是不是同一個物件
+      return Set.of(mine);
     });
   }
 
@@ -77,6 +87,11 @@ class _Repo {
     _tpex: _fp(_d1007),
   };
   final fingerprintThrows = <String>{};
+
+  /// 自選∪持股（真的 repository 由 loadInput 一併讀、也可單獨查）
+  Set<String> mine = {};
+  bool mineThrows = false;
+  int mineCalls = 0;
   final loadThrows = <String>{};
   final fingerprintCalls = <String, int>{};
   final loadCalls = <String, int>{};
@@ -223,6 +238,72 @@ void main() {
     });
   });
 
+  test('自選或持股變了：價格指紋沒變也重讀，格子換上新的自選標記', () {
+    fakeAsync((async) {
+      final repo = _Repo();
+      final c = _start(async, repo);
+      _notifier(c).setVisible(true);
+      async.flushMicrotasks();
+      expect(repo.loads(_twse), 1);
+      repo.mine = {'9901'};
+      async.elapse(const Duration(minutes: 1));
+      expect(repo.loads(_twse), 2);
+      final tile = _state(c).markets[_twse]!.industries.single.tiles.single;
+      expect(tile.isMine, isTrue);
+      async.elapse(const Duration(minutes: 2));
+      expect(repo.loads(_twse), 2, reason: '重讀後基準更新，不再重讀');
+      c.dispose();
+    });
+  });
+
+  test('自選或持股內容沒變：不重讀', () {
+    fakeAsync((async) {
+      final repo = _Repo()..mine = {'9901'};
+      final c = _start(async, repo);
+      _notifier(c).setVisible(true);
+      async.elapse(const Duration(minutes: 3));
+      expect(repo.mineCalls, greaterThan(2), reason: '前提：每次比對都查');
+      expect(repo.loads(_twse), 1);
+      c.dispose();
+    });
+  });
+
+  test('讀資料時自選剛好變了：基準取在讀資料前，下一次比對會再重讀', () {
+    fakeAsync((async) {
+      final repo = _Repo();
+      repo.onLoad = (market) async {
+        if (market == _twse) repo.mine = {'9901'};
+      };
+      final c = _start(async, repo);
+      repo.onLoad = null;
+      _notifier(c).setVisible(true);
+      async.flushMicrotasks();
+      expect(repo.loads(_twse), 2);
+      async.elapse(const Duration(minutes: 1));
+      expect(repo.loads(_twse), 2);
+      c.dispose();
+    });
+  });
+
+  test('比對時自選查詢失敗：保留畫面、只記一次 warning，恢復後照常比對', () {
+    fakeAsync((async) {
+      final repo = _Repo();
+      final c = _start(async, repo);
+      final before = _state(c);
+      repo.mineThrows = true;
+      _notifier(c).setVisible(true);
+      async.elapse(const Duration(minutes: 2));
+      expect(_state(c).markets, before.markets);
+      expect(repo.loads(_twse), 1);
+      expect(warnings.where((w) => w.contains('熱力圖比對失敗')), hasLength(1));
+      repo.mineThrows = false;
+      repo.mine = {'9901'};
+      async.elapse(const Duration(minutes: 1));
+      expect(repo.loads(_twse), 2);
+      c.dispose();
+    });
+  });
+
   test('不可見時不輪詢、回到可見立即比對', () {
     fakeAsync((async) {
       final repo = _Repo();
@@ -346,7 +427,7 @@ void main() {
       repo.fingerprintThrows.add(_twse);
       _notifier(c).setVisible(true);
       async.elapse(const Duration(minutes: 3));
-      expect(warnings.where((w) => w.contains('指紋')), hasLength(1));
+      expect(warnings.where((w) => w.contains('熱力圖比對失敗')), hasLength(1));
       c.dispose();
     });
   });
@@ -531,7 +612,7 @@ void main() {
       async.elapse(const Duration(minutes: 1));
       repo.fingerprintThrows.add(_twse);
       async.elapse(const Duration(minutes: 1));
-      expect(warnings.where((w) => w.contains('指紋')), hasLength(2));
+      expect(warnings.where((w) => w.contains('熱力圖比對失敗')), hasLength(2));
       c.dispose();
     });
   });

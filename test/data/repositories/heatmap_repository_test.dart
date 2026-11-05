@@ -108,6 +108,8 @@ void main() {
     );
     final input = await repo.loadInput(MarketCode.tpex, _d1007);
     expect(input.mine, {'9911', '9912'});
+    // 熱力圖比對自選有沒有變時單獨查，結果要與讀資料時一致
+    expect(await repo.mineSymbols(), {'9911', '9912'});
   });
 
   test('兩個股數來源同一天，經 DB 讀回後選到外資', () async {

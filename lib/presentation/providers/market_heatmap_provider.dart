@@ -52,7 +52,8 @@ final marketHeatmapProvider =
 /// - 開頁、盤後資料寫入的通知（`dataUpdateEpochProvider`）、跨午夜／開盤／
 ///   收盤（`liveQuoteBoundaryProvider`）都重讀。
 /// - 頁面可見期間每分鐘比對內容指紋：launchd 在背景寫入時沒有通知，很多
-///   寫入也不改日期，只能比內容。
+///   寫入也不改日期，只能比內容。同時比對自選∪持股：從熱力圖點進個股頁加入
+///   自選後返回，回到可見時的立即比對就會重讀，雙線框跟著出現。
 /// - 重讀進行中又有觸發，結束後恰好再讀一次。
 class MarketHeatmapNotifier extends Notifier<MarketHeatmapState> {
   static const _tag = 'MarketHeatmap';
@@ -61,12 +62,16 @@ class MarketHeatmapNotifier extends Notifier<MarketHeatmapState> {
   /// 上一次成功讀取時、讀資料「前」取得的指紋（寫入夾在兩者之間時，下一次
   /// 比對會發現不同而再讀一次）
   final _baseline = <String, HeatmapFingerprint?>{};
+
+  /// 上一次成功讀取時、讀資料「前」取得的自選∪持股（同上，夾在中間的變動
+  /// 下一次比對會發現）；沒有正式資料的市場不記
+  final _mineBaseline = <String, Set<String>>{};
   bool _active = true;
   bool _inFlight = false;
   bool _pending = false;
   bool _visible = false;
   bool _loadedOnce = false;
-  bool _fingerprintFailing = false;
+  bool _checkFailing = false;
   Timer? _timer;
 
   @override
@@ -119,13 +124,16 @@ class MarketHeatmapNotifier extends Notifier<MarketHeatmapState> {
         if (fp == null) {
           markets.remove(market);
           _baseline[market] = null;
+          _mineBaseline.remove(market);
         } else {
+          final mine = await repo.mineSymbols();
           final input = await repo.loadInput(market, fp.date);
           read.stop();
           final compute = Stopwatch()..start();
           markets[market] = buildHeatmapMarket(input);
           compute.stop();
           _baseline[market] = fp;
+          _mineBaseline[market] = mine;
           AppLogger.debug(
             _tag,
             '$market 讀取 ${read.elapsedMilliseconds}ms、'
@@ -153,8 +161,8 @@ class MarketHeatmapNotifier extends Notifier<MarketHeatmapState> {
     );
   }
 
-  /// 比對兩個市場的內容指紋；有任一不同、或有讀取失敗待重試時重讀。reload
-  /// 進行中時不比對，直接排一次重讀。
+  /// 比對兩個市場的內容指紋與自選∪持股；有任一不同、或有讀取失敗待重試時
+  /// 重讀。reload 進行中時不比對，直接排一次重讀。
   ///
   /// 會在畫面的 `didChangeDependencies` 被呼叫：不得同步寫 `state`。
   Future<void> checkFingerprint() async {
@@ -170,14 +178,20 @@ class MarketHeatmapNotifier extends Notifier<MarketHeatmapState> {
         final fp = await repo.fingerprint(market);
         if (fp != _baseline[market]) differs = true;
       }
-      _fingerprintFailing = false;
+      if (_mineBaseline.isNotEmpty) {
+        final mine = await repo.mineSymbols();
+        if (_mineBaseline.values.any((m) => !setEquals(m, mine))) {
+          differs = true;
+        }
+      }
+      _checkFailing = false;
       if (differs && _active) await reload();
     } catch (e) {
       if (!_active) return;
-      if (!_fingerprintFailing) {
-        AppLogger.warning(_tag, '熱力圖指紋比對失敗，保留畫面', e);
+      if (!_checkFailing) {
+        AppLogger.warning(_tag, '熱力圖比對失敗（指紋或自選），保留畫面', e);
       }
-      _fingerprintFailing = true;
+      _checkFailing = true;
     }
   }
 

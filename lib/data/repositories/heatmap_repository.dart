@@ -13,6 +13,9 @@ class HeatmapRepository {
   Future<HeatmapFingerprint?> fingerprint(String market) =>
       _db.getHeatmapFingerprint(market);
 
+  /// 自選∪持股的代號（熱力圖比對有沒有變，變了就重讀）
+  Future<Set<String>> mineSymbols() => _db.getWatchlistAndHoldingSymbols();
+
   /// [market] 在 [date] 的價格列、兩個股數來源各自最新一筆（股數欄位為空的
   /// 來源不帶），以及自選∪持股。
   Future<HeatmapMarketInput> loadInput(String market, DateTime date) async {
@@ -20,7 +23,7 @@ class HeatmapRepository {
     final symbols = [for (final r in rows) r.symbol];
     final foreign = await _db.getLatestShareholdingsBatch(symbols);
     final insider = await _db.getLatestInsiderHoldingsBatch(symbols);
-    final mine = await _db.getWatchlistAndHoldingSymbols();
+    final mine = await mineSymbols();
 
     HeatmapShares? shares(double? value, DateTime? asOf) =>
         value == null || asOf == null ? null : (shares: value, date: asOf);
