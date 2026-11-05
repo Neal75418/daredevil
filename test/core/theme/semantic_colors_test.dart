@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/color_contrast.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/core/theme/heatmap_colors.dart';
 import 'package:daredevil/core/theme/indicator_colors.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/core/constants/chip_strength.dart';
@@ -71,6 +72,27 @@ void main() {
               'WarningColors 含 ${c.toARGB32().toRadixString(16)}，'
               '色相 ${ColorContrast.hue(c).toStringAsFixed(1)}°',
         );
+      }
+    });
+
+    test('熱力圖的平盤、空心邊框、空心文字、標題文字、自選框不得落在股價色相區（兩主題）', () {
+      for (final b in Brightness.values) {
+        for (final c in [
+          HeatmapColors.flat(b),
+          HeatmapColors.hollowBorder(b),
+          HeatmapColors.hollowText(b),
+          HeatmapColors.headerText(b),
+          HeatmapColors.mineOuter,
+          HeatmapColors.mineInner,
+        ]) {
+          expect(
+            _inPriceHueZone(c),
+            isFalse,
+            reason:
+                '熱力圖 ${b.name} 含 ${c.toARGB32().toRadixString(16)}，'
+                '色相 ${ColorContrast.hue(c).toStringAsFixed(1)}°',
+          );
+        }
       }
     });
 

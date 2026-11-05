@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
+import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/models/twse/twse_market_index.dart';
@@ -128,6 +130,42 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('標題列有熱力圖入口，點了進 /market-heatmap', (tester) async {
+    tester.view.physicalSize = const Size(5000, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final router = GoRouter(
+      routes: [
+        GoRoute(path: '/', builder: (_, _) => const MarketOverviewScreen()),
+        GoRoute(
+          path: AppRoutes.marketHeatmap,
+          builder: (_, _) => const Scaffold(body: Text('heatmap')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      buildProviderTestApp(
+        const SizedBox(),
+        overrides: [
+          marketOverviewProvider.overrideWith(() => _FakeMarket(_withData)),
+        ],
+        router: router,
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    final entry = find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byTooltip('marketHeatmap.title'),
+    );
+    expect(entry, findsOneWidget);
+    await tester.tap(entry);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(router.state.matchedLocation, AppRoutes.marketHeatmap);
+    expect(find.text('heatmap'), findsOneWidget);
   });
 
   group('盤中即時報價', () {

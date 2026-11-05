@@ -50,6 +50,7 @@ import 'package:daredevil/data/database/dao/day_trading_dao.dart';
 import 'package:daredevil/data/database/dao/dividend_dao.dart';
 import 'package:daredevil/data/database/dao/event_dao.dart';
 import 'package:daredevil/data/database/dao/financial_data_dao.dart';
+import 'package:daredevil/data/database/dao/heatmap_dao.dart';
 import 'package:daredevil/data/database/dao/holding_distribution_dao.dart';
 import 'package:daredevil/data/database/dao/insider_holding_dao.dart';
 import 'package:daredevil/data/database/dao/insider_transfer_dao.dart';
@@ -153,6 +154,7 @@ class AppDatabase extends $AppDatabase
         QuarterlyReportDaoMixin,
         MarketOverviewDaoMixin,
         MarketDayFetchDaoMixin,
+        HeatmapDaoMixin,
         CalibrationCacheDaoMixin {
   /// 純 Dart constructor — caller 注入 [QueryExecutor]
   ///

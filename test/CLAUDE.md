@@ -25,6 +25,9 @@ void main() {
 **注意事項**：
 - `SectionHeader` 使用 `flutter_animate`，需 `await tester.pump(const Duration(seconds: 1))` 推進動畫
 - `buildTestApp` 預設語系 en_US：依語系分級的數字（`Localizations.localeOf(context)` → `LocalizedNumberFormat`／各畫面格式函式）在 widget 測試走英文路徑（K/M/B）。要驗中文輸出或中文長字串版面（溢位）時傳 `locale: const Locale('zh', 'TW')`
+- `buildProviderTestApp` 的 `zhTranslations`／`enTranslations`（互斥）載入真實翻譯：驗中文或英文字串的版面（溢位、截斷）用它；key 字串比實際文字長，會造成假溢位
+- 測試預設字型 FlutterTest 每個字（含數字、「…」）都是字級見方的方塊，量不出真實文字寬度；沒指定 `fontFamily` 的文字一律用它，`FontLoader` 載同名字型也換不掉。要量真實寬度時，用 `FontLoader` 把系統字型載成 `'Roboto'`（測試主題的字族），並讓被測文字從 `Theme` 取字族（熱力圖 painter 即如此）
+- go_router：`context.push` 之後 `router.routerDelegate.currentConfiguration.uri` 仍是底層位置；驗 push 後的位置用 `router.state.matchedLocation`
 - `TechnicalIndicatorService` 為 plain class，直接 `new` 使用，不需 mock
 - `FinMindRevenue.date` 型別為 `String`（非 `DateTime`）
 - `PortfolioPositionData.quantity` 型別為 `double`（非 `int`）

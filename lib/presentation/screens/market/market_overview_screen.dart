@@ -1,7 +1,9 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/presentation/providers/live_price_provider.dart';
 import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
@@ -26,7 +28,16 @@ class MarketOverviewScreen extends ConsumerWidget {
     ref.watch(liveQuoteBoundaryProvider);
     final live = ref.watch(marketLiveIndicesProvider);
     return Scaffold(
-      appBar: AppBar(title: Text('marketOverview.title'.tr())),
+      appBar: AppBar(
+        title: Text('marketOverview.title'.tr()),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.grid_view),
+            tooltip: 'marketHeatmap.title'.tr(),
+            onPressed: () => context.push(AppRoutes.marketHeatmap),
+          ),
+        ],
+      ),
       body: LiveQuoteScope(
         registrations: marketIndexRegistrations(
           state,

@@ -36,22 +36,29 @@ final _testDb = AppDatabase.forTesting();
 /// 才載入完成。⚠️ 翻譯寫入全域 `Localization.instance` 且不會還原，同檔
 /// 之後依賴 key 字串的測試會被污染——用到它的測試放在獨立檔案（每個測試
 /// 檔各自一個 isolate）。
+///
+/// [enTranslations] 同上，但載入 en 翻譯、語系 en_US（驗英文字串的版面）。
 Widget buildProviderTestApp(
   Widget child, {
   List<Override> overrides = const [],
   Brightness brightness = Brightness.light,
   GoRouter? router,
   bool zhTranslations = false,
+  bool enTranslations = false,
   LiveQuoteCenter Function()? liveQuoteCenter,
 }) {
-  if (zhTranslations) {
+  assert(!(zhTranslations && enTranslations), '只能載入一種翻譯');
+  if (zhTranslations || enTranslations) {
+    final locale = zhTranslations
+        ? const Locale('zh', 'TW')
+        : const Locale('en', 'US');
     return EasyLocalization(
-      supportedLocales: const [Locale('zh', 'TW')],
+      supportedLocales: [locale],
       path: 'assets/translations',
-      fallbackLocale: const Locale('zh', 'TW'),
-      startLocale: const Locale('zh', 'TW'),
+      fallbackLocale: locale,
+      startLocale: locale,
       saveLocale: false,
-      assetLoader: _ZhTwAssetLoader(),
+      assetLoader: zhTranslations ? _ZhTwAssetLoader() : _EnAssetLoader(),
       child: Builder(
         builder: (context) => _buildProviderApp(
           child,
@@ -81,6 +88,15 @@ class _ZhTwAssetLoader extends AssetLoader {
 
   @override
   Future<Map<String, dynamic>> load(String path, Locale locale) async => _zhTw;
+}
+
+class _EnAssetLoader extends AssetLoader {
+  static final _en =
+      json.decode(File('assets/translations/en.json').readAsStringSync())
+          as Map<String, dynamic>;
+
+  @override
+  Future<Map<String, dynamic>> load(String path, Locale locale) async => _en;
 }
 
 Widget _buildProviderApp(

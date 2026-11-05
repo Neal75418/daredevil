@@ -13,6 +13,7 @@ abstract final class AppRoutes {
   static const alerts = '/alerts';
   static const industry = '/industry';
   static const market = '/market';
+  static const marketHeatmap = '/market-heatmap';
   static const portfolio = '/portfolio';
   static const compare = '/compare';
   static const calendar = '/calendar';
