@@ -217,7 +217,7 @@ void main() {
     );
   });
 
-  test('圖區為 0 或極小：不拋錯，極小時格子都不可互動', () {
+  test('圖區為 0 或極小：不拋錯；極小時整個產業合成一塊', () {
     expect(layoutHeatmap(mixed, width: 0, height: 500), isEmpty);
     expect(layoutHeatmap(mixed, width: 800, height: -1), isEmpty);
     expect(layoutHeatmap(mixed, width: 800, height: 0), isEmpty);
@@ -229,9 +229,9 @@ void main() {
       width: 10,
       height: 10,
     );
-    final tiles = layout.single.tiles;
-    expect(tiles, hasLength(40));
-    expect(tiles.where((t) => t.interactive), isEmpty);
+    expect(layout.single.tiles, isEmpty);
+    expect(layout.single.other!.members, hasLength(40));
+    expect(layout.single.other!.wholeIndustry, isTrue);
   });
 
   test('總市值溢位回空', () {
@@ -378,5 +378,197 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  group('太小的個股合併成「其他」', () {
+    const minArea =
+        HeatmapParams.foldMinSide *
+        HeatmapParams.foldMinSide *
+        HeatmapParams.foldAspectAllowance;
+
+    HeatmapTile tile(
+      String symbol,
+      double cap, {
+      TileChange change = const TileChangeValue(1),
+      bool mine = false,
+    }) => HeatmapTile(
+      symbol: symbol,
+      name: symbol,
+      close: 100,
+      marketCap: cap,
+      change: change,
+      isMine: mine,
+    );
+
+    HeatmapIndustry industry(String name, List<HeatmapTile> tiles) =>
+        HeatmapIndustry(
+          name: name,
+          marketCap: tiles.fold(0.0, (a, t) => a + t.marketCap),
+          weightedChangePercent: 1,
+          tiles: tiles,
+        );
+
+    HeatmapIndustryLayout only(List<HeatmapTile> tiles) =>
+        layoutHeatmap([industry('A', tiles)], width: 400, height: 300).single;
+
+    test('預期面積太小的個股合成一塊，面積＝它們市值的占比', () {
+      final l = only([
+        tile('A0', 1000),
+        for (var i = 0; i < 30; i++) tile('S$i', 1),
+      ]);
+      expect(l.tiles.map((t) => t.tile.symbol), ['A0']);
+      final other = l.other!;
+      expect(other.members, hasLength(30));
+      expect(other.wholeIndustry, isFalse);
+      expect(other.marketCap, 30);
+      expect(
+        _area(other.bounds),
+        closeTo(_area(_content(l)) * 30 / 1030, 1e-6),
+      );
+      // 合併塊與格子不重疊、一起鋪滿內容區
+      expect(_overlap(other.bounds, l.tiles.single.bounds), closeTo(0, 1e-9));
+      expect(
+        _area(other.bounds) + _area(l.tiles.single.bounds),
+        closeTo(_area(_content(l)), 1e-6),
+      );
+    });
+
+    test('門檻含等號：預期面積剛好等於門檻不合併、略小就合併', () {
+      // 364×340：內縮後 360×336、扣標題列 16 → 格子區 360×320 = 115,200；
+      // 占比 1/100 的預期面積剛好是 1,152（浮點數也剛好）
+      HeatmapIndustryLayout at(List<double> caps) => layoutHeatmap(
+        [
+          industry('A', [
+            for (var i = 0; i < caps.length; i++) tile('A$i', caps[i]),
+          ]),
+        ],
+        width: 364,
+        height: 340,
+      ).single;
+      final exact = at([98, 1, 1]);
+      expect(_area(_content(exact)), 115200, reason: '前提：格子區面積');
+      expect(1 / 100 * 115200, minArea, reason: '前提：浮點數剛好等於門檻');
+      expect(exact.other, isNull);
+      expect(at([98.02, 0.99, 0.99]).other!.members, hasLength(2));
+    });
+
+    test('只有一檔太小時不合併', () {
+      final l = only([tile('A0', 1000), tile('S0', 1)]);
+      expect(l.other, isNull);
+      expect(l.tiles, hasLength(2));
+    });
+
+    test('自選或持股不合併', () {
+      final l = only([
+        tile('A0', 1000),
+        for (var i = 0; i < 30; i++) tile('S$i', 1, mine: i < 2),
+      ]);
+      expect(l.other!.members, hasLength(28));
+      expect(l.tiles.map((t) => t.tile.symbol), ['A0', 'S0', 'S1']);
+    });
+
+    test('整個產業都太小：只有一塊、標成整個產業', () {
+      final layout = layoutHeatmap(
+        [
+          industry('A', [tile('A0', 1e6)]),
+          industry('B', [for (var i = 0; i < 5; i++) tile('B$i', 1)]),
+        ],
+        width: 400,
+        height: 300,
+      );
+      final b = layout.firstWhere((l) => l.industry.key == 'B');
+      expect(b.tiles, isEmpty);
+      expect(b.other!.wholeIndustry, isTrue);
+      expect(b.other!.members, hasLength(5));
+    });
+
+    test('整個產業都合併時，漲跌直接用產業的值（與標題列同一個數）', () {
+      // 產業的值刻意與成員反推的值（+1）不同，才分得出用的是哪一個
+      final layout = layoutHeatmap(
+        [
+          industry('A', [tile('A0', 1e6)]),
+          HeatmapIndustry(
+            name: 'B',
+            marketCap: 5,
+            weightedChangePercent: 1.23,
+            tiles: [for (var i = 0; i < 5; i++) tile('B$i', 1)],
+          ),
+        ],
+        width: 400,
+        height: 300,
+      );
+      final b = layout.firstWhere((l) => l.industry.key == 'B');
+      expect(b.other!.wholeIndustry, isTrue, reason: '前提：整個產業合併');
+      expect(b.other!.weightedChangePercent, 1.23);
+    });
+
+    test('合併塊的漲跌以平盤市值加權、家數照四捨五入後的方向', () {
+      final l = only([
+        tile('A0', 1e6),
+        // 平盤市值各 100：+10% 與 −10% 加權後 0
+        tile('S0', 110, change: const TileChangeValue(10)),
+        tile('S1', 90, change: const TileChangeValue(-10)),
+        tile('S2', 0.0001, change: const TileChangeValue(0.004)),
+        tile(
+          'S3',
+          0.0001,
+          change: const TileChangeHollow(HollowReason.noChangeData),
+        ),
+      ]);
+      final other = l.other!;
+      expect(other.weightedChangePercent, closeTo(0, 1e-6));
+      expect(other.breadth, (up: 1, down: 1, flat: 1, hollow: 1));
+    });
+
+    test('算不出平盤市值的成員（漲跌幅 −100%）跳過，其他成員照常加權', () {
+      final l = only([
+        tile('A0', 1e6),
+        tile('S0', 1, change: const TileChangeValue(-100)),
+        tile('S1', 1, change: const TileChangeValue(2)),
+      ]);
+      expect(l.other!.weightedChangePercent, closeTo(2, 1e-9));
+    });
+
+    test('合併的成員全是空心：沒有加權漲跌', () {
+      const hollow = TileChangeHollow(HollowReason.noChangeData);
+      final l = only([
+        tile('A0', 1e6),
+        tile('S0', 1, change: hollow),
+        tile('S1', 1, change: hollow),
+      ]);
+      expect(l.other!.weightedChangePercent, isNull);
+    });
+
+    test('otherAt：點在合併塊上回該產業與合併塊；格子上回 null', () {
+      final layout = [
+        only([tile('A0', 1000), for (var i = 0; i < 30; i++) tile('S$i', 1)]),
+      ];
+      final other = layout.single.other!;
+      expect(other.interactive, isTrue);
+      final p = other.paint;
+      final hit = otherAt(layout, p.left + p.width / 2, p.top + p.height / 2);
+      expect(hit?.other, other);
+      expect(hit?.industry, layout.single);
+      final t = layout.single.tiles.single.paint;
+      expect(
+        otherAt(layout, t.left + t.width / 2, t.top + t.height / 2),
+        isNull,
+      );
+    });
+
+    test('otherAt：合併塊被擠成細條、不可互動時回 null', () {
+      // 只有一檔大的加合併塊：合併塊只占約 0.4%，排成不到 4px 寬的細條
+      final layout = [
+        only([tile('A0', 1e12), for (var i = 0; i < 40; i++) tile('S$i', 1e8)]),
+      ];
+      final other = layout.single.other!;
+      expect(other.interactive, isFalse);
+      final p = other.paint;
+      expect(p.width * p.height, greaterThan(0), reason: '前提：有面積');
+      expect(
+        otherAt(layout, p.left + p.width / 2, p.top + p.height / 2),
+        isNull,
+      );
+    });
   });
 }

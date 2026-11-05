@@ -122,6 +122,10 @@ String formatHeatmapCap(double marketCap, Locale locale) {
   return NumberFormat('#,##0.0', 'en_US').format(marketCap / unit);
 }
 
+/// 點了合併塊（[HeatmapOtherLayout]）
+typedef HeatmapOtherTap =
+    void Function(HeatmapIndustryLayout industry, HeatmapOtherLayout other);
+
 /// 畫在圖上與無障礙描述用的文字（由頁面依語系組好傳入；兩個函式以
 /// identity 比較，頁面要保存同一個實例，painter 才不會一直重畫）
 @immutable
@@ -130,6 +134,10 @@ class HeatmapPaintLabels {
     required this.uncategorized,
     required this.industrySemantics,
     required this.tileSemantics,
+    required this.otherLabel,
+    required this.otherShortLabel,
+    required this.wholeLabel,
+    required this.otherSemantics,
   });
 
   /// 產業別為空時的產業名稱
@@ -137,18 +145,40 @@ class HeatmapPaintLabels {
   final String Function(HeatmapIndustryLayout industry) industrySemantics;
   final String Function(HeatmapTileLayout tile) tileSemantics;
 
+  /// 合併塊的標籤（「其他 N 檔」）
+  final String Function(int count) otherLabel;
+
+  /// 「其他 N 檔」寫不下時退用的短標籤（「其他」）
+  final String otherShortLabel;
+
+  /// 整個產業都合併、產業又有標題列時的標籤（「共 N 檔」，不重複產業名稱）
+  final String Function(int count) wholeLabel;
+  final String Function(
+    HeatmapIndustryLayout industry,
+    HeatmapOtherLayout other,
+  )
+  otherSemantics;
+
   @override
   bool operator ==(Object other) =>
       other is HeatmapPaintLabels &&
       other.uncategorized == uncategorized &&
+      other.otherShortLabel == otherShortLabel &&
       identical(other.industrySemantics, industrySemantics) &&
-      identical(other.tileSemantics, tileSemantics);
+      identical(other.tileSemantics, tileSemantics) &&
+      identical(other.otherLabel, otherLabel) &&
+      identical(other.wholeLabel, wholeLabel) &&
+      identical(other.otherSemantics, otherSemantics);
 
   @override
   int get hashCode => Object.hash(
     uncategorized,
+    otherShortLabel,
     identityHashCode(industrySemantics),
     identityHashCode(tileSemantics),
+    identityHashCode(otherLabel),
+    identityHashCode(wholeLabel),
+    identityHashCode(otherSemantics),
   );
 }
 
@@ -164,6 +194,7 @@ class HeatmapPainter extends CustomPainter {
     required this.labels,
     required this.onIndustryTap,
     required this.onTileTap,
+    required this.onOtherTap,
     this.fontFamily,
     this.fontFamilyFallback,
   });
@@ -177,6 +208,7 @@ class HeatmapPainter extends CustomPainter {
   /// 傳穩定的實例（例如 State 的方法），語意才不會每次都重建。
   final ValueChanged<String> onIndustryTap;
   final ValueChanged<String> onTileTap;
+  final HeatmapOtherTap onOtherTap;
 
   /// 圖上文字的字族，由畫面依 App 主題傳入（只取字族，字級與顏色由 painter
   /// 決定）；null 用引擎預設字型
@@ -191,6 +223,8 @@ class HeatmapPainter extends CustomPainter {
       for (final tile in industry.tiles) {
         _paintTile(canvas, tile);
       }
+      final other = industry.other;
+      if (other != null) _paintOther(canvas, industry, other);
     }
   }
 
@@ -258,47 +292,136 @@ class HeatmapPainter extends CustomPainter {
       _stroke(canvas, rect, HeatmapColors.mineOuter);
       _stroke(canvas, rect.deflate(1), HeatmapColors.mineInner);
     }
-    _paintTileText(canvas, tile, rect, style.text);
+    final change = tile.tile.change;
+    _paintLabel(
+      canvas,
+      rect,
+      style.text,
+      name: tile.tile.name,
+      percent: change is TileChangeValue ? change.percent : null,
+      shortenName: true,
+    );
+  }
+
+  /// 合併塊：照成員的加權漲跌上色（全是空心時畫空心），寫「其他 N 檔」；
+  /// 整個產業都合併時，有標題列寫「共 N 檔」（名稱已在標題列），沒有才寫
+  /// 產業名稱。不畫自選框（自選股不會被合併）。
+  void _paintOther(
+    Canvas canvas,
+    HeatmapIndustryLayout industry,
+    HeatmapOtherLayout other,
+  ) {
+    final rect = _rect(other.paint);
+    if (rect.width <= 0 || rect.height <= 0) return;
+    final percent = other.weightedChangePercent;
+    final style = heatmapTileStyle(
+      percent == null
+          ? const TileChangeHollow(HollowReason.noChangeData)
+          : TileChangeValue(percent),
+      brightness,
+    );
+    final fill = style.fill;
+    if (fill != null) {
+      canvas.drawRect(rect, Paint()..color = fill);
+    } else {
+      _stroke(canvas, rect, style.border!);
+    }
+    final count = other.members.length;
+    if (!other.wholeIndustry) {
+      // 「其他 N 檔」縮短後看不懂：寫不下就退成「其他」，再寫不下就不寫
+      // （不只寫一個數字，免得被當成一檔股票）
+      _paintLabel(
+        canvas,
+        rect,
+        style.text,
+        name: labels.otherLabel(count),
+        fallbackNames: [labels.otherShortLabel],
+        percent: percent,
+        shortenName: false,
+      );
+    } else if (industry.header != null) {
+      // 產業名稱已在標題列（標題列太窄時常寫不下漲跌幅）：「共 N 檔」寫不下
+      // 就只寫漲跌幅
+      _paintLabel(
+        canvas,
+        rect,
+        style.text,
+        name: labels.wholeLabel(count),
+        percent: percent,
+        shortenName: false,
+        percentWithoutName: true,
+      );
+    } else {
+      _paintLabel(
+        canvas,
+        rect,
+        style.text,
+        name: industry.industry.name ?? labels.uncategorized,
+        percent: percent,
+        shortenName: true,
+      );
+    }
   }
 
   /// 格子文字：名稱優先，第二行放得下才加漲跌幅（見 [heatmapTileLines]）；
-  /// 字級隨格子大小（見 [heatmapTileFontSize]）。
-  void _paintTileText(
+  /// 字級隨格子大小（見 [heatmapTileFontSize]）。[shortenName] 為 false 時
+  /// 名稱放不下就整格不寫。
+  void _paintLabel(
     Canvas canvas,
-    HeatmapTileLayout tile,
     Rect rect,
-    Color color,
-  ) {
+    Color color, {
+    required String name,
+    required double? percent,
+    required bool shortenName,
+    List<String> fallbackNames = const [],
+    bool percentWithoutName = false,
+  }) {
     if (rect.width < HeatmapParams.tileTextMinWidth ||
         rect.height < HeatmapParams.tileTextMinHeight) {
       return;
     }
     final fontSize = heatmapTileFontSize(rect.width, rect.height);
     final maxWidth = rect.width - 2 * HeatmapParams.textPadding;
-    final change = tile.tile.change;
     final painters = <String, TextPainter>{};
     TextPainter make(String text) =>
         painters[text] ??= _text(text, color, fontSize: fontSize);
 
     try {
-      final name = heatmapFitName(
-        tile.tile.name,
-        maxWidth,
-        (text) => make(text).width,
-      );
-      final namePainter = name == null ? null : make(name);
-      final percent = change is TileChangeValue
-          ? make(formatHeatmapPercent(change.percent))
-          : null;
+      final fitted = shortenName
+          ? heatmapFitName(name, maxWidth, (text) => make(text).width)
+          : [
+              name,
+              ...fallbackNames,
+            ].where((text) => make(text).width <= maxWidth).firstOrNull;
+      final namePainter = fitted == null ? null : make(fitted);
+      final percentPainter = percent == null
+          ? null
+          : make(formatHeatmapPercent(percent));
+      if (namePainter == null) {
+        // 名稱由別處標示（例如標題列）時，只寫漲跌幅
+        if (percentWithoutName &&
+            percentPainter != null &&
+            percentPainter.width <= maxWidth &&
+            percentPainter.height <= rect.height) {
+          percentPainter.paint(
+            canvas,
+            Offset(
+              rect.left + (rect.width - percentPainter.width) / 2,
+              rect.top + (rect.height - percentPainter.height) / 2,
+            ),
+          );
+        }
+        return;
+      }
       final pick = heatmapTileLines(
-        nameFits: namePainter != null,
-        percentWidth: percent?.width,
-        lineHeight: namePainter?.height ?? double.infinity,
+        nameFits: true,
+        percentWidth: percentPainter?.width,
+        lineHeight: namePainter.height,
         width: maxWidth,
         height: rect.height,
       );
       if (!pick.name) return;
-      final lines = [namePainter!, if (pick.percent) percent!];
+      final lines = [namePainter, if (pick.percent) percentPainter!];
       final total = lines.fold(0.0, (h, p) => h + p.height);
       var y = rect.top + (rect.height - total) / 2;
       for (final line in lines) {
@@ -373,7 +496,7 @@ class HeatmapPainter extends CustomPainter {
       ];
     }
     return [
-      for (final industry in layout)
+      for (final industry in layout) ...[
         for (final tile in industry.tiles)
           if (tile.interactive)
             CustomPainterSemantics(
@@ -385,6 +508,17 @@ class HeatmapPainter extends CustomPainter {
                 onTap: () => onTileTap(tile.tile.symbol),
               ),
             ),
+        if (industry.other case final other? when other.interactive)
+          CustomPainterSemantics(
+            rect: _rect(other.paint),
+            properties: SemanticsProperties(
+              label: labels.otherSemantics(industry, other),
+              textDirection: TextDirection.ltr,
+              button: true,
+              onTap: () => onOtherTap(industry, other),
+            ),
+          ),
+      ],
     ];
   };
 
@@ -392,5 +526,6 @@ class HeatmapPainter extends CustomPainter {
   bool shouldRebuildSemantics(HeatmapPainter oldDelegate) =>
       shouldRepaint(oldDelegate) ||
       oldDelegate.onIndustryTap != onIndustryTap ||
-      oldDelegate.onTileTap != onTileTap;
+      oldDelegate.onTileTap != onTileTap ||
+      oldDelegate.onOtherTap != onOtherTap;
 }

@@ -689,6 +689,80 @@ void main() {
       handle.dispose();
     });
 
+    HeatmapMarketData folded(List<HeatmapTile> tiles) => HeatmapMarketData(
+      market: MarketCode.twse,
+      dataDate: DateTime(2026, 10, 7),
+      excludedForShares: 0,
+      industries: [_industry('測試業', tiles, 1)],
+    );
+
+    testWidgets('放大後合併塊的描述寫檔數、加權漲跌與漲跌家數', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pump(
+        tester,
+        _loaded({
+          // 一檔大的、四檔中型、40 檔太小（只有大的加合併塊時，合併塊會被
+          // 擠成細長條）
+          MarketCode.twse: folded([
+            _tile('9901', '測試甲', 1e12, 1),
+            for (var i = 0; i < 4; i++) _tile('${9902 + i}', '中$i', 1e11, 1),
+            for (var i = 0; i < 40; i++) _tile('${9940 + i}', '小$i', 1e9, 1),
+          ]),
+        }),
+      );
+      await openIndustryMenu(tester);
+      await tester.tap(find.text('測試業 +1.00%'));
+      await tester.pumpAndSettle();
+      expect(
+        find.semantics.byLabel('其他 40 檔，市值加權上漲 1.00%，漲 40、跌 0、平 0'),
+        findsOneWidget,
+      );
+      handle.dispose();
+    });
+
+    testWidgets('合併塊有空心成員時，描述補上無漲跌資料的檔數', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pump(
+        tester,
+        _loaded({
+          MarketCode.twse: folded([
+            _tile('9901', '測試甲', 1e12, 1),
+            for (var i = 0; i < 4; i++) _tile('${9902 + i}', '中$i', 1e11, 1),
+            for (var i = 0; i < 40; i++) _tile('${9940 + i}', '小$i', 1e9, 1),
+            _hollowTile('9939', '小空', 1e9),
+          ]),
+        }),
+      );
+      await openIndustryMenu(tester);
+      await tester.tap(find.text('測試業 +1.00%'));
+      await tester.pumpAndSettle();
+      expect(
+        find.semantics.byLabel('其他 41 檔，市值加權上漲 1.00%，漲 40、跌 0、平 0、無漲跌資料 1'),
+        findsOneWidget,
+      );
+      handle.dispose();
+    });
+
+    testWidgets('整個產業都合併時，描述用產業名稱', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pump(
+        tester,
+        _loaded({
+          MarketCode.twse: folded([
+            for (var i = 0; i < 1000; i++) _tile('${i + 1000}', '小$i', 1, 1),
+          ]),
+        }),
+      );
+      await openIndustryMenu(tester);
+      await tester.tap(find.text('測試業 +1.00%'));
+      await tester.pumpAndSettle();
+      expect(
+        find.semantics.byLabel('測試業，市值加權上漲 1.00%，漲 1000、跌 0、平 0'),
+        findsOneWidget,
+      );
+      handle.dispose();
+    });
+
     testWidgets('產業別空白時寫「未分類」', (tester) async {
       final handle = tester.ensureSemantics();
       await pump(
@@ -789,6 +863,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(router.state.matchedLocation, '/stock/9901');
     expect(find.text('stock 9901'), findsOneWidget);
+  });
+
+  testWidgets('點「其他 N 檔」拉出成員清單，點一檔進個股頁', (tester) async {
+    final router = testRouter(initial: AppRoutes.marketHeatmap);
+    await pumpRouter(
+      tester,
+      router,
+      _loaded({
+        MarketCode.twse: HeatmapMarketData(
+          market: MarketCode.twse,
+          dataDate: DateTime(2026, 10, 7),
+          excludedForShares: 0,
+          industries: [
+            _industry('測試業', [
+              _tile('9901', '測試甲', 1e12, 1),
+              for (var i = 0; i < 4; i++) _tile('${9902 + i}', '中$i', 1e11, 1),
+              // 「小0」漲最多：清單依漲跌幅排序，它排第一列
+              for (var i = 0; i < 40; i++)
+                _tile('${9940 + i}', '小$i', 1e9, i == 0 ? 9.9 : 1),
+            ], 1),
+          ],
+        ),
+      }),
+    );
+    final other = _painterOf(tester).layout.single.other!;
+    expect(other.members, hasLength(40), reason: '前提：40 檔被合併');
+    final p = other.paint;
+    await tester.tapAt(
+      tester.getTopLeft(find.byType(HeatmapView)) +
+          Offset(p.left + p.width / 2, p.top + p.height / 2),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('測試業 · 其他 40 檔'), findsOneWidget);
+    await tester.tap(find.text('小0'));
+    await tester.pumpAndSettle();
+    expect(router.state.matchedLocation, '/stock/9940');
   });
 
   group('可見性', () {

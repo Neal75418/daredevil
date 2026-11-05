@@ -18,6 +18,7 @@ class HeatmapView extends StatefulWidget {
     required this.zoomIndustryKey,
     required this.onIndustryTap,
     required this.onTileTap,
+    required this.onOtherTap,
     required this.labels,
   });
 
@@ -27,17 +28,23 @@ class HeatmapView extends StatefulWidget {
   final String? zoomIndustryKey;
   final ValueChanged<String> onIndustryTap;
   final ValueChanged<String> onTileTap;
+
+  /// 點「其他 N 檔」（部分合併）：列出成員。整個產業合成的那塊照點產業標題，
+  /// 呼叫 [onIndustryTap]
+  final HeatmapOtherTap onOtherTap;
   final HeatmapPaintLabels labels;
 
   @override
   State<HeatmapView> createState() => _HeatmapViewState();
 }
 
-/// 提示：指著的格子、位置，以及算出它的那份佈局（佈局換了就不畫）
+/// 提示：指著的格子或合併塊（兩者擇一）、所屬產業、位置，以及算出它的那份
+/// 佈局（佈局換了就不畫）
 typedef _Hover = ({
   List<HeatmapIndustryLayout> layout,
-  HeatmapTileLayout tile,
-  String industryName,
+  HeatmapIndustryLayout industry,
+  HeatmapTileLayout? tile,
+  HeatmapOtherLayout? other,
   Offset at,
 });
 
@@ -83,24 +90,44 @@ class _HeatmapViewState extends State<HeatmapView> {
 
   void _showAt(List<HeatmapIndustryLayout> layout, Offset at) {
     final tile = tileAt(layout, at.dx, at.dy);
-    if (tile == null) {
-      _hover.value = null;
+    if (tile != null) {
+      final industry = layout.firstWhere(
+        (l) => l.tiles.any((t) => identical(t, tile)),
+      );
+      _hover.value = (
+        layout: layout,
+        industry: industry,
+        tile: tile,
+        other: null,
+        at: at,
+      );
       return;
     }
-    final industry = layout.firstWhere(
-      (l) => l.tiles.any((t) => identical(t, tile)),
-    );
-    _hover.value = (
-      layout: layout,
-      tile: tile,
-      industryName: industry.industry.name ?? widget.labels.uncategorized,
-      at: at,
-    );
+    final hit = otherAt(layout, at.dx, at.dy);
+    _hover.value = hit == null
+        ? null
+        : (
+            layout: layout,
+            industry: hit.industry,
+            tile: null,
+            other: hit.other,
+            at: at,
+          );
   }
 
   // 無障礙節點的點擊：穩定的方法 tear-off，painter 比較時才相等
   void _semanticIndustryTap(String key) => widget.onIndustryTap(key);
   void _semanticTileTap(String symbol) => widget.onTileTap(symbol);
+
+  /// 合併塊的點擊（手勢與無障礙共用）：全市場圖上整個產業合成的那塊放大
+  /// 該產業；其餘（包括已放大後仍整個合成一塊的）列出成員
+  void _otherTap(HeatmapIndustryLayout industry, HeatmapOtherLayout other) {
+    if (other.wholeIndustry && widget.zoomIndustryKey == null) {
+      widget.onIndustryTap(industry.industry.key);
+    } else {
+      widget.onOtherTap(industry, other);
+    }
+  }
 
   void _tap(List<HeatmapIndustryLayout> layout, Offset at) {
     final header = industryHeaderAt(layout, at.dx, at.dy);
@@ -109,7 +136,12 @@ class _HeatmapViewState extends State<HeatmapView> {
       return;
     }
     final tile = tileAt(layout, at.dx, at.dy);
-    if (tile != null) widget.onTileTap(tile.tile.symbol);
+    if (tile != null) {
+      widget.onTileTap(tile.tile.symbol);
+      return;
+    }
+    final hit = otherAt(layout, at.dx, at.dy);
+    if (hit != null) _otherTap(hit.industry, hit.other);
   }
 
   @override
@@ -139,6 +171,7 @@ class _HeatmapViewState extends State<HeatmapView> {
                       labels: widget.labels,
                       onIndustryTap: _semanticIndustryTap,
                       onTileTap: _semanticTileTap,
+                      onOtherTap: _otherTap,
                       fontFamily: font?.fontFamily,
                       fontFamilyFallback: font?.fontFamilyFallback,
                     ),
@@ -194,12 +227,24 @@ class _HeatmapViewState extends State<HeatmapView> {
       bottom: below
           ? null
           : size.height - hover.at.dy + HeatmapParams.tooltipOffset,
-      child: IgnorePointer(
-        child: HeatmapTooltip(
-          tile: hover.tile.tile,
-          industryName: hover.industryName,
-        ),
-      ),
+      child: IgnorePointer(child: _tooltip(hover)),
+    );
+  }
+
+  Widget _tooltip(_Hover hover) {
+    final industryName =
+        hover.industry.industry.name ?? widget.labels.uncategorized;
+    final tile = hover.tile;
+    if (tile != null) {
+      return HeatmapTooltip(tile: tile.tile, industryName: industryName);
+    }
+    final other = hover.other!;
+    return HeatmapOtherTooltip(
+      other: other,
+      title: other.wholeIndustry
+          ? industryName
+          : widget.labels.otherLabel(other.members.length),
+      industryName: industryName,
     );
   }
 }

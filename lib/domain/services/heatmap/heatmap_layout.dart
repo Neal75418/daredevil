@@ -44,6 +44,65 @@ class HeatmapTileLayout {
   int get hashCode => Object.hash(tile, bounds, paint, interactive);
 }
 
+/// 漲跌家數（方向照四捨五入到 2 位後的漲跌幅，與顏色同一階）
+typedef HeatmapBreadth = ({int up, int down, int flat, int hollow});
+
+/// 合併的小格子：產業內預期面積太小（點不到、寫不下字）的個股合成一塊
+@immutable
+class HeatmapOtherLayout {
+  const HeatmapOtherLayout({
+    required this.members,
+    required this.bounds,
+    required this.paint,
+    required this.interactive,
+    required this.wholeIndustry,
+    required this.marketCap,
+    required this.weightedChangePercent,
+    required this.breadth,
+  });
+
+  /// 被合併的個股（市值降冪）
+  final List<HeatmapTile> members;
+  final HeatmapBox bounds;
+  final HeatmapBox paint;
+  final bool interactive;
+
+  /// 整個產業都被合併（沒有個別格子）：畫面寫產業名稱，不寫「其他」
+  final bool wholeIndustry;
+
+  /// 成員市值合計（面積照它算）
+  final double marketCap;
+
+  /// 成員以平盤市值加權的漲跌幅；成員全是空心或結果不是有限數時為 null。
+  /// 整個產業都合併時是產業的 [HeatmapIndustry.weightedChangePercent]
+  final double? weightedChangePercent;
+  final HeatmapBreadth breadth;
+
+  @override
+  bool operator ==(Object other) =>
+      other is HeatmapOtherLayout &&
+      const ListEquality<HeatmapTile>().equals(other.members, members) &&
+      other.bounds == bounds &&
+      other.paint == paint &&
+      other.interactive == interactive &&
+      other.wholeIndustry == wholeIndustry &&
+      other.marketCap == marketCap &&
+      other.weightedChangePercent == weightedChangePercent &&
+      other.breadth == breadth;
+
+  @override
+  int get hashCode => Object.hash(
+    const ListEquality<HeatmapTile>().hash(members),
+    bounds,
+    paint,
+    interactive,
+    wholeIndustry,
+    marketCap,
+    weightedChangePercent,
+    breadth,
+  );
+}
+
 /// 一個產業區塊的位置
 @immutable
 class HeatmapIndustryLayout {
@@ -52,6 +111,7 @@ class HeatmapIndustryLayout {
     required this.bounds,
     required this.header,
     required this.tiles,
+    this.other,
   });
 
   final HeatmapIndustry industry;
@@ -61,7 +121,12 @@ class HeatmapIndustryLayout {
 
   /// 標題列；區塊太小時為 null（格子從頂端開始）
   final HeatmapBox? header;
+
+  /// 個別畫出的格子（不含被合併的）
   final List<HeatmapTileLayout> tiles;
+
+  /// 合併的小格子；沒有要合併的（或只有一檔太小）時為 null
+  final HeatmapOtherLayout? other;
 
   @override
   bool operator ==(Object other) =>
@@ -69,7 +134,8 @@ class HeatmapIndustryLayout {
       other.industry == industry &&
       other.bounds == bounds &&
       other.header == header &&
-      const ListEquality<HeatmapTileLayout>().equals(other.tiles, tiles);
+      const ListEquality<HeatmapTileLayout>().equals(other.tiles, tiles) &&
+      other.other == this.other;
 
   @override
   int get hashCode => Object.hash(
@@ -77,6 +143,7 @@ class HeatmapIndustryLayout {
     bounds,
     header,
     const ListEquality<HeatmapTileLayout>().hash(tiles),
+    other,
   );
 }
 
@@ -131,18 +198,117 @@ HeatmapIndustryLayout _layoutIndustry(
           height: inner.height - headerHeight,
         )
       : inner;
-  final tileBoxes = squarify([
-    for (final t in industry.tiles) t.marketCap,
-  ], content);
+  final tiles = industry.tiles;
+  final total = tiles.fold(0.0, (a, t) => a + t.marketCap);
+  final contentArea = content.width * content.height;
+  const minArea =
+      HeatmapParams.foldMinSide *
+      HeatmapParams.foldMinSide *
+      HeatmapParams.foldAspectAllowance;
+  final canFold = total > 0 && total.isFinite && contentArea.isFinite;
+  // 自選或持股不合併：使用者自己的股票要一直看得到
+  bool tooSmall(HeatmapTile t) =>
+      canFold && !t.isMine && t.marketCap / total * contentArea < minArea;
+  final folded = [
+    for (final t in tiles)
+      if (tooSmall(t)) t,
+  ];
+  if (folded.length < 2) {
+    final boxes = squarify([for (final t in tiles) t.marketCap], content);
+    return HeatmapIndustryLayout(
+      industry: industry,
+      bounds: bounds,
+      header: header,
+      tiles: List.unmodifiable([
+        for (var k = 0; k < tiles.length; k++) _layoutTile(tiles[k], boxes[k]),
+      ]),
+    );
+  }
+  final kept = [
+    for (final t in tiles)
+      if (!tooSmall(t)) t,
+  ];
+  // 合併塊照市值排進降冪序列，與個別格子一起切
+  final otherCap = folded.fold(0.0, (a, t) => a + t.marketCap);
+  final firstSmaller = kept.indexWhere((t) => t.marketCap < otherCap);
+  final at = firstSmaller < 0 ? kept.length : firstSmaller;
+  final boxes = [
+    ...squarify(
+      [for (final t in kept) t.marketCap]..insert(at, otherCap),
+      content,
+    ),
+  ];
+  final otherBox = boxes.removeAt(at);
+  final otherPaint = _inset(otherBox, HeatmapParams.tileGap / 2);
   return HeatmapIndustryLayout(
     industry: industry,
     bounds: bounds,
     header: header,
     tiles: List.unmodifiable([
-      for (var k = 0; k < industry.tiles.length; k++)
-        _layoutTile(industry.tiles[k], tileBoxes[k]),
+      for (var k = 0; k < kept.length; k++) _layoutTile(kept[k], boxes[k]),
     ]),
+    other: HeatmapOtherLayout(
+      members: List.unmodifiable(folded),
+      bounds: otherBox,
+      paint: otherPaint,
+      interactive:
+          math.min(otherPaint.width, otherPaint.height) >=
+          HeatmapParams.minInteractiveSide,
+      wholeIndustry: kept.isEmpty,
+      marketCap: otherCap,
+      // 整個產業都合併時直接用產業的值：與標題列寫的是同一個數，不會因兩種
+      // 算法的捨入差 0.01
+      weightedChangePercent: kept.isEmpty
+          ? industry.weightedChangePercent
+          : _weightedChange(folded),
+      breadth: _breadth(folded),
+    ),
   );
+}
+
+/// 以平盤市值加權的漲跌幅（與產業漲跌同一算法；產業那邊直接用股數 ×
+/// （收盤 − 漲跌），這裡從格子已有的市值與漲跌幅反推，盤中市值基準不同時要改）。平盤市值＝市值 ÷
+/// (1 + 漲跌幅 / 100)：市值是股數 × 收盤，漲跌幅＝漲跌 ÷（收盤 − 漲跌），
+/// 所以等於股數 ×（收盤 − 漲跌）。
+double? _weightedChange(List<HeatmapTile> tiles) {
+  var sum = 0.0;
+  var base = 0.0;
+  for (final t in tiles) {
+    final change = t.change;
+    if (change is! TileChangeValue) continue;
+    final b = t.marketCap * 100 / (100 + change.percent);
+    // 極端資料下（漲跌幅 −100%）算不出平盤市值：跳過這一檔，不讓整塊變空心
+    // （成員乘積溢位時整塊結果不是有限數，仍回 null）
+    if (!b.isFinite || !(b > 0)) continue;
+    sum += b * change.percent;
+    base += b;
+  }
+  if (!(base > 0)) return null;
+  final weighted = sum / base;
+  return weighted.isFinite ? weighted : null;
+}
+
+HeatmapBreadth _breadth(List<HeatmapTile> tiles) {
+  var up = 0;
+  var down = 0;
+  var flat = 0;
+  var hollow = 0;
+  for (final t in tiles) {
+    switch (t.change) {
+      case TileChangeHollow():
+        hollow++;
+      case TileChangeValue(:final percent):
+        final rounded = HeatmapParams.roundPercent(percent);
+        if (rounded > 0) {
+          up++;
+        } else if (rounded < 0) {
+          down++;
+        } else {
+          flat++;
+        }
+    }
+  }
+  return (up: up, down: down, flat: flat, hollow: hollow);
 }
 
 HeatmapTileLayout _layoutTile(HeatmapTile tile, HeatmapBox bounds) {
@@ -293,6 +459,23 @@ HeatmapTileLayout? tileAt(
     if (!_contains(industry.bounds, x, y)) continue;
     for (final t in industry.tiles) {
       if (t.interactive && _contains(t.paint, x, y)) return t;
+    }
+    return null;
+  }
+  return null;
+}
+
+/// 點擊或滑鼠位置對應的合併塊（只回可互動的）
+({HeatmapIndustryLayout industry, HeatmapOtherLayout other})? otherAt(
+  List<HeatmapIndustryLayout> layout,
+  double x,
+  double y,
+) {
+  for (final industry in layout) {
+    if (!_contains(industry.bounds, x, y)) continue;
+    final other = industry.other;
+    if (other != null && other.interactive && _contains(other.paint, x, y)) {
+      return (industry: industry, other: other);
     }
     return null;
   }

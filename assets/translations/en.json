@@ -131,6 +131,15 @@
     "tpex": "OTC"
   },
   "marketHeatmap": {
+    "otherShort": "Others",
+    "semOtherWithHollow": "{label}, cap-weighted {dir} {pct}, up {up}, down {down}, flat {flat}, no change data {hollow}",
+    "otherLabel": "{count} others",
+    "tooltipStocks": "{count} stocks",
+    "tooltipBreadth": "Up {up}, down {down}, flat {flat}",
+    "tooltipBreadthWithHollow": "Up {up}, down {down}, flat {flat}, no change data {hollow}",
+    "tooltipWeighted": "Cap-weighted:",
+    "semOther": "{label}, cap-weighted {dir} {pct}, up {up}, down {down}, flat {flat}",
+    "semOtherNoChange": "{label}, no change data, {count} stocks",
     "title": "Market Heatmap",
     "wholeMarket": "All industries",
     "backToWhole": "← All industries",

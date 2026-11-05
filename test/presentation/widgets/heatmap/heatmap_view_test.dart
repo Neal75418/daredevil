@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/services/heatmap/heatmap_layout.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_painter.dart';
+import 'package:daredevil/presentation/widgets/heatmap/heatmap_tooltip.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_view.dart';
 
 import '../../../helpers/provider_test_helpers.dart';
@@ -22,13 +23,14 @@ HeatmapTile _tile(
   double cap,
   TileChange change, {
   double close = 100,
+  bool mine = false,
 }) => HeatmapTile(
   symbol: symbol,
   name: name,
   close: close,
   marketCap: cap,
   change: change,
-  isMine: false,
+  isMine: mine,
 );
 
 final _data = HeatmapMarketData(
@@ -57,14 +59,31 @@ final _data = HeatmapMarketData(
       weightedChangePercent: -0.4,
       tiles: [_tile('9911', '測試丁', 80000000000, const TileChangeValue(-0.4))],
     ),
-    // 小產業：格子有面積但邊長不到 4，不可互動
+    // 一檔大的加 30 檔太小的：小的合併成一塊「其他」
+    HeatmapIndustry(
+      name: 'D',
+      marketCap: 13000000000,
+      weightedChangePercent: 1,
+      tiles: [
+        _tile('9961', '測試己', 10000000000, const TileChangeValue(1)),
+        for (var i = 0; i < 30; i++)
+          _tile('${9970 + i}', '微$i', 100000000, const TileChangeValue(1)),
+      ],
+    ),
+    // 小產業：格子有面積但邊長不到 4，不可互動（自選不合併，才留得下來）
     HeatmapIndustry(
       name: 'C',
-      marketCap: 1200000000,
+      marketCap: 400000000,
       weightedChangePercent: 0.5,
       tiles: [
         for (var i = 0; i < 20; i++)
-          _tile('${9921 + i}', '小$i', 60000000, const TileChangeValue(0.5)),
+          _tile(
+            '${9921 + i}',
+            '小$i',
+            20000000,
+            const TileChangeValue(0.5),
+            mine: true,
+          ),
       ],
     ),
   ],
@@ -72,22 +91,33 @@ final _data = HeatmapMarketData(
 
 String _industryLabel(HeatmapIndustryLayout l) => 'industry:${l.industry.key}';
 String _tileLabel(HeatmapTileLayout t) => 'tile:${t.tile.symbol}';
+String _otherLabel(int count) => 'other:$count';
+String _wholeLabel(int count) => 'all:$count';
+String _otherSemantics(HeatmapIndustryLayout l, HeatmapOtherLayout o) =>
+    'other:${l.industry.key}';
 
 const _labels = HeatmapPaintLabels(
   uncategorized: '未分類',
   industrySemantics: _industryLabel,
   tileSemantics: _tileLabel,
+  otherLabel: _otherLabel,
+  otherShortLabel: 'oth',
+  wholeLabel: _wholeLabel,
+  otherSemantics: _otherSemantics,
 );
 
 HeatmapView _view({
   String? zoom,
   ValueChanged<String>? onTile,
   ValueChanged<String>? onIndustry,
+  HeatmapOtherTap? onOther,
+  HeatmapMarketData? data,
 }) => HeatmapView(
-  data: _data,
+  data: data ?? _data,
   zoomIndustryKey: zoom,
   onIndustryTap: onIndustry ?? (_) {},
   onTileTap: onTile ?? (_) {},
+  onOtherTap: onOther ?? (_, _) {},
   labels: _labels,
 );
 
@@ -99,6 +129,8 @@ Widget _app({
   Brightness brightness = Brightness.light,
   ValueChanged<String>? onTile,
   ValueChanged<String>? onIndustry,
+  HeatmapOtherTap? onOther,
+  HeatmapMarketData? data,
   double width = _width,
   double height = _height,
 }) => _host(
@@ -107,7 +139,13 @@ Widget _app({
     child: SizedBox(
       width: width,
       height: height,
-      child: _view(zoom: zoom, onTile: onTile, onIndustry: onIndustry),
+      child: _view(
+        zoom: zoom,
+        onTile: onTile,
+        onIndustry: onIndustry,
+        onOther: onOther,
+        data: data,
+      ),
     ),
   ),
   brightness: brightness,
@@ -268,6 +306,7 @@ void main() {
               zoomIndustryKey: null,
               onIndustryTap: (_) {},
               onTileTap: (_) {},
+              onOtherTap: (_, _) {},
               labels: _labels,
             ),
           ),
@@ -277,6 +316,192 @@ void main() {
     await tester.pumpAndSettle();
     await _hover(tester, const Offset(_width / 2, _height / 2));
     expect(find.text('9981 · 未分類'), findsOneWidget);
+  });
+
+  testWidgets('滑鼠移到合併塊：提示寫檔數、產業、漲跌家數與加權漲跌', (tester) async {
+    bigViewport(tester);
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+    final other = _layout.firstWhere((l) => l.industry.key == 'D').other!;
+    expect(other.members, hasLength(30), reason: '前提：30 檔被合併');
+    await _hover(tester, _center(tester, other.paint));
+    expect(find.text('other:30'), findsOneWidget);
+    expect(find.text('D'), findsOneWidget);
+    expect(find.text('漲 30、跌 0、平 0'), findsOneWidget);
+    expect(find.text('市值加權 +1.00%'), findsOneWidget);
+    expect(find.text('市值 30.0 億'), findsOneWidget);
+  });
+
+  group('合併塊提示', () {
+    HeatmapOtherLayout other({
+      bool whole = false,
+      double? pct = 1,
+      HeatmapBreadth breadth = (up: 2, down: 1, flat: 0, hollow: 1),
+    }) => HeatmapOtherLayout(
+      members: [
+        for (var i = 0; i < 4; i++)
+          _tile('${9990 + i}', '微$i', 1e8, const TileChangeValue(1)),
+      ],
+      bounds: (left: 0, top: 0, width: 100, height: 100),
+      paint: (left: 0, top: 0, width: 100, height: 100),
+      interactive: true,
+      wholeIndustry: whole,
+      marketCap: 4e8,
+      weightedChangePercent: pct,
+      breadth: breadth,
+    );
+
+    Future<void> pumpTooltip(WidgetTester tester, Widget tooltip) async {
+      await tester.pumpWidget(_host(Center(child: tooltip)));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('有空心成員：家數多寫無漲跌資料的檔數', (tester) async {
+      await pumpTooltip(
+        tester,
+        HeatmapOtherTooltip(other: other(), title: '其他 4 檔', industryName: 'D'),
+      );
+      expect(find.text('其他 4 檔'), findsOneWidget);
+      expect(find.text('D'), findsOneWidget);
+      expect(find.text('漲 2、跌 1、平 0、無漲跌資料 1'), findsOneWidget);
+      expect(find.text('市值 4.0 億'), findsOneWidget);
+    });
+
+    testWidgets('整個產業都合併：第二行寫檔數', (tester) async {
+      await pumpTooltip(
+        tester,
+        HeatmapOtherTooltip(
+          other: other(whole: true),
+          title: 'D',
+          industryName: 'D',
+        ),
+      );
+      expect(find.text('共 4 檔'), findsOneWidget);
+    });
+
+    testWidgets('成員全是空心：加權漲跌寫無漲跌資料', (tester) async {
+      await pumpTooltip(
+        tester,
+        HeatmapOtherTooltip(
+          other: other(
+            pct: null,
+            breadth: (up: 0, down: 0, flat: 0, hollow: 4),
+          ),
+          title: '其他 4 檔',
+          industryName: 'D',
+        ),
+      );
+      expect(find.text('市值加權 無漲跌資料'), findsOneWidget);
+    });
+  });
+
+  testWidgets('點「其他 N 檔」交給合併塊的回呼（列出成員），不放大', (tester) async {
+    bigViewport(tester);
+    String? industry;
+    String? tapped;
+    (HeatmapIndustryLayout, HeatmapOtherLayout)? other;
+    await tester.pumpWidget(
+      _app(
+        onIndustry: (k) => industry = k,
+        onTile: (s) => tapped = s,
+        onOther: (i, o) => other = (i, o),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final d = _layout.firstWhere((l) => l.industry.key == 'D');
+    await tester.tapAt(_center(tester, d.other!.paint));
+    expect(other?.$1.industry.key, 'D');
+    expect(other?.$2.members, hasLength(30));
+    expect(industry, isNull);
+    expect(tapped, isNull);
+  });
+
+  testWidgets('已放大時點整個產業合成的那塊：列出成員（不再放大同一個產業）', (tester) async {
+    bigViewport(tester);
+    // 500 檔等值：放大後每檔預期面積約 800 px²，仍整個合成一塊
+    final data = HeatmapMarketData(
+      market: 'TWSE',
+      dataDate: DateTime(2026, 10, 7),
+      excludedForShares: 0,
+      industries: [
+        HeatmapIndustry(
+          name: 'E',
+          marketCap: 500,
+          weightedChangePercent: 1,
+          tiles: [
+            for (var i = 0; i < 500; i++)
+              _tile('${1000 + i}', '小$i', 1, const TileChangeValue(1)),
+          ],
+        ),
+      ],
+    );
+    final e = layoutHeatmap(
+      data.industries,
+      width: _width,
+      height: _height,
+    ).single;
+    expect(e.other?.wholeIndustry, isTrue, reason: '前提：放大後仍整個合成一塊');
+    String? industry;
+    var otherCalls = 0;
+    await tester.pumpWidget(
+      _app(
+        data: data,
+        zoom: 'E',
+        onIndustry: (k) => industry = k,
+        onOther: (_, _) => otherCalls++,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tapAt(_center(tester, e.other!.paint));
+    expect(otherCalls, 1);
+    expect(industry, isNull);
+  });
+
+  testWidgets('點整個產業合成的那塊：放大到該產業', (tester) async {
+    bigViewport(tester);
+    // 一檔大股的產業加上一個十檔都很小的產業：後者整個合成一塊
+    final data = HeatmapMarketData(
+      market: 'TWSE',
+      dataDate: DateTime(2026, 10, 7),
+      excludedForShares: 0,
+      industries: [
+        HeatmapIndustry(
+          name: 'A',
+          marketCap: 1e6,
+          weightedChangePercent: 1,
+          tiles: [_tile('9901', '測試甲', 1e6, const TileChangeValue(1))],
+        ),
+        HeatmapIndustry(
+          name: 'E',
+          marketCap: 3e4,
+          weightedChangePercent: 1,
+          tiles: [
+            for (var i = 0; i < 10; i++)
+              _tile('${9981 + i}', '小$i', 3e3, const TileChangeValue(1)),
+          ],
+        ),
+      ],
+    );
+    final e = layoutHeatmap(
+      data.industries,
+      width: _width,
+      height: _height,
+    ).firstWhere((l) => l.industry.key == 'E');
+    expect(e.other?.wholeIndustry, isTrue, reason: '前提：整個產業合成一塊');
+    expect(e.other!.interactive, isTrue);
+    String? industry;
+    var otherCalls = 0;
+    await tester.pumpWidget(
+      _app(
+        data: data,
+        onIndustry: (k) => industry = k,
+        onOther: (_, _) => otherCalls++,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tapAt(_center(tester, e.other!.paint));
+    expect(industry, 'E');
+    expect(otherCalls, 0);
   });
 
   testWidgets('空心格子的提示寫原因', (tester) async {
@@ -490,7 +715,12 @@ void main() {
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
-    expect(_semanticLabels(tester), ['industry:A', 'industry:B', 'industry:C']);
+    expect(_semanticLabels(tester), [
+      'industry:A',
+      'industry:B',
+      'industry:D',
+      'industry:C',
+    ]);
 
     await tester.pumpWidget(_app(zoom: 'A'));
     await tester.pumpAndSettle();

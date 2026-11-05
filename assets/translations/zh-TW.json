@@ -131,6 +131,15 @@
     "tpex": "櫃"
   },
   "marketHeatmap": {
+    "otherShort": "其他",
+    "semOtherWithHollow": "{label}，市值加權{dir} {pct}，漲 {up}、跌 {down}、平 {flat}、無漲跌資料 {hollow}",
+    "otherLabel": "其他 {count} 檔",
+    "tooltipStocks": "共 {count} 檔",
+    "tooltipBreadth": "漲 {up}、跌 {down}、平 {flat}",
+    "tooltipBreadthWithHollow": "漲 {up}、跌 {down}、平 {flat}、無漲跌資料 {hollow}",
+    "tooltipWeighted": "市值加權",
+    "semOther": "{label}，市值加權{dir} {pct}，漲 {up}、跌 {down}、平 {flat}",
+    "semOtherNoChange": "{label}，無漲跌資料，共 {count} 檔",
     "title": "大盤熱力圖",
     "wholeMarket": "全市場",
     "backToWhole": "← 全市場",

@@ -50,6 +50,13 @@ abstract final class HeatmapParams {
   static const double industryHeaderMinWidth = 40.0;
   static const double industryHeaderMinHeight = 40.0;
 
+  /// 小格子合併：個股在產業內的預期面積（市值占比 × 格子區面積）小於
+  /// 「[foldMinSide]² × [foldAspectAllowance]」就合併成一塊「其他」。24 是
+  /// 無障礙規範的最小點擊目標；乘上形狀放寬倍數，長寬比 2 以內的格子短邊仍有
+  /// 24。用預期面積而非排版後的邊長判斷，同樣資料每次結果相同。
+  static const double foldMinSide = 24.0;
+  static const double foldAspectAllowance = 2.0;
+
   /// 標題列的字級，也是格子字級的下限
   static const double labelFontSize = 11.0;
 

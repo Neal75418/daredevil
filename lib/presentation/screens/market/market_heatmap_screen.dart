@@ -17,7 +17,9 @@ import 'package:daredevil/presentation/providers/market_heatmap_provider.dart';
 import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_legend.dart';
+import 'package:daredevil/presentation/widgets/heatmap/heatmap_other_sheet.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_painter.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_view.dart';
 import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
@@ -54,6 +56,10 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
         uncategorized: 'marketHeatmap.uncategorized'.tr(),
         industrySemantics: _industrySemantics,
         tileSemantics: _tileSemantics,
+        otherLabel: _otherLabel,
+        otherShortLabel: 'marketHeatmap.otherShort'.tr(),
+        wholeLabel: _wholeLabel,
+        otherSemantics: _otherSemantics,
       );
     }
   }
@@ -68,6 +74,31 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
   void _clearZoom() => setState(() => _zoom = null);
 
   void _openStock(String symbol) => context.push(AppRoutes.stockDetail(symbol));
+
+  /// 「其他 N 檔」的成員清單；點一檔先收起清單再進個股頁
+  void _showOther(HeatmapIndustryLayout industry, HeatmapOtherLayout other) {
+    final name = industry.industry.name ?? 'marketHeatmap.uncategorized'.tr();
+    showAppBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        builder: (_, controller) => HeatmapOtherSheet(
+          title: '$name · ${_otherLabel(other.members.length)}',
+          other: other,
+          scrollController: controller,
+          onStockTap: (symbol) {
+            Navigator.of(sheetContext).pop();
+            _openStock(symbol);
+          },
+        ),
+      ),
+    );
+  }
 
   /// 重讀後放大中的產業不在了：回到全市場（之後它再出現也不自己放大）
   void _dropMissingZoom(MarketHeatmapState next) {
@@ -161,6 +192,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
                 zoomIndustryKey: zoom,
                 onIndustryTap: _zoomTo,
                 onTileTap: _openStock,
+                onOtherTap: _showOther,
                 labels: _labels!,
               ),
             ),
@@ -323,6 +355,39 @@ String _industrySemantics(HeatmapIndustryLayout layout) {
       'count': count,
     },
   );
+}
+
+String _otherLabel(int count) =>
+    'marketHeatmap.otherLabel'.tr(namedArgs: {'count': '$count'});
+
+String _wholeLabel(int count) =>
+    'marketHeatmap.tooltipStocks'.tr(namedArgs: {'count': '$count'});
+
+/// 合併塊的描述：標籤（整個產業時是產業名稱）、市值加權漲跌與漲跌家數
+String _otherSemantics(HeatmapIndustryLayout layout, HeatmapOtherLayout other) {
+  final label = other.wholeIndustry
+      ? layout.industry.name ?? 'marketHeatmap.uncategorized'.tr()
+      : _otherLabel(other.members.length);
+  final pct = other.weightedChangePercent;
+  if (pct == null) {
+    return 'marketHeatmap.semOtherNoChange'.tr(
+      namedArgs: {'label': label, 'count': '${other.members.length}'},
+    );
+  }
+  final b = other.breadth;
+  final args = {
+    'label': label,
+    'dir': _directionKey(pct).tr(),
+    'pct': _unsignedPercent(pct),
+    'up': '${b.up}',
+    'down': '${b.down}',
+    'flat': '${b.flat}',
+  };
+  return b.hollow > 0
+      ? 'marketHeatmap.semOtherWithHollow'.tr(
+          namedArgs: {...args, 'hollow': '${b.hollow}'},
+        )
+      : 'marketHeatmap.semOther'.tr(namedArgs: args);
 }
 
 String _tileSemantics(HeatmapTileLayout layout) {

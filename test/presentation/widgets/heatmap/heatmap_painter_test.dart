@@ -45,14 +45,23 @@ final _industries = [
 
 String _industryLabel(HeatmapIndustryLayout l) => 'industry:${l.industry.key}';
 String _tileLabel(HeatmapTileLayout t) => 'tile:${t.tile.symbol}';
+String _otherLabel(int count) => 'other:$count';
+String _wholeLabel(int count) => 'all:$count';
+String _otherSemantics(HeatmapIndustryLayout l, HeatmapOtherLayout o) =>
+    'other:${l.industry.key}:${o.members.length}';
 
 const _labels = HeatmapPaintLabels(
   uncategorized: '未分類',
   industrySemantics: _industryLabel,
   tileSemantics: _tileLabel,
+  otherLabel: _otherLabel,
+  otherShortLabel: 'oth',
+  wholeLabel: _wholeLabel,
+  otherSemantics: _otherSemantics,
 );
 
 void _ignore(String _) {}
+void _ignoreOther(HeatmapIndustryLayout _, HeatmapOtherLayout _) {}
 
 HeatmapPainter _painter(
   List<HeatmapIndustryLayout> layout, {
@@ -61,6 +70,7 @@ HeatmapPainter _painter(
   HeatmapPaintLabels? labels,
   ValueChanged<String> onIndustryTap = _ignore,
   ValueChanged<String> onTileTap = _ignore,
+  HeatmapOtherTap onOtherTap = _ignoreOther,
   String? fontFamily,
   List<String>? fontFamilyFallback,
 }) => HeatmapPainter(
@@ -70,6 +80,7 @@ HeatmapPainter _painter(
   labels: labels ?? _labels,
   onIndustryTap: onIndustryTap,
   onTileTap: onTileTap,
+  onOtherTap: onOtherTap,
   fontFamily: fontFamily,
   fontFamilyFallback: fontFamilyFallback,
 );
@@ -163,6 +174,10 @@ void main() {
         uncategorized: 'Uncategorized',
         industrySemantics: _industryLabel,
         tileSemantics: _tileLabel,
+        otherLabel: _otherLabel,
+        otherShortLabel: 'oth',
+        wholeLabel: _wholeLabel,
+        otherSemantics: _otherSemantics,
       );
       expect(
         _painter(layout, labels: other).shouldRepaint(_painter(layout)),
@@ -177,6 +192,10 @@ void main() {
       uncategorized: '未分類',
       industrySemantics: otherIndustryLabel,
       tileSemantics: _tileLabel,
+      otherLabel: _otherLabel,
+      otherShortLabel: 'oth',
+      wholeLabel: _wholeLabel,
+      otherSemantics: _otherSemantics,
     );
     expect(
       _painter(layout, labels: other).shouldRepaint(_painter(layout)),
@@ -198,6 +217,17 @@ void main() {
       final next = _painter(layout, onIndustryTap: other);
       expect(next.shouldRepaint(_painter(layout)), isFalse);
       expect(next.shouldRebuildSemantics(_painter(layout)), isTrue);
+    });
+
+    test('合併塊回呼換了要重建', () {
+      void other(HeatmapIndustryLayout _, HeatmapOtherLayout _) {}
+      expect(
+        _painter(
+          layout,
+          onOtherTap: other,
+        ).shouldRebuildSemantics(_painter(layout)),
+        isTrue,
+      );
     });
 
     test('格子回呼換了要重建', () {
@@ -417,6 +447,214 @@ void main() {
         );
       });
     }
+  });
+
+  group('合併塊', () {
+    HeatmapBox box(Rect r) =>
+        (left: r.left, top: r.top, width: r.width, height: r.height);
+
+    HeatmapOtherLayout other(
+      Rect r, {
+      double? pct = 1,
+      bool whole = false,
+      int count = 3,
+    }) => HeatmapOtherLayout(
+      members: [
+        for (var i = 0; i < count; i++)
+          _tile('${9950 + i}', 1, const TileChangeValue(1)),
+      ],
+      bounds: box(r),
+      paint: box(r),
+      interactive: true,
+      wholeIndustry: whole,
+      marketCap: count.toDouble(),
+      weightedChangePercent: pct,
+      breadth: (up: count, down: 0, flat: 0, hollow: 0),
+    );
+
+    List<HeatmapIndustryLayout> withOther(
+      HeatmapOtherLayout o, {
+      HeatmapBox? header,
+    }) => [
+      HeatmapIndustryLayout(
+        industry: const HeatmapIndustry(
+          name: '甲業',
+          marketCap: 3,
+          weightedChangePercent: 1,
+          tiles: [],
+        ),
+        bounds: o.bounds,
+        header: header,
+        tiles: const [],
+        other: o,
+      ),
+    ];
+
+    test('照加權漲跌填色，寫「其他 N 檔」與漲跌幅', () {
+      const r = Rect.fromLTWH(0, 0, 200, 100);
+      final fill = heatmapTileStyle(
+        const TileChangeValue(1),
+        Brightness.light,
+      ).fill!;
+      final fn = _paintFn(withOther(other(r)));
+      expect(fn, paints..rect(rect: r, color: fill));
+      expect(fn, paintsExactlyCountTimes(#drawParagraph, 2));
+    });
+
+    test('成員全是空心：只畫邊框、只寫標籤', () {
+      const r = Rect.fromLTWH(0, 0, 200, 100);
+      final fn = _paintFn(withOther(other(r, pct: null)));
+      expect(
+        fn,
+        paints..rect(
+          rect: r.deflate(0.5),
+          color: HeatmapColors.hollowBorder(Brightness.light),
+          style: PaintingStyle.stroke,
+        ),
+      );
+      expect(fn, paintsExactlyCountTimes(#drawRect, 1));
+      expect(fn, paintsExactlyCountTimes(#drawParagraph, 1));
+    });
+
+    test('「其他 N 檔」放不下時退成短標籤「其他」（不縮短成看不懂的字）', () {
+      // 「other:3」7 字 × 11 = 77、「oth」33，可用寬 56；漲跌幅 66 寫不下
+      expect(
+        _paintFn(withOther(other(const Rect.fromLTWH(0, 0, 60, 60)))),
+        paintsExactlyCountTimes(#drawParagraph, 1),
+      );
+    });
+
+    test('連「其他」都放不下：不寫（不只寫一個數字）', () {
+      // 可用寬 32 < 「oth」33；漲跌幅也寫不下
+      expect(
+        _paintFn(withOther(other(const Rect.fromLTWH(0, 0, 36, 60)))),
+        paintsExactlyCountTimes(#drawParagraph, 0),
+      );
+    });
+
+    test('部分合併：短標籤也放不下時，漲跌幅放得下也不單獨寫', () {
+      final labels = HeatmapPaintLabels(
+        uncategorized: '未分類',
+        industrySemantics: _industryLabel,
+        tileSemantics: _tileLabel,
+        otherLabel: (count) => 'x' * 30,
+        otherShortLabel: 'y' * 30,
+        wholeLabel: _wholeLabel,
+        otherSemantics: _otherSemantics,
+      );
+      expect(
+        (Canvas canvas) => _painter(
+          withOther(other(const Rect.fromLTWH(0, 0, 200, 100))),
+          labels: labels,
+        ).paint(canvas, const Size(400, 300)),
+        paintsExactlyCountTimes(#drawParagraph, 0),
+      );
+    });
+
+    test('整個產業合成一塊、有標題列：漲跌幅也放不下就不寫', () {
+      // 40 寬（可用 36）：「+1.00%」66 寫不下；標題列只寫得下「甲業」一段
+      expect(
+        _paintFn(
+          withOther(
+            other(const Rect.fromLTWH(0, 16, 40, 100), whole: true),
+            header: (left: 0, top: 0, width: 40, height: 16),
+          ),
+        ),
+        paintsExactlyCountTimes(#drawParagraph, 1),
+      );
+    });
+
+    test('整個產業合成一塊、有標題列：「共 N 檔」放不下時只寫漲跌幅', () {
+      final labels = HeatmapPaintLabels(
+        uncategorized: '未分類',
+        industrySemantics: _industryLabel,
+        tileSemantics: _tileLabel,
+        otherLabel: _otherLabel,
+        otherShortLabel: 'oth',
+        wholeLabel: (count) => 'x' * 30,
+        otherSemantics: _otherSemantics,
+      );
+      // 標題列 200 寬：「甲業」＋「 +1.00%」兩段；合併塊只寫漲跌幅一段
+      expect(
+        (Canvas canvas) => _painter(
+          withOther(
+            other(const Rect.fromLTWH(0, 16, 200, 100), whole: true),
+            header: (left: 0, top: 0, width: 200, height: 16),
+          ),
+          labels: labels,
+        ).paint(canvas, const Size(400, 300)),
+        paintsExactlyCountTimes(#drawParagraph, 3),
+      );
+    });
+
+    ({List<String> calls, HeatmapPaintLabels labels}) spyLabels() {
+      final calls = <String>[];
+      return (
+        calls: calls,
+        labels: HeatmapPaintLabels(
+          uncategorized: '未分類',
+          industrySemantics: _industryLabel,
+          tileSemantics: _tileLabel,
+          otherLabel: (count) {
+            calls.add('other');
+            return 'other:$count';
+          },
+          otherShortLabel: 'oth',
+          wholeLabel: (count) {
+            calls.add('whole');
+            return 'all:$count';
+          },
+          otherSemantics: _otherSemantics,
+        ),
+      );
+    }
+
+    test('整個產業都合併、沒有標題列：寫產業名稱', () {
+      final spy = spyLabels();
+      final layout = withOther(
+        other(const Rect.fromLTWH(0, 0, 200, 100), whole: true),
+      );
+      expect(
+        (Canvas canvas) => _painter(
+          layout,
+          labels: spy.labels,
+        ).paint(canvas, const Size(400, 300)),
+        paintsExactlyCountTimes(#drawParagraph, 2),
+      );
+      expect(spy.calls, isEmpty);
+    });
+
+    test('整個產業都合併、有標題列：寫「共 N 檔」，不重複產業名稱', () {
+      final spy = spyLabels();
+      final layout = withOther(
+        other(const Rect.fromLTWH(0, 16, 200, 100), whole: true),
+        header: (left: 0, top: 0, width: 200, height: 16),
+      );
+      expect(
+        (Canvas canvas) => _painter(
+          layout,
+          labels: spy.labels,
+        ).paint(canvas, const Size(400, 300)),
+        // 標題列 2 段（名稱、漲跌幅）＋合併塊 2 行
+        paintsExactlyCountTimes(#drawParagraph, 4),
+      );
+      expect(spy.calls, ['whole']);
+    });
+
+    test('放大時合併塊有無障礙節點，點擊交給合併塊的回呼；未放大時沒有', () {
+      (HeatmapIndustryLayout, HeatmapOtherLayout)? tapped;
+      final layout = withOther(other(const Rect.fromLTWH(0, 0, 200, 100)));
+      final nodes = _painter(
+        layout,
+        zoomed: true,
+        onOtherTap: (industry, other) => tapped = (industry, other),
+      ).semanticsBuilder(const Size(400, 300));
+      expect([for (final n in nodes) n.properties.label], ['other:甲業:3']);
+      nodes.single.properties.onTap!();
+      expect(tapped?.$1, layout.single);
+      expect(tapped?.$2, layout.single.other);
+      expect(_semanticLabels(_painter(layout)), ['industry:甲業']);
+    });
   });
 
   group('heatmapFitName（每字寬 10，「*」寬 3）', () {
