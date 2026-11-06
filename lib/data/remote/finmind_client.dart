@@ -10,6 +10,7 @@ import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/lru_cache.dart';
 import 'package:daredevil/data/models/finmind/models.dart';
 import 'package:daredevil/data/remote/api_budget_tracker.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 export 'package:daredevil/data/models/finmind/models.dart';
 
 /// FinMind API 客戶端（台股市場資料）
@@ -632,7 +633,7 @@ class FinMindClient {
     startDate:
         startDate ??
         () {
-          final d = DateTime.now().subtract(
+          final d = DeviceTime.now().subtract(
             const Duration(days: DataFreshness.totalReturnIndexLookbackDays),
           );
           return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

@@ -8,6 +8,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/update_history_provider.dart';
 import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// Today screen 上 tap 「最後更新時間」會彈出此 sheet
 ///
@@ -242,7 +243,7 @@ class _UpdateRunTile extends StatelessWidget {
 /// - 使用 [context.locale]（easy_localization），自動跟 app 設定一致
 String _formatRunDate(BuildContext context, DateTime startedAt) {
   final local = startedAt.toLocal();
-  final now = DateTime.now();
+  final now = DeviceTime.now();
   final localeName = context.locale.toString();
   final dateFmt = local.year == now.year
       ? DateFormat.MMMd(localeName)

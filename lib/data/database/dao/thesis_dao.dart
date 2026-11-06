@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'package:daredevil/data/database/app_database.drift.dart';
 import 'package:daredevil/data/database/tables/user_tables.drift.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 釘選論點 DAO（出場層）
 ///
@@ -78,7 +79,7 @@ mixin ThesisDaoMixin on $AppDatabase {
         status: const Value('INVALIDATED'),
         invalidatedDate: Value(invalidatedDate),
         invalidatedReason: Value(reason),
-        updatedAt: Value(DateTime.now()),
+        updatedAt: Value(DeviceTime.now()),
       ),
     );
   }
@@ -90,7 +91,7 @@ mixin ThesisDaoMixin on $AppDatabase {
     )..where((t) => t.id.equals(id) & t.status.equals('INVALIDATED'))).write(
       PinnedThesisCompanion(
         status: const Value('ARCHIVED'),
-        updatedAt: Value(DateTime.now()),
+        updatedAt: Value(DeviceTime.now()),
       ),
     );
   }

@@ -25,6 +25,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/intraday_quote_client.dart';
 import 'package:daredevil/domain/services/alert/intraday_alert_monitor.dart';
 import 'package:daredevil/domain/services/alert/intraday_poll_schedule.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 import 'tool_db.dart';
 
@@ -72,7 +73,7 @@ Future<void> main(List<String> args) async {
   // 不修喚醒時段(那要改 275 條 plist entry 或大幅增加喚醒次數),而是
   // 讓故障**自己講出來**:漏接提醒的症狀與「今天沒股票觸價」完全一樣,
   // 使用者會得出錯誤結論。這個專案反覆吃虧的正是這一類偽裝成正常的故障。
-  final localOffset = DateTime.now().timeZoneOffset;
+  final localOffset = DeviceTime.now().timeZoneOffset;
   const taipeiOffset = Duration(hours: 8);
   final tzMismatch = localOffset != taipeiOffset;
 

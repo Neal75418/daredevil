@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:daredevil/core/utils/device_time.dart';
+
 /// CLI 日誌自輪替(2026-08-08)。
 ///
 /// **為什麼不用 newsyslog**:那要在 `/etc/newsyslog.d/` 放一個未版控、
@@ -65,7 +67,7 @@ abstract final class LogRotation {
       }
 
       final header =
-          '--- truncated at ${DateTime.now().toIso8601String()} '
+          '--- truncated at ${DeviceTime.now().toIso8601String()} '
           '(was $length bytes) ---\n';
       file.writeAsBytesSync([...header.codeUnits, ...tail]);
     } catch (e) {

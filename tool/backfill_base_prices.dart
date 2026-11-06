@@ -30,6 +30,7 @@ import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 import 'tool_db.dart';
 
@@ -144,7 +145,7 @@ Future<int> runBasePriceBackfill(
   final out = log ?? print;
   // 上櫃當月的迄日夾到今天：迄日在未來的 exDailyQ 請求形狀沒驗過，
   // DividendSyncer 的迄日一律是今天
-  final todayDay = DateContext.normalize(today ?? DateTime.now());
+  final todayDay = DateContext.normalize(today ?? DeviceTime.now());
   final a = parseBasePriceArgs(args, stderr.writeln);
   if (a == null) return 2;
 

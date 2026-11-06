@@ -19,6 +19,7 @@ import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/notification_provider.dart';
 import 'package:daredevil/presentation/providers/price_alert_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 每日更新作業的最大執行時間
 const _updateTimeout = Duration(minutes: ApiConfig.updateTimeoutMin);
@@ -166,7 +167,7 @@ class TodayNotifier extends Notifier<TodayState> {
       _latestRunInProgress =
           lastRun != null &&
           lastRun.status.toUpperCase() == UpdateStatus.running.code &&
-          DateTime.now().difference(lastRun.startedAt) <
+          DeviceTime.now().difference(lastRun.startedAt) <
               DataFreshness.orphanRunningCutoff;
       // 首次載入時各頁也是從 DB 全新讀取，視為已同步
       _ackedSnapshot ??= _snapshot;
@@ -316,7 +317,7 @@ class TodayNotifier extends Notifier<TodayState> {
     unawaited(
       runUpdate().catchError((Object e, StackTrace s) {
         AppLogger.warning('TodayNotifier', 'cold-start auto-update 失敗', e, s);
-        return UpdateResult(date: DateTime.now())..message = '$e';
+        return UpdateResult(date: DeviceTime.now())..message = '$e';
       }),
     );
   }
@@ -331,7 +332,7 @@ class TodayNotifier extends Notifier<TodayState> {
   /// 若已有更新在進行中，直接返回以避免並發 DB 寫入衝突。
   Future<UpdateResult> runUpdate({bool force = false}) async {
     if (state.isUpdating) {
-      return UpdateResult(date: DateTime.now())
+      return UpdateResult(date: DeviceTime.now())
         ..skipped = true
         ..message = '更新已在進行中，請稍候';
     }

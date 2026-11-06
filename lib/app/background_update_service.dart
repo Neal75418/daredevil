@@ -14,6 +14,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/database/app_database_flutter.dart';
 import 'package:daredevil/data/repositories/settings_repository.dart';
 import 'package:daredevil/domain/services/update_service.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 背景更新任務名稱
 const kBackgroundUpdateTask = 'afterclose_daily_update';
@@ -64,7 +65,7 @@ class BackgroundUpdateService {
     await Workmanager().cancelByUniqueName(kBackgroundUpdateTask);
 
     // 計算下次 15:00 的延遲時間
-    final now = DateTime.now();
+    final now = DeviceTime.now();
     var scheduledTime = DateTime(
       now.year,
       now.month,
@@ -200,7 +201,7 @@ Future<void> _showUpdateNotification(UpdateResult result) async {
 
 /// 產生通知 ID（使用當日日期）
 int _generateNotificationId() {
-  final now = DateTime.now();
+  final now = DeviceTime.now();
   return now.year * 10000 + now.month * 100 + now.day;
 }
 

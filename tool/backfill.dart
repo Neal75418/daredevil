@@ -85,6 +85,7 @@ import 'package:daredevil/domain/repositories/institutional_repository.dart';
 import 'package:daredevil/domain/repositories/price_repository.dart';
 import 'package:daredevil/domain/repositories/stock_repository.dart';
 import 'package:daredevil/domain/repositories/trading_repository.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 import 'tool_db.dart';
 
@@ -158,7 +159,7 @@ class BackfillConfig {
   /// 2021-2023 而不重抓已存在的 2024-2026）。
   final DateTime? startDateOverride;
 
-  /// 明確指定 backfill 結束日（覆寫 `DateTime.now()`）。null = now。
+  /// 明確指定 backfill 結束日（覆寫 `DeviceTime.now()`）。null = now。
   final DateTime? endDateOverride;
 
   /// 價格回補改走 FinMind per-symbol（而非 per-day batch）。
@@ -277,7 +278,7 @@ class Backfiller {
   /// 各 phase 順序執行（prices/institutional/day_trading/revenue/financial/valuation）。遇到 rate limit / network exception 時立即
   /// 向上拋出 — 呼叫端負責決定要 retry 或 abort。
   Future<BackfillResult> run() async {
-    final overallStart = DateTime.now();
+    final overallStart = DeviceTime.now();
     final phases = <PhaseResult>[];
 
     // Phase 0: 確保 stock_master 表有內容
@@ -315,16 +316,16 @@ class Backfiller {
       _logDryRunPlan(symbols);
       return BackfillResult(
         phases: const [],
-        totalDuration: DateTime.now().difference(overallStart),
+        totalDuration: DeviceTime.now().difference(overallStart),
       );
     }
 
     // 日期範圍 — 優先用明確的 start/end override，否則回退 years-based
-    // 正規化到午夜：DateTime.now() 的時間分量若洩漏進 day-loop，
+    // 正規化到午夜：DeviceTime.now() 的時間分量若洩漏進 day-loop，
     // countPricesByDateAndMarket 的 TEXT 等值比對永遠 miss → skip-guard 全滅、
     // 每輪 retry 從頭重抓（2026-07-10 燒掉 26 輪的教訓之一）。
     final endDate = DateContext.normalize(
-      config.endDateOverride ?? DateTime.now(),
+      config.endDateOverride ?? DeviceTime.now(),
     );
     final startDate = DateContext.normalize(
       config.startDateOverride ??
@@ -340,7 +341,7 @@ class Backfiller {
         endDate: endDate,
       );
       if (dayTrading != null) phases.add(dayTrading);
-      final totalDuration = DateTime.now().difference(overallStart);
+      final totalDuration = DeviceTime.now().difference(overallStart);
       final result = BackfillResult(
         phases: phases,
         totalDuration: totalDuration,
@@ -453,7 +454,7 @@ class Backfiller {
       _log('⏭️  skipFundamentals — 跳過 revenue/financial/valuation phase');
     }
 
-    final totalDuration = DateTime.now().difference(overallStart);
+    final totalDuration = DeviceTime.now().difference(overallStart);
     final result = BackfillResult(phases: phases, totalDuration: totalDuration);
     _logSummary(result);
     return result;
@@ -471,11 +472,11 @@ class Backfiller {
   }) async {
     _log('');
     _log('▶️  Phase [$name] — ${symbols.length} symbols');
-    final start = DateTime.now();
+    final start = DeviceTime.now();
     final failedSymbols = <String>[];
     var succeeded = 0;
     var rowsInserted = 0;
-    var lastLogAt = DateTime.now();
+    var lastLogAt = DeviceTime.now();
 
     for (var i = 0; i < symbols.length; i++) {
       final symbol = symbols[i];
@@ -495,7 +496,7 @@ class Backfiller {
       }
 
       // 每 10 秒印一次進度
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       if (now.difference(lastLogAt).inSeconds >= 10 ||
           i == symbols.length - 1) {
         final pct = ((i + 1) / symbols.length * 100).toStringAsFixed(1);
@@ -509,7 +510,7 @@ class Backfiller {
       }
     }
 
-    final duration = DateTime.now().difference(start);
+    final duration = DeviceTime.now().difference(start);
     return PhaseResult(
       phase: name,
       symbolsProcessed: symbols.length,
@@ -528,10 +529,10 @@ class Backfiller {
   /// 次校準,沒有任何訊號(2026-08-29 tool 稽核 #8)。
   Future<PhaseResult?> _syncStockList() async {
     _log('▶️  Phase [stock_list] — 從 FinMind 同步股票清單');
-    final start = DateTime.now();
+    final start = DeviceTime.now();
     try {
       final count = await deps.stockRepo.syncStockList();
-      final duration = DateTime.now().difference(start);
+      final duration = DeviceTime.now().difference(start);
       _log(
         '✅ [stock_list] synced $count stocks in ${_formatDuration(duration)}',
       );
@@ -549,7 +550,7 @@ class Backfiller {
         rowsInserted: 0,
         // hasFailures 看的是這個欄位
         failedSymbols: const ['<stock_list>'],
-        duration: DateTime.now().difference(start),
+        duration: DeviceTime.now().difference(start),
       );
     }
   }
@@ -606,13 +607,13 @@ class Backfiller {
       '▶️  Phase [institutional] — ${targetSymbols.length} symbols × per-day '
       'TWSE+TPEx batch',
     );
-    final phaseStart = DateTime.now();
+    final phaseStart = DeviceTime.now();
     final targetSet = targetSymbols.toSet();
     final failedDays = <String>[];
     var rowsInserted = 0;
     var daysProcessed = 0;
     var daysSucceeded = 0;
-    var lastLogAt = DateTime.now();
+    var lastLogAt = DeviceTime.now();
 
     final totalCalendarDays = endDate.difference(startDate).inDays;
 
@@ -655,7 +656,7 @@ class Backfiller {
       }
       daysProcessed++;
 
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       if (now.difference(lastLogAt).inSeconds >= 10 ||
           current.isAtSameMomentAs(endDate)) {
         final daysCovered = current.difference(startDate).inDays;
@@ -679,7 +680,7 @@ class Backfiller {
       current = current.add(const Duration(days: 1));
     }
 
-    final duration = DateTime.now().difference(phaseStart);
+    final duration = DeviceTime.now().difference(phaseStart);
     return PhaseResult(
       phase: 'institutional',
       // Per-day 模式：用 daysProcessed 填 symbolsProcessed（同
@@ -729,14 +730,14 @@ class Backfiller {
 
     _log('');
     _log('▶️  Phase [day_trading] — per-day TWSE TWTB4U batch');
-    final phaseStart = DateTime.now();
+    final phaseStart = DeviceTime.now();
     final failedDays = <String>[];
     var rowsInserted = 0;
     var daysProcessed = 0;
     var daysSucceeded = 0;
     var apiCalls = 0;
     var consecutiveZeroDays = 0;
-    var lastLogAt = DateTime.now();
+    var lastLogAt = DeviceTime.now();
 
     // 由新至舊走訪（同 MarketIndexSyncer.backfillDeepHistory）：限流中止時
     // 優先保住較近期的區段——研究通常從最近往回取窗，近期資料先到手比
@@ -807,7 +808,7 @@ class Backfiller {
       }
       daysProcessed++;
 
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       if (now.difference(lastLogAt).inSeconds >= 10) {
         final elapsed = now.difference(phaseStart);
         _log(
@@ -821,7 +822,7 @@ class Backfiller {
       current = current.subtract(const Duration(days: 1));
     }
 
-    final duration = DateTime.now().difference(phaseStart);
+    final duration = DeviceTime.now().difference(phaseStart);
     return PhaseResult(
       phase: 'day_trading',
       // Per-day 模式：用 daysProcessed 填 symbolsProcessed（同
@@ -862,14 +863,14 @@ class Backfiller {
     _log(
       '▶️  Phase [prices:twse] — ${twseSymbols.length} symbols × per-day batch',
     );
-    final phaseStart = DateTime.now();
+    final phaseStart = DeviceTime.now();
     final targetSet = twseSymbols.toSet();
     final failedDays = <String>[];
     var rowsInserted = 0;
     var daysProcessed = 0;
     var daysSucceeded = 0;
     var consecutiveZeroDays = 0;
-    var lastLogAt = DateTime.now();
+    var lastLogAt = DeviceTime.now();
 
     final totalCalendarDays = endDate.difference(startDate).inDays;
 
@@ -941,7 +942,7 @@ class Backfiller {
       }
       daysProcessed++;
 
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       if (now.difference(lastLogAt).inSeconds >= 10 ||
           current.isAtSameMomentAs(endDate)) {
         final daysCovered = current.difference(startDate).inDays;
@@ -965,7 +966,7 @@ class Backfiller {
       current = current.add(const Duration(days: 1));
     }
 
-    final duration = DateTime.now().difference(phaseStart);
+    final duration = DeviceTime.now().difference(phaseStart);
     return PhaseResult(
       phase: 'prices:twse',
       // Per-day 模式：用 daysProcessed 填 symbolsProcessed
@@ -994,14 +995,14 @@ class Backfiller {
     _log(
       '▶️  Phase [prices:tpex] — ${tpexSymbols.length} symbols × per-day batch',
     );
-    final phaseStart = DateTime.now();
+    final phaseStart = DeviceTime.now();
     final targetSet = tpexSymbols.toSet();
     final failedDays = <String>[];
     var rowsInserted = 0;
     var daysProcessed = 0;
     var daysSucceeded = 0;
     var consecutiveZeroDays = 0;
-    var lastLogAt = DateTime.now();
+    var lastLogAt = DeviceTime.now();
 
     final totalCalendarDays = endDate.difference(startDate).inDays;
 
@@ -1066,7 +1067,7 @@ class Backfiller {
       }
       daysProcessed++;
 
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       if (now.difference(lastLogAt).inSeconds >= 10 ||
           current.isAtSameMomentAs(endDate)) {
         final daysCovered = current.difference(startDate).inDays;
@@ -1091,7 +1092,7 @@ class Backfiller {
       current = current.add(const Duration(days: 1));
     }
 
-    final duration = DateTime.now().difference(phaseStart);
+    final duration = DeviceTime.now().difference(phaseStart);
     return PhaseResult(
       phase: 'prices:tpex',
       // 這個 phase 是 per-day 模式：用 daysProcessed 填 symbolsProcessed
@@ -1124,7 +1125,7 @@ class Backfiller {
     _log(
       '▶️  Phase [prices:finmind] — ${symbols.length} symbols × FinMind range',
     );
-    final phaseStart = DateTime.now();
+    final phaseStart = DeviceTime.now();
     if (finMind == null) {
       _log('⚠️  [prices:finmind] 無 FinMindClient 注入 — 跳過');
       return PhaseResult(
@@ -1133,7 +1134,7 @@ class Backfiller {
         symbolsSucceeded: 0,
         rowsInserted: 0,
         failedSymbols: const [],
-        duration: DateTime.now().difference(phaseStart),
+        duration: DeviceTime.now().difference(phaseStart),
       );
     }
 
@@ -1160,7 +1161,7 @@ class Backfiller {
     var succeeded = 0;
     var rowsInserted = 0;
     var skipped = 0;
-    var lastLogAt = DateTime.now();
+    var lastLogAt = DeviceTime.now();
 
     for (var i = 0; i < symbols.length; i++) {
       final symbol = symbols[i];
@@ -1207,7 +1208,7 @@ class Backfiller {
         _log('  ⚠️  $symbol failed: $e');
       }
 
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       if (now.difference(lastLogAt).inSeconds >= 10 ||
           i == symbols.length - 1) {
         final pct = ((i + 1) / symbols.length * 100).toStringAsFixed(1);
@@ -1231,7 +1232,7 @@ class Backfiller {
       symbolsSucceeded: succeeded,
       rowsInserted: rowsInserted,
       failedSymbols: failed,
-      duration: DateTime.now().difference(phaseStart),
+      duration: DeviceTime.now().difference(phaseStart),
     );
   }
 

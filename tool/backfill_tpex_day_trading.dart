@@ -70,6 +70,7 @@ import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/day_trading_ratio.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 import 'tool_db.dart';
 import 'package:drift/drift.dart' show Value;
@@ -124,7 +125,7 @@ Future<int> runTpexDayTradingCli(List<String> args) async {
     return 2;
   }
 
-  final end = DateContext.normalize(DateTime.now());
+  final end = DateContext.normalize(DeviceTime.now());
   final start = DateTime(end.year - years, end.month, end.day);
   print('📦 DB: $dbPath');
   print('📅 區間: ${_ymd(start)} → ${_ymd(end)}（$years 年）');

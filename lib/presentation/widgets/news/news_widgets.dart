@@ -9,6 +9,7 @@ import 'package:daredevil/presentation/providers/news_fetch_provider.dart';
 import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 import 'package:daredevil/presentation/widgets/common/drag_handle.dart';
 import 'package:daredevil/presentation/widgets/news/news_grouping.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 新聞段落的 slivers（段落標題＋lazy 清單）——新聞頁與個股新聞分頁共用
 List<Widget> newsSectionSlivers({
@@ -199,7 +200,7 @@ class NewsListItem extends StatelessWidget {
   }
 
   String _formatTime(DateTime publishedAt) {
-    final now = DateTime.now();
+    final now = DeviceTime.now();
     final dt = publishedAt.toLocal();
     final diff = now.difference(dt);
 

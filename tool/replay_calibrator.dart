@@ -108,6 +108,7 @@ import 'package:daredevil/domain/services/price_calculator.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/update/batch_data_builder.dart';
 import 'package:daredevil/domain/services/rules/stock_rules.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 import 'tool_db.dart';
 
@@ -316,15 +317,15 @@ class ReplayCalibrator {
   final void Function(String) _log;
 
   Future<ReplayResult> run() async {
-    final overallStart = DateTime.now();
+    final overallStart = DeviceTime.now();
 
     // 1. Load 所有資料
     _log('▶️  Loading backfilled data from DB...');
-    final loadStart = DateTime.now();
+    final loadStart = DeviceTime.now();
     var data = await _loadData();
     _log(
       '✅ Loaded: ${data.pricesBySymbol.length} symbols with prices '
-      '(${_formatDuration(DateTime.now().difference(loadStart))})',
+      '(${_formatDuration(DeviceTime.now().difference(loadStart))})',
     );
 
     if (data.pricesBySymbol.isEmpty) {
@@ -335,7 +336,7 @@ class ReplayCalibrator {
         symbolsProcessed: 0,
         daysProcessed: 0,
         ruleStats: const {},
-        duration: DateTime.now().difference(overallStart),
+        duration: DeviceTime.now().difference(overallStart),
       );
     }
 
@@ -347,7 +348,7 @@ class ReplayCalibrator {
         symbolsProcessed: data.pricesBySymbol.length,
         daysProcessed: 0,
         ruleStats: const {},
-        duration: DateTime.now().difference(overallStart),
+        duration: DeviceTime.now().difference(overallStart),
       );
     }
 
@@ -431,12 +432,12 @@ class ReplayCalibrator {
       '▶️  Replaying rule firings across ${data.pricesBySymbol.length} symbols'
       '${config.excessReturn ? " (excess-return mode)" : " (absolute-return mode)"}...',
     );
-    final replayStart = DateTime.now();
+    final replayStart = DeviceTime.now();
     final ruleStats = <String, RuleStats>{};
     var symbolsProcessed = 0;
     var daysProcessed = 0;
     var totalFirings = 0;
-    var lastLogAt = DateTime.now();
+    var lastLogAt = DeviceTime.now();
 
     for (final symbol in data.pricesBySymbol.keys) {
       symbolsProcessed++;
@@ -451,7 +452,7 @@ class ReplayCalibrator {
       daysProcessed += result.days;
       totalFirings += result.firings;
 
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       if (now.difference(lastLogAt).inSeconds >= 10 ||
           symbolsProcessed == data.pricesBySymbol.length) {
         final pct = (symbolsProcessed / data.pricesBySymbol.length * 100)
@@ -488,7 +489,7 @@ class ReplayCalibrator {
       _log('⏭️  persist:false — 只回傳統計，不寫回 DB');
     }
 
-    final duration = DateTime.now().difference(overallStart);
+    final duration = DeviceTime.now().difference(overallStart);
     final result = ReplayResult(
       rulesObserved: ruleStats.length,
       totalFirings: totalFirings,
@@ -1008,7 +1009,7 @@ class ReplayCalibrator {
       final allPrices = await db.getPriceHistory(
         symbol,
         startDate: DateTime(2000),
-        endDate: DateTime.now(),
+        endDate: DeviceTime.now(),
       );
       if (allPrices.isEmpty) continue;
       // 確保升序
@@ -1382,7 +1383,7 @@ class ReplayCalibrator {
       final meta = <String, String>{
         'return_mode': config.excessReturn ? 'excess' : 'absolute',
         'excess_success_threshold': config.excessSuccessThreshold.toString(),
-        'generated_at': DateTime.now().toUtc().toIso8601String(),
+        'generated_at': DeviceTime.now().toUtc().toIso8601String(),
         if (baseline.hit5 != null)
           'universe_baseline_hit_5d': baseline.hit5.toString(),
         if (baseline.hit60 != null)

@@ -10,7 +10,7 @@ import 'package:daredevil/data/database/app_database.dart';
 /// finished_at  "2026-08-11T17:33:46 +08:00"   → 解析成本地(isUtc=false)
 /// ```
 /// 因為 `startedAt` 用 `dateTime().withDefault(currentDateAndTime)`(SQLite
-/// 的 `CURRENT_TIMESTAMP`,UTC),而 `finishedAt` 由 Dart 的 `DateTime.now()`
+/// 的 `CURRENT_TIMESTAMP`,UTC),而 `finishedAt` 由 Dart 的 `DeviceTime.now()`
 /// 寫入。
 ///
 /// **但語意是一致的**:09:33 UTC 與 17:33+08:00 是同一個瞬間,drift 正確

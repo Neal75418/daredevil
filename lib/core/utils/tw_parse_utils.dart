@@ -1,5 +1,6 @@
 import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/utils/date_context.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 台灣股市 API 回應的共用解析工具
 ///
@@ -82,7 +83,7 @@ abstract final class TwParseUtils {
   /// 交易日，只能信回應的 `date`），必須用嚴格版——回退成今天會把最新資料寫成
   /// 錯誤日期且毫無訊號。
   static DateTime parseAdDate(String dateStr) =>
-      parseAdDateOrNull(dateStr) ?? DateContext.normalize(DateTime.now());
+      parseAdDateOrNull(dateStr) ?? DateContext.normalize(DeviceTime.now());
 
   /// 解析含斜線的民國日期（例如 "115/01/02"）
   ///

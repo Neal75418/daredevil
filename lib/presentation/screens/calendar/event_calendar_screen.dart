@@ -15,6 +15,7 @@ import 'package:daredevil/presentation/screens/calendar/widgets/event_list_tile.
 import 'package:daredevil/presentation/screens/calendar/widgets/upcoming_events_section.dart';
 import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 import 'package:daredevil/presentation/widgets/fill_remaining_scrollable.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 事件行事曆頁面
 class EventCalendarScreen extends ConsumerStatefulWidget {
@@ -80,8 +81,8 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
   @override
   void initState() {
     super.initState();
-    _focusedDay = widget.initialFocusedDay ?? DateTime.now();
-    _selectedDay = widget.initialFocusedDay ?? DateTime.now();
+    _focusedDay = widget.initialFocusedDay ?? DeviceTime.now();
+    _selectedDay = widget.initialFocusedDay ?? DeviceTime.now();
 
     Future.microtask(() => ref.read(eventCalendarProvider.notifier).init());
   }
@@ -714,7 +715,7 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
   }
 
   /// 跳回今天（focus＋選取＋載入當月）
-  void _jumpToToday() => _jumpTo(DateTime.now());
+  void _jumpToToday() => _jumpTo(DeviceTime.now());
 
   /// 點月曆標題開 date picker 跳月
   Future<void> _pickMonth() async {

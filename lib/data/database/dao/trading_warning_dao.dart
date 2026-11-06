@@ -4,6 +4,7 @@ import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.drift.dart';
 import 'package:daredevil/data/database/tables/market_data_tables.drift.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 注意股票 / 處置股票操作
 mixin TradingWarningDaoMixin on $AppDatabase {
@@ -177,7 +178,7 @@ mixin TradingWarningDaoMixin on $AppDatabase {
   ///    造成 -50 分 + 三模式硬排除永久生效，該股再也不會出現在任何推薦榜。
   ///    保守保留一段時間（可能真的還在處置中）後強制失效，避免永久幽靈。
   Future<int> updateExpiredWarnings({DateTime? now}) async {
-    final effectiveNow = now ?? DateTime.now();
+    final effectiveNow = now ?? DeviceTime.now();
     final nullEndDateCutoff = effectiveNow.subtract(
       const Duration(days: FundamentalParams.disposalNullEndDateMaxDays),
     );

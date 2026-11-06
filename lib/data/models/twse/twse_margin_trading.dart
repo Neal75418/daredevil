@@ -1,5 +1,6 @@
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/models/twse/twse_daily_price.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// TWSE 融資融券資料
 class TwseMarginTrading {
@@ -26,7 +27,7 @@ class TwseMarginTrading {
     return TwseMarginTrading(
       date: dateStr != null
           ? TwseDailyPrice.parseRocDate(dateStr.toString())
-          : DateTime.now(),
+          : DeviceTime.now(),
       code: code.toString(),
       name: json['Name']?.toString() ?? '',
       marginBuy: _parseDouble(json['MarginPurchase']) ?? 0,

@@ -9,6 +9,7 @@ import 'package:daredevil/core/utils/sentinel.dart';
 import 'package:daredevil/data/models/tpex/tpex_industry_eps.dart';
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 // ==================================================
 // 產業 EPS 狀態
@@ -131,7 +132,7 @@ class IndustryEpsNotifier extends Notifier<IndustryEpsState> {
       state = state.copyWith(
         allData: data,
         isLoading: false,
-        fetchedAt: DateTime.now(),
+        fetchedAt: DeviceTime.now(),
       );
     } catch (e) {
       // 真 API 錯誤也可能落在 dispose 之後——先 guard 再碰 state,

@@ -20,6 +20,7 @@ import 'package:daredevil/domain/services/scan_filter_service.dart';
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 // Re-export（向後相容）
 export 'package:daredevil/domain/models/scan_models.dart';
@@ -286,7 +287,7 @@ class ScanNotifier extends Notifier<ScanState> {
       final tradeableUniverse = await _db.getTradeableUniverseCount(targetDate);
 
       // 載入產業列表（使用 static 快取 + TTL）
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final cacheExpired =
           _industryCacheTime == null ||
           now.difference(_industryCacheTime!) > _industryCacheTtl;

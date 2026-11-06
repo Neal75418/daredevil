@@ -1,5 +1,7 @@
 import 'dart:collection';
 
+import 'package:daredevil/core/utils/device_time.dart';
+
 /// 支援 TTL（存活時間）的 LRU（最近最少使用）快取
 ///
 /// 功能特點：
@@ -60,7 +62,10 @@ class LruCache<K, V> {
     }
 
     // 新增項目
-    _cache[key] = _CacheEntry(value: value, expiresAt: DateTime.now().add(ttl));
+    _cache[key] = _CacheEntry(
+      value: value,
+      expiresAt: DeviceTime.now().add(ttl),
+    );
   }
 
   /// 清除所有快取項目
@@ -76,7 +81,7 @@ class _CacheEntry<V> {
   final V value;
   final DateTime expiresAt;
 
-  bool get isExpired => DateTime.now().isAfter(expiresAt);
+  bool get isExpired => DeviceTime.now().isAfter(expiresAt);
 }
 
 /// 批次查詢快取管理器（自動產生快取鍵）

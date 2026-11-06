@@ -12,6 +12,7 @@ import 'package:daredevil/domain/services/alert/trailing_ma_alert_service.dart';
 import 'package:daredevil/domain/services/alert_evaluation_service.dart';
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 警示類型列舉
 enum AlertType {
@@ -592,7 +593,7 @@ class PriceAlertNotifier extends Notifier<PriceAlertState> {
         evaluationService: AlertEvaluationService(),
       );
       final triggeredIds = <int>{};
-      final now = DateTime.now();
+      final now = DeviceTime.now();
 
       // 只保留「本次真的搶到」的——呼叫端(today_provider)會為回傳清單
       // 的每一筆發通知,回傳未過濾的等於沒去重(2026-08-08 三次審查 F-1:

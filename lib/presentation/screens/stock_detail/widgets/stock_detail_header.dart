@@ -22,6 +22,7 @@ import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/presentation/providers/stock_detail_provider.dart';
 import 'package:daredevil/presentation/widgets/reason_tags.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// Header 所需的最小資料集，用於 `.select()` 精確 rebuild
 class StockHeaderData {
@@ -727,7 +728,7 @@ class StockDetailHeader extends StatelessWidget {
   }
 
   String _formatDataDate(DateTime date) {
-    final now = DateTime.now();
+    final now = DeviceTime.now();
     final today = DateContext.normalize(now);
     final dataDay = DateContext.normalize(date);
 

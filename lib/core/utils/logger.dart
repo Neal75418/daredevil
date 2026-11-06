@@ -1,4 +1,5 @@
 import 'package:daredevil/core/utils/log_redaction.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 日誌等級，用於過濾輸出
 enum LogLevel { debug, info, warning, error }
@@ -144,7 +145,7 @@ abstract final class AppLogger {
       LogLevel.error => '[E]',
     };
 
-    final now = DateTime.now();
+    final now = DeviceTime.now();
     final timestamp =
         '${now.hour.toString().padLeft(2, '0')}:'
         '${now.minute.toString().padLeft(2, '0')}:'

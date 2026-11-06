@@ -22,6 +22,7 @@ import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/watchlist_types.dart';
 import 'package:daredevil/presentation/widgets/warning_badge.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 export 'package:daredevil/presentation/providers/watchlist_types.dart';
 
@@ -687,7 +688,7 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
 
       // 從資料庫讀取實際的 createdAt，確保與 loadData 一致
       final watchlistEntry = await _db.getWatchlistEntry(symbol);
-      final actualAddedAt = watchlistEntry?.createdAt ?? DateTime.now();
+      final actualAddedAt = watchlistEntry?.createdAt ?? DeviceTime.now();
 
       // 增量更新：僅載入此股票資料
       final itemData = await _loadSingleStockData(
@@ -723,7 +724,7 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
 
       final fundamentalRepo = ref.read(fundamentalRepositoryProvider);
       // 使用 wall-clock time 計算回填範圍（非關鍵路徑，不影響測試正確性）
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       await fundamentalRepo.syncMonthlyRevenue(
         symbol: symbol,
         startDate: DateTime(now.year - 5, now.month),
@@ -794,7 +795,7 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
 
       // 從資料庫讀取實際的 createdAt，確保與 loadData 一致
       final watchlistEntry = await _db.getWatchlistEntry(symbol);
-      final actualAddedAt = watchlistEntry?.createdAt ?? DateTime.now();
+      final actualAddedAt = watchlistEntry?.createdAt ?? DeviceTime.now();
 
       // 增量更新：僅載入此股票資料
       final stock = await _db.getStock(symbol);
@@ -889,7 +890,7 @@ class WatchlistNotifier extends Notifier<WatchlistState> {
       // 自選股預設顯示短線分數，未來可加 horizon 切換
       score: analysis?.scoreShort,
       hasSignal: reasons.isNotEmpty,
-      addedAt: addedAt ?? DateTime.now(),
+      addedAt: addedAt ?? DeviceTime.now(),
       recentPrices: recentPrices,
       reasons: reasons.map((r) => r.reasonType).toList(),
       warningType: warningType,

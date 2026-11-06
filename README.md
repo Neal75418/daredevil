@@ -224,6 +224,7 @@ dart format .     # 格式化程式碼
 flutter test                       # 全部
 flutter test --coverage            # 含覆蓋率報告
 flutter test test/domain/services/ # 特定目錄
+scripts/test_time_shift.sh 90      # 把 lib／tool 的「現在」往後撥 90 天跑全部，找過了某天才會紅的測試
 ```
 
 ---

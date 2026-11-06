@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'package:daredevil/data/database/app_database.drift.dart';
 import 'package:daredevil/data/database/tables/portfolio_tables.drift.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 投資組合相關資料存取：持倉與交易紀錄
 mixin PortfolioDaoMixin on $AppDatabase {
@@ -44,7 +45,7 @@ mixin PortfolioDaoMixin on $AppDatabase {
         avgCost: Value(avgCost),
         realizedPnl: Value(realizedPnl),
         totalDividendReceived: Value(totalDividendReceived),
-        updatedAt: Value(now ?? DateTime.now()),
+        updatedAt: Value(now ?? DeviceTime.now()),
       ),
     );
   }

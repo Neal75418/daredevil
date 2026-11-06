@@ -3,6 +3,7 @@ import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/models/twse/intraday_quote.dart';
 import 'package:daredevil/data/remote/intraday_quote_client.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 一輪檢查的結果。
 ///
@@ -114,7 +115,7 @@ class IntradayAlertMonitor {
 
     final (:quotes, :errors) = await _client.fetchQuotes(wanted);
     final fired = <TriggeredAlert>[];
-    final stamp = now ?? DateTime.now();
+    final stamp = now ?? DeviceTime.now();
 
     for (final a in pending) {
       final q = quotes[a.symbol];

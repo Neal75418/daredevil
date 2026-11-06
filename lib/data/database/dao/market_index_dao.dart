@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'package:daredevil/data/database/app_database.drift.dart';
 import 'package:daredevil/data/database/tables/market_index_tables.drift.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 大盤指數歷史資料存取
 mixin MarketIndexDaoMixin on $AppDatabase {
@@ -31,7 +32,7 @@ mixin MarketIndexDaoMixin on $AppDatabase {
     int days = 30,
     DateTime? now,
   }) async {
-    final upperBound = now ?? DateTime.now();
+    final upperBound = now ?? DeviceTime.now();
     final cutoff = upperBound.subtract(Duration(days: days + 10));
     // 上界防護：未來日期的髒資料（曾因 parseAdDate 誤判而寫入）永遠不會被讀出，
     // 避免污染走勢圖（V 字毛刺）與均線計算。

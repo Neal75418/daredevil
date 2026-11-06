@@ -28,6 +28,7 @@ import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/providers/today_provider.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -287,7 +288,7 @@ class _DaredevilAppState extends ConsumerState<DaredevilApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) =>
-      _lifecycle.onStateChanged(state, DateTime.now());
+      _lifecycle.onStateChanged(state, DeviceTime.now());
 
   /// 桌面結束 App（macOS Cmd+Q）：engine 等回覆才結束，落盤能在退出前完成
   @override

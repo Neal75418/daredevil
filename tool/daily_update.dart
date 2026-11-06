@@ -48,6 +48,7 @@ import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_reg
 import 'package:daredevil/core/utils/build_stamp.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 import 'tool_db.dart';
 
@@ -63,7 +64,7 @@ Future<void> main(List<String> args) async {
       '${Platform.environment['HOME']}/Library/Logs/$name',
     );
   }
-  final start = DateTime.now();
+  final start = DeviceTime.now();
   // build stamp:launchd 跑的是 AOT 產物,落後 source 時三個訊號(exit
   // code、update_run、日誌)全部正常,跑的卻是舊邏輯。2026-08-15 實測
   // 落後 3 天,是靠檔案時間戳撞見的——這行讓日誌自己就能回答「跑的是
@@ -119,7 +120,7 @@ Future<void> main(List<String> args) async {
       ),
       finMindToken: finMindToken,
     );
-    final elapsed = DateTime.now().difference(start);
+    final elapsed = DeviceTime.now().difference(start);
     print(
       '[daily_update] finished in ${elapsed.inSeconds}s — '
       'success=${result.success}, skipped=${result.skipped}, '

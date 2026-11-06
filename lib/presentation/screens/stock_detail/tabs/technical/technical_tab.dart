@@ -13,6 +13,7 @@ import 'package:daredevil/presentation/screens/stock_detail/widgets/k_line_chart
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/core/utils/responsive_helper.dart';
 import 'package:daredevil/presentation/widgets/section_header.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 圖表時間範圍選項
 enum ChartTimeRange {
@@ -83,7 +84,9 @@ class _TechnicalTabState extends ConsumerState<TechnicalTab> {
   int? _visibleBarCount(List<DailyPriceEntry> history) {
     if (_timeRange == ChartTimeRange.all || history.isEmpty) return null;
 
-    final cutoffDate = DateTime.now().subtract(Duration(days: _timeRange.days));
+    final cutoffDate = DeviceTime.now().subtract(
+      Duration(days: _timeRange.days),
+    );
     // 只數 OHLC 齊全列(2026-08-05 複審):圖表建 K 棒會剔除缺值列,
     // 這裡若照數全列,sublist 起點前移、尾端多顯示範圍外的舊 K。
     return history

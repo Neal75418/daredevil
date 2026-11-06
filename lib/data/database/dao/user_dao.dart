@@ -10,6 +10,7 @@ import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/constants/rule_enums.dart';
 import 'package:daredevil/core/constants/rule_params_alert.dart';
 import 'package:daredevil/domain/services/alert_evaluation_service.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 自選股條目 + 其所屬分組名稱（未分組則 [groupName] 為 null）
 ///
@@ -264,7 +265,7 @@ mixin UserDaoMixin on $AppDatabase {
   }) {
     return (update(updateRun)..where((t) => t.id.equals(id))).write(
       UpdateRunCompanion(
-        finishedAt: Value(now ?? DateTime.now()),
+        finishedAt: Value(now ?? DeviceTime.now()),
         status: Value(status),
         message: Value(message),
       ),
@@ -280,7 +281,7 @@ mixin UserDaoMixin on $AppDatabase {
   /// GUI 共用同一份 DB 各開獨立連線,無條件清會誤殺對方進行中的 run。
   /// 回傳收斂筆數。
   Future<int> failOrphanRunningRuns({DateTime? now}) {
-    final effectiveNow = now ?? DateTime.now();
+    final effectiveNow = now ?? DeviceTime.now();
     final cutoff = effectiveNow.subtract(DataFreshness.orphanRunningCutoff);
     return (update(updateRun)..where(
           (t) =>
@@ -423,7 +424,7 @@ mixin UserDaoMixin on $AppDatabase {
         await (update(
           priceAlert,
         )..where((t) => t.id.equals(id) & t.triggeredAt.isNull())).write(
-          PriceAlertCompanion(triggeredAt: Value(now ?? DateTime.now())),
+          PriceAlertCompanion(triggeredAt: Value(now ?? DeviceTime.now())),
         );
     return affected > 0;
   }
@@ -441,7 +442,7 @@ mixin UserDaoMixin on $AppDatabase {
   /// 只回收 `isActive = true` 的:已消費的 `(false, T)` 是正常終點。
   /// 回傳回收筆數。
   Future<int> reclaimStaleAlertClaims({DateTime? now}) {
-    final cutoff = (now ?? DateTime.now()).subtract(
+    final cutoff = (now ?? DeviceTime.now()).subtract(
       DataFreshness.alertClaimLease,
     );
     return (update(priceAlert)..where(
@@ -515,7 +516,7 @@ mixin UserDaoMixin on $AppDatabase {
     return (update(priceAlert)..where((t) => t.id.equals(id))).write(
       PriceAlertCompanion(
         isActive: const Value(false),
-        triggeredAt: Value(now ?? DateTime.now()),
+        triggeredAt: Value(now ?? DeviceTime.now()),
       ),
     );
   }
@@ -538,8 +539,8 @@ mixin UserDaoMixin on $AppDatabase {
 
     final symbols = activeAlerts.map((a) => a.symbol).toSet().toList();
 
-    // 統一時間基準，避免各 helper 各自呼叫 DateTime.now()
-    final now = DateTime.now();
+    // 統一時間基準，避免各 helper 各自呼叫 DeviceTime.now()
+    final now = DeviceTime.now();
 
     // Data fetching stays in DAO (needs DB access)
     final volumeDataMap = await _fetchVolumeDataForAlerts(symbols, now);
@@ -738,7 +739,7 @@ mixin UserDaoMixin on $AppDatabase {
     required Map<String, double> peRatioMap,
   }) async {
     // 營收年增率：取最近 3 個月的營收資料（每 symbol 只用最新一筆）
-    final cutoffDate = DateTime.now().subtract(const Duration(days: 120));
+    final cutoffDate = DeviceTime.now().subtract(const Duration(days: 120));
     final revenues =
         await (select(monthlyRevenue)
               ..where((t) => t.symbol.isIn(symbols))
@@ -759,7 +760,7 @@ mixin UserDaoMixin on $AppDatabase {
     }
 
     // 殖利率和本益比：從 stockValuation 表取最近 30 天資料
-    final valCutoff = DateTime.now().subtract(const Duration(days: 30));
+    final valCutoff = DeviceTime.now().subtract(const Duration(days: 30));
     final valuations =
         await (select(stockValuation)
               ..where((t) => t.symbol.isIn(symbols))
@@ -788,7 +789,7 @@ mixin UserDaoMixin on $AppDatabase {
     required Map<String, double> pledgeRatioMap,
   }) async {
     // 董監持股：取最近 6 個月的資料（只需最新一筆的 sharesChange）
-    final holdingCutoff = DateTime.now().subtract(const Duration(days: 180));
+    final holdingCutoff = DeviceTime.now().subtract(const Duration(days: 180));
     final holdings =
         await (select(insiderHolding)
               ..where((t) => t.symbol.isIn(symbols))

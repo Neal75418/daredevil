@@ -2,6 +2,8 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:meta/meta.dart';
 import 'package:timezone/timezone.dart' as tz;
 
+import 'package:daredevil/core/utils/device_time.dart';
+
 /// 台灣時區工具
 ///
 /// 確保交易日計算使用 Asia/Taipei (UTC+8) 時區，
@@ -23,9 +25,11 @@ class TaiwanTime {
   /// 時鐘縫就永遠測不了(測試會隨月曆日期變綠變紅)。production 恆為
   /// null,零開銷;測試設定後必須在 tearDown 歸還 null。
   ///
-  /// 與 core/utils/clock.dart 的 AppClock/SystemClock 並存的理由:那條
-  /// 是 DI 縫,而呼叫本類 static 的 widget 注入不到——不要再開第三個縫,
-  /// 能走 DI 的新程式碼優先用 AppClock。
+  /// 三個時間縫的分工,不要再開第四個:
+  /// - `AppClock`(core/utils/clock.dart):DI 縫,能注入的新程式碼優先用它;
+  /// - 本欄位:呼叫本類 static 的 widget 注入不到時,單一測試固定時間;
+  /// - `DeviceTime.debugShift`:整套測試一起往後撥(找時間炸彈),本類的
+  ///   [now] 也從它換算。
   @visibleForTesting
   static DateTime Function()? debugNowOverride;
 
@@ -36,7 +40,7 @@ class TaiwanTime {
   static DateTime now() {
     final override = debugNowOverride;
     if (override != null) return override();
-    final tzNow = tz.TZDateTime.now(_location);
+    final tzNow = tz.TZDateTime.from(DeviceTime.now(), _location);
     return DateTime(
       tzNow.year,
       tzNow.month,

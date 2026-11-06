@@ -5,6 +5,7 @@ import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/sentinel.dart';
 import 'package:daredevil/data/models/tpex/tpex_short_sell_ranking.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 // ==================================================
 // 融券排行狀態
@@ -61,7 +62,7 @@ class ShortSellRankingNotifier extends Notifier<ShortSellRankingState> {
         rankings: rankings,
         isLoading: false,
         error: null, // 成功後清除先前的錯誤
-        fetchedAt: DateTime.now(),
+        fetchedAt: DeviceTime.now(),
       );
     } catch (e) {
       AppLogger.warning('ShortSellRankingNotifier', '載入融券排行失敗', e);

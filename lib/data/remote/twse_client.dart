@@ -14,6 +14,7 @@ import 'package:daredevil/data/models/tpex/tpex_insider_transfer.dart';
 import 'package:daredevil/data/models/twse/models.dart';
 import 'package:daredevil/data/remote/insider_holding_aggregator.dart';
 import 'package:daredevil/data/remote/market_client_mixin.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 export 'package:daredevil/data/models/twse/models.dart';
 
@@ -659,7 +660,7 @@ class TwseClient {
     }
 
     // 防止未來日期
-    final now = DateTime.now();
+    final now = DeviceTime.now();
     if (year > now.year || (year == now.year && month > now.month)) {
       AppLogger.debug(_tag, '$code: 查詢日期大於今日 ($year/$month)，跳過');
       return Future.value([]);
@@ -1470,7 +1471,7 @@ class TwseClient {
                 r.month >= 1 &&
                 r.month <= 12 &&
                 r.year >= 2000 &&
-                r.year <= DateTime.now().year + 1,
+                r.year <= DeviceTime.now().year + 1,
           )
           .toList();
       AppLogger.info(_tag, '月營收: ${results.length} 筆');
@@ -1485,7 +1486,7 @@ class TwseClient {
   /// 免費 API，無需 token。
   Future<List<TwseDayTrading>> getAllDayTradingData({DateTime? date}) {
     return MarketClientMixin.executeRequest(_tag, '當沖資料', () async {
-      final targetDate = date ?? DateTime.now();
+      final targetDate = date ?? DeviceTime.now();
       final cacheKey = date != null
           ? 'dayTrading:${TwParseUtils.formatDateCompact(date)}'
           : 'dayTrading';
@@ -1853,7 +1854,7 @@ class TwseClient {
   /// 2025 年後端點變更，查詢參數改為 startDate/endDate。
   Future<List<TwseTradingWarning>> getTradingWarnings({DateTime? date}) {
     return MarketClientMixin.executeRequest(_tag, '注意股票', () async {
-      final targetDate = date ?? DateTime.now();
+      final targetDate = date ?? DeviceTime.now();
       final dateStr = TwParseUtils.formatDateCompact(targetDate);
 
       final response = await _dio.get(
@@ -1929,7 +1930,7 @@ class TwseClient {
   /// 2025 年後端點變更，回傳現行有效的處置股票清單（無需日期參數）。
   Future<List<TwseTradingWarning>> getDisposalInfo({DateTime? date}) {
     return MarketClientMixin.executeRequest(_tag, '處置股票', () async {
-      final targetDate = date ?? DateTime.now();
+      final targetDate = date ?? DeviceTime.now();
 
       final response = await _dio.get(
         ApiEndpoints.twseDisposal,

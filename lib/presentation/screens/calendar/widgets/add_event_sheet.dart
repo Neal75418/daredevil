@@ -10,6 +10,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/event_calendar_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 新增/編輯事件 BottomSheet
 class AddEventSheet extends ConsumerStatefulWidget {
@@ -51,7 +52,7 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet> {
         _symbolController.text = existing.symbol!;
       }
     } else {
-      _date = widget.initialDate ?? DateTime.now();
+      _date = widget.initialDate ?? DeviceTime.now();
     }
   }
 

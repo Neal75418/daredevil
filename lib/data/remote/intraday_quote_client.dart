@@ -7,6 +7,7 @@ import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/models/twse/intraday_quote.dart';
 import 'package:daredevil/data/remote/market_client_mixin.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 一輪報價抓取的結果:成功的報價 + 失敗批次的錯誤摘要
 typedef QuoteFetchResult = ({
@@ -163,7 +164,7 @@ class IntradayQuoteClient {
         'ex_ch': exCh,
         'json': 1,
         'delay': 0,
-        '_': '${DateTime.now().millisecondsSinceEpoch}${_requestSeq++}',
+        '_': '${DeviceTime.now().millisecondsSinceEpoch}${_requestSeq++}',
       },
       // 一律取原始字串自行解碼(2026-08-08 code review):讓 Dio 解析
       // 有兩個坑——①MIS 回應前綴帶空行,json 模式會解析失敗;②限流

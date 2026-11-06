@@ -20,6 +20,7 @@ import 'package:daredevil/domain/models/market_overview_models.dart';
 export 'package:daredevil/domain/models/market_overview_models.dart';
 import 'package:daredevil/domain/services/chip_anomaly_service.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 // ==================================================
 // 廣度趨勢純函式
@@ -338,7 +339,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
 
     try {
       // 取得最新資料日期
-      final dataDate = await _db.getLatestDataDate() ?? DateTime.now();
+      final dataDate = await _db.getLatestDataDate() ?? DeviceTime.now();
 
       // 回退日期：前一個交易日
       // 處理開工日盤後資料未釋出、DB 重置後部分同步等情境

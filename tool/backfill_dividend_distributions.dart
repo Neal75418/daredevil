@@ -52,6 +52,7 @@ import 'package:daredevil/data/remote/tpex_client.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/domain/services/update/dividend_backfiller.dart';
 import 'package:daredevil/domain/services/update/dividend_coverage.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 import 'tool_db.dart';
 
@@ -322,7 +323,7 @@ Future<int> runBackfillDividendCli(
 Future<String?> runningUpdateNotice(AppDatabase db, {DateTime? clock}) async {
   final latest = await db.getLatestUpdateRun();
   if (latest == null || latest.status != UpdateStatus.running.code) return null;
-  final age = (clock ?? DateTime.now()).difference(latest.startedAt);
+  final age = (clock ?? DeviceTime.now()).difference(latest.startedAt);
   if (age > DataFreshness.orphanRunningCutoff) return null;
   return '[dividend-backfill] 有更新正在跑（${latest.startedAt} 開始）；等它結束'
       '再執行。App 被強制結束留下的 RUNNING 會在 '

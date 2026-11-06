@@ -22,6 +22,7 @@ import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart
 import 'package:daredevil/presentation/providers/mode_recommendation_provider.dart';
 import 'package:daredevil/presentation/providers/news_fetch_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 熱度分析結果（新聞頁「熱度分析」Tab 的完整狀態）
 class NewsHeatAnalysis {
@@ -88,7 +89,7 @@ final newsHeatProvider = FutureProvider<NewsHeatAnalysis>((ref) async {
         hasRiskKeyword: NewsHeatParams.riskNewsKeywords.any(n.title.contains),
       ),
   ];
-  final heat = HeatCalculator().compute(articles, now: DateTime.now());
+  final heat = HeatCalculator().compute(articles, now: DeviceTime.now());
 
   // 三模式交叉（與今日頁同源）
   final modeBySymbol = <String, ScoringMode>{};

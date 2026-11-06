@@ -45,6 +45,7 @@ import 'package:daredevil/core/constants/calibrated_scores/calibrated_scores_tab
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart' as cal;
 import 'package:daredevil/core/constants/reason_type.dart';
 import 'package:daredevil/core/constants/scoring_mode.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 // ============================================================================
 // Public data models (importable by tests)
@@ -763,7 +764,7 @@ void _printPromoteImpact(Set<String> producedHorizons) {
 /// 時），這裡只負責讓它成為有意識的選擇。
 void _printReplayContext(Database db) {
   final generatedAt = readRunMeta(db)?.generatedAt;
-  final age = replayAgeInDays(generatedAt, DateTime.now().toUtc());
+  final age = replayAgeInDays(generatedAt, DeviceTime.now().toUtc());
   if (generatedAt == null) {
     print('📅 replay 落檔時間：未知（舊 DB 無 generated_at）');
   } else {
@@ -1073,7 +1074,7 @@ HorizonOutput? _processHorizon(
   final usedClustered = isExcess && baselineHit != null;
   final payload = <String, dynamic>{
     'schema_version': 1,
-    'generated_at': DateTime.now().toUtc().toIso8601String(),
+    'generated_at': DeviceTime.now().toUtc().toIso8601String(),
     'horizon': horizon == _horizonShort ? '5d' : '60d',
     'backtest': {
       // window_days/train_ratio 已移除（2026-07-23 稽核：宣稱 2 年窗/0.7
@@ -1181,7 +1182,7 @@ String _writeManifest({
   required HorizonOutput short,
   required HorizonOutput long,
 }) {
-  final now = DateTime.now().toUtc();
+  final now = DeviceTime.now().toUtc();
   final versionTag =
       '${now.year.toString().padLeft(4, '0')}-'
       '${now.month.toString().padLeft(2, '0')}-'

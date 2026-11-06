@@ -12,6 +12,7 @@ import 'package:daredevil/data/repositories/portfolio_repository.dart';
 import 'package:daredevil/presentation/providers/portfolio_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 新增交易 BottomSheet
 class AddTransactionSheet extends ConsumerStatefulWidget {
@@ -29,7 +30,7 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
 
 class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   TransactionType _txType = TransactionType.buy;
-  DateTime _date = DateTime.now();
+  DateTime _date = DeviceTime.now();
   final _symbolController = TextEditingController();
   final _quantityController = TextEditingController();
   final _priceController = TextEditingController();
@@ -474,7 +475,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       context: context,
       initialDate: _date,
       firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
+      lastDate: DeviceTime.now(),
     );
     if (picked != null) setState(() => _date = picked);
   }

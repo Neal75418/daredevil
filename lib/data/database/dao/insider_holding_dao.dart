@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'package:daredevil/data/database/app_database.drift.dart';
 import 'package:daredevil/data/database/tables/market_data_tables.drift.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 董監事持股操作
 mixin InsiderHoldingDaoMixin on $AppDatabase {
@@ -108,7 +109,7 @@ mixin InsiderHoldingDaoMixin on $AppDatabase {
     final placeholders = List.filled(symbols.length, '?').join(', ');
 
     // 計算起始日期（Dart 側計算，避免 SQL 字串插值）
-    final effectiveNow = now ?? DateTime.now();
+    final effectiveNow = now ?? DeviceTime.now();
     final startDate = DateTime(
       effectiveNow.year,
       effectiveNow.month - months,

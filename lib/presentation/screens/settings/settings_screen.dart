@@ -15,6 +15,7 @@ import 'package:daredevil/presentation/screens/settings/widgets/api_token_tile.d
 import 'package:daredevil/presentation/screens/settings/widgets/data_management_tile.dart';
 import 'package:daredevil/presentation/widgets/common/radio_selection_dialog.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// App 版本資訊（從 pubspec.yaml 自動讀取，不需手動維護）
 final _packageInfoProvider = FutureProvider<PackageInfo>(
@@ -540,7 +541,7 @@ class SettingsScreen extends ConsumerWidget {
         ),
         const SizedBox(height: DesignTokens.spacing16),
         Text(
-          '© ${DateTime.now().year} Daredevil',
+          '© ${DeviceTime.now().year} Daredevil',
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],

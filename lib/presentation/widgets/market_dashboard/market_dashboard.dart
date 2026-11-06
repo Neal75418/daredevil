@@ -25,6 +25,7 @@ import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/domain/services/market_reading_service.dart';
 import 'package:daredevil/domain/services/market_sentiment_service.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 大盤總覽 Dashboard
 ///
@@ -196,7 +197,7 @@ class _MarketDashboardState extends State<MarketDashboard> {
   /// 建構標題列
   Widget _buildHeader(ThemeData theme, bool isMobile) {
     final dataDate = widget.state.dataDate;
-    final now = DateTime.now();
+    final now = DeviceTime.now();
     final latestTradingDay = TaiwanCalendar.isTradingDay(now)
         ? DateContext.normalize(now)
         : TaiwanCalendar.getPreviousTradingDay(now);

@@ -7,6 +7,7 @@ import 'package:daredevil/core/constants/api_config.dart';
 import 'package:daredevil/core/exceptions/app_exception.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/domain/models/news_feed.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 // Re-export domain value objects so existing data-layer callers can keep
 // importing them via this file.
@@ -76,7 +77,7 @@ class RssParser {
             sourceName: result.source.name,
             url: result.source.url,
             error: result.error!,
-            timestamp: DateTime.now(),
+            timestamp: DeviceTime.now(),
           ),
         );
       }
@@ -135,7 +136,7 @@ class RssParser {
       title: title,
       content: content,
       url: link,
-      publishedAt: _parseDate(pubDate) ?? DateTime.now(),
+      publishedAt: _parseDate(pubDate) ?? DeviceTime.now(),
       category: source.category,
     );
   }
@@ -163,7 +164,7 @@ class RssParser {
       title: title,
       content: content,
       url: link,
-      publishedAt: _parseDate(published) ?? DateTime.now(),
+      publishedAt: _parseDate(published) ?? DeviceTime.now(),
       category: source.category,
     );
   }

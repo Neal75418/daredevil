@@ -1,6 +1,7 @@
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/tw_parse_utils.dart';
 import 'package:daredevil/data/models/twse/twse_daily_price.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// TWSE 法人買賣超資料
 class TwseInstitutional {
@@ -32,7 +33,7 @@ class TwseInstitutional {
     return TwseInstitutional(
       date: dateStr != null
           ? TwseDailyPrice.parseRocDate(dateStr.toString())
-          : DateTime.now(),
+          : DeviceTime.now(),
       code: code.toString(),
       name: json['Name']?.toString() ?? '',
       foreignBuy:

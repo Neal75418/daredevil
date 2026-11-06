@@ -6,6 +6,7 @@ import 'package:daredevil/core/constants/rule_params_indicator.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.drift.dart';
 import 'package:daredevil/data/database/tables/daily_price.drift.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 修復工具套用平盤價的一列：(代號, 日期, 交易所當天的平盤價)
 typedef BasePriceRow = ({String symbol, DateTime date, double basePrice});
@@ -847,7 +848,7 @@ mixin PriceDaoMixin on $AppDatabase {
     DateTime? endDate,
   }) async {
     // 使用原生 SQL 以達成高效的 GROUP BY 搭配 HAVING 子句
-    final effectiveEndDate = endDate ?? DateTime.now();
+    final effectiveEndDate = endDate ?? DeviceTime.now();
 
     const query = '''
     SELECT dp.symbol, COUNT(*) as cnt
