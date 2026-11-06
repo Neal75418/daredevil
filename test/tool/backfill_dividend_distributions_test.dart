@@ -118,8 +118,25 @@ void main() {
     });
     tearDown(() => tempDir.deleteSync(recursive: true));
 
+    // 這組都該在打 API 之前回傳：注入一定會失敗的 backfiller。被測的判斷失效
+    // 時改成在這裡丟錯，而不是建立真的 TwseClient／TpexClient 打到外部 API
+    // （撥時間跑、RUNNING 被 beforeOpen 當孤兒清掉時就發生過）
+    late MockDividendBackfiller guard;
+    setUp(() {
+      registerFallbackValue(const DividendBackfillScope());
+      guard = MockDividendBackfiller();
+      when(
+        () => guard.backfill(
+          now: any(named: 'now'),
+          maxCalls: any(named: 'maxCalls'),
+          scope: any(named: 'scope'),
+          breaker: any(named: 'breaker'),
+        ),
+      ).thenAnswer((_) async => throw StateError('不該走到回補：「打 API 之前就擋下」的判斷失效'));
+    });
+
     Future<int> run(List<String> args) =>
-        runBackfillDividendCli(args, now: now);
+        runBackfillDividendCli(args, now: now, backfillerFactory: (_) => guard);
 
     test('🚨 --dry-run 搭配不存在的 --db → 回 0，且不建立檔案', () async {
       final path = '${tempDir.path}/none.sqlite';

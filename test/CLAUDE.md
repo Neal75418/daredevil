@@ -39,3 +39,12 @@ void main() {
 - **`MockAppDatabase` 的 transaction**：要在 mock 上 stub 的 transaction 呼叫，生產碼必須寫明型別參數（例如 `transaction<void>(...)`）——mocktail 用 `==` 比對 type arguments，沒寫時推論出的型別對不上 `<void>` stub。stub 寫 `when(() => mockDb.transaction<void>(any())).thenAnswer((inv) async { await (inv.positionalArguments[0] as Future<void> Function())(); });`。有回傳值的照型別 stub，例如 `transaction<int>`（見 `warning_repository_test.dart`）。
 - **`thenThrow` 是同步拋出**：被測程式先啟動多個 Future 再一起等（`awaitPairSettled` 等）時，同步拋出會在掛上 handler 之前就被外層 catch 接走，測不到配對邏輯、還可能剛好綠。模擬 client 失敗用 `thenAnswer((_) async => throw e)`（真的 client 是 async，錯誤走 Future）。
 - **Drift 日期欄**存成 ISO 文字（`build.yaml` 的 `store_date_time_values_as_text`）：本地 DateTime 附裝置 offset（台北機器上是 `+08:00`，CI runner 上是 `+00:00`），讀回是本地時間；`DateTime.utc` 存成 `Z`，讀回仍是 UTC。`DateContext.normalize` 是**裝置本地午夜**，不是 UTC。用真 in-memory DB 比對日期時兩邊都先 normalize，不要寫死 offset 字串。
+
+## 時間（DeviceTime 與撥時間）
+
+- `scripts/test_time_shift.sh N [檔…]` 把 lib／tool 的「現在」往後撥 N 天跑測試；CI 每次推送另跑 +90（`test (+90 days, …)`）。不要手打 `--dart-define`。
+- 測試要「現在」（造相對日期資料、算預期、傳給被測程式的 `now:`／clock）一律用 `DeviceTime.now()`，不用 `DateTime.now()`：後者撥時間時與程式分岔（+90 假紅），傳進去的 now 也撥不動、會藏住真炸彈。
+- 固定日期資料＋被測程式從「現在」往回推窗口 → 注入固定時鐘（`AppClock` fake、`now:`，或 `TaiwanTime.debugNowOverride`＋tearDown 還原）。
+- 斷言不依賴今天的月份、星期、是否交易日（`tw_parse_utils_test` 的 02/30 曾斷言「月份不是 3」，每年三月紅）。
+- 撥不到的：SQLite 填的欄位（`withDefault(currentDateAndTime)`）、新 isolate、子行程、套件內部預設的 `DateTime.now()`（`TableCalendar.currentDay`、`showDatePicker.currentDate` 要明傳）。比較的一邊是 SQLite 填的時間時用 `skip: skipWhenTimeShifted`（`testWidgets` 寫 `skipWhenTimeShifted != null`），其他原因的紅燈不得用它略過。
+- 測試自己撥時間：先存 `original = DeviceTime.debugShift`、`addTearDown` 還原，再設 `original + Δ`（相加，不覆蓋整套的平移）。

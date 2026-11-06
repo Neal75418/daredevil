@@ -83,6 +83,7 @@
 | **路由**                  | 使用 `AppRoutes` 常數，禁止硬編碼路由字串                 |
 | **OHLCV 提取**            | 使用 `prices.extractOhlcv()` extension，避免重複迴圈      |
 | **Dart 3**                | Records, Pattern Matching, Sealed Classes                 |
+| **讀「現在」**            | `DeviceTime.now()`；能注入就用 `AppClock`（禁直接 `DateTime.now()`，守門見 `device_time_guard_test`） |
 
 ### Repository Pattern
 

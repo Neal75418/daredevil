@@ -229,6 +229,7 @@ jobs:
           files=$(find test -name '*_test.dart' | sort | awk -v n=${{ strategy.job-total }} -v i=${{ matrix.shard }} '(NR - 1) % n == i')
           [ -n "$files" ] || { echo "shard ${{ matrix.shard }}: no test files"; exit 1; }
           echo "shard ${{ matrix.shard }}: $(echo "$files" | wc -l) test files"
+          echo "撥到 $(date -u -d '+90 days' +%F)（UTC）"
           scripts/test_time_shift.sh 90 --exclude-tags golden $files
 
       # 只在測試那一步失敗時說明（測試之前的下載、建置失敗時不寫；測試步驟裡面
@@ -240,7 +241,8 @@ jobs:
             echo '### 撥 +90 天的測試紅了'
             echo '多半代表有測試會在 90 天內開始紅（時間炸彈），不一定是這次改動造成的。'
             echo '先看一般測試那組（`test (N)`）：同一個測試也紅的話，是一般失敗、不是時間炸彈。'
-            echo '本機重現（CI 是 UTC）：`TZ=UTC scripts/test_time_shift.sh 90 <紅的測試檔>`。'
+            echo "這次撥到 $(date -u -d '+90 days' +%F)（UTC）。"
+            echo '本機重現（CI 是 UTC）：`TZ=UTC scripts/test_time_shift.sh N <紅的測試檔>`，N 取 90 減去距這次 CI 的天數，撥到同一天（只在某天紅的炸彈換一天就看不到）。'
             echo '本機重現不出來時，先看失敗訊息是不是下載失敗（例如 `Building assets for package:sqlite3 failed`）或偶發失敗的測試，重跑那個 job 即可。'
             echo '常見原因：測試用固定日期資料、程式從「現在」往回推窗口 → 注入固定時鐘或改相對日期；'
             echo '測試自己讀真實 `DateTime.now()` 算預期 → 改讀 `DeviceTime.now()`。'

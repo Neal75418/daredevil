@@ -405,6 +405,8 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
           firstDay: DateTime(2000),
           lastDay: DateTime(2100),
           focusedDay: _focusedDay,
+          // 沒給時套件自己讀 DateTime.now()，撥時間跑測試時與聚焦月份分岔
+          currentDay: DeviceTime.now(),
           selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
           calendarFormat: state.calendarFormat,
           rowHeight: rowHeight,
@@ -724,6 +726,7 @@ class _EventCalendarScreenState extends ConsumerState<EventCalendarScreen> {
       initialDate: _focusedDay,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
+      currentDate: DeviceTime.now(),
     );
     if (picked == null || !mounted) return;
     _jumpTo(picked);

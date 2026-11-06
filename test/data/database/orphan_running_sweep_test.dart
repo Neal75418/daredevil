@@ -84,7 +84,8 @@ void main() {
         UpdateStatus.running.code,
       );
 
-      final swept = await db.failOrphanRunningRuns(); // now=真現在,row 剛建
+      final swept = await db
+          .failOrphanRunningRuns(); // now=DeviceTime.now(),row 剛建（startedAt 由 SQLite 填真實時間）
       expect(swept, 0);
 
       final runs = await db.getRecentUpdateRuns();

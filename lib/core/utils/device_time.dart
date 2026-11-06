@@ -12,8 +12,9 @@ import 'package:meta/meta.dart';
 /// 要台北時間用 `TaiwanTime.now()`（由這裡換算）；能注入時鐘的地方優先用
 /// `AppClock`。
 ///
-/// 例外：資料表 `withDefault(currentDateAndTime)` 由 SQLite 填當下時間，不經
-/// 這裡、撥不到（例如 `UpdateRun.startedAt`）。
+/// 撥不到的：資料表 `withDefault(currentDateAndTime)` 由 SQLite 填當下時間
+/// （例如 `UpdateRun.startedAt`）；`Isolate.run` 等新 isolate 裡 [debugShift]
+/// 恆為 0（static 不跨 isolate）；`Process.run` 起的子行程。
 abstract final class DeviceTime {
   /// 測試平移；production 恆為 0
   @visibleForTesting

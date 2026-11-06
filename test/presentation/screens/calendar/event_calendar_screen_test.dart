@@ -400,6 +400,30 @@ void main() {
       expect(find.byType(DatePickerDialog), findsOneWidget);
     });
 
+    // 套件沒給「今天」時自己讀真實 DateTime.now()：撥時間跑測試時，標記的今天
+    // 會和跳回今日、聚焦的月份（走 DeviceTime）分岔
+    testWidgets('月曆與跳月選擇器的「今天」跟著 DeviceTime', (tester) async {
+      final original = DeviceTime.debugShift;
+      addTearDown(() => DeviceTime.debugShift = original);
+      DeviceTime.debugShift = original + const Duration(days: 400);
+      widenViewport(tester);
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump(const Duration(seconds: 1));
+      final today = DeviceTime.now();
+
+      final calendar = tester.widget<TableCalendar<StockEventEntry>>(
+        find.byType(TableCalendar<StockEventEntry>),
+      );
+      expect(isSameDay(calendar.currentDay, today), isTrue);
+
+      await tester.tap(find.text(DateFormat.yMMMM().format(today)));
+      await tester.pumpAndSettle();
+      final picker = tester.widget<DatePickerDialog>(
+        find.byType(DatePickerDialog),
+      );
+      expect(DateUtils.isSameDay(picker.currentDate, today), isTrue);
+    });
+
     testWidgets('wide month stats card counts types and toggles filter', (
       tester,
     ) async {
