@@ -164,3 +164,84 @@ jobs:
           files: coverage/lcov.info
           flags: shard-${{ matrix.shard }}
           fail_ci_if_error: false
+
+  # ── Job 3: 撥 +90 天的測試 shards（與 Job 2 並行）────────────────────
+  # 把 lib／tool 的「現在」往後撥 90 天跑測試（範圍同 Job 2；scripts/test_time_shift.sh，
+  # 見 DeviceTime），提前抓「過了某天才會紅」的時間炸彈：服務從現在往回推窗口、
+  # 測試卻用固定日期資料。這裡紅不一定是這次改動造成的。
+  #
+  # 獨立成一個 job、不在 Job 2 的 matrix 加「撥幾天」：Job 2 依 strategy.job-total
+  # 分檔，多一個維度 job 總數就變兩倍、分檔算錯（有檔案沒被分到也不會報錯）。
+  # 不上傳覆蓋率（Codecov 只收 Job 2 的 5 份）。
+  test-time-shift:
+    name: test (+90 days, shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Cache pub dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Cache build_runner outputs
+        uses: actions/cache@v6
+        with:
+          path: |
+            .dart_tool/build/
+            .dart_tool/hooks_runner/shared/
+            lib/**/*.drift.dart
+          key: build-runner-${{ runner.os }}-${{ hashFiles('pubspec.lock', 'lib/data/database/tables/**', 'lib/domain/models/**') }}
+          restore-keys: build-runner-${{ runner.os }}-
+
+      - name: Generate code (Drift)
+        # 重試理由同 Job 2
+        run: |
+          for i in 1 2 3; do
+            dart run build_runner build --delete-conflicting-outputs && exit 0
+            echo "build_runner attempt $i failed; retrying in 15s..."
+            sleep 15
+          done
+          exit 1
+
+      # 分檔方式同 Job 2
+      - name: Run tests (+90 days)
+        id: tests
+        run: |
+          files=$(find test -name '*_test.dart' | sort | awk -v n=${{ strategy.job-total }} -v i=${{ matrix.shard }} '(NR - 1) % n == i')
+          [ -n "$files" ] || { echo "shard ${{ matrix.shard }}: no test files"; exit 1; }
+          echo "shard ${{ matrix.shard }}: $(echo "$files" | wc -l) test files"
+          scripts/test_time_shift.sh 90 --exclude-tags golden $files
+
+      # 只在測試那一步失敗時說明（測試之前的下載、建置失敗時不寫；測試步驟裡面
+      # 也可能下載失敗，文案提醒先排除）
+      - name: Explain failure
+        if: failure() && steps.tests.outcome == 'failure'
+        run: |
+          {
+            echo '### 撥 +90 天的測試紅了'
+            echo '多半代表有測試會在 90 天內開始紅（時間炸彈），不一定是這次改動造成的。'
+            echo '先看一般測試那組（`test (N)`）：同一個測試也紅的話，是一般失敗、不是時間炸彈。'
+            echo '本機重現（CI 是 UTC）：`TZ=UTC scripts/test_time_shift.sh 90 <紅的測試檔>`。'
+            echo '本機重現不出來時，先看失敗訊息是不是下載失敗（例如 `Building assets for package:sqlite3 failed`）或偶發失敗的測試，重跑那個 job 即可。'
+            echo '常見原因：測試用固定日期資料、程式從「現在」往回推窗口 → 注入固定時鐘或改相對日期；'
+            echo '測試自己讀真實 `DateTime.now()` 算預期 → 改讀 `DeviceTime.now()`。'
+          } >> "$GITHUB_STEP_SUMMARY"

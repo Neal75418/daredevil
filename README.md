@@ -227,6 +227,10 @@ flutter test test/domain/services/ # 特定目錄
 scripts/test_time_shift.sh 90      # 把 lib／tool 的「現在」往後撥 90 天跑全部，找過了某天才會紅的測試
 ```
 
+推到 main 或對 main 開 PR 時，CI 除了一般測試，也會撥 +90 天再跑一次同樣的測試（`test (+90 days, …)`
+那組 job）。只有那組紅、一般測試那組沒紅，多半代表有測試會在 90 天內開始紅（不一定是該次改動造成的）；
+本機 `TZ=UTC scripts/test_time_shift.sh 90 <測試檔>` 重現不出來時，先排除下載失敗或偶發失敗的測試。
+
 ---
 
 ## 文件

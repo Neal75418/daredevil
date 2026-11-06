@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -19,6 +21,21 @@ void main() {
         timeShiftFromDefine(
           const String.fromEnvironment('TEST_TIME_SHIFT_DAYS'),
         ),
+      );
+    },
+  );
+
+  // scripts/test_time_shift.sh 另以環境變數帶同一個天數：腳本傳給 Dart 的
+  // define 名稱若被改壞，平移會靜默變 0（全綠卻沒撥）——這條會紅
+  test(
+    '用腳本撥時間時，指定的天數真的生效',
+    skip: _expectedShiftDays == null
+        ? '只在用 scripts/test_time_shift.sh 跑時檢查'
+        : null,
+    () {
+      expect(
+        DeviceTime.debugShift,
+        Duration(days: int.parse(_expectedShiftDays!)),
       );
     },
   );
@@ -79,3 +96,5 @@ void main() {
     expect(diff.inSeconds, inInclusiveRange(0, 1));
   });
 }
+
+final _expectedShiftDays = Platform.environment['EXPECT_TIME_SHIFT_DAYS'];

@@ -9,4 +9,6 @@ days="${1:?用法：scripts/test_time_shift.sh <天數> [測試路徑…]}"
 shift
 [[ "$days" =~ ^-?[0-9]+$ ]] || { echo "天數要是整數：$days" >&2; exit 2; }
 
-exec flutter test --dart-define=TEST_TIME_SHIFT_DAYS="$days" "$@"
+# EXPECT_TIME_SHIFT_DAYS 讓 device_time_test 核對平移真的生效（--dart-define 的
+# 名稱被改壞時，平移會靜默變 0、全套照樣綠）
+EXPECT_TIME_SHIFT_DAYS="$days" exec flutter test --dart-define=TEST_TIME_SHIFT_DAYS="$days" "$@"
