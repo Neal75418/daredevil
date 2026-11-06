@@ -26,4 +26,7 @@ abstract final class UiConstants {
   /// 走勢圖佔 78px (70+8)，需要比 compact 門檻更多空間，
   /// 避免 320-400px 邊界寬度的水平溢出。
   static const double sparklineMinWidth = 400.0;
+
+  /// 股息貢獻（%）的絕對值低於此值時不顯示 Hero 的含息報酬指數徽章（避免噪音）
+  static const double dividendBadgeMinPercent = 0.01;
 }

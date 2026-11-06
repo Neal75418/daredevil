@@ -572,6 +572,73 @@ void main() {
     });
   });
 
+  group('含息報酬指數徽章', () {
+    MarketOverviewState stateWith({double? contribution}) =>
+        MarketOverviewState(
+          indices: [
+            createIndex(MarketIndexNames.taiex, 22000, 150),
+            createIndex(MarketIndexNames.tpexIndex, 250, 1),
+          ],
+          dividendContributionPercent: contribution,
+          dataDate: DateTime(2026, 2, 13),
+        );
+
+    HeroIndexSection heroOf(WidgetTester tester, String name) => tester
+        .widgetList<HeroIndexSection>(find.byType(HeroIndexSection))
+        .singleWhere((h) => h.index.name == name);
+
+    testWidgets('手機版：加權 Hero 拿 state 的股息貢獻', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(MarketDashboard(state: stateWith(contribution: 1.23))),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        heroOf(tester, MarketIndexNames.taiex).dividendContributionPercent,
+        1.23,
+      );
+    });
+
+    testWidgets('並排：加權 Hero 拿股息貢獻，櫃買 Hero 保留徽章高度', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(MarketDashboard(state: stateWith(contribution: 1.23))),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        heroOf(tester, MarketIndexNames.taiex).dividendContributionPercent,
+        1.23,
+      );
+      final tpex = heroOf(tester, MarketIndexNames.tpexIndex);
+      expect(tpex.dividendContributionPercent, isNull);
+      expect(tpex.reserveBadgeSpace, isTrue);
+    });
+
+    testWidgets('並排：沒有股息貢獻 → 櫃買 Hero 不保留高度', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(MarketDashboard(state: stateWith())),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        heroOf(tester, MarketIndexNames.tpexIndex).reserveBadgeSpace,
+        isFalse,
+      );
+    });
+
+    // 加權側低於門檻不顯示徽章時，櫃買側也不能空出一行
+    testWidgets('並排：股息貢獻低於門檻 → 櫃買 Hero 不保留高度', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(MarketDashboard(state: stateWith(contribution: 0.005))),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        heroOf(tester, MarketIndexNames.tpexIndex).reserveBadgeSpace,
+        isFalse,
+      );
+    });
+  });
+
   group('盤中即時報價', () {
     // 盤後:指數微漲、家數偏多;即時:指數大跌——判讀若誤用即時會換句子
     final state = MarketOverviewState(

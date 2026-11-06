@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import 'package:daredevil/core/constants/market_index_names.dart';
+import 'package:daredevil/core/constants/ui_constants.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
@@ -14,12 +15,19 @@ import 'package:daredevil/presentation/widgets/market_dashboard/market_reading_l
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_overview_selectors.dart';
 
+/// 股息貢獻徽章是否顯示：有值且絕對值達 [UiConstants.dividendBadgeMinPercent]。
+///
+/// 並排時櫃買側保留徽章高度也用它判斷，與加權側的徽章同一個門檻。
+bool showsDividendBadge(double? contributionPercent) =>
+    contributionPercent != null &&
+    contributionPercent.abs() >= UiConstants.dividendBadgeMinPercent;
+
 /// Hero 指數區域
 ///
 /// 顯示指數大數字 + 漲跌幅 + 30 日 Sparkline 走勢圖
 /// 支援加權指數和櫃買指數，根據 index name 自動選擇標題
 ///
-/// 當顯示加權指數且提供 [totalReturnHistory] 時，
+/// 當顯示加權指數且 [dividendContributionPercent] 達顯示門檻（[showsDividendBadge]）時，
 /// 會在走勢圖下方顯示含息報酬指數的股息貢獻 badge。
 class HeroIndexSection extends StatelessWidget {
   const HeroIndexSection({
@@ -27,7 +35,7 @@ class HeroIndexSection extends StatelessWidget {
     required this.index,
     this.historyData = const [],
     this.stageHistory = const [],
-    this.totalReturnHistory = const [],
+    this.dividendContributionPercent,
     this.reserveBadgeSpace = false,
     this.isStale = false,
     this.flash,
@@ -56,8 +64,9 @@ class HeroIndexSection extends StatelessWidget {
   /// 與 [historyData]（30 點走勢圖）分離，需 ≥60 個交易日才能算出 MA60。
   final List<double> stageHistory;
 
-  /// 含息報酬指數歷史資料（供計算股息貢獻比較）
-  final List<double> totalReturnHistory;
+  /// 近 30 日的股息貢獻（%），見 `MarketOverviewState.dividendContributionPercent`；
+  /// null 或未達門檻時不顯示徽章
+  final double? dividendContributionPercent;
 
   /// 並排顯示時，為無 badge 的欄位保留相同高度
   final bool reserveBadgeSpace;
@@ -73,8 +82,7 @@ class HeroIndexSection extends StatelessWidget {
 
     final showBadge =
         index.name == MarketIndexNames.taiex &&
-        totalReturnHistory.length >= 2 &&
-        historyData.length >= 2;
+        showsDividendBadge(dividendContributionPercent);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,8 +231,7 @@ class HeroIndexSection extends StatelessWidget {
               horizontal: DesignTokens.spacing4,
             ),
             child: _TotalReturnBadge(
-              taiexHistory: historyData,
-              totalReturnHistory: totalReturnHistory,
+              contributionPercent: dividendContributionPercent!,
             ),
           ),
         ] else if (reserveBadgeSpace) ...[
@@ -402,39 +409,17 @@ class HeroIndexSection extends StatelessWidget {
 
 /// 含息報酬指數 vs 加權指數的股息貢獻 badge
 ///
-/// 計算近 30 日期間內，含息報酬指數相對於加權指數的超額報酬，
+/// 顯示近 30 日含息報酬指數相對於加權指數的超額報酬，
 /// 即「股息再投資」所貢獻的額外報酬百分比。
 class _TotalReturnBadge extends StatelessWidget {
-  const _TotalReturnBadge({
-    required this.taiexHistory,
-    required this.totalReturnHistory,
-  });
+  const _TotalReturnBadge({required this.contributionPercent});
 
-  final List<double> taiexHistory;
-  final List<double> totalReturnHistory;
+  final double contributionPercent;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    // 避免除以零（資料異常時的防禦）
-    if (taiexHistory.first == 0 || totalReturnHistory.first == 0) {
-      return const SizedBox.shrink();
-    }
-
-    // 計算期間報酬率差異（股息貢獻）
-    final taiexReturn =
-        (taiexHistory.last - taiexHistory.first) / taiexHistory.first * 100;
-    final triReturn =
-        (totalReturnHistory.last - totalReturnHistory.first) /
-        totalReturnHistory.first *
-        100;
-    final dividendContribution = triReturn - taiexReturn;
-
-    // 貢獻太小時不顯示（避免噪音）
-    if (dividendContribution.abs() < 0.01) return const SizedBox.shrink();
-
-    final sign = dividendContribution > 0 ? '+' : '';
+    final sign = contributionPercent > 0 ? '+' : '';
 
     return Row(
       children: [
@@ -464,7 +449,7 @@ class _TotalReturnBadge extends StatelessWidget {
           child: Text(
             'marketOverview.dividendContribution'.tr(
               namedArgs: {
-                'pct': '$sign${dividendContribution.toStringAsFixed(2)}',
+                'pct': '$sign${contributionPercent.toStringAsFixed(2)}',
               },
             ),
             style: theme.textTheme.labelSmall?.copyWith(

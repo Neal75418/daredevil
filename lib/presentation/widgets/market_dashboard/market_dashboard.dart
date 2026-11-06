@@ -410,9 +410,8 @@ class _MarketDashboardState extends State<MarketDashboard> {
             historyData: widget.state.indexHistory[taiex.first.name] ?? [],
             stageHistory:
                 widget.state.indexStageHistory[taiex.first.name] ?? [],
-            totalReturnHistory:
-                widget.state.indexHistory[MarketIndexNames.totalReturnIndex] ??
-                [],
+            dividendContributionPercent:
+                widget.state.dividendContributionPercent,
           ),
         );
       } else {
@@ -703,10 +702,7 @@ class _MarketDashboardState extends State<MarketDashboard> {
     // TPEx 側保留與 TWSE badge 等高的空間
     final shouldReserveBadge =
         market == MarketCode.tpex &&
-        (widget.state.indexHistory[MarketIndexNames.taiex]?.length ?? 0) >= 2 &&
-        (widget.state.indexHistory[MarketIndexNames.totalReturnIndex]?.length ??
-                0) >=
-            2;
+        showsDividendBadge(widget.state.dividendContributionPercent);
 
     // 綜合判讀（top-level，緊接 Hero 指數，位於欄位最上方）
     final synthesis = _buildCompositeSynthesisLine(market);
@@ -736,11 +732,9 @@ class _MarketDashboardState extends State<MarketDashboard> {
             statusText: _heroStatusText(market, shown, heroIdx.first),
             historyData: widget.state.indexHistory[heroName] ?? [],
             stageHistory: widget.state.indexStageHistory[heroName] ?? [],
-            totalReturnHistory: market == MarketCode.twse
-                ? widget.state.indexHistory[MarketIndexNames
-                          .totalReturnIndex] ??
-                      []
-                : [],
+            dividendContributionPercent: market == MarketCode.twse
+                ? widget.state.dividendContributionPercent
+                : null,
             reserveBadgeSpace: shouldReserveBadge,
           )
         else

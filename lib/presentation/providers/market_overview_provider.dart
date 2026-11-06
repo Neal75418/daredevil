@@ -9,6 +9,7 @@ import 'package:daredevil/core/constants/industry_names.dart';
 import 'package:daredevil/core/constants/market_index_names.dart';
 import 'package:daredevil/core/constants/rule_params_institutional.dart';
 export 'package:daredevil/core/constants/market_index_names.dart';
+import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/sentinel.dart';
@@ -41,6 +42,39 @@ List<double> cumulativeAdLine(List<double> dailyNet) {
     result.add(running);
   }
   return result;
+}
+
+// ==================================================
+// 股息貢獻純函式
+// ==================================================
+
+/// 股息貢獻（%）：含息報酬指數的期間報酬減去加權指數的期間報酬。
+///
+/// 兩條序列（oldest→newest）只取兩邊都有的交易日，起點是共同的第一天、
+/// 終點是共同的最後一天。加權指數每日更新就寫入今天，含息報酬指數（FinMind）
+/// 要到晚上才有今天；各取自己的最後一筆，會把今天整天的漲跌算成股息。
+///
+/// 共同的日子不到兩天、或起點為 0 時回 null（不顯示）。
+double? computeDividendContribution({
+  required List<DatedValue> priceIndex,
+  required List<DatedValue> totalReturnIndex,
+}) {
+  final totalReturnByDay = {
+    for (final p in totalReturnIndex) DateContext.normalize(p.date): p.value,
+  };
+  final common = [
+    for (final p in priceIndex)
+      if (totalReturnByDay[DateContext.normalize(p.date)] case final tri?)
+        (price: p.value, totalReturn: tri),
+  ];
+  if (common.length < 2) return null;
+  final first = common.first;
+  final last = common.last;
+  if (first.price == 0 || first.totalReturn == 0) return null;
+  final priceReturn = (last.price - first.price) / first.price * 100;
+  final totalReturn =
+      (last.totalReturn - first.totalReturn) / first.totalReturn * 100;
+  return totalReturn - priceReturn;
 }
 
 // ==================================================
@@ -77,6 +111,7 @@ class MarketOverviewState {
     this.marginIndexChangePercent = const {},
     this.postMarketIndexChangePercent = const {},
     this.advanceDeclineStaleDates = const {},
+    this.dividendContributionPercent,
   });
 
   // Section key 常數（供 sectionDates 使用）
@@ -196,6 +231,13 @@ class MarketOverviewState {
   /// `readingIndexChangePercentOf`。查不到那天就不放進 map（不退回最新值）。
   final Map<String, double> postMarketIndexChangePercent;
 
+  /// 近 30 日的股息貢獻（%），Hero 卡含息報酬指數徽章用；資料不足為 null。
+  ///
+  /// 由 DB 裡帶日期的加權與含息報酬指數算（[computeDividendContribution]），
+  /// 不用 [indexHistory]：那裡的加權接上了 API 的今天收盤、而且沒有日期，
+  /// 配不出兩條序列的共同日子。
+  final double? dividendContributionPercent;
+
   /// 是否有任何有效資料
   bool get hasData =>
       indices.isNotEmpty ||
@@ -228,6 +270,7 @@ class MarketOverviewState {
     Map<String, double>? marginIndexChangePercent,
     Map<String, double>? postMarketIndexChangePercent,
     Map<String, DateTime>? advanceDeclineStaleDates,
+    double? dividendContributionPercent,
   }) {
     return MarketOverviewState(
       indices: indices ?? this.indices,
@@ -267,6 +310,8 @@ class MarketOverviewState {
           postMarketIndexChangePercent ?? this.postMarketIndexChangePercent,
       advanceDeclineStaleDates:
           advanceDeclineStaleDates ?? this.advanceDeclineStaleDates,
+      dividendContributionPercent:
+          dividendContributionPercent ?? this.dividendContributionPercent,
     );
   }
 }
@@ -289,7 +334,7 @@ typedef _BreadthHistory = ({
 typedef _OverviewSnapshot = (
   (
     ({List<TwseMarketIndex> data, Set<String> staleNames}),
-    Map<String, List<double>>,
+    Map<String, List<DatedValue>>,
     ({Map<String, AdvanceDecline> data, Map<String, DateTime> staleDates}),
     ({Map<String, InstitutionalTotals> data, DateTime dataDate}),
     ({
@@ -546,9 +591,10 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     final instByMarket = instResult.data;
     final marginByMarket = marginResult.data;
 
-    // 複製歷史資料，避免原地修改導致重複追加
+    // 取收盤值成新的 list（下面會追加今天收盤，不能動到原始資料）
     final indexHistory = <String, List<double>>{
-      for (final e in rawHistory.entries) e.key: List<double>.from(e.value),
+      for (final e in rawHistory.entries)
+        e.key: [for (final p in e.value) p.value],
     };
     final indexStageHistory = <String, List<double>>{
       for (final e in rawStageHistory.entries)
@@ -612,6 +658,11 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       indexStageHistory: indexStageHistory,
       marginIndexChangePercent: marginIndexChange,
       postMarketIndexChangePercent: postMarketIndexChange,
+      dividendContributionPercent: computeDividendContribution(
+        priceIndex: rawHistory[MarketIndexNames.taiex] ?? const [],
+        totalReturnIndex:
+            rawHistory[MarketIndexNames.totalReturnIndex] ?? const [],
+      ),
       advanceDeclineByMarket: advDecByMarket,
       advanceDeclineStaleDates: advDecResult.staleDates,
       institutionalByMarket: instByMarket,
@@ -843,8 +894,8 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     }
   }
 
-  /// 從 DB 載入近 30 日指數歷史（供走勢圖使用）
-  Future<Map<String, List<double>>> _loadIndexHistory({
+  /// 從 DB 載入近 30 日指數歷史（走勢圖與股息貢獻用）
+  Future<Map<String, List<DatedValue>>> _loadIndexHistory({
     required Set<String> failedSections,
   }) async {
     try {
@@ -857,12 +908,12 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
 
       final historyMap = await _db.getIndexHistoryBatch(indexNames, days: 30);
 
-      // 轉換為 name → close 值列表
-      final result = <String, List<double>>{};
-      for (final entry in historyMap.entries) {
-        result[entry.key] = entry.value.map((e) => e.close).toList();
-      }
-      return result;
+      return {
+        for (final entry in historyMap.entries)
+          entry.key: [
+            for (final e in entry.value) (date: e.date, value: e.close),
+          ],
+      };
     } catch (e) {
       AppLogger.warning('MarketOverviewNotifier', '載入指數歷史失敗', e);
       failedSections.add('indexHistory');

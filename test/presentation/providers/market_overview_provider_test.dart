@@ -214,6 +214,15 @@ void main() {
       expect(updated.error, 'test');
       expect(updated.indices, isEmpty);
     });
+
+    // 載入逾時先結束轉圈時只 copyWith(isLoading…)，徽章要留著上一輪的值
+    test('copyWith 保留股息貢獻', () {
+      const original = MarketOverviewState(dividendContributionPercent: 1.5);
+      expect(
+        original.copyWith(isLoading: false).dividendContributionPercent,
+        1.5,
+      );
+    });
   });
 
   group('AdvanceDecline', () {
@@ -1103,6 +1112,127 @@ void main() {
     test('empty input returns empty list', () {
       expect(cumulativeAdLine([]), isEmpty);
     });
+  });
+
+  group('computeDividendContribution', () {
+    final d1 = DateTime(2026, 11, 4);
+    final d2 = DateTime(2026, 11, 5);
+    final d3 = DateTime(2026, 11, 6);
+
+    List<DatedValue> series(List<(DateTime, double)> points) => [
+      for (final (date, value) in points) (date: date, value: value),
+    ];
+
+    // 加權 14:00 就有今天，含息報酬指數晚上才寫入：終點要停在兩邊都有的那天
+    test('🚨 含息落後一天 → 終點取兩邊都有的最後一天', () {
+      final result = computeDividendContribution(
+        priceIndex: series([(d1, 100), (d2, 110), (d3, 105)]),
+        totalReturnIndex: series([(d1, 200), (d2, 222)]),
+      );
+      // 含息 +11%、加權到 d2 +10%；各取最後一筆會變成 11 − 5 = 6
+      expect(result, closeTo(1.0, 1e-9));
+    });
+
+    test('加權缺第一天 → 起點取兩邊都有的第一天', () {
+      final result = computeDividendContribution(
+        priceIndex: series([(d2, 110), (d3, 121)]),
+        totalReturnIndex: series([(d1, 200), (d2, 220), (d3, 244.2)]),
+      );
+      // d2→d3：含息 +11%、加權 +10%；含息從 d1 起算會變成 22.1 − 10
+      expect(result, closeTo(1.0, 1e-9));
+    });
+
+    test('同一天、時刻不同仍算同一天', () {
+      final result = computeDividendContribution(
+        priceIndex: series([(d1, 100), (d2, 110)]),
+        totalReturnIndex: series([
+          (DateTime.utc(2026, 11, 4), 200),
+          (DateTime.utc(2026, 11, 5), 222),
+        ]),
+      );
+      expect(result, closeTo(1.0, 1e-9));
+    });
+
+    test('兩邊都有的日子不到兩天 → null', () {
+      expect(
+        computeDividendContribution(
+          priceIndex: series([(d1, 100), (d2, 110)]),
+          totalReturnIndex: series([(d2, 220), (d3, 230)]),
+        ),
+        isNull,
+      );
+    });
+
+    test('加權起點為 0 → null', () {
+      expect(
+        computeDividendContribution(
+          priceIndex: series([(d1, 0), (d2, 110)]),
+          totalReturnIndex: series([(d1, 200), (d2, 222)]),
+        ),
+        isNull,
+      );
+    });
+
+    test('含息起點為 0 → null', () {
+      expect(
+        computeDividendContribution(
+          priceIndex: series([(d1, 100), (d2, 110)]),
+          totalReturnIndex: series([(d1, 0), (d2, 222)]),
+        ),
+        isNull,
+      );
+    });
+  });
+
+  // 每日更新 15:30 寫入今天的加權，含息報酬指數約 21:30 才寫入
+  test('🚨 DB 的加權已有今天、含息停在前一天 → 股息貢獻算到前一天', () async {
+    setupEmptyDefaults();
+    final d1 = DateTime(2026, 11, 4);
+    final d2 = DateTime(2026, 11, 5);
+    final today = DateTime(2026, 11, 6);
+    MarketIndexEntry row(String name, DateTime day, double close) =>
+        MarketIndexEntry(
+          id: day.day,
+          date: day,
+          name: name,
+          close: close,
+          change: 0,
+          changePercent: 0,
+          createdAt: day,
+        );
+    when(() => mockDb.getLatestDataDate()).thenAnswer((_) async => today);
+    when(() => mockTwse.getMarketIndices()).thenAnswer(
+      (_) async => [
+        TwseMarketIndex(
+          date: today,
+          name: MarketIndexNames.taiex,
+          close: 38580,
+          change: -1820,
+          changePercent: -4.5,
+        ),
+      ],
+    );
+    when(
+      () => mockDb.getIndexHistoryBatch(any(), days: any(named: 'days')),
+    ).thenAnswer(
+      (_) async => {
+        MarketIndexNames.taiex: [
+          row(MarketIndexNames.taiex, d1, 40000),
+          row(MarketIndexNames.taiex, d2, 40400),
+          row(MarketIndexNames.taiex, today, 38580),
+        ],
+        MarketIndexNames.totalReturnIndex: [
+          row(MarketIndexNames.totalReturnIndex, d1, 90000),
+          row(MarketIndexNames.totalReturnIndex, d2, 91000),
+        ],
+      },
+    );
+
+    await container.read(marketOverviewProvider.notifier).loadData();
+    final state = container.read(marketOverviewProvider);
+
+    // 含息 +1.111%、加權到前一天 +1%
+    expect(state.dividendContributionPercent, closeTo(0.1111, 1e-4));
   });
 
   // 證交所約 14:00 公布今天收盤 → API 的指數是今天；漲跌家數、成交量等盤後

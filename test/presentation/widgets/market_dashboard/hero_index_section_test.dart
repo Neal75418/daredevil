@@ -274,6 +274,82 @@ void main() {
     });
   });
 
+  group('showsDividendBadge', () {
+    test('null 或絕對值低於 0.01 → 不顯示', () {
+      expect(showsDividendBadge(null), isFalse);
+      expect(showsDividendBadge(0.005), isFalse);
+      expect(showsDividendBadge(-0.005), isFalse);
+    });
+
+    test('絕對值達 0.01 → 顯示（含負值）', () {
+      expect(showsDividendBadge(0.01), isTrue);
+      expect(showsDividendBadge(-0.5), isTrue);
+    });
+  });
+
+  group('含息報酬指數徽章', () {
+    const badgeKey = 'marketOverview.dividendContribution';
+
+    testWidgets('加權指數＋有股息貢獻 → 顯示徽章', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(
+          HeroIndexSection(
+            index: createIndex(),
+            dividendContributionPercent: 1.23,
+          ),
+        ),
+      );
+      expect(find.text(badgeKey), findsOneWidget);
+    });
+
+    testWidgets('股息貢獻為 null → 不顯示', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(HeroIndexSection(index: createIndex())),
+      );
+      expect(find.text(badgeKey), findsNothing);
+    });
+
+    testWidgets('股息貢獻小於 0.01% → 不顯示，也不留徽章的間距', (tester) async {
+      // 儀表板裡 Hero 放在可捲動的欄位中，高度＝內容高度
+      Future<double> heightWith(double? contribution) async {
+        await tester.pumpWidget(
+          buildTestApp(
+            SingleChildScrollView(
+              child: HeroIndexSection(
+                index: createIndex(),
+                dividendContributionPercent: contribution,
+              ),
+            ),
+          ),
+        );
+        return tester.getSize(find.byType(HeroIndexSection)).height;
+      }
+
+      final withoutValue = await heightWith(null);
+      final belowThreshold = await heightWith(0.005);
+      expect(find.text(badgeKey), findsNothing);
+      expect(belowThreshold, withoutValue);
+    });
+
+    testWidgets('櫃買指數 → 不顯示', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(
+          HeroIndexSection(
+            index: TwseMarketIndex(
+              date: DateTime(2026, 2, 15),
+              name: MarketIndexNames.tpexIndex,
+              close: 250,
+              change: 1,
+              changePercent: 0.4,
+            ),
+            dividendContributionPercent: 1.23,
+          ),
+        ),
+      );
+      expect(find.text(badgeKey), findsNothing);
+    });
+  });
+
   group('非即時角標(2026-08-29 靜默稽核 #3)', () {
     testWidgets('🚨 isStale → 顯示「非即時」與資料日期', (tester) async {
       await tester.pumpWidget(
