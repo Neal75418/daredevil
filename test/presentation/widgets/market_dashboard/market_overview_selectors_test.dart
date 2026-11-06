@@ -42,6 +42,106 @@ void main() {
     });
   });
 
+  // 指數（證交所約 14:00 公布今天收盤）比該畫面的盤後資料新時，標指數是哪天的
+  // 收盤；比較的日期由各畫面自己給（總覽用各市場盤後資料日、熱力圖用格子的日期）
+  group('indexCloseOfDate', () {
+    final index = _index(MarketIndexNames.taiex, 48024.6, -0.28); // 9/24
+
+    test('🚨 非即時、指數日期與比較日期不同 → 回指數的日期', () {
+      expect(
+        indexCloseOfDate(
+          index: index,
+          isLive: false,
+          compareDate: DateTime(2026, 9, 23),
+        ),
+        DateTime(2026, 9, 24),
+      );
+    });
+
+    test('同一天 → null', () {
+      expect(
+        indexCloseOfDate(
+          index: index,
+          isLive: false,
+          compareDate: DateTime(2026, 9, 24, 15),
+        ),
+        isNull,
+      );
+    });
+
+    test('即時報價 → null（狀態列已說明報價時間）', () {
+      expect(
+        indexCloseOfDate(
+          index: index,
+          isLive: true,
+          compareDate: DateTime(2026, 9, 23),
+        ),
+        isNull,
+      );
+    });
+
+    test('沒有比較日期 → null', () {
+      expect(
+        indexCloseOfDate(index: index, isLive: false, compareDate: null),
+        isNull,
+      );
+    });
+  });
+
+  // 證交所約 14:00 公布今天收盤，指數就換成今天；漲跌家數、成交量等盤後資料
+  // 要等每日更新才換。判讀拿兩者對照時必須是同一天，否則是今天的漲跌配昨天的量
+  group('readingIndexChangePercentOf', () {
+    final state = MarketOverviewState(
+      dataDate: DateTime(2026, 9, 24),
+      indices: [_index(MarketIndexNames.taiex, 48024.6, -0.28)],
+    );
+
+    test('指數與盤後資料同一天 → 用指數的漲跌', () {
+      expect(readingIndexChangePercentOf(state, MarketCode.twse), -0.28);
+    });
+
+    test('🚨 指數比盤後資料新 → 用盤後資料那天的漲跌，不用指數的', () {
+      final s = state.copyWith(
+        dataDate: DateTime(2026, 9, 23),
+        postMarketIndexChangePercent: {MarketCode.twse: 1.2},
+      );
+      expect(readingIndexChangePercentOf(s, MarketCode.twse), 1.2);
+    });
+
+    test('指數比盤後資料新、查不到那天的漲跌 → null（不退回指數的值）', () {
+      final s = state.copyWith(dataDate: DateTime(2026, 9, 23));
+      expect(readingIndexChangePercentOf(s, MarketCode.twse), isNull);
+    });
+
+    test('沒有資料日期 → 用指數的漲跌（無從對照）', () {
+      const s = MarketOverviewState();
+      final withIndex = s.copyWith(
+        indices: [_index(MarketIndexNames.taiex, 48024.6, -0.28)],
+      );
+      expect(readingIndexChangePercentOf(withIndex, MarketCode.twse), -0.28);
+    });
+
+    test('🚨 該市場盤後資料退回前一天（上櫃斷線）→ 用退回那天的漲跌', () {
+      final s = MarketOverviewState(
+        dataDate: DateTime(2026, 9, 24),
+        advanceDeclineStaleDates: {MarketCode.tpex: DateTime(2026, 9, 23)},
+        indices: [_index(MarketIndexNames.tpexIndex, 285.3, 0.1)], // 9/24
+        postMarketIndexChangePercent: {MarketCode.tpex: -2.0},
+      );
+      expect(readingIndexChangePercentOf(s, MarketCode.tpex), -2.0);
+    });
+
+    test('查無主指數 → null', () {
+      expect(
+        readingIndexChangePercentOf(
+          const MarketOverviewState(),
+          MarketCode.tpex,
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('computeMarketSentiment', () {
     const ad = AdvanceDecline(advance: 408, decline: 667, unchanged: 149);
     test('沒有漲跌家數 → null', () {

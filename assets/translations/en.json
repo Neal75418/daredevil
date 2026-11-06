@@ -316,6 +316,7 @@
       "etfFilterFail": "ETF filter unavailable; list may include ETFs"
     },
     "indexStale": "stale ({date})",
+    "indexCloseOf": "Index: {date} close",
     "sectionsFailed": "{count} sections failed to load; figures may be incomplete",
     "sentimentPartial": "{count} sub-indicators missing; score uses remaining weights",
     "summary": {

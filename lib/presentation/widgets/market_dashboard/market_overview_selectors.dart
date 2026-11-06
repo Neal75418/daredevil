@@ -20,6 +20,52 @@ TwseMarketIndex? heroIndexOf(MarketOverviewState state, String marketKey) {
   return null;
 }
 
+/// 指數要標「指數為 M/D 收盤」時的日期：不是即時報價，且指數日期與該畫面
+/// 盤後資料的日期（[compareDate]）不同時回指數日期，否則 null。
+///
+/// 證交所約 14:00 公布今天收盤，每日更新寫入前家數、熱力圖格子等還是前一天；
+/// 比較的日期由各畫面給自己的（總覽用各市場盤後資料日 [postMarketDateOf]、
+/// 熱力圖用各市場格子的日期）。
+DateTime? indexCloseOfDate({
+  required TwseMarketIndex index,
+  required bool isLive,
+  required DateTime? compareDate,
+}) {
+  if (isLive || compareDate == null) return null;
+  return DateContext.isSameDay(index.date, compareDate) ? null : index.date;
+}
+
+/// 「指數為 M/D 收盤」
+String indexCloseOfText(DateTime date) => 'marketOverview.indexCloseOf'.tr(
+  namedArgs: {'date': '${date.month}/${date.day}'},
+);
+
+/// 該市場盤後資料（漲跌家數、成交額）實際是哪天：當日缺資料而退回前一交易日
+/// 時是退回那天（[MarketOverviewState.advanceDeclineStaleDates]，例如上櫃行情
+/// 斷線、上市照寫），否則是 [MarketOverviewState.dataDate]
+DateTime? postMarketDateOf(MarketOverviewState state, String marketKey) =>
+    state.advanceDeclineStaleDates[marketKey] ?? state.dataDate;
+
+/// 判讀用的指數漲跌幅：與該市場盤後資料（[postMarketDateOf]）同一天的值。
+///
+/// 主指數就是那天（或沒有資料日期可對照）→ 用它；主指數比較新（證交所約
+/// 14:00 公布今天收盤、每日更新還沒寫入；或該市場盤後資料退回前一天）→ 用
+/// DB 裡那天的漲跌（[MarketOverviewState.postMarketIndexChangePercent]），
+/// 查不到回 null，不退回主指數的值——今天的漲跌配昨天的成交量、家數，判讀
+/// 會講錯。
+double? readingIndexChangePercentOf(
+  MarketOverviewState state,
+  String marketKey,
+) {
+  final index = heroIndexOf(state, marketKey);
+  if (index == null) return null;
+  final date = postMarketDateOf(state, marketKey);
+  if (date == null || DateContext.isSameDay(index.date, date)) {
+    return index.changePercent;
+  }
+  return state.postMarketIndexChangePercent[marketKey];
+}
+
 /// 指數漲跌幅文字（大盤頁 hero 與今日頁摘要條共用）
 ///
 /// 正負號看 [TwseMarketIndex.change]，與漲跌配色同一欄位：`changePercent`

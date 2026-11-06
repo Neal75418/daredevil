@@ -75,6 +75,7 @@ class MarketOverviewState {
     this.dataDate,
     this.sectionDates = const {},
     this.marginIndexChangePercent = const {},
+    this.postMarketIndexChangePercent = const {},
     this.advanceDeclineStaleDates = const {},
   });
 
@@ -186,6 +187,15 @@ class MarketOverviewState {
   /// 最新值——那正是這個 bug 本身。
   final Map<String, double> marginIndexChangePercent;
 
+  /// **各市場盤後資料那天**（`postMarketDateOf`：退回日或 [dataDate]）的大盤
+  /// 漲跌幅（%），key 為市場代碼。
+  ///
+  /// [indices] 來自 API，證交所約 14:00 公布收盤後就是今天；漲跌家數、成交量
+  /// 等盤後資料是 [dataDate]（每日更新前是前一交易日），某市場當日缺資料時
+  /// 再退回前一天。判讀拿指數漲跌對照這些資料時要用同一天的值，見
+  /// `readingIndexChangePercentOf`。查不到那天就不放進 map（不退回最新值）。
+  final Map<String, double> postMarketIndexChangePercent;
+
   /// 是否有任何有效資料
   bool get hasData =>
       indices.isNotEmpty ||
@@ -216,6 +226,7 @@ class MarketOverviewState {
     DateTime? dataDate,
     Map<String, DateTime>? sectionDates,
     Map<String, double>? marginIndexChangePercent,
+    Map<String, double>? postMarketIndexChangePercent,
     Map<String, DateTime>? advanceDeclineStaleDates,
   }) {
     return MarketOverviewState(
@@ -252,6 +263,8 @@ class MarketOverviewState {
       sectionDates: sectionDates ?? this.sectionDates,
       marginIndexChangePercent:
           marginIndexChangePercent ?? this.marginIndexChangePercent,
+      postMarketIndexChangePercent:
+          postMarketIndexChangePercent ?? this.postMarketIndexChangePercent,
       advanceDeclineStaleDates:
           advanceDeclineStaleDates ?? this.advanceDeclineStaleDates,
     );
@@ -585,6 +598,12 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       marginResult.dataDates,
       failedSections: failedSections,
     );
+    // 判讀拿指數漲跌對照漲跌家數、成交量時要同一天（見
+    // [MarketOverviewState.postMarketIndexChangePercent]）
+    final postMarketIndexChange = await _loadIndexChangeOn({
+      for (final market in const [MarketCode.twse, MarketCode.tpex])
+        market: advDecResult.staleDates[market] ?? dataDate,
+    }, failedSections: failedSections);
 
     return MarketOverviewState(
       indices: indicesResult.data,
@@ -592,6 +611,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       indexHistory: indexHistory,
       indexStageHistory: indexStageHistory,
       marginIndexChangePercent: marginIndexChange,
+      postMarketIndexChangePercent: postMarketIndexChange,
       advanceDeclineByMarket: advDecByMarket,
       advanceDeclineStaleDates: advDecResult.staleDates,
       institutionalByMarket: instByMarket,
@@ -753,7 +773,8 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
     }
   }
 
-  /// 取 [date] 當天各市場大盤的漲跌幅（%），供籌碼槓桿判讀使用。
+  /// 取各市場指定日（[datesByMarket]）大盤的漲跌幅（%）：籌碼槓桿判讀用融資日，
+  /// 其餘判讀用盤後資料日（[MarketOverviewState.postMarketIndexChangePercent]）。
   ///
   /// **查不到該日就不放進回傳 map**——caller 會因此不顯示判讀行。刻意不回退
   /// 到最新值：融資融券常落後 1~3 天，用最新指數配舊融資會讓因果陳述反轉
@@ -775,7 +796,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       );
       final result = <String, double>{};
       for (final entry in byMarket.entries) {
-        // 逐市場用**自己的**融資日配對(2026-08-01 複審)
+        // 逐市場用**自己的**日期配對(融資日兩市場可能不同,2026-08-01 複審)
         final date = datesByMarket[entry.key];
         if (date == null) continue;
         final rows = history[entry.value];
@@ -789,7 +810,7 @@ class MarketOverviewNotifier extends Notifier<MarketOverviewState> {
       }
       return result;
     } catch (e) {
-      AppLogger.warning('MarketOverviewNotifier', '載入融資日指數漲跌失敗', e);
+      AppLogger.warning('MarketOverviewNotifier', '載入指定日指數漲跌失敗', e);
       failedSections.add('indexChangeOn');
       return const {};
     }

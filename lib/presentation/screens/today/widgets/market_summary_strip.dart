@@ -5,6 +5,7 @@ import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/theme/semantic_colors.dart';
+import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_overview_selectors.dart';
@@ -65,9 +66,20 @@ class MarketSummaryStrip extends StatelessWidget {
         : WarningColors.warning;
     final failed = state.failedSections.length;
     final separator = ExcludeSemantics(child: Text('・', style: muted));
-    // 指數用即時報價時,情緒與漲跌家數仍是盤後(前一交易日):標日期,
-    // 避免看成今天的
-    final postMarketDate = (live?.anyLive ?? false) ? state.dataDate : null;
+    // 指數與情緒、漲跌家數(上市)不是同一天時標上市盤後資料的日期,避免看成
+    // 同一天:指數用即時報價、證交所已公布今天收盤(約 14:00)而每日更新還沒
+    // 寫入,或上市個股行情當日缺而退回前一天
+    final twsePostMarketDate = postMarketDateOf(state, MarketCode.twse);
+    final postMarketDate =
+        twsePostMarketDate != null &&
+            const [MarketCode.twse, MarketCode.tpex].any((market) {
+              final index =
+                  live?.byMarket[market]?.index ?? heroIndexOf(state, market);
+              return index != null &&
+                  !DateContext.isSameDay(index.date, twsePostMarketDate);
+            })
+        ? twsePostMarketDate
+        : null;
 
     return Padding(
       padding: _outerPadding,
@@ -131,11 +143,7 @@ class MarketSummaryStrip extends StatelessWidget {
                               context,
                               muted: muted,
                               strong: strong,
-                              dateLabel: postMarketDate == null
-                                  ? null
-                                  : state.advanceDeclineStaleDates[MarketCode
-                                            .twse] ??
-                                        postMarketDate,
+                              dateLabel: postMarketDate,
                             ),
                           ],
                         ),

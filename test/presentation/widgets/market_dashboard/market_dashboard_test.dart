@@ -11,6 +11,7 @@ import 'package:daredevil/presentation/widgets/market_dashboard/hero_index_secti
 import 'package:daredevil/presentation/widgets/market_dashboard/market_dashboard.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_reading_line.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/sentiment_gauge_section.dart';
+import 'package:daredevil/presentation/widgets/market_dashboard/trading_turnover_row.dart';
 
 import '../../../helpers/price_flash_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
@@ -80,6 +81,97 @@ void main() {
   }
 
   group('MarketDashboard', () {
+    // 證交所約 14:00 公布今天收盤 → 指數是今天；成交量等盤後資料要等每日更新。
+    // 判讀若拿今天的漲跌配昨天的量，結論會講錯（例如「價跌量縮」其實是兩天拼成）
+    testWidgets('🚨 指數比盤後資料新 → 成交量判讀用盤後資料那天的指數漲跌', (tester) async {
+      widenViewport(tester);
+      final state = createLoadedState().copyWith(
+        indices: [
+          TwseMarketIndex(
+            date: DateTime(2026, 2, 16),
+            name: MarketIndexNames.taiex,
+            close: 21000,
+            change: -1000,
+            changePercent: -4.55,
+          ),
+        ],
+        turnoverByMarket: {
+          MarketCode.twse: const TradingTurnover(totalTurnover: 600000000000),
+        },
+        postMarketIndexChangePercent: {MarketCode.twse: 0.68},
+      );
+      await tester.pumpWidget(buildTestApp(MarketDashboard(state: state)));
+      await tester.pump(const Duration(seconds: 1));
+
+      final changes = tester
+          .widgetList<TradingTurnoverRow>(find.byType(TradingTurnoverRow))
+          .map((r) => r.indexChangePercent)
+          .toList();
+      expect(changes, isNotEmpty);
+      expect(changes, everyElement(0.68));
+    });
+
+    // 上櫃行情斷線那天：上櫃家數退回前一天、判讀的指數漲跌跟著用那天，但法人
+    // API 照樣是今天。法人與指數、家數不同天時不參與綜合判讀（同缺資料）
+    group('綜合判讀的法人要與指數、家數同一天', () {
+      MarketOverviewState tpexState({Map<String, DateTime> stale = const {}}) =>
+          MarketOverviewState(
+            indices: [
+              TwseMarketIndex(
+                date: DateTime(2026, 2, 13),
+                name: MarketIndexNames.tpexIndex,
+                close: 300,
+                change: -12.5,
+                changePercent: -4.0,
+              ),
+            ],
+            advanceDeclineByMarket: {
+              MarketCode.tpex: const AdvanceDecline(advance: 50, decline: 700),
+            },
+            institutionalByMarket: {
+              MarketCode.tpex: const InstitutionalTotals(
+                foreignNet: 1e11,
+                totalNet: 1e11,
+              ),
+            },
+            advanceDeclineStaleDates: stale,
+            postMarketIndexChangePercent: {MarketCode.tpex: -4.0},
+            dataDate: DateTime(2026, 2, 13),
+          );
+
+      testWidgets('同一天 → 法人參與（極端下跌＋法人背離）', (tester) async {
+        widenViewport(tester);
+        await tester.pumpWidget(
+          buildTestApp(MarketDashboard(state: tpexState())),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        expect(
+          find.text('marketOverview.reading.synthesis.extremeDownDivergence'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('🚨 上櫃家數退回前一天、法人是今天 → 法人不參與', (tester) async {
+        widenViewport(tester);
+        await tester.pumpWidget(
+          buildTestApp(
+            MarketDashboard(
+              state: tpexState(stale: {MarketCode.tpex: DateTime(2026, 2, 12)}),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        expect(
+          find.text('marketOverview.reading.synthesis.extremeDown'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('marketOverview.reading.synthesis.extremeDownDivergence'),
+          findsNothing,
+        );
+      });
+    });
+
     testWidgets('shows loading indicator when isLoading', (tester) async {
       widenViewport(tester);
       const state = MarketOverviewState(isLoading: true);

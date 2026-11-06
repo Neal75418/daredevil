@@ -7,6 +7,7 @@ import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/constants/app_routes.dart';
 import 'package:daredevil/core/theme/breakpoints.dart';
+import 'package:daredevil/data/models/twse/twse_market_index.dart';
 import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/advance_decline_gauge.dart';
@@ -279,16 +280,35 @@ class _MarketDashboardState extends State<MarketDashboard> {
   /// 找不到對應指數時回傳 null，判讀行不顯示。
   /// 籌碼槓桿判讀專用：取**融資資料那天**的指數漲跌幅。
   ///
-  /// 不可改用 [_indexChangePercent]（最新值）——融資融券由 TWSE 約 21:00
-  /// 發布，傍晚更新時常落後 1~3 天，兩者相配會讓因果陳述反轉：2026-07-27
-  /// 實測櫃買 07-24 為 -3.69%、07-27 為 +0.12%，取後者會把「去槓桿中」
-  /// 講成「籌碼洗清，相對健康」（方向相反且更樂觀）。
+  /// 不可改用 [_indexChangePercent]（對齊的是盤後資料日，融資常再落後）——
+  /// 融資融券由 TWSE 約 21:00 發布，傍晚更新時常落後 1~3 天，兩者相配會讓
+  /// 因果陳述反轉：2026-07-27 實測櫃買 07-24 為 -3.69%、07-27 為 +0.12%，
+  /// 取後者會把「去槓桿中」講成「籌碼洗清，相對健康」（方向相反且更樂觀）。
   /// 查不到對應日時回 null，判讀行不顯示。
   double? _marginIndexChangePercent(String marketKey) =>
       widget.state.marginIndexChangePercent[marketKey];
 
+  /// Hero 指數的狀態列：即時報價的狀態優先；否則指數比該市場盤後資料新時
+  /// 說明指數是哪天的收盤（見 [indexCloseOfDate]、[postMarketDateOf]）
+  String? _heroStatusText(
+    String market,
+    MarketIndexLive? shown,
+    TwseMarketIndex official,
+  ) {
+    final status = shown?.statusText;
+    if (status != null) return status;
+    final date = indexCloseOfDate(
+      index: shown?.index ?? official,
+      isLive: shown?.isLive ?? false,
+      compareDate: postMarketDateOf(widget.state, market),
+    );
+    return date == null ? null : indexCloseOfText(date);
+  }
+
+  /// 判讀用的指數漲跌：與盤後資料同一天（證交所 14:00 公布收盤後，Hero 顯示的
+  /// 指數可能比成交量、家數新一天，見 [readingIndexChangePercentOf]）
   double? _indexChangePercent(String marketKey) =>
-      heroIndexOf(widget.state, marketKey)?.changePercent;
+      readingIndexChangePercentOf(widget.state, marketKey);
 
   /// 綜合判讀行（top-level，見 [MarketReadingService.interpretCompositeSynthesis]）
   ///
@@ -302,8 +322,21 @@ class _MarketDashboardState extends State<MarketDashboard> {
     if (indexChangePercent == null || ad == null || ad.total <= 0) {
       return null;
     }
-    final institutionalTotalNet =
-        widget.state.institutionalByMarket[market]?.totalNet ?? 0;
+    // 法人要與指數、家數同一天才能組成一句因果：上櫃行情斷線那天上櫃家數退回
+    // 前一天（指數漲跌跟著用那天），法人 API 卻照樣是今天。不同天時法人不參與
+    // （同缺資料視為 0）
+    final state = widget.state;
+    final instDate =
+        state.sectionDates[MarketOverviewState.kSectionInstitutional] ??
+        state.dataDate;
+    final postMarketDate = postMarketDateOf(state, market);
+    final institutionalAligned =
+        instDate == null ||
+        postMarketDate == null ||
+        DateContext.isSameDay(instDate, postMarketDate);
+    final institutionalTotalNet = institutionalAligned
+        ? state.institutionalByMarket[market]?.totalNet ?? 0
+        : 0.0;
     final reading = MarketReadingService.interpretCompositeSynthesis(
       market: market,
       indexChangePercent: indexChangePercent,
@@ -373,7 +406,7 @@ class _MarketDashboardState extends State<MarketDashboard> {
                 widget.state.indexStaleNames.contains(taiex.first.name),
             flash: shown?.flash,
             flashEnabled: shown?.flashEnabled ?? true,
-            statusText: shown?.statusText,
+            statusText: _heroStatusText(MarketCode.twse, shown, taiex.first),
             historyData: widget.state.indexHistory[taiex.first.name] ?? [],
             stageHistory:
                 widget.state.indexStageHistory[taiex.first.name] ?? [],
@@ -413,7 +446,7 @@ class _MarketDashboardState extends State<MarketDashboard> {
                 widget.state.indexStaleNames.contains(tpexIdx.first.name),
             flash: shown?.flash,
             flashEnabled: shown?.flashEnabled ?? true,
-            statusText: shown?.statusText,
+            statusText: _heroStatusText(MarketCode.tpex, shown, tpexIdx.first),
             historyData:
                 widget.state.indexHistory[MarketIndexNames.tpexIndex] ?? [],
             stageHistory:
@@ -700,7 +733,7 @@ class _MarketDashboardState extends State<MarketDashboard> {
                 widget.state.indexStaleNames.contains(heroIdx.first.name),
             flash: shown?.flash,
             flashEnabled: shown?.flashEnabled ?? true,
-            statusText: shown?.statusText,
+            statusText: _heroStatusText(market, shown, heroIdx.first),
             historyData: widget.state.indexHistory[heroName] ?? [],
             stageHistory: widget.state.indexStageHistory[heroName] ?? [],
             totalReturnHistory: market == MarketCode.twse

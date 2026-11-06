@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/twse_client.dart';
 import 'package:daredevil/data/remote/tpex_client.dart';
@@ -1104,9 +1105,89 @@ void main() {
     });
   });
 
+  // 證交所約 14:00 公布今天收盤 → API 的指數是今天；漲跌家數、成交量等盤後
+  // 資料要等每日更新（dataDate 仍是前一交易日）。判讀拿指數漲跌對照它們時
+  // 要用 dataDate 那天的值（readingIndexChangePercentOf）
+  test('🚨 state 帶出盤後資料日（dataDate）那天的指數漲跌幅', () async {
+    setupEmptyDefaults();
+    final dataDay = DateTime(2026, 11, 5);
+    final apiDay = DateTime(2026, 11, 6);
+    when(() => mockDb.getLatestDataDate()).thenAnswer((_) async => dataDay);
+    when(
+      () => mockDb.getIndexHistoryBatch(any(), days: any(named: 'days')),
+    ).thenAnswer(
+      (_) async => {
+        MarketIndexNames.taiex: [
+          for (final (day, pct) in [(dataDay, 1.2), (apiDay, -4.51)])
+            MarketIndexEntry(
+              id: day.day,
+              date: day,
+              name: MarketIndexNames.taiex,
+              close: 40000,
+              change: 0,
+              changePercent: pct,
+              createdAt: day,
+            ),
+        ],
+      },
+    );
+
+    await container.read(marketOverviewProvider.notifier).loadData();
+    final state = container.read(marketOverviewProvider);
+
+    expect(state.postMarketIndexChangePercent[MarketCode.twse], 1.2);
+    expect(
+      state.postMarketIndexChangePercent.containsKey(MarketCode.tpex),
+      isFalse,
+      reason: '查不到那天就不放（不退回最新值）',
+    );
+  });
+
+  // 上櫃行情斷線時上市照寫、上櫃沒寫：dataDate 是今天，上櫃家數、成交額退回
+  // 前一交易日（advanceDeclineStaleDates）。上櫃判讀要配退回那天的指數漲跌
+  test('🚨 上櫃盤後資料退回前一交易日 → 上櫃用退回那天的指數漲跌', () async {
+    setupEmptyDefaults();
+    final fallback = TaiwanCalendar.getPreviousTradingDay(
+      testDate.subtract(const Duration(days: 1)),
+    );
+    when(() => mockDb.getAdvanceDeclineCountsByMarket(any())).thenAnswer(
+      (_) async => {
+        'TWSE': (advance: 250, decline: 800, unchanged: 70),
+        'TPEx': (advance: 400, decline: 350, unchanged: 60),
+      },
+    );
+    when(() => mockDb.getAdvanceDeclineCountsByMarket(testDate)).thenAnswer(
+      (_) async => {'TWSE': (advance: 250, decline: 800, unchanged: 70)},
+    );
+    when(
+      () => mockDb.getIndexHistoryBatch(any(), days: any(named: 'days')),
+    ).thenAnswer(
+      (_) async => {
+        MarketIndexNames.tpexIndex: [
+          for (final (day, pct) in [(fallback, -2.0), (testDate, 0.5)])
+            MarketIndexEntry(
+              id: day.day,
+              date: day,
+              name: MarketIndexNames.tpexIndex,
+              close: 300,
+              change: 0,
+              changePercent: pct,
+              createdAt: day,
+            ),
+        ],
+      },
+    );
+
+    await container.read(marketOverviewProvider.notifier).loadData();
+    final state = container.read(marketOverviewProvider);
+
+    expect(state.advanceDeclineStaleDates[MarketCode.tpex], fallback);
+    expect(state.postMarketIndexChangePercent[MarketCode.tpex], -2.0);
+  });
+
   // 籌碼槓桿判讀拿「最新指數」配「較舊的融資資料」，結論可能整個反過來
   //
-  // market_dashboard.dart 的 `_indexChangePercent` 掃 `state.indices` 取
+  // 當時 market_dashboard.dart 的 `_indexChangePercent` 掃 `state.indices` 取
   // **最新**漲跌幅，但融資融券區塊自帶較舊的 sectionDate（TWSE 約 21:00 才
   // 發布，傍晚更新時常落後 1~3 天，畫面也確實標著該日期）。兩者被組成一句
   // 因果陳述送進 `MarketReadingService.interpretMarginLeverage`。

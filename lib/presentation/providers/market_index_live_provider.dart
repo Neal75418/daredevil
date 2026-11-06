@@ -36,7 +36,8 @@ class MarketIndexLive {
   /// 設定頁「價格閃色」
   final bool flashEnabled;
 
-  /// 這個指數自己的報價狀態(已翻譯);用盤後正式資料時為 null
+  /// 這個指數自己的報價狀態(已翻譯);用盤後正式資料時為 null。指數比該畫面
+  /// 盤後資料新時的「指數為 M/D 收盤」由各畫面自己比較(見 indexCloseOfDate)
   final String? statusText;
 
   /// 依合併結果組出要顯示的指數;沒有盤後資料也沒有即時時回 null
@@ -96,7 +97,7 @@ class MarketLiveIndices {
   /// 兩個指數合起來的報價狀態(大盤列用,已翻譯);都用正式資料時為 null
   final String? statusText;
 
-  /// 有任一指數用即時報價(此時情緒、漲跌家數仍是盤後,要標日期)
+  /// 有任一指數用即時報價(大盤列標日期看的是指數日期與盤後資料日期,不看這個)
   bool get anyLive => byMarket.values.any((i) => i.isLive);
 }
 

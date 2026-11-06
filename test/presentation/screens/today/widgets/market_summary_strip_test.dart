@@ -373,7 +373,60 @@ void main() {
       expect(find.text('漲 408 跌 667 (9/24)'), findsOneWidget);
     });
 
-    testWidgets('沒有指數用即時 → 不標日期(維持現狀)', (tester) async {
+    // 證交所約 14:00 公布今天收盤 → 指數是今天（不是即時報價）；情緒與漲跌家數
+    // 要等每日更新才換成今天
+    testWidgets('🚨 指數比盤後資料新（沒用即時）→ 情緒與漲跌家數也標盤後資料的日期', (tester) async {
+      final newer = _withData.copyWith(
+        dataDate: DateTime(2026, 9, 24),
+        indices: [
+          for (final i in _withData.indices)
+            TwseMarketIndex(
+              date: DateTime(2026, 9, 25),
+              name: i.name,
+              close: i.close,
+              change: i.change,
+              changePercent: i.changePercent,
+            ),
+        ],
+      );
+      await pump(tester, newer, live: const MarketLiveIndices());
+      expect(find.text('${sentimentGroup(newer)} (9/24)'), findsOneWidget);
+      expect(find.text('漲 408 跌 667 (9/24)'), findsOneWidget);
+    });
+
+    // 上市個股行情當日缺（上櫃照寫）：dataDate 是今天、上市家數退回前一天
+    testWidgets('🚨 上市家數退回前一天、指數是今天 → 標退回那天', (tester) async {
+      final stale = _withData.copyWith(
+        dataDate: DateTime(2026, 9, 24),
+        advanceDeclineStaleDates: {MarketCode.twse: DateTime(2026, 9, 23)},
+      );
+      await pump(tester, stale, live: const MarketLiveIndices());
+      // 情緒以上市盤後資料那天計算（該天測試資料不足 → —），一樣標退回那天
+      expect(find.text('上市 情緒 — (9/23)'), findsOneWidget);
+      expect(find.text('漲 408 跌 667 (9/23)'), findsOneWidget);
+    });
+
+    testWidgets('只有上櫃指數比盤後資料新 → 也標日期', (tester) async {
+      final tpexNewer = _withData.copyWith(
+        dataDate: DateTime(2026, 9, 24),
+        indices: [
+          for (final i in _withData.indices)
+            i.name == MarketIndexNames.tpexIndex
+                ? TwseMarketIndex(
+                    date: DateTime(2026, 9, 25),
+                    name: i.name,
+                    close: i.close,
+                    change: i.change,
+                    changePercent: i.changePercent,
+                  )
+                : i,
+        ],
+      );
+      await pump(tester, tpexNewer, live: const MarketLiveIndices());
+      expect(find.text('漲 408 跌 667 (9/24)'), findsOneWidget);
+    });
+
+    testWidgets('指數與盤後資料同一天（沒用即時）→ 不標日期', (tester) async {
       final withDate = _withData.copyWith(dataDate: DateTime(2026, 9, 24));
       await pump(tester, withDate, live: const MarketLiveIndices());
       expect(find.text(sentimentGroup(withDate)), findsOneWidget);

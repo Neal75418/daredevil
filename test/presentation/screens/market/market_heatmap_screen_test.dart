@@ -282,6 +282,35 @@ void main() {
   }
 
   group('狀態', () {
+    // 證交所約 14:00 公布今天收盤 → 指數是今天；格子要等每日更新。右側「M/D 收盤」
+    // 是格子的日期，指數要另外說明。比較的是格子自己的日期（各市場分開定案）
+    testWidgets('🚨 指數比格子新 → 標「指數為 M/D 收盤」；同一天的市場不標', (tester) async {
+      final newer = _overview.copyWith(
+        indices: [
+          for (final i in _overview.indices)
+            i.name == MarketIndexNames.taiex
+                ? TwseMarketIndex(
+                    date: DateTime(2026, 10, 8),
+                    name: i.name,
+                    close: i.close,
+                    change: i.change,
+                    changePercent: i.changePercent,
+                  )
+                : i,
+        ],
+      );
+      await pump(
+        tester,
+        _loaded({MarketCode.twse: _twse(), MarketCode.tpex: _tpex}),
+        overview: newer,
+      );
+      expect(find.text('指數為 10/8 收盤'), findsOneWidget);
+
+      await tester.tap(find.text('上櫃'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('指數為'), findsNothing);
+    });
+
     testWidgets('兩個市場日期不同時頁首跟著切換', (tester) async {
       await pump(
         tester,

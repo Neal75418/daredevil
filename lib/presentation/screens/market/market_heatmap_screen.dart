@@ -522,7 +522,18 @@ class _IndexHeader extends StatelessWidget {
                 : 'marketOverview.summary.tpex')
             .tr();
     final date = dataDate;
-    final statusText = shown?.statusText;
+    // 即時報價的狀態優先；否則指數比格子新時說明指數是哪天的收盤（右側的
+    // 「M/D 收盤」是格子的日期）
+    final closeOf = index == null || date == null
+        ? null
+        : indexCloseOfDate(
+            index: index,
+            isLive: shown?.isLive ?? false,
+            compareDate: date,
+          );
+    final statusText =
+        shown?.statusText ??
+        (closeOf == null ? null : indexCloseOfText(closeOf));
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         DesignTokens.spacing16,
