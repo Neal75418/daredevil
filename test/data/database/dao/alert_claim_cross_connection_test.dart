@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 提醒認領的**跨連線**互斥(2026-08-08 五次審查)。
 ///
@@ -76,7 +77,7 @@ void main() {
     // `reclaimStaleAlertClaims`(15 分鐘租約)把它回收掉,B 就搶得到了
     // ——測試紅,但被測的機制其實是對的。同一天我已經在心跳測試與時區
     // 測試上犯過兩次同樣的日期依賴。
-    final t1 = DateTime.now();
+    final t1 = DeviceTime.now();
     expect(await a.claimAlertTrigger(id, now: t1), isTrue);
     expect(await b.claimAlertTrigger(id), isFalse, reason: 'A 持有期間 B 搶不到');
 

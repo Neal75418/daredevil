@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 void main() {
   late AppDatabase db;
@@ -26,7 +27,7 @@ void main() {
       ]);
 
       // 插入 30 天歷史價格（模擬 RSI 從低到高）
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final prices = <DailyPriceCompanion>[];
       for (int i = 0; i < 30; i++) {
         final closePrice = 500.0 + i * 2.0; // 逐漸上漲，RSI 會偏高
@@ -68,7 +69,7 @@ void main() {
       ]);
 
       // 插入橫盤資料（RSI 會在 50 左右）
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final prices = <DailyPriceCompanion>[];
       for (int i = 0; i < 30; i++) {
         prices.add(
@@ -123,7 +124,7 @@ void main() {
       ]);
 
       // 插入下跌資料（RSI 會偏低）
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final prices = <DailyPriceCompanion>[];
       for (int i = 0; i < 30; i++) {
         final closePrice = 500.0 - i * 2.0; // 逐漸下跌，RSI 會偏低
@@ -197,7 +198,7 @@ void main() {
       ]);
 
       // 插入 30 天歷史價格（模擬 KD 黃金交叉在最後幾天發生）
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final prices = <DailyPriceCompanion>[];
       for (int i = 0; i < 30; i++) {
         final day = i;
@@ -252,7 +253,7 @@ void main() {
         ),
       ]);
 
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final prices = <DailyPriceCompanion>[];
       for (int i = 0; i < 20; i++) {
         prices.add(
@@ -311,7 +312,7 @@ void main() {
           ),
         ]);
 
-        final now = DateTime.now();
+        final now = DeviceTime.now();
         final prices = <DailyPriceCompanion>[];
         for (int i = 0; i < 30; i++) {
           final day = i;
@@ -398,7 +399,7 @@ void main() {
       ]);
 
       // 插入 30 天歷史價格（模擬均線交叉）
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final prices = <DailyPriceCompanion>[];
       for (int i = 0; i < 30; i++) {
         final day = i;
@@ -450,7 +451,7 @@ void main() {
         ),
       ]);
 
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final prices = <DailyPriceCompanion>[];
       for (int i = 0; i < 30; i++) {
         prices.add(
@@ -510,7 +511,7 @@ void main() {
         ),
       ]);
 
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final prices = <DailyPriceCompanion>[];
       // 先 20 天橫盤於 510（建立均線基準）
       for (int i = 0; i < 20; i++) {

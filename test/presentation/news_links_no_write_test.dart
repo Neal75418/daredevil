@@ -5,6 +5,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/news_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/stock_news_provider.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// 簡稱比對的結果只在記憶體：fixture 含「名稱比得到、代號比不到」的標題，
 /// 載入後 news_stock_map 的完整集合必須與載入前相同。
@@ -16,7 +17,7 @@ void main() {
       StockMasterCompanion.insert(symbol: '9901', name: '甲乙', market: 'TWSE'),
       StockMasterCompanion.insert(symbol: '9902', name: '丙丁', market: 'TWSE'),
     ]);
-    final at = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+    final at = DeviceTime.now().toUtc().subtract(const Duration(hours: 1));
     await db.insertNewsWithMappings(
       [
         NewsItemCompanion.insert(

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/data/remote/rss_parser.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 /// RssParser 對真實 feed 形狀的解析測試(2026-07-30 審查)。
 ///
@@ -12,7 +13,7 @@ import 'package:daredevil/data/remote/rss_parser.dart';
 /// 冒煙測試,格式回歸(媒體改版、CDATA/HTML 包裝、爛日期)無守門。
 /// Fixture 仿台灣財經媒體常見形狀:CDATA + HTML 內文、+0800/GMT/EST
 /// 時區、兩位數年份、content:encoded 優先序、Atom published→updated
-/// fallback、缺 pubDate 的 DateTime.now() fallback。
+/// fallback、缺 pubDate 的 DeviceTime.now() fallback。
 class _MockDio extends Mock implements Dio {}
 
 String _fixture(String name) =>
@@ -77,11 +78,11 @@ void main() {
       expect(est.publishedAt, DateTime.utc(2026, 7, 29, 13, 15, 30));
     });
 
-    test('爛 pubDate:fallback 到 DateTime.now()(不丟棄新聞)', () async {
+    test('爛 pubDate:fallback 到 DeviceTime.now()(不丟棄新聞)', () async {
       stubFeed('rss_20_feed.xml');
-      final before = DateTime.now();
+      final before = DeviceTime.now();
       final items = await parser.parseFeed(source);
-      final after = DateTime.now();
+      final after = DeviceTime.now();
       final bad = items.firstWhere((i) => i.title.contains('爛日期'));
       // 行為鎖定:解析失敗以「現在」當發布時間。代價是這類新聞會被排序
       // 頂到最前——改行為(如丟棄或 epoch)前先改這條測試。

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/news_fetch_provider.dart';
 import 'package:daredevil/presentation/widgets/news/news_widgets.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 import '../../../helpers/time_zone_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
@@ -14,8 +15,8 @@ NewsItemEntry item(String id) => NewsItemEntry(
   title: '標題$id',
   url: 'https://example.com/$id',
   category: 'OTHER',
-  publishedAt: DateTime.now(),
-  fetchedAt: DateTime.now(),
+  publishedAt: DeviceTime.now(),
+  fetchedAt: DeviceTime.now(),
 );
 
 void main() {
@@ -41,7 +42,7 @@ void main() {
     expect(tapped, ['9902']);
   });
 
-  final now = DateTime.now();
+  final now = DeviceTime.now();
   final old = now.subtract(const Duration(days: 10));
   final crossOld = crossDayLocal(old.year, old.month, old.day);
 

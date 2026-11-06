@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/tw_parse_utils.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 void main() {
   group('TwParseUtils', () {
@@ -101,9 +103,9 @@ void main() {
       });
 
       test('returns today for invalid length', () {
-        final before = DateTime.now();
+        final before = DeviceTime.now();
         final result = TwParseUtils.parseAdDate('2026');
-        final after = DateTime.now();
+        final after = DeviceTime.now();
 
         // 防止午夜跨日：result 應在 before ~ after 的日期範圍內
         expect(result.year, before.year);
@@ -111,7 +113,7 @@ void main() {
       });
 
       test('returns today for empty string', () {
-        final before = DateTime.now();
+        final before = DeviceTime.now();
         final result = TwParseUtils.parseAdDate('');
 
         expect(result.year, before.year);
@@ -119,7 +121,7 @@ void main() {
 
       test('rejects implausibly early year (e.g. 0000-12-18 junk)', () {
         // 曾因 API 髒資料寫入 0000-12-18 等錯誤年份，現應回退到今日
-        final before = DateTime.now();
+        final before = DeviceTime.now();
         final result = TwParseUtils.parseAdDate('00001218');
 
         expect(result.year, before.year);
@@ -127,19 +129,24 @@ void main() {
       });
 
       test('rejects out-of-range month', () {
-        final before = DateTime.now();
+        final before = DeviceTime.now();
         final result = TwParseUtils.parseAdDate('20261318'); // month 13
 
         expect(result.year, before.year);
       });
 
       test('rejects normalized invalid day (e.g. 02/30)', () {
-        // 2/30 會被 DateTime 正規化為 3/2，視為無效 → 回退今日
-        final before = DateTime.now();
+        // 2/30 會被 DateTime 正規化為 3/2，視為無效 → 回退今日。
+        // 不能寫成「月份不是 3」：今天在三月時回退的今日就是 3 月，每年三月必紅
+        final before = DeviceTime.now();
         final result = TwParseUtils.parseAdDate('20260230');
+        final after = DeviceTime.now();
 
-        expect(result.year, before.year);
-        expect(result.month, isNot(3));
+        expect(result, isNot(DateTime(2026, 3, 2)));
+        expect(
+          result,
+          anyOf(DateContext.normalize(before), DateContext.normalize(after)),
+        );
       });
     });
 

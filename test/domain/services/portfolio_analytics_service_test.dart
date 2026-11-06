@@ -1,4 +1,5 @@
 import 'package:daredevil/domain/services/portfolio_analytics_service.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/portfolio_data_builders.dart';
@@ -41,7 +42,7 @@ void main() {
           quantity: 1500,
           price: 500.0,
           fee: 0,
-          date: DateTime.now().subtract(const Duration(days: 100)),
+          date: DeviceTime.now().subtract(const Duration(days: 100)),
         ),
         createTestPortfolioTransaction(
           symbol: '2330',
@@ -50,7 +51,7 @@ void main() {
           price: 510.0,
           fee: 0,
           tax: 0,
-          date: DateTime.now().subtract(const Duration(days: 50)),
+          date: DeviceTime.now().subtract(const Duration(days: 50)),
         ),
       ];
 
@@ -76,7 +77,7 @@ void main() {
         transactions: [
           createTestPortfolioTransaction(
             txType: 'SELL',
-            date: DateTime.now().subtract(const Duration(days: 10)),
+            date: DeviceTime.now().subtract(const Duration(days: 10)),
           ),
         ],
         positions: [], // no positions = no cost
@@ -158,7 +159,7 @@ void main() {
             price: 100.0,
             fee: 14,
             tax: 30,
-            date: DateTime.now().subtract(const Duration(days: 30)),
+            date: DeviceTime.now().subtract(const Duration(days: 30)),
           ),
         ],
         positions: [],
@@ -170,7 +171,7 @@ void main() {
     });
 
     test('calculates daily and linearized returns', () {
-      final buyDate = DateTime.now().subtract(const Duration(days: 100));
+      final buyDate = DeviceTime.now().subtract(const Duration(days: 100));
       final transactions = [
         createTestPortfolioTransaction(
           symbol: 'A',
@@ -209,7 +210,7 @@ void main() {
 
     test('includes dividends in period return calculation', () {
       // 場景：持平股價，只有股利驅動報酬
-      final buyDate = DateTime.now().subtract(const Duration(days: 100));
+      final buyDate = DeviceTime.now().subtract(const Duration(days: 100));
       final transactions = [
         createTestPortfolioTransaction(
           symbol: 'A',
@@ -245,7 +246,7 @@ void main() {
 
     test('yearly return uses compound formula and is clamped', () {
       // Very short holding period with large gain → high annualized return
-      final buyDate = DateTime.now().subtract(const Duration(days: 5));
+      final buyDate = DeviceTime.now().subtract(const Duration(days: 5));
       final transactions = [
         createTestPortfolioTransaction(
           symbol: 'A',
@@ -277,7 +278,7 @@ void main() {
     });
 
     test('returns empty when daysSinceStart is 0 (same day)', () {
-      final today = DateTime.now();
+      final today = DeviceTime.now();
       final transactions = [
         createTestPortfolioTransaction(
           symbol: 'A',
@@ -335,7 +336,7 @@ void main() {
         transactions: [
           createTestPortfolioTransaction(
             symbol: 'A',
-            date: DateTime.now().subtract(const Duration(days: 30)),
+            date: DeviceTime.now().subtract(const Duration(days: 30)),
           ),
         ],
         positions: positions,
@@ -361,7 +362,7 @@ void main() {
         transactions: [
           createTestPortfolioTransaction(
             symbol: 'A',
-            date: DateTime.now().subtract(const Duration(days: 30)),
+            date: DeviceTime.now().subtract(const Duration(days: 30)),
           ),
         ],
         positions: positions,

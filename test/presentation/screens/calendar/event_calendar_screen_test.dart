@@ -7,6 +7,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/presentation/providers/event_calendar_provider.dart';
 import 'package:daredevil/presentation/screens/calendar/event_calendar_screen.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
@@ -363,7 +364,7 @@ void main() {
       final cal = tester.widget<TableCalendar<StockEventEntry>>(
         find.byType(TableCalendar<StockEventEntry>),
       );
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       expect(
         (cal.focusedDay.year, cal.focusedDay.month),
         (now.year, now.month),
@@ -392,7 +393,7 @@ void main() {
       await tester.pumpWidget(buildTestWidget());
       await tester.pump(const Duration(seconds: 1));
 
-      final title = DateFormat.yMMMM().format(DateTime.now());
+      final title = DateFormat.yMMMM().format(DeviceTime.now());
       await tester.tap(find.text(title));
       await tester.pumpAndSettle();
 
@@ -403,7 +404,7 @@ void main() {
       tester,
     ) async {
       widenViewport(tester);
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final d1 = DateTime(now.year, now.month, 10);
       final d2 = DateTime(now.year, now.month, 20);
       await tester.pumpWidget(

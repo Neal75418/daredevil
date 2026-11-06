@@ -15,6 +15,7 @@ import 'package:daredevil/domain/services/update_service.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/today_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 // ==========================================
 // Mocks
@@ -603,8 +604,8 @@ void main() {
         (_) async => UpdateRunEntry(
           id: 2,
           runDate: DateTime(2026, 9, 24),
-          // 孤兒判斷以真實時間計算，進行中的 run 必須是剛開始的
-          startedAt: DateTime.now().subtract(const Duration(minutes: 1)),
+          // 孤兒判斷以 DeviceTime.now() 計算（撥時間時跟著撥），進行中的 run 必須是剛開始的
+          startedAt: DeviceTime.now().subtract(const Duration(minutes: 1)),
           status: 'RUNNING',
         ),
       );
@@ -700,7 +701,7 @@ void main() {
       await notifier.loadData();
       final epochBefore = c.read(dataUpdateEpochProvider);
 
-      final startedAt = DateTime.now().subtract(const Duration(hours: 3));
+      final startedAt = DeviceTime.now().subtract(const Duration(hours: 3));
       when(() => mockDb.getLatestUpdateRun()).thenAnswer(
         (_) async => UpdateRunEntry(
           id: 3,

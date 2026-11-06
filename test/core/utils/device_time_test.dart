@@ -40,6 +40,19 @@ void main() {
     });
   });
 
+  group('skipWhenTimeShifted', () {
+    // 永遠略過的話，用它的測試在平常的 CI 也不跑，守的行為就沒人守了
+    test('沒撥時間 → 不略過', () {
+      DeviceTime.debugShift = Duration.zero;
+      expect(skipWhenTimeShifted, isNull);
+    });
+
+    test('撥了時間 → 略過並說明理由', () {
+      DeviceTime.debugShift = const Duration(days: 30);
+      expect(skipWhenTimeShifted, contains('SQLite'));
+    });
+  });
+
   test('now() 是裝置本地時間加上平移', () {
     DeviceTime.debugShift = const Duration(days: 400);
     final before = DateTime.now().add(const Duration(days: 400));

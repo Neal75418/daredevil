@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
+import '../../../helpers/time_shift.dart';
 
 /// update_run 的時間欄位時區一致性(2026-08-11 實機)。
 ///
@@ -27,35 +28,39 @@ void main() {
   setUp(() => db = AppDatabase.forTesting());
   tearDown(() async => db.close());
 
-  test('🚨 startedAt 與 finishedAt 必須指向同一個瞬間', () async {
-    final before = DateTime.now();
-    final id = await db.createUpdateRun(DateTime(2026, 8, 11), 'RUNNING');
-    await db.finishUpdateRun(id, 'SUCCESS');
-    final after = DateTime.now();
+  test(
+    '🚨 startedAt 與 finishedAt 必須指向同一個瞬間',
+    skip: skipWhenTimeShifted,
+    () async {
+      final before = DateTime.now();
+      final id = await db.createUpdateRun(DateTime(2026, 8, 11), 'RUNNING');
+      await db.finishUpdateRun(id, 'SUCCESS');
+      final after = DateTime.now();
 
-    final run = (await db.getLatestUpdateRun())!;
-    // 兩者都在這次測試的時間窗內 → 同基準。若 startedAt 是 UTC,
-    // 它會落在 8 小時前,遠早於 before。
-    expect(
-      run.startedAt.isAfter(before.subtract(const Duration(minutes: 1))),
-      isTrue,
-      reason:
-          'startedAt=${run.startedAt} 早於測試開始時間 $before —— '
-          '八成是 SQLite CURRENT_TIMESTAMP 寫進了 UTC',
-    );
-    expect(
-      run.startedAt.isBefore(after.add(const Duration(minutes: 1))),
-      isTrue,
-    );
-    final duration = run.finishedAt!.difference(run.startedAt);
-    expect(
-      duration.inMinutes.abs(),
-      lessThan(1),
-      reason: '同一次測試內建立又結束,時長不該以小時計。實測 $duration',
-    );
-  });
+      final run = (await db.getLatestUpdateRun())!;
+      // 兩者都在這次測試的時間窗內 → 同基準。若 startedAt 是 UTC,
+      // 它會落在 8 小時前,遠早於 before。
+      expect(
+        run.startedAt.isAfter(before.subtract(const Duration(minutes: 1))),
+        isTrue,
+        reason:
+            'startedAt=${run.startedAt} 早於測試開始時間 $before —— '
+            '八成是 SQLite CURRENT_TIMESTAMP 寫進了 UTC',
+      );
+      expect(
+        run.startedAt.isBefore(after.add(const Duration(minutes: 1))),
+        isTrue,
+      );
+      final duration = run.finishedAt!.difference(run.startedAt);
+      expect(
+        duration.inMinutes.abs(),
+        lessThan(1),
+        reason: '同一次測試內建立又結束,時長不該以小時計。實測 $duration',
+      );
+    },
+  );
 
-  test('🚨 剛建立的 RUNNING 不可被孤兒回收誤殺', () async {
+  test('🚨 剛建立的 RUNNING 不可被孤兒回收誤殺', skip: skipWhenTimeShifted, () async {
     // failOrphanRunningRuns 用 startedAt < now - 2h。startedAt 若慢 8 小時,
     // 剛開始的 run 立刻符合條件 → 被標成 FAILED。
     final id = await db.createUpdateRun(DateTime(2026, 8, 11), 'RUNNING');

@@ -9,6 +9,7 @@ import 'package:daredevil/presentation/providers/mode_recommendation_provider.da
 import 'package:daredevil/presentation/providers/news_fetch_provider.dart';
 import 'package:daredevil/presentation/providers/news_heat_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 import '../../helpers/warning_data_generators.dart';
 
@@ -65,9 +66,9 @@ void main() {
     when(() => mockDb.getLatestPricesBatch(any())).thenAnswer((_) async => {});
     when(() => mockNewsRepo.getRecentNews(days: any(named: 'days'))).thenAnswer(
       (_) async => [
-        news('a', '台積電法說會', DateTime.now()),
-        news('b', '記憶體漲價 南亞科受惠', DateTime.now()),
-        news('c', '南亞科獲利創高', DateTime.now()),
+        news('a', '台積電法說會', DeviceTime.now()),
+        news('b', '記憶體漲價 南亞科受惠', DeviceTime.now()),
+        news('c', '南亞科獲利創高', DeviceTime.now()),
       ],
     );
     container = ProviderContainer(
@@ -127,7 +128,7 @@ void main() {
         // close 110、漲跌 +10 → 前收 100 → +10%
         '2408': DailyPriceEntry(
           symbol: '2408',
-          date: DateTime.now(),
+          date: DeviceTime.now(),
           close: 110,
           priceChange: 10,
         ),
@@ -142,8 +143,8 @@ void main() {
   test('風險關鍵字：標題命中的個股 hasRiskNews 為真', () async {
     when(() => mockNewsRepo.getRecentNews(days: any(named: 'days'))).thenAnswer(
       (_) async => [
-        news('a', '南亞科高層涉內線交易遭調查', DateTime.now()),
-        news('b', '台積電法說會', DateTime.now()),
+        news('a', '南亞科高層涉內線交易遭調查', DeviceTime.now()),
+        news('b', '台積電法說會', DeviceTime.now()),
       ],
     );
     final r = await container.read(newsHeatProvider.future);
@@ -162,7 +163,7 @@ void main() {
     when(() => mockNewsRepo.getRecentNews(days: any(named: 'days'))).thenAnswer(
       (_) async => [
         for (var i = 7; i <= 20; i++)
-          news('d$i', '盤後速報', DateTime.now().subtract(Duration(days: i))),
+          news('d$i', '盤後速報', DeviceTime.now().subtract(Duration(days: i))),
       ],
     );
     container.invalidate(newsHeatProvider);

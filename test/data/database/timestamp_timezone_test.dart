@@ -2,7 +2,7 @@
 //
 // **起因**:維運查表時發現同一列的兩個時間欄長得完全不同——
 //   started_at  : 2026-08-16 10:20:50                  ← SQLite CURRENT_TIMESTAMP(UTC)
-//   finished_at : 2026-08-16T18:20:50.416168 +08:00    ← Dart DateTime.now()(本地)
+//   finished_at : 2026-08-16T18:20:50.416168 +08:00    ← Dart DeviceTime.now()(本地)
 // 直接相減會看成「跑了 8 小時」,實際是 1 分鐘。
 //
 // **查證結論:不是 bug。** `storeDateTimeAsText: true` 之下,Drift 把無時區
@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import '../../helpers/time_shift.dart';
 
 void main() {
   late AppDatabase db;
@@ -48,7 +49,7 @@ void main() {
   });
 
   group('孤兒 RUNNING 收斂——時間基準若錯,兩個方向都會出事', () {
-    test('🚨 剛建立的 RUNNING 不得被誤殺', () async {
+    test('🚨 剛建立的 RUNNING 不得被誤殺', skip: skipWhenTimeShifted, () async {
       // 誤殺的後果:GUI 正在跑的更新被 CLI 的 beforeOpen 標成 FAILED
       // (age cutoff 存在的唯一理由,見 user_dao.failOrphanRunningRuns)
       await db.createUpdateRun(DateTime(2026, 8, 14), 'RUNNING');

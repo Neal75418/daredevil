@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:daredevil/core/constants/data_freshness.dart';
 import 'package:daredevil/core/constants/rule_enums.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import '../../helpers/time_shift.dart';
 
 /// 孤兒 RUNNING run 的啟動清理(2026-07-30 審查)。
 ///
@@ -71,18 +72,25 @@ void main() {
     expect(byId[done]!.message, '正常完成');
   });
 
-  test('未過門檻的 RUNNING 不得誤殺(跨 process:CLI 開 DB 撞見 GUI 進行中)', () async {
-    final db = AppDatabase(NativeDatabase(dbFile));
-    addTearDown(db.close);
+  test(
+    '未過門檻的 RUNNING 不得誤殺(跨 process:CLI 開 DB 撞見 GUI 進行中)',
+    skip: skipWhenTimeShifted,
+    () async {
+      final db = AppDatabase(NativeDatabase(dbFile));
+      addTearDown(db.close);
 
-    await db.createUpdateRun(DateTime(2026, 7, 30), UpdateStatus.running.code);
+      await db.createUpdateRun(
+        DateTime(2026, 7, 30),
+        UpdateStatus.running.code,
+      );
 
-    final swept = await db.failOrphanRunningRuns(); // now=真現在,row 剛建
-    expect(swept, 0);
+      final swept = await db.failOrphanRunningRuns(); // now=真現在,row 剛建
+      expect(swept, 0);
 
-    final runs = await db.getRecentUpdateRuns();
-    expect(runs.single.status, UpdateStatus.running.code);
-  });
+      final runs = await db.getRecentUpdateRuns();
+      expect(runs.single.status, UpdateStatus.running.code);
+    },
+  );
 
   test('beforeOpen 接線:重開 DB 自動收斂「過期」的 RUNNING', () async {
     final db1 = AppDatabase(NativeDatabase(dbFile));

@@ -19,6 +19,7 @@ import 'package:daredevil/domain/services/update/dividend_backfiller.dart';
 import 'package:daredevil/domain/services/update/dividend_coverage.dart';
 
 import '../../tool/backfill_dividend_distributions.dart';
+import '../helpers/time_shift.dart';
 
 class MockDividendBackfiller extends Mock implements DividendBackfiller {}
 
@@ -164,7 +165,7 @@ void main() {
       return path;
     }
 
-    test('有更新正在跑（最新一筆 RUNNING）→ 2', () async {
+    test('有更新正在跑（最新一筆 RUNNING）→ 2', skip: skipWhenTimeShifted, () async {
       final path = await freshDb(stocksPerMarket: 500, running: true);
       expect(await run(['--db', path]), 2);
     });

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/core/utils/device_time.dart';
 
 void main() {
   late AppDatabase db;
@@ -26,7 +27,7 @@ void main() {
       ]);
 
       // 插入 20 天歷史價格（平均成交量 = 10000）
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final prices = <DailyPriceCompanion>[];
       for (int i = 0; i < 20; i++) {
         prices.add(
@@ -51,7 +52,7 @@ void main() {
         await db.insertPrices([
           DailyPriceCompanion.insert(
             symbol: '2330',
-            date: DateTime.now(),
+            date: DeviceTime.now(),
             close: const Value(510.0),
             volume: const Value(40000.0),
           ),
@@ -80,7 +81,7 @@ void main() {
       await db.insertPrices([
         DailyPriceCompanion.insert(
           symbol: '2330',
-          date: DateTime.now(),
+          date: DeviceTime.now(),
           close: const Value(510.0),
           volume: const Value(30000.0),
         ),
@@ -102,7 +103,7 @@ void main() {
       await db.insertPrices([
         DailyPriceCompanion.insert(
           symbol: '2330',
-          date: DateTime.now(),
+          date: DeviceTime.now(),
           close: const Value(505.0),
           volume: const Value(40000.0),
         ),
@@ -128,7 +129,7 @@ void main() {
       await db.insertPrices([
         DailyPriceCompanion.insert(
           symbol: '2330',
-          date: DateTime.now(),
+          date: DeviceTime.now(),
           close: const Value(510.0),
           volume: const Value(20000000.0),
         ),
@@ -155,7 +156,7 @@ void main() {
         await db.insertPrices([
           DailyPriceCompanion.insert(
             symbol: '2330',
-            date: DateTime.now(),
+            date: DeviceTime.now(),
             close: const Value(510.0),
             volume: const Value(20000000.0),
           ),
@@ -207,7 +208,7 @@ void main() {
       ]);
 
       // 插入 52 週歷史價格（最高 580，最低 380）
-      final now = DateTime.now();
+      final now = DeviceTime.now();
       final prices = <DailyPriceCompanion>[];
       for (int i = 0; i < 52; i++) {
         // 模擬波動：380-580 之間
