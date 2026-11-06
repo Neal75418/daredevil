@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:daredevil/core/constants/api_config.dart';
+import 'package:daredevil/core/constants/data_freshness.dart';
+import 'package:daredevil/core/constants/market_index_names.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
@@ -14,6 +16,7 @@ import 'package:daredevil/domain/services/price_calculator.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/repositories/market_data_repository.dart';
+import 'package:daredevil/domain/models/market_overview_models.dart';
 import 'package:daredevil/domain/services/data_sync_service.dart';
 import 'package:daredevil/domain/services/analysis_summary_service.dart';
 import 'package:daredevil/domain/services/technical_indicator_service.dart';
@@ -21,13 +24,33 @@ import 'package:daredevil/presentation/mappers/summary_localizer.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
-import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/stock_detail_state.dart';
 import 'package:daredevil/data/loaders/stock_fundamentals_loader.dart';
 import 'package:daredevil/data/loaders/stock_chip_loader.dart';
 
 // Re-export 狀態類別供外部使用
 export 'package:daredevil/presentation/providers/stock_detail_state.dart';
+
+/// 大盤位階：只用 [asOf] 那天（含）為止的收盤（[closes] 為 oldest→newest）。
+///
+/// 個股摘要的訊號是分析那天的；證交所約 14:00 公布收盤後指數就是今天，
+/// 個股分析要等每日更新，用到今天的收盤會拿今天的大盤配昨天的個股。
+/// [closes] 還沒有 [asOf] 那天（例如那天的加權指數沒寫進 DB）時回 null，
+/// 不拿前一天頂替；沒有資料日或不足 MA60 所需天數時也回 null
+/// （摘要不顯示位階）。
+MarketStage? marketStageAsOf(List<DatedValue>? closes, DateTime? asOf) {
+  if (closes == null || asOf == null) return null;
+  final day = DateContext.normalize(asOf);
+  final upTo = [
+    for (final p in closes)
+      if (!DateContext.normalize(p.date).isAfter(day)) p,
+  ];
+  if (upTo.isEmpty || !DateContext.isSameDay(upTo.last.date, day)) return null;
+  final stage = TechnicalIndicatorService().calculateMarketStage([
+    for (final p in upTo) p.value,
+  ]).stage;
+  return stage == MarketStage.insufficient ? null : stage;
+}
 
 // ==================================================
 // 股票詳情 Notifier
@@ -48,6 +71,10 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
   /// 恰好在清空後擋住自己——無此旗標則「換 token」讓存活的個股頁靜默
   /// 空白且永久卡死。同 instance 重跑 field 保留,據此排自動 reload。
   var _hasLoadedOnce = false;
+
+  /// 摘要的大盤位階（多頭/空頭/盤整，regime context 行）：[loadData] 依分析日
+  /// 算好，重產摘要（[_regenerateAiSummary]）沿用
+  MarketStage? _marketStage;
 
   /// [loadData] 的世代號：每輪載入遞增，await 之後比對，過期（已有較新的
   /// 一輪）就放棄寫入——最新的請求勝出。build() 重跑時也遞增，讓重建前
@@ -121,16 +148,24 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
   MarketDataRepository get _marketRepo =>
       ref.read(marketDataRepositoryProvider);
 
-  /// 大盤位階（多頭/空頭/盤整）— 供 AI 摘要的 regime context 行使用。
-  /// 讀 marketOverview 已載入的加權指數長窗口 closes；未載入或資料不足回 null
-  /// （摘要 graceful 不顯示位階行）。
-  MarketStage? _currentMarketStage() {
-    final closes = ref
-        .read(marketOverviewProvider)
-        .indexStageHistory[MarketIndexNames.taiex];
-    if (closes == null || closes.isEmpty) return null;
-    final result = TechnicalIndicatorService().calculateMarketStage(closes);
-    return result.stage == MarketStage.insufficient ? null : result.stage;
+  /// 加權指數長窗口收盤（大盤位階 MA60 用），oldest→newest，窗口以分析日
+  /// [asOf] 為終點（DB 落後很久時 MA60 仍有足夠天數）；讀不到時回空（摘要
+  /// 不顯示位階行）
+  Future<List<DatedValue>> _loadTaiexCloses(DateTime asOf) async {
+    try {
+      final rows = await _db.getIndexHistoryBatch(
+        [MarketIndexNames.taiex],
+        days: DataFreshness.marketStageHistoryLookbackDays,
+        now: asOf,
+      );
+      return [
+        for (final r in rows[MarketIndexNames.taiex] ?? const [])
+          (date: r.date, value: r.close),
+      ];
+    } catch (e) {
+      AppLogger.warning('StockDetailNotifier', '讀取加權指數歷史失敗', e);
+      return const [];
+    }
   }
 
   /// 載入股票詳情資料。
@@ -175,6 +210,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
         reasons,
         dbInstHistory,
         isInWatchlist,
+        taiexCloses,
       ) = await (
         _db.getStock(_symbol),
         _db.getPriceHistory(
@@ -193,6 +229,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
           endDate: normalizedToday,
         ),
         _db.isInWatchlist(_symbol),
+        _loadTaiexCloses(analysisDate),
       ).wait;
       if (!isCurrent()) return;
       var instHistory = dbInstHistory;
@@ -236,6 +273,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
 
       // 生成 AI 智慧分析摘要（horizon 固定 short — 選擇器已於 2026-06 移除）。
       const loadHorizon = Horizon.short;
+      final marketStage = marketStageAsOf(taiexCloses, analysisDate);
       final summaryData = const AnalysisSummaryService().generate(
         analysis: analysis,
         reasons: reasons,
@@ -248,10 +286,12 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
         revenueHistory: state.fundamentals.revenueHistory,
         latestPER: state.fundamentals.latestPER,
         horizon: loadHorizon,
-        marketStage: _currentMarketStage(),
+        marketStage: marketStage,
       );
       final summary = const SummaryLocalizer().localize(summaryData);
       if (!isCurrent()) return;
+
+      _marketStage = marketStage;
 
       state = state.copyWith(
         stock: stock,
@@ -436,7 +476,7 @@ class StockDetailNotifier extends Notifier<StockDetailState> {
       revenueHistory: revenueData,
       latestPER: latestPER,
       horizon: Horizon.short,
-      marketStage: _currentMarketStage(),
+      marketStage: _marketStage,
     );
     state = state.copyWith(
       aiSummary: const SummaryLocalizer().localize(summaryData),

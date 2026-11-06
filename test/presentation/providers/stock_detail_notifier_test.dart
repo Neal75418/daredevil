@@ -8,8 +8,11 @@ import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/remote/finmind_client.dart';
 import 'package:daredevil/data/repositories/insider_repository.dart';
+import 'package:daredevil/core/constants/market_index_names.dart';
+import 'package:daredevil/domain/models/market_overview_models.dart';
 import 'package:daredevil/domain/services/data_sync_service.dart';
 import 'package:daredevil/domain/services/rule_accuracy_service.dart';
+import 'package:daredevil/domain/services/technical_indicator_service.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/stock_detail_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
@@ -49,6 +52,31 @@ class MockAppClock extends Mock implements AppClock {}
 
 const _testSymbol = '2330';
 final _defaultDate = DateTime(2026, 2, 13);
+
+/// 加權收盤：到 [_defaultDate] 連漲 80 天（多頭排列），隔天跌到 MA20 下方
+/// （均線糾結），第三天又漲回多頭
+final _stageDays = [
+  for (var i = 79; i >= 0; i--) _defaultDate.subtract(Duration(days: i)),
+];
+final List<DatedValue> _stageCloses = [
+  for (var i = 0; i < 80; i++) (date: _stageDays[i], value: 100.0 + i),
+  (date: _defaultDate.add(const Duration(days: 1)), value: 150.0),
+  (date: _defaultDate.add(const Duration(days: 2)), value: 200.0),
+];
+
+/// [closes] 轉成 DB 的加權指數列
+List<MarketIndexEntry> _taiexRows(List<DatedValue> closes) => [
+  for (final (i, p) in closes.indexed)
+    MarketIndexEntry(
+      id: i,
+      date: p.date,
+      name: MarketIndexNames.taiex,
+      close: p.value,
+      change: 0,
+      changePercent: 0,
+      createdAt: p.date,
+    ),
+];
 
 StockMasterEntry createStock({
   String symbol = _testSymbol,
@@ -152,6 +180,7 @@ void main() {
     List<DailyInstitutionalEntry>? instHistory,
     bool isInWatchlist = false,
     DateTime? latestDataDate,
+    List<DatedValue> taiexCloses = const [],
   }) {
     final defaultPriceHistory =
         priceHistory ??
@@ -200,6 +229,15 @@ void main() {
     when(
       () => mockDb.isInWatchlist(_testSymbol),
     ).thenAnswer((_) async => isInWatchlist);
+    when(
+      () => mockDb.getIndexHistoryBatch(
+        any(),
+        days: any(named: 'days'),
+        now: any(named: 'now'),
+      ),
+    ).thenAnswer(
+      (_) async => {MarketIndexNames.taiex: _taiexRows(taiexCloses)},
+    );
 
     // DataSyncService
     when(
@@ -214,6 +252,7 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(DateTime(2026));
+    registerFallbackValue(<String>[]);
     registerFallbackValue(<DailyPriceEntry>[]);
     registerFallbackValue(<DailyInstitutionalEntry>[]);
   });
@@ -244,6 +283,17 @@ void main() {
   tearDown(() {
     container.dispose();
   });
+
+  /// 分析與理由是 [_defaultDate] 的隔天，股價（對齊法人）仍是 [_defaultDate]
+  void setupAnalysisAfterPriceMocks() {
+    final analysisDay = _defaultDate.add(const Duration(days: 1));
+    setupLoadDataMocks(
+      latestDataDate: analysisDay,
+      analysis: createAnalysis(date: analysisDay),
+      reasons: [createReason(date: analysisDay)],
+      taiexCloses: _stageCloses,
+    );
+  }
 
   // ==========================================
   // StockDetailNotifier.loadData
@@ -573,6 +623,24 @@ void main() {
         () => mockDb.getDividendMissingPriceKeys(),
       ).thenAnswer((_) async => <(String, DateTime)>{});
     }
+
+    test('🚨 營收、估值載入後重產摘要：大盤位階仍算到分析那天', () async {
+      setupAnalysisAfterPriceMocks();
+      stubFundamentalsReads();
+
+      final notifier = container.read(
+        stockDetailProvider(_testSymbol).notifier,
+      );
+      await notifier.loadData();
+      final loaded = container.read(stockDetailProvider(_testSymbol)).aiSummary;
+      await notifier.loadFundamentals();
+
+      final summary = container
+          .read(stockDetailProvider(_testSymbol))
+          .aiSummary;
+      expect(summary, isNot(same(loaded)), reason: '營收、估值到了要重產摘要');
+      expect(summary!.overallAssessment, contains('summary.marketNeutral'));
+    });
 
     test('🚨 股利資料建置中（新安裝、尚無完整度事實）：頁首不出現錯誤', () async {
       setupLoadDataMocks();
@@ -1119,6 +1187,97 @@ void main() {
             .scoreShort,
         90,
         reason: '_active 在 build() 重跑時被設回 true，擋不住重建前的載入',
+      );
+    });
+  });
+
+  // 證交所約 14:00 公布收盤、每日更新後 DB 就有今天的加權；個股分析可能還是前一天
+  group('大盤位階對齊分析日', () {
+    test('marketStageAsOf：只用到 asOf 那天為止的收盤', () {
+      expect(marketStageAsOf(_stageCloses, _defaultDate), MarketStage.bullish);
+      expect(
+        marketStageAsOf(
+          _stageCloses,
+          _defaultDate.add(const Duration(days: 1)),
+        ),
+        MarketStage.neutral,
+      );
+    });
+
+    test('marketStageAsOf：序列還沒有 asOf 那天 → null（不拿前一天的頂替）', () {
+      expect(
+        marketStageAsOf(
+          _stageCloses.sublist(0, 80),
+          _defaultDate.add(const Duration(days: 1)),
+        ),
+        isNull,
+      );
+    });
+
+    test('marketStageAsOf：沒有資料日、沒有序列或不足 60 天 → null', () {
+      expect(marketStageAsOf(_stageCloses, null), isNull);
+      expect(marketStageAsOf(_stageCloses, DateTime(2000)), isNull);
+      expect(marketStageAsOf(null, _defaultDate), isNull);
+      expect(
+        marketStageAsOf(_stageCloses.sublist(0, 59), _stageDays[58]),
+        isNull,
+      );
+    });
+
+    test('🚨 載入時：DB 已有隔天的收盤，摘要仍用分析那天的位階', () async {
+      setupLoadDataMocks(taiexCloses: _stageCloses.sublist(0, 81));
+
+      await container
+          .read(stockDetailProvider(_testSymbol).notifier)
+          .loadData();
+
+      final summary = container
+          .read(stockDetailProvider(_testSymbol))
+          .aiSummary;
+      expect(summary!.overallAssessment, contains('summary.marketBullish'));
+    });
+
+    // 上市法人 15:30 那輪還沒出來：分析已是今天，股價對齊法人仍停在前一天
+    test('🚨 分析日比股價日新：位階算到分析那天（摘要的訊號是那天的）', () async {
+      setupAnalysisAfterPriceMocks();
+
+      await container
+          .read(stockDetailProvider(_testSymbol).notifier)
+          .loadData();
+
+      final summary = container
+          .read(stockDetailProvider(_testSymbol))
+          .aiSummary;
+      expect(summary!.overallAssessment, contains('summary.marketNeutral'));
+      // 讀取窗口以分析日為終點：DB 落後很久時 MA60 仍有足夠天數
+      verify(
+        () => mockDb.getIndexHistoryBatch(
+          any(),
+          days: any(named: 'days'),
+          now: _defaultDate.add(const Duration(days: 1)),
+        ),
+      ).called(1);
+    });
+
+    test('讀加權指數失敗：頁面照常載入，摘要不顯示位階', () async {
+      setupLoadDataMocks();
+      when(
+        () => mockDb.getIndexHistoryBatch(
+          any(),
+          days: any(named: 'days'),
+          now: any(named: 'now'),
+        ),
+      ).thenAnswer((_) async => throw Exception('db'));
+
+      await container
+          .read(stockDetailProvider(_testSymbol).notifier)
+          .loadData();
+
+      final state = container.read(stockDetailProvider(_testSymbol));
+      expect(state.error, isNull);
+      expect(
+        state.aiSummary!.overallAssessment,
+        isNot(contains('summary.market')),
       );
     });
   });
