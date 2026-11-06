@@ -223,21 +223,26 @@ class HeroIndexSection extends StatelessWidget {
         ),
 
         // 含息報酬指數比較（卡片外部，僅加權指數顯示）
-        // 放在 Container 外確保上市/上櫃卡片高度一致
-        if (showBadge) ...[
+        // 放在 Container 外確保上市/上櫃卡片高度一致。並排時櫃買側放一個
+        // 看不見的同款徽章佔位（數值只為排版、不顯示），高度跟著徽章走
+        if (showBadge || reserveBadgeSpace) ...[
           const SizedBox(height: DesignTokens.spacing6),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: DesignTokens.spacing4,
-            ),
-            child: _TotalReturnBadge(
-              contributionPercent: dividendContributionPercent!,
+          Visibility(
+            visible: showBadge,
+            maintainSize: true,
+            maintainAnimation: true,
+            maintainState: true,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: DesignTokens.spacing4,
+              ),
+              child: _TotalReturnBadge(
+                contributionPercent: showBadge
+                    ? dividendContributionPercent!
+                    : 0,
+              ),
             ),
           ),
-        ] else if (reserveBadgeSpace) ...[
-          // 並排模式：為 TPEx 側保留與 badge 等高的空間
-          const SizedBox(height: DesignTokens.spacing6),
-          const SizedBox(height: 16),
         ],
       ],
     );

@@ -299,7 +299,8 @@ void main() {
           ),
         ),
       );
-      expect(find.text(badgeKey), findsOneWidget);
+      expect(find.text(badgeKey).hitTestable(), findsOneWidget);
+      expect(find.semantics.byLabel(RegExp(badgeKey)), findsWidgets);
     });
 
     testWidgets('股息貢獻為 null → 不顯示', (tester) async {
@@ -329,6 +330,47 @@ void main() {
       final belowThreshold = await heightWith(0.005);
       expect(find.text(badgeKey), findsNothing);
       expect(belowThreshold, withoutValue);
+    });
+
+    // 並排時櫃買側保留這一行，兩欄下面的內容才對得齊
+    testWidgets('保留徽章高度：與加權有徽章時同高；不保留時沒有這一行', (tester) async {
+      Future<double> heightOf(HeroIndexSection hero) async {
+        await tester.pumpWidget(
+          buildTestApp(SingleChildScrollView(child: hero)),
+        );
+        return tester.getSize(find.byType(HeroIndexSection)).height;
+      }
+
+      final tpex = TwseMarketIndex(
+        date: DateTime(2026, 2, 15),
+        name: MarketIndexNames.tpexIndex,
+        close: 250,
+        change: 1,
+        changePercent: 0.4,
+      );
+      final withBadge = await heightOf(
+        HeroIndexSection(
+          index: createIndex(),
+          dividendContributionPercent: 1.23,
+        ),
+      );
+      final reserved = await heightOf(
+        HeroIndexSection(index: tpex, reserveBadgeSpace: true),
+      );
+      expect(
+        find.text(badgeKey).hitTestable(),
+        findsNothing,
+        reason: '佔位不能被點到',
+      );
+      expect(
+        find.semantics.byLabel(RegExp(badgeKey)),
+        findsNothing,
+        reason: '佔位不能被報讀軟體念出',
+      );
+      final plain = await heightOf(HeroIndexSection(index: tpex));
+
+      expect(reserved, withBadge);
+      expect(plain, lessThan(reserved));
     });
 
     testWidgets('櫃買指數 → 不顯示', (tester) async {
