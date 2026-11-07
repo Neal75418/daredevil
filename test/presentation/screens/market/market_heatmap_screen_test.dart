@@ -13,6 +13,7 @@ import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/models/twse/twse_market_index.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/domain/services/heatmap/heatmap_grouping.dart';
 import 'package:daredevil/presentation/providers/app_visibility_provider.dart';
 import 'package:daredevil/presentation/providers/heatmap_live_provider.dart';
 import 'package:daredevil/presentation/providers/live_price_provider.dart';
@@ -1227,6 +1228,7 @@ void main() {
       MarketOverviewState? overview,
       MarketLiveIndices? live,
       GoRouter? router,
+      bool english = false,
     }) async {
       viewport(tester);
       final clock = _Clock(at);
@@ -1249,7 +1251,8 @@ void main() {
               settingsProvider.overrideWith(_FakeSettings.new),
           ],
           router: router,
-          zhTranslations: true,
+          zhTranslations: !english,
+          enTranslations: english,
           liveQuoteCenter: () => center,
         ),
       );
@@ -1366,6 +1369,63 @@ void main() {
       expect(statusLine(tester).data, '今日收盤 3／120 檔・待盤後更新');
       expect(find.textContaining('指數為'), findsNothing);
       expect(find.text('11/6 收盤'), findsNothing);
+    });
+
+    for (final (locale, english, expected) in [
+      ('zh-TW', false, '今日收盤 3／120 檔・2 檔收盤沒撮合・待盤後更新'),
+      (
+        'en',
+        true,
+        "Today's close 3/120 · 2 no closing match · after-hours data pending",
+      ),
+    ]) {
+      testWidgets('🚨 收盤後有收盤沒撮合的檔（$locale）：進度另寫檔數', (tester) async {
+        await pumpLive(
+          tester,
+          at: monday(13, 40),
+          markets: {MarketCode.twse: twse120()},
+          state: LiveQuoteState(
+            entries: {
+              for (final s in ['Z000', 'Z001', 'Z100'])
+                s: quote(s, 101, closing: true),
+            },
+            latestResponseHadToday: true,
+            // Z001 放棄後又拿到收盤報價：算已收盤
+            closingGivenUpAt: {
+              for (final s in ['Z001', 'Z002', 'Z239']) s: monday(13, 35),
+            },
+          ),
+          live: const MarketLiveIndices(),
+          english: english,
+        );
+        expect(statusLine(tester).data, expected);
+        expect(statusLine(tester).maxLines, 2);
+        expect(statusLine(tester).overflow, TextOverflow.ellipsis);
+      });
+    }
+
+    testWidgets('收盤後限流＋收盤沒撮合：限流文字在前、進度在後', (tester) async {
+      await pumpLive(
+        tester,
+        at: monday(13, 40),
+        markets: {MarketCode.twse: twse120()},
+        state: LiveQuoteState(
+          entries: {
+            for (final s in ['Z000', 'Z001', 'Z100'])
+              s: quote(s, 101, closing: true),
+          },
+          rateLimitedUntil: monday(13, 41),
+          latestResponseHadToday: true,
+          closingGivenUpAt: {
+            for (final s in ['Z002', 'Z239']) s: monday(13, 35),
+          },
+        ),
+        live: const MarketLiveIndices(),
+      );
+      expect(
+        statusLine(tester).data,
+        '報價暫停（證交所限流，13:41 再試）・今日收盤 3／120 檔・2 檔收盤沒撮合・待盤後更新',
+      );
     });
 
     testWidgets('收盤後限流：限流文字在前、進度在後', (tester) async {
@@ -1497,7 +1557,14 @@ void main() {
       expect(after.liveMode, HeatmapLiveMode.afterClose);
       expect(after.shouldRepaint(before), isTrue);
       expect(after.labels.coverageSuffix(0.8, after.liveMode!), '・收盤 80%');
-      expect(after.labels.noChangeLabel(after.liveMode!), '未收盤');
+      expect(
+        after.labels.noChangeLabel(after.liveMode!, allNoClosingMatch: false),
+        '未收盤',
+      );
+      expect(
+        after.labels.noChangeLabel(after.liveMode!, allNoClosingMatch: true),
+        '收盤沒撮合',
+      );
       expect(find.semantics.byLabel('半導體業，未收盤，共 2 檔'), findsOneWidget);
       expect(
         find.semantics.byLabel('其他電子零組件業，市值加權上漲 2.00%，共 2 檔，已收盤部分占 83%'),
@@ -1713,6 +1780,139 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.semantics.byLabel('其他 40 檔，未即時，共 40 檔'), findsOneWidget);
         handle.dispose();
+      });
+
+      group('收盤後區塊每一格都是收盤沒撮合', () {
+        HeatmapTile unmatched(String symbol, String name, double cap) =>
+            HeatmapTile(
+              symbol: symbol,
+              name: name,
+              close: 100,
+              marketCap: cap,
+              baseCap: 0,
+              change: const TileChangeHollow(HollowReason.noClosingMatch),
+              isMine: false,
+            );
+
+        HeatmapTile waiting(String symbol, String name, double cap) =>
+            HeatmapTile(
+              symbol: symbol,
+              name: name,
+              close: 100,
+              marketCap: cap,
+              baseCap: 0,
+              change: const TileChangeHollow(HollowReason.noClosingQuote),
+              isMine: false,
+            );
+
+        HeatmapIndustry block(String name, List<HeatmapTile> tiles) =>
+            HeatmapIndustry(
+              name: name,
+              marketCap: tiles.fold(0.0, (s, t) => s + t.marketCap),
+              weightedChangePercent: null,
+              tiles: tiles,
+              liveCoverage: 0,
+              allNoClosingMatch: heatmapAllNoClosingMatch(tiles),
+            );
+
+        /// 航運業全部收盤沒撮合；觀光餐旅業混一檔尚未取得收盤報價
+        HeatmapMarketData afterCloseData() => HeatmapMarketData(
+          market: MarketCode.twse,
+          dataDate: friday,
+          excludedForShares: 0,
+          liveMode: HeatmapLiveMode.afterClose,
+          industries: [
+            _industry('半導體業', [_tile('9901', '測試甲', 8e11, 1)], 1, coverage: 1),
+            block('航運業', [
+              unmatched('9931', '測試航運', 2e11),
+              unmatched('9932', '測試航運乙', 1e11),
+            ]),
+            block('觀光餐旅業', [
+              unmatched('9961', '測試庚', 1e11),
+              waiting('9962', '測試辛', 1e11),
+            ]),
+          ],
+        );
+
+        testWidgets('產業選單：全部沒撮合寫「收盤沒撮合」，混一檔未收盤的寫「未收盤」', (tester) async {
+          await pumpFixed(tester, afterCloseData());
+          await openIndustryMenu(tester);
+          expect(menuTexts(tester), [
+            '全市場',
+            '半導體業 +1.00%・收盤 100%',
+            '航運業 收盤沒撮合',
+            '觀光餐旅業 未收盤',
+          ]);
+        });
+
+        testWidgets('無障礙：產業描述', (tester) async {
+          final handle = tester.ensureSemantics();
+          await pumpFixed(tester, afterCloseData());
+          expect(find.semantics.byLabel('航運業，收盤沒撮合，共 2 檔'), findsOneWidget);
+          expect(find.semantics.byLabel('觀光餐旅業，未收盤，共 2 檔'), findsOneWidget);
+          handle.dispose();
+        });
+
+        testWidgets('無障礙：合併塊全部沒撮合說「收盤沒撮合」；格子說原因', (tester) async {
+          final handle = tester.ensureSemantics();
+          final container = await pumpFixed(
+            tester,
+            HeatmapMarketData(
+              market: MarketCode.twse,
+              dataDate: friday,
+              excludedForShares: 0,
+              liveMode: HeatmapLiveMode.afterClose,
+              industries: [
+                block('測試業', [
+                  unmatched('9901', '測試甲', 1e12),
+                  for (var i = 0; i < 4; i++)
+                    unmatched('${9902 + i}', '中$i', 1e11),
+                  for (var i = 0; i < 40; i++)
+                    unmatched('${9940 + i}', '小$i', 1e9),
+                ]),
+              ],
+            ),
+          );
+          container.read(heatmapSelectionProvider.notifier).zoomTo('測試業');
+          await tester.pumpAndSettle();
+          expect(
+            find.semantics.byLabel('其他 40 檔，收盤沒撮合，共 40 檔'),
+            findsOneWidget,
+          );
+          expect(find.semantics.byLabel('測試甲，收盤沒撮合'), findsOneWidget);
+          handle.dispose();
+        });
+
+        testWidgets('無障礙：小產業合併塊全部沒撮合說「收盤沒撮合」', (tester) async {
+          final handle = tester.ensureSemantics();
+          final small = _withSmallIndustries();
+          await pumpFixed(
+            tester,
+            HeatmapMarketData(
+              market: small.market,
+              dataDate: friday,
+              excludedForShares: 0,
+              liveMode: HeatmapLiveMode.afterClose,
+              industries: [
+                for (final i in small.industries)
+                  block(i.name!, [
+                    for (final t in i.tiles)
+                      unmatched(t.symbol, t.name, t.marketCap),
+                  ]),
+              ],
+            ),
+          );
+          final group = _painterOf(tester).smallIndustries!;
+          expect(group.allNoClosingMatch, isTrue, reason: '前提');
+          expect(
+            find.semantics.byLabel(
+              '其他 ${group.members.length} 個產業，收盤沒撮合，'
+              '共 ${group.stockCount} 檔',
+            ),
+            findsOneWidget,
+          );
+          handle.dispose();
+        });
       });
 
       testWidgets('無障礙：小產業合併塊寫「沒有今日漲跌 N」並接即時比例', (tester) async {

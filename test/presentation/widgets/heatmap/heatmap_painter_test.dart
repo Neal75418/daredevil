@@ -62,8 +62,14 @@ String _groupSemantics(HeatmapIndustryGroupLayout g, HeatmapLiveMode? mode) =>
 String _coverageSuffix(double coverage, HeatmapLiveMode mode) =>
     '・${mode == HeatmapLiveMode.intraday ? '即時' : '收盤'} '
     '${(coverage * 100).round()}%';
-String _noChangeLabel(HeatmapLiveMode mode) =>
-    mode == HeatmapLiveMode.intraday ? '未即時' : '未收盤';
+String _noChangeLabel(
+  HeatmapLiveMode mode, {
+  required bool allNoClosingMatch,
+}) => allNoClosingMatch
+    ? '收盤沒撮合'
+    : mode == HeatmapLiveMode.intraday
+    ? '未即時'
+    : '未收盤';
 
 const _labels = HeatmapPaintLabels(
   uncategorized: '未分類',
@@ -510,6 +516,7 @@ void main() {
       weightedChangePercent: pct,
       breadth: (up: count, down: 0, flat: 0, hollow: 0),
       coverage: 1,
+      allNoClosingMatch: false,
     );
 
     List<HeatmapIndustryLayout> withOther(
@@ -775,6 +782,7 @@ void main() {
       weightedChangePercent: pct,
       breadth: (up: 3, down: 0, flat: 0, hollow: 0),
       coverage: 1,
+      allNoClosingMatch: false,
     );
 
     void Function(Canvas) paintGroup(HeatmapIndustryGroupLayout g) =>
@@ -1064,6 +1072,7 @@ void main() {
       double width, {
       double? pct = 1.83,
       double? coverage = 0.96,
+      bool allNoClosingMatch = false,
     }) => [
       HeatmapIndustryLayout(
         industry: HeatmapIndustry(
@@ -1072,6 +1081,7 @@ void main() {
           weightedChangePercent: pct,
           liveCoverage: coverage,
           tiles: const [],
+          allNoClosingMatch: allNoClosingMatch,
         ),
         bounds: (left: 0, top: 0, width: width, height: 100),
         header: (left: 0, top: 0, width: width, height: 16),
@@ -1084,6 +1094,7 @@ void main() {
       double? pct = 0.5,
       double coverage = 0.3,
       int count = 12,
+      bool allNoClosingMatch = false,
     }) => HeatmapOtherLayout(
       members: [
         for (var i = 0; i < count; i++)
@@ -1097,6 +1108,7 @@ void main() {
       weightedChangePercent: pct,
       breadth: (up: count, down: 0, flat: 0, hollow: 0),
       coverage: coverage,
+      allNoClosingMatch: allNoClosingMatch,
     );
 
     List<HeatmapIndustryLayout> withOther(HeatmapOtherLayout o) => [
@@ -1114,25 +1126,30 @@ void main() {
       ),
     ];
 
-    HeatmapIndustryGroupLayout group(Rect r, {double coverage = 0.5}) =>
-        HeatmapIndustryGroupLayout(
-          members: [
-            for (var i = 0; i < 3; i++)
-              HeatmapIndustry(
-                name: 'S$i',
-                marketCap: 1,
-                weightedChangePercent: 1,
-                tiles: [_tile('${9960 + i}', 1, const TileChangeValue(1))],
-              ),
-          ],
-          bounds: box(r),
-          paint: box(r),
-          interactive: true,
-          marketCap: 3,
-          weightedChangePercent: 1,
-          breadth: (up: 3, down: 0, flat: 0, hollow: 0),
-          coverage: coverage,
-        );
+    HeatmapIndustryGroupLayout group(
+      Rect r, {
+      double coverage = 0.5,
+      double? pct = 1,
+      bool allNoClosingMatch = false,
+    }) => HeatmapIndustryGroupLayout(
+      members: [
+        for (var i = 0; i < 3; i++)
+          HeatmapIndustry(
+            name: 'S$i',
+            marketCap: 1,
+            weightedChangePercent: 1,
+            tiles: [_tile('${9960 + i}', 1, const TileChangeValue(1))],
+          ),
+      ],
+      bounds: box(r),
+      paint: box(r),
+      interactive: true,
+      marketCap: 3,
+      weightedChangePercent: pct,
+      breadth: (up: 3, down: 0, flat: 0, hollow: 0),
+      coverage: coverage,
+      allNoClosingMatch: allNoClosingMatch,
+    );
 
     /// 「其他 N 檔」照中文的字數
     final zhLabels = HeatmapPaintLabels(
@@ -1208,7 +1225,7 @@ void main() {
           calls.add('suffix');
           return '';
         },
-        noChangeLabel: (m) {
+        noChangeLabel: (m, {required allNoClosingMatch}) {
           calls.add('noChange');
           return '';
         },
@@ -1258,9 +1275,9 @@ void main() {
           calls.add((c, m));
           return _coverageSuffix(c, m);
         },
-        noChangeLabel: (m) {
+        noChangeLabel: (m, {required allNoClosingMatch}) {
           modes.add(m);
-          return _noChangeLabel(m);
+          return _noChangeLabel(m, allNoClosingMatch: allNoClosingMatch);
         },
       );
       expect(
@@ -1274,6 +1291,77 @@ void main() {
       );
       expect(calls, [(0.96, HeatmapLiveMode.afterClose)]);
       expect(modes, [HeatmapLiveMode.afterClose]);
+    });
+
+    test('🚨 收盤後區塊每一格都是收盤沒撮合：標題、合併塊、小產業合併塊寫「收盤沒撮合」', () {
+      final calls = <(String, HeatmapLiveMode, bool)>[];
+      String spyLabel(
+        String block,
+        HeatmapLiveMode m, {
+        required bool allNoClosingMatch,
+      }) {
+        calls.add((block, m, allNoClosingMatch));
+        return _noChangeLabel(m, allNoClosingMatch: allNoClosingMatch);
+      }
+
+      HeatmapPaintLabels spy(String block) => HeatmapPaintLabels(
+        uncategorized: '未分類',
+        industrySemantics: _industryLabel,
+        tileSemantics: _tileLabel,
+        otherLabel: (count) => '其他 $count 檔',
+        otherShortLabel: '其他',
+        wholeLabel: _wholeLabel,
+        otherSemantics: _otherSemantics,
+        groupLabel: _groupLabel,
+        groupShortLabel: 'grp',
+        groupSemantics: _groupSemantics,
+        coverageSuffix: _coverageSuffix,
+        noChangeLabel: (m, {required allNoClosingMatch}) =>
+            spyLabel(block, m, allNoClosingMatch: allNoClosingMatch),
+      );
+      const r = Rect.fromLTWH(0, 0, 400, 60);
+      // 標題：名稱 4 字＋「 收盤沒撮合」6 字；「 未收盤」4 字
+      expect(
+        widths(
+          [
+            ...header(300, pct: null, coverage: 0, allNoClosingMatch: true),
+            ...header(300, pct: null, coverage: 0),
+          ],
+          liveMode: HeatmapLiveMode.afterClose,
+          labels: spy('header'),
+        ),
+        [44, 66, 44, 44],
+      );
+      // 合併塊：「其他 12 檔」7 字、「收盤沒撮合」5 字（字級 12）
+      expect(
+        widths(
+          withOther(other(r, pct: null, coverage: 0, allNoClosingMatch: true)),
+          liveMode: HeatmapLiveMode.afterClose,
+          labels: spy('other'),
+        ),
+        [84, 60],
+      );
+      // 小產業合併塊：「group:3」7 字、「收盤沒撮合」5 字
+      expect(
+        widths(
+          const [],
+          smallIndustries: group(
+            r,
+            pct: null,
+            coverage: 0,
+            allNoClosingMatch: true,
+          ),
+          liveMode: HeatmapLiveMode.afterClose,
+          labels: spy('group'),
+        ),
+        [84, 60],
+      );
+      expect(calls, [
+        ('header', HeatmapLiveMode.afterClose, true),
+        ('header', HeatmapLiveMode.afterClose, false),
+        ('other', HeatmapLiveMode.afterClose, true),
+        ('group', HeatmapLiveMode.afterClose, true),
+      ]);
     });
 
     test('合併塊：盤中「其他 12 檔」＋「+0.50%・即時 30%」', () {
@@ -1370,10 +1458,13 @@ void main() {
 
     test('labels 換了比例或沒有值的文字函式也要重畫', () {
       String suffix2(double c, HeatmapLiveMode m) => 's';
-      String noChange2(HeatmapLiveMode m) => 'n';
+      String noChange2(HeatmapLiveMode m, {required bool allNoClosingMatch}) =>
+          'n';
       HeatmapPaintLabels labels({
         String Function(double, HeatmapLiveMode) suffix = _coverageSuffix,
-        String Function(HeatmapLiveMode) noChange = _noChangeLabel,
+        String Function(HeatmapLiveMode, {required bool allNoClosingMatch})
+            noChange =
+            _noChangeLabel,
       }) => HeatmapPaintLabels(
         uncategorized: '未分類',
         industrySemantics: _industryLabel,

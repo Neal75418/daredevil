@@ -121,7 +121,10 @@ String _groupLabel(int count) => '其他 $count 個產業';
 String _groupSemantics(HeatmapIndustryGroupLayout g, HeatmapLiveMode? mode) =>
     'group:${g.members.length}';
 String _coverageSuffix(double coverage, HeatmapLiveMode mode) => '・$coverage';
-String _noChangeLabel(HeatmapLiveMode mode) => mode.name;
+String _noChangeLabel(
+  HeatmapLiveMode mode, {
+  required bool allNoClosingMatch,
+}) => mode.name;
 
 const _labels = HeatmapPaintLabels(
   uncategorized: '未分類',
@@ -376,6 +379,7 @@ void main() {
       HeatmapBreadth breadth = (up: 2, down: 1, flat: 0, hollow: 1),
       int mine = 0,
       double coverage = 1,
+      bool allNoClosingMatch = false,
     }) => HeatmapOtherLayout(
       members: [
         for (var i = 0; i < 4; i++)
@@ -395,6 +399,7 @@ void main() {
       weightedChangePercent: pct,
       breadth: breadth,
       coverage: coverage,
+      allNoClosingMatch: allNoClosingMatch,
     );
 
     Future<void> pumpTooltip(WidgetTester tester, Widget tooltip) async {
@@ -485,6 +490,48 @@ void main() {
       expect(find.text('漲 0、跌 0、平 0、空心 4'), findsOneWidget);
     });
 
+    testWidgets('🚨 收盤後成員都是收盤沒撮合：加權漲跌寫「收盤沒撮合」，否則「未收盤」', (tester) async {
+      for (final (flag, text) in [(true, '收盤沒撮合'), (false, '未收盤')]) {
+        await pumpTooltip(
+          tester,
+          HeatmapOtherTooltip(
+            other: other(
+              pct: null,
+              coverage: 0,
+              breadth: (up: 0, down: 0, flat: 0, hollow: 4),
+              allNoClosingMatch: flag,
+            ),
+            title: '其他 4 檔',
+            industryName: 'D',
+            liveMode: HeatmapLiveMode.afterClose,
+          ),
+        );
+        expect(find.text('市值加權 $text'), findsOneWidget, reason: '$flag');
+      }
+    });
+
+    testWidgets('🚨 小產業合併塊（收盤後）成員都是收盤沒撮合：寫「收盤沒撮合」', (tester) async {
+      await pumpTooltip(
+        tester,
+        const HeatmapIndustryGroupTooltip(
+          group: HeatmapIndustryGroupLayout(
+            members: [],
+            bounds: (left: 0, top: 0, width: 100, height: 100),
+            paint: (left: 0, top: 0, width: 100, height: 100),
+            interactive: true,
+            marketCap: 4e8,
+            weightedChangePercent: null,
+            breadth: (up: 0, down: 0, flat: 0, hollow: 3),
+            coverage: 0,
+            allNoClosingMatch: true,
+          ),
+          title: '其他 2 個產業',
+          liveMode: HeatmapLiveMode.afterClose,
+        ),
+      );
+      expect(find.text('市值加權 收盤沒撮合'), findsOneWidget);
+    });
+
     testWidgets('小產業合併塊（收盤後）：「・收盤」比例與空心計數', (tester) async {
       await pumpTooltip(
         tester,
@@ -498,6 +545,7 @@ void main() {
             weightedChangePercent: 1,
             breadth: (up: 2, down: 0, flat: 0, hollow: 3),
             coverage: 0.5,
+            allNoClosingMatch: false,
           ),
           title: '其他 2 個產業',
           liveMode: HeatmapLiveMode.afterClose,
@@ -540,6 +588,7 @@ void main() {
       (HollowReason.noTrade, '尚無成交'),
       (HollowReason.noQuote, '無報價'),
       (HollowReason.noClosingQuote, '尚未取得收盤報價'),
+      (HollowReason.noClosingMatch, '收盤沒撮合'),
       (HollowReason.noChangeData, '無漲跌資料'),
     ]) {
       testWidgets('${reason.name}（沒有前一筆）：只寫原因', (tester) async {

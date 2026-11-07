@@ -59,7 +59,7 @@ LiveQuoteEntry _entry(
   isClosingQuote: closing,
 );
 
-/// 預設：[entries] 的每一檔都登記、都在 [fresh]
+/// 預設：[entries] 的每一檔都登記、都在 [fresh]；報價中心沒有放棄任何一檔
 HeatmapMarketData _overlay(
   HeatmapMarketData official,
   Map<String, LiveQuoteEntry> entries, {
@@ -67,6 +67,7 @@ HeatmapMarketData _overlay(
   Map<String, LiveSymbolStatus> status = const {},
   Set<String>? registered,
   Set<String>? fresh,
+  Set<String> givenUp = const {},
 }) => overlayHeatmapLive(
   official,
   mode: mode,
@@ -74,6 +75,7 @@ HeatmapMarketData _overlay(
   symbolStatus: status,
   registered: registered ?? entries.keys.toSet(),
   fresh: fresh ?? entries.keys.toSet(),
+  closingGivenUp: givenUp,
   today: _today,
 );
 
@@ -126,11 +128,13 @@ List<String> _symbols(
   HeatmapLiveMode mode = HeatmapLiveMode.intraday,
   String? zoom,
   Map<String, LiveQuoteEntry> entries = const {},
+  Set<String> givenUp = const {},
 }) => heatmapLiveSymbols(
   official,
   mode: mode,
   zoomIndustryKey: zoom,
   entries: entries,
+  closingGivenUp: givenUp,
   today: _today,
 );
 
@@ -395,6 +399,7 @@ void main() {
       Set<String> registered = const {},
       Set<String> fresh = const {},
       Map<String, LiveSymbolStatus> status = const {},
+      Set<String> givenUp = const {},
     }) => _overlay(
       _official([_tile('9901')]),
       {'9901': ?entry},
@@ -402,6 +407,7 @@ void main() {
       registered: registered,
       fresh: fresh,
       status: status,
+      givenUp: givenUp,
     );
 
     test('今天的收盤報價：不論登記與 fresh 都上色', () {
@@ -487,6 +493,68 @@ void main() {
       );
       expect(_percentOf(data), closeTo(3, 1e-9));
     });
+
+    group('報價中心已放棄（closingGivenUp）', () {
+      test('🚨 已放棄、沒有收盤報價：收盤沒撮合（不附正式資料的漲跌）', () {
+        for (final entry in [null, _entry('9901')]) {
+          final data = run(entry: entry, givenUp: {'9901'});
+          expect(
+            _changeOf(data),
+            const TileChangeHollow(HollowReason.noClosingMatch),
+            reason: '$entry',
+          );
+          expect(_only(data).baseCap, 0);
+          expect(_only(data).close, 100, reason: '顯示價維持正式資料');
+        }
+      });
+
+      test('沒放棄：尚未取得收盤報價', () {
+        final data = run(entry: _entry('9901'), givenUp: {'9902'});
+        expect(
+          _changeOf(data),
+          const TileChangeHollow(HollowReason.noClosingQuote),
+        );
+      });
+
+      test('🚨 有今天的收盤報價即使在集合裡也上色（收盤報價先於放棄）', () {
+        final data = run(
+          entry: _entry('9901', price: 102, closing: true),
+          givenUp: {'9901'},
+        );
+        expect(_percentOf(data), closeTo(2, 1e-9));
+      });
+
+      test('前一天的收盤報價不算：收盤沒撮合', () {
+        final data = run(
+          entry: _entry('9901', date: DateTime(2026, 11, 6), closing: true),
+          givenUp: {'9901'},
+        );
+        expect(
+          _changeOf(data),
+          const TileChangeHollow(HollowReason.noClosingMatch),
+        );
+      });
+
+      test('🚨 盤中不看它：登記且 fresh 的照常上色、沒登記的照常未即時', () {
+        final official = _official([_tile('9901'), _tile('9902')]);
+        final data = _overlay(
+          official,
+          {'9901': _entry('9901')},
+          registered: {'9901'},
+          fresh: {'9901'},
+          givenUp: {'9901', '9902'},
+        );
+        expect(_percentOf(data, '9901'), closeTo(3, 1e-9));
+        expect(
+          _changeOf(data, '9902'),
+          isA<TileChangeHollow>().having(
+            (c) => c.reason,
+            'reason',
+            HollowReason.notLive,
+          ),
+        );
+      });
+    });
   });
 
   group('產業與整體', () {
@@ -548,6 +616,71 @@ void main() {
       final industry = data.industries.single;
       expect(industry.weightedChangePercent, closeTo(1, 1e-9));
       expect(industry.liveCoverage, 0.5);
+    });
+
+    group('產業的 allNoClosingMatch（每一格都是收盤沒撮合）', () {
+      HeatmapIndustry afterClose(
+        List<HeatmapTile> tiles,
+        Map<String, LiveQuoteEntry> entries,
+        Set<String> givenUp,
+      ) => _overlay(
+        _official(tiles),
+        entries,
+        mode: HeatmapLiveMode.afterClose,
+        givenUp: givenUp,
+      ).industries.single;
+
+      test('🚨 每一格都放棄：true（加權漲跌 null、coverage 0）', () {
+        final industry = afterClose(
+          [_tile('9901'), _tile('9902')],
+          {},
+          {'9901', '9902'},
+        );
+        expect(industry.allNoClosingMatch, isTrue);
+        expect(industry.weightedChangePercent, isNull);
+        expect(industry.liveCoverage, 0);
+      });
+
+      test('🚨 混一格尚未取得收盤報價：false', () {
+        expect(
+          afterClose(
+            [_tile('9901'), _tile('9902')],
+            {},
+            {'9901'},
+          ).allNoClosingMatch,
+          isFalse,
+        );
+      });
+
+      test('混一格有收盤報價：false', () {
+        expect(
+          afterClose(
+            [_tile('9901'), _tile('9902')],
+            {'9902': _entry('9902', closing: true)},
+            {'9901'},
+          ).allNoClosingMatch,
+          isFalse,
+        );
+      });
+
+      test('🚨 空產業不算：false', () {
+        expect(afterClose([], {}, {'9901'}).allNoClosingMatch, isFalse);
+      });
+
+      test('盤中與正式資料：false', () {
+        final official = _official([_tile('9901')]);
+        expect(
+          _overlay(
+            official,
+            {},
+            registered: {},
+            fresh: {},
+            givenUp: {'9901'},
+          ).industries.single.allNoClosingMatch,
+          isFalse,
+        );
+        expect(official.industries.single.allNoClosingMatch, isFalse);
+      });
     });
 
     test('liveMode 帶入結果', () {
@@ -983,6 +1116,43 @@ void main() {
               if (i != 4 && i != 7) _sym(i),
           ],
         );
+      });
+
+      test('🚨 報價中心已放棄的移出，由下一檔補上；與已取得的一起扣掉', () {
+        const givenUp = {1, 5, 68};
+        final symbols = _symbols(
+          market,
+          mode: HeatmapLiveMode.afterClose,
+          entries: closingToday([0, 2]),
+          givenUp: {for (final i in givenUp) _sym(i)},
+        );
+        expect(symbols, [
+          for (var i = 0; i < 74; i++)
+            if (!givenUp.contains(i) && i != 0 && i != 2) _sym(i),
+        ]);
+        expect(symbols, hasLength(_limit));
+      });
+
+      test('全部都放棄或已取得：空清單', () {
+        expect(
+          _symbols(
+            market,
+            mode: HeatmapLiveMode.afterClose,
+            entries: closingToday([for (var i = 0; i < 80; i += 2) i]),
+            givenUp: {for (var i = 1; i < 80; i += 2) _sym(i)},
+          ),
+          isEmpty,
+        );
+      });
+
+      test('🚨 盤中同一組代號照常登記（盤中不看 closingGivenUp）', () {
+        final givenUp = {for (var i = 0; i < 10; i++) _sym(i)};
+        expect(_symbols(market, givenUp: givenUp), [
+          for (var i = 0; i < _limit; i++) _sym(i),
+        ]);
+        expect(_symbols(market, zoom: '甲業', givenUp: givenUp), [
+          for (var i = 0; i < 80; i += 2) _sym(i),
+        ]);
       });
 
       test('市值相同：跨產業依代號升冪', () {

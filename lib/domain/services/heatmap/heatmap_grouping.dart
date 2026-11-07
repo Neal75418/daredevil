@@ -155,6 +155,19 @@ double heatmapValueCoverage(Iterable<HeatmapTile> tiles) {
   return valued / total;
 }
 
+/// 每一格都是收盤沒撮合（[HollowReason.noClosingMatch]）；沒有格子時為 false。
+///
+/// 產業、合併塊、小產業合併塊在算 [heatmapValueCoverage] 的同一處算出並存成
+/// 欄位，畫面只讀欄位：區塊沒有漲跌值時據此改寫「收盤沒撮合」。
+bool heatmapAllNoClosingMatch(Iterable<HeatmapTile> tiles) =>
+    tiles.isNotEmpty &&
+    tiles.every(
+      (t) => switch (t.change) {
+        TileChangeHollow(reason: HollowReason.noClosingMatch) => true,
+        _ => false,
+      },
+    );
+
 HeatmapIndustry _industry(String? name, List<HeatmapTile> tiles) {
   tiles.sort(_byCapThen((t) => t.marketCap, (t) => t.symbol));
   return HeatmapIndustry(

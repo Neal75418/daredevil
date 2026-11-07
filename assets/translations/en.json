@@ -169,6 +169,7 @@
     "hollowNoTrade": "No trades yet",
     "hollowNoQuote": "No quote",
     "hollowNoClosingQuote": "Closing quote not yet received",
+    "hollowNoClosingMatch": "No closing match",
     "tooltipMine": "{count} in watchlist or holdings",
     "semWithMine": "{base}, {count} in watchlist or holdings",
     "mineMark": "Watchlist or holding",
@@ -184,6 +185,7 @@
     "notClosed": "No close yet",
     "previousClose": "Close {date}: {pct}",
     "closingProgress": "Today's close {done}/{total} · after-hours data pending",
+    "closingProgressUnmatched": "Today's close {done}/{total} · {unmatched} no closing match · after-hours data pending",
     "statusJoin": " · "
   },
   "marketOverview": {

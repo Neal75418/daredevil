@@ -57,6 +57,7 @@ class LiveQuoteState {
     this.lastRespondedAt,
     this.latestResponseHadToday,
     this.latestQuoteTime,
+    this.closingGivenUpAt = const {},
   });
 
   /// 各檔今天的即時報價(換日清空;顯示前一律經 `LiveQuoteMerge` 檢查日期)
@@ -87,6 +88,15 @@ class LiveQuoteState {
 
   /// 最近一次成功的一輪中,各筆報價時間的最大值(頁首盤中顯示)
   final String? latestQuoteTime;
+
+  /// 收盤後已放棄的代號 → 最後一次嘗試的套用時刻(取自報價中心的
+  /// `appClockProvider`)。放棄＝「有回應但不是收盤報價」已滿
+  /// [LiveQuoteParams.afterCloseMaxAttempts] 次、現在仍不是收盤報價(收盤
+  /// 那一盤沒撮合);放棄後收盤後不再請求,時刻停在那一次。代號在收盤後的
+  /// 嘗試達到上限的那一輪加入。報價中心換日時(一拍開始或一輪結束時發現
+  /// 日期變了)才發布清空的版本:計時器停著跨過午夜時,重新計時的第一拍
+  /// 之前讀到的仍是前一天的,使用端要用時刻的日期判斷是不是今天放棄的
+  final Map<String, DateTime> closingGivenUpAt;
 }
 
 /// 報價中心專用 client:短逾時(MIS 卡住時 5 秒／8 秒就放棄、下一輪再來),
@@ -509,6 +519,7 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
       lastRespondedAt: _lastRespondedAt,
       latestResponseHadToday: _book.latestResponseHadToday,
       latestQuoteTime: _book.latestQuoteTime,
+      closingGivenUpAt: _book.closingGivenUpAt,
     );
   }
 }

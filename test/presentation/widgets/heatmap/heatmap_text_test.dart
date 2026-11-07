@@ -20,16 +20,17 @@ void main() {
     HollowReason.noTrade: 'marketHeatmap.hollowNoTrade',
     HollowReason.noQuote: 'marketHeatmap.hollowNoQuote',
     HollowReason.noClosingQuote: 'marketHeatmap.hollowNoClosingQuote',
+    HollowReason.noClosingMatch: 'marketHeatmap.hollowNoClosingMatch',
   };
 
-  test('五種原因各自對到自己的翻譯 key', () {
+  test('六種原因各自對到自己的翻譯 key', () {
     expect(keys.keys.toSet(), HollowReason.values.toSet());
     for (final MapEntry(key: reason, value: key) in keys.entries) {
       expect(heatmapHollowReasonText(reason), key, reason: '$reason');
     }
   });
 
-  test('五個 key 在 zh-TW 與 en 都有文字，且彼此不同', () {
+  test('六個 key 在 zh-TW 與 en 都有文字，且彼此不同', () {
     for (final (locale, expected) in [
       (
         'zh-TW',
@@ -39,11 +40,13 @@ void main() {
           HollowReason.noTrade: '尚無成交',
           HollowReason.noQuote: '無報價',
           HollowReason.noClosingQuote: '尚未取得收盤報價',
+          HollowReason.noClosingMatch: '收盤沒撮合',
         },
       ),
       (
         'en',
-        null, // 英文只驗存在且不重複，措辭由翻譯檔決定
+        // 英文只驗存在且不重複，措辭由翻譯檔決定；收盤沒撮合照規格的措辭
+        {HollowReason.noClosingMatch: 'No closing match'},
       ),
     ]) {
       final root =
@@ -59,9 +62,9 @@ void main() {
       for (final MapEntry(key: reason, value: text) in texts.entries) {
         expect(text, isNotNull, reason: '$locale 缺 ${keys[reason]}');
         expect(text, isNotEmpty);
-        if (expected != null) expect(text, expected[reason]);
+        if (expected.containsKey(reason)) expect(text, expected[reason]);
       }
-      expect(texts.values.toSet(), hasLength(5), reason: '$locale 有重複文字');
+      expect(texts.values.toSet(), hasLength(6), reason: '$locale 有重複文字');
     }
   });
 
@@ -106,30 +109,59 @@ void main() {
       heatmapCoverageSemantics(0.5, HeatmapLiveMode.afterClose),
       'marketHeatmap.semClosingCoverage',
     );
-    expect(heatmapNoChangeText(null), 'marketHeatmap.hollowNoChange');
     expect(
-      heatmapNoChangeText(HeatmapLiveMode.intraday),
+      heatmapNoChangeText(null, allNoClosingMatch: false),
+      'marketHeatmap.hollowNoChange',
+    );
+    expect(
+      heatmapNoChangeText(HeatmapLiveMode.intraday, allNoClosingMatch: false),
       'marketHeatmap.notLive',
     );
     expect(
-      heatmapNoChangeText(HeatmapLiveMode.afterClose),
+      heatmapNoChangeText(HeatmapLiveMode.afterClose, allNoClosingMatch: false),
       'marketHeatmap.notClosed',
+    );
+  });
+
+  test('🚨 區塊每一格都是收盤沒撮合：沒有值寫「收盤沒撮合」（與格子同一個 key）', () {
+    expect(
+      heatmapNoChangeText(HeatmapLiveMode.afterClose, allNoClosingMatch: true),
+      'marketHeatmap.hollowNoClosingMatch',
+    );
+    expect(
+      heatmapNoChangeText(HeatmapLiveMode.afterClose, allNoClosingMatch: true),
+      heatmapHollowReasonText(HollowReason.noClosingMatch),
     );
   });
 
   group('heatmapWeightedText', () {
     test('正式資料：只有漲跌幅；沒有值寫無漲跌資料', () {
       expect(
-        heatmapWeightedText(percent: -0.8, coverage: null, mode: null),
+        heatmapWeightedText(
+          percent: -0.8,
+          coverage: null,
+          mode: null,
+          allNoClosingMatch: false,
+        ),
         '-0.80%',
       );
       expect(
-        heatmapWeightedText(percent: -0.8, coverage: 0.5, mode: null),
+        heatmapWeightedText(
+          percent: -0.8,
+          coverage: 0.5,
+          mode: null,
+          allNoClosingMatch: false,
+        ),
         '-0.80%',
         reason: '正式資料不標比例',
       );
       expect(
-        heatmapWeightedText(percent: null, coverage: null, mode: null),
+        heatmapWeightedText(
+          percent: null,
+          coverage: null,
+          mode: null,
+          allNoClosingMatch: false,
+        ),
         'marketHeatmap.hollowNoChange',
       );
     });
@@ -140,6 +172,7 @@ void main() {
           percent: 1.83,
           coverage: 0.96,
           mode: HeatmapLiveMode.intraday,
+          allNoClosingMatch: false,
         ),
         '+1.83%marketHeatmap.liveCoverage',
       );
@@ -148,8 +181,21 @@ void main() {
           percent: null,
           coverage: 0,
           mode: HeatmapLiveMode.afterClose,
+          allNoClosingMatch: false,
         ),
         'marketHeatmap.notClosed',
+      );
+    });
+
+    test('🚨 收盤後區塊每一格都是收盤沒撮合：寫「收盤沒撮合」', () {
+      expect(
+        heatmapWeightedText(
+          percent: null,
+          coverage: 0,
+          mode: HeatmapLiveMode.afterClose,
+          allNoClosingMatch: true,
+        ),
+        'marketHeatmap.hollowNoClosingMatch',
       );
     });
 
@@ -159,6 +205,7 @@ void main() {
           percent: 1.83,
           coverage: null,
           mode: HeatmapLiveMode.intraday,
+          allNoClosingMatch: false,
         ),
         '+1.83%',
       );
@@ -194,27 +241,45 @@ void main() {
         heatmapLiveStatusText(
           const HeatmapLiveView(
             mode: HeatmapLiveMode.afterClose,
-            closing: (done: 3, total: 120),
+            closing: (done: 3, unmatched: 0, total: 120),
           ),
         ),
         'marketHeatmap.closingProgress',
       );
     });
 
-    // 窄螢幕最多兩行、超過以省略號結束：截掉的必須是後面的進度，不是暫停
-    test('收盤後又暫停：暫停在前、以分隔字接進度', () {
+    test('🚨 收盤後有收盤沒撮合的檔：進度另寫檔數', () {
       expect(
         heatmapLiveStatusText(
           const HeatmapLiveView(
             mode: HeatmapLiveMode.afterClose,
-            quoteStatus: paused,
-            closing: (done: 3, total: 120),
+            closing: (done: 3, unmatched: 1, total: 120),
           ),
         ),
-        'liveQuote.pausedRateLimit'
-        'marketHeatmap.statusJoin'
-        'marketHeatmap.closingProgress',
+        'marketHeatmap.closingProgressUnmatched',
       );
+    });
+
+    // 窄螢幕最多兩行、超過以省略號結束：截掉的必須是後面的進度，不是暫停
+    test('收盤後又暫停：暫停在前、以分隔字接進度', () {
+      for (final (unmatched, key) in [
+        (0, 'marketHeatmap.closingProgress'),
+        (2, 'marketHeatmap.closingProgressUnmatched'),
+      ]) {
+        expect(
+          heatmapLiveStatusText(
+            HeatmapLiveView(
+              mode: HeatmapLiveMode.afterClose,
+              quoteStatus: paused,
+              closing: (done: 3, unmatched: unmatched, total: 120),
+            ),
+          ),
+          'liveQuote.pausedRateLimit'
+          'marketHeatmap.statusJoin'
+          '$key',
+          reason: '收盤沒撮合 $unmatched 檔',
+        );
+      }
     });
 
     test('停市日退回：只有報價狀態（沒有進度）', () {
@@ -241,6 +306,8 @@ void main() {
       'notClosed': '未收盤',
       'previousClose': '{date} 收盤 {pct}',
       'closingProgress': '今日收盤 {done}／{total} 檔・待盤後更新',
+      'closingProgressUnmatched':
+          '今日收盤 {done}／{total} 檔・{unmatched} 檔收盤沒撮合・待盤後更新',
       'statusJoin': '・',
       'tooltipBreadthWithHollow': '漲 {up}、跌 {down}、平 {flat}、空心 {hollow}',
       'semOtherWithHollow':
@@ -262,6 +329,18 @@ void main() {
         expect(text, isNotEmpty, reason: '$locale $key');
         if (locale == 'zh-TW') expect(text, zhExpected[key], reason: key);
       }
+      if (locale == 'en') {
+        // 規格的英文措辭
+        expect(
+          block['closingProgressUnmatched'],
+          "Today's close {done}/{total} · {unmatched} no closing match · "
+          'after-hours data pending',
+        );
+        expect(
+          block['closingProgress'],
+          "Today's close {done}/{total} · after-hours data pending",
+        );
+      }
       for (final key in ['semLiveCoverage', 'semClosingCoverage']) {
         expect(block[key] as String, isNot(contains('・')), reason: key);
         expect(block[key] as String, isNot(contains('·')), reason: key);
@@ -274,6 +353,7 @@ void main() {
         ('semClosingCoverage', ['{pct}']),
         ('previousClose', ['{date}', '{pct}']),
         ('closingProgress', ['{done}', '{total}']),
+        ('closingProgressUnmatched', ['{done}', '{unmatched}', '{total}']),
         ('semIndustryNoChange', ['{name}', '{status}', '{count}']),
         ('semOtherNoChange', ['{label}', '{status}', '{count}']),
         ('tooltipBreadthWithHollow', ['{hollow}']),

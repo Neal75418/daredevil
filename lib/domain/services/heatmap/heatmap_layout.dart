@@ -61,6 +61,7 @@ class HeatmapOtherLayout {
     required this.weightedChangePercent,
     required this.breadth,
     required this.coverage,
+    required this.allNoClosingMatch,
   });
 
   /// 被合併的個股（市值降冪）
@@ -83,6 +84,9 @@ class HeatmapOtherLayout {
   /// 成員中有漲跌值的市值占成員市值合計的比例（0～1）
   final double coverage;
 
+  /// 每個成員都是 [HollowReason.noClosingMatch]（見 [heatmapAllNoClosingMatch]）
+  final bool allNoClosingMatch;
+
   /// 成員中自選或持股的檔數（> 0 時合併塊畫自選框）
   int get mineCount => members.where((t) => t.isMine).length;
 
@@ -97,7 +101,8 @@ class HeatmapOtherLayout {
       other.marketCap == marketCap &&
       other.weightedChangePercent == weightedChangePercent &&
       other.breadth == breadth &&
-      other.coverage == coverage;
+      other.coverage == coverage &&
+      other.allNoClosingMatch == allNoClosingMatch;
 
   @override
   int get hashCode => Object.hash(
@@ -110,6 +115,7 @@ class HeatmapOtherLayout {
     weightedChangePercent,
     breadth,
     coverage,
+    allNoClosingMatch,
   );
 }
 
@@ -170,6 +176,7 @@ class HeatmapIndustryGroupLayout {
     required this.weightedChangePercent,
     required this.breadth,
     required this.coverage,
+    required this.allNoClosingMatch,
   });
 
   /// 被合併的產業（與輸入同序，市值降冪）
@@ -194,6 +201,10 @@ class HeatmapIndustryGroupLayout {
   /// 成員所有個股中有漲跌值的市值占市值合計的比例（0～1）
   final double coverage;
 
+  /// 成員的每一檔個股都是 [HollowReason.noClosingMatch]（見
+  /// [heatmapAllNoClosingMatch]）
+  final bool allNoClosingMatch;
+
   /// 成員的個股檔數
   int get stockCount => members.fold(0, (a, i) => a + i.tiles.length);
 
@@ -211,7 +222,8 @@ class HeatmapIndustryGroupLayout {
       other.marketCap == marketCap &&
       other.weightedChangePercent == weightedChangePercent &&
       other.breadth == breadth &&
-      other.coverage == coverage;
+      other.coverage == coverage &&
+      other.allNoClosingMatch == allNoClosingMatch;
 
   @override
   int get hashCode => Object.hash(
@@ -223,6 +235,7 @@ class HeatmapIndustryGroupLayout {
     weightedChangePercent,
     breadth,
     coverage,
+    allNoClosingMatch,
   );
 }
 
@@ -302,6 +315,7 @@ HeatmapMarketLayout layoutHeatmapMarket(
       weightedChangePercent: heatmapWeightedChange(tiles),
       breadth: _breadth(tiles),
       coverage: heatmapValueCoverage(tiles),
+      allNoClosingMatch: heatmapAllNoClosingMatch(tiles),
     ),
   );
 }
@@ -422,6 +436,7 @@ HeatmapIndustryLayout _layoutIndustry(
           : heatmapWeightedChange(folded),
       breadth: _breadth(folded),
       coverage: heatmapValueCoverage(folded),
+      allNoClosingMatch: heatmapAllNoClosingMatch(folded),
     ),
   );
 }

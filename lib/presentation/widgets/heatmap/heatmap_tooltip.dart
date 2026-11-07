@@ -93,6 +93,7 @@ class HeatmapOtherTooltip extends StatelessWidget {
       percent: other.weightedChangePercent,
       coverage: other.coverage,
       mode: liveMode,
+      allNoClosingMatch: other.allNoClosingMatch,
     );
     final cap = formatHeatmapCap(
       other.marketCap,
@@ -156,6 +157,7 @@ class HeatmapIndustryGroupTooltip extends StatelessWidget {
       percent: group.weightedChangePercent,
       coverage: group.coverage,
       mode: liveMode,
+      allNoClosingMatch: group.allNoClosingMatch,
     );
     return _TooltipCard(
       children: [

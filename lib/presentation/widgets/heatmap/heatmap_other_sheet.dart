@@ -50,6 +50,7 @@ class HeatmapOtherSheet extends StatelessWidget {
       percent: other.weightedChangePercent,
       coverage: other.coverage,
       mode: liveMode,
+      allNoClosingMatch: other.allNoClosingMatch,
     );
     final members = sortHeatmapOtherMembers(other.members);
     return ListView.builder(

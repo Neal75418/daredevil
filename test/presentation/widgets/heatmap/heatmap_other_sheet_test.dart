@@ -48,6 +48,7 @@ final _other = HeatmapOtherLayout(
   weightedChangePercent: 0.5,
   breadth: (up: 2, down: 1, flat: 0, hollow: 1),
   coverage: 0.7,
+  allNoClosingMatch: false,
 );
 
 void main() {
@@ -123,6 +124,7 @@ void main() {
       weightedChangePercent: 3,
       breadth: (up: 1, down: 0, flat: 0, hollow: 2),
       coverage: 4 / 9,
+      allNoClosingMatch: false,
     );
     await pump(tester, other: live, liveMode: HeatmapLiveMode.intraday);
     expect(find.text('漲 1、跌 0、平 0、空心 2'), findsOneWidget);
@@ -149,10 +151,33 @@ void main() {
       weightedChangePercent: null,
       breadth: (up: 0, down: 0, flat: 0, hollow: 1),
       coverage: 0,
+      allNoClosingMatch: false,
     );
     await pump(tester, other: none, liveMode: HeatmapLiveMode.afterClose);
     expect(find.text('市值加權 未收盤'), findsOneWidget);
     expect(find.text('尚未取得收盤報價'), findsOneWidget);
+  });
+
+  testWidgets('🚨 收盤後成員都是收盤沒撮合：加權漲跌與每列都寫「收盤沒撮合」', (tester) async {
+    const unmatched = TileChangeHollow(HollowReason.noClosingMatch);
+    final none = HeatmapOtherLayout(
+      members: [
+        _tile('9973', '測試寅', 3e8, unmatched),
+        _tile('9972', '測試丑', 2e8, unmatched),
+      ],
+      bounds: _box,
+      paint: _box,
+      interactive: true,
+      wholeIndustry: false,
+      marketCap: 5e8,
+      weightedChangePercent: null,
+      breadth: (up: 0, down: 0, flat: 0, hollow: 2),
+      coverage: 0,
+      allNoClosingMatch: true,
+    );
+    await pump(tester, other: none, liveMode: HeatmapLiveMode.afterClose);
+    expect(find.text('市值加權 收盤沒撮合'), findsOneWidget);
+    expect(find.text('收盤沒撮合'), findsNWidgets(2));
   });
 
   test('排序看顯示的值：四捨五入後相同就依市值', () {
@@ -203,6 +228,7 @@ void main() {
       weightedChangePercent: 1.3,
       breadth: (up: 2, down: 0, flat: 0, hollow: 0),
       coverage: 1,
+      allNoClosingMatch: false,
     );
     await tester.pumpWidget(
       buildProviderTestApp(
@@ -240,6 +266,7 @@ void main() {
       weightedChangePercent: 0.004,
       breadth: (up: 0, down: 0, flat: 1, hollow: 0),
       coverage: 1,
+      allNoClosingMatch: false,
     );
     await tester.pumpWidget(
       buildProviderTestApp(

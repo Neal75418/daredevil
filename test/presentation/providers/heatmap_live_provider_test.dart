@@ -141,6 +141,7 @@ LiveQuoteState _state({
   DateTime? rateLimitedUntil,
   DateTime? lastRespondedAt,
   String? quoteTime,
+  Map<String, DateTime> givenUpAt = const {},
 }) => LiveQuoteState(
   entries: entries,
   fetchedAt: fetchedAt,
@@ -149,6 +150,7 @@ LiveQuoteState _state({
   lastRespondedAt: lastRespondedAt,
   latestResponseHadToday: hadToday,
   latestQuoteTime: quoteTime,
+  closingGivenUpAt: givenUpAt,
 );
 
 /// 開著的熱力圖頁：listener 讓 autoDispose 的 provider 一直活著，每個動作
@@ -547,12 +549,12 @@ void main() {
         for (var i = 3; i < 50; i++) _sym(i),
         for (var i = 51; i < 73; i++) _sym(i),
       ]);
-      expect(view.closing, (done: 3, total: 80));
+      expect(view.closing, (done: 3, unmatched: 0, total: 80));
       expect(_changeOf(view, '9900'), _colored);
       expect(_changeOf(view, '9903'), _hollow(HollowReason.noClosingQuote));
 
       final zoomed = page.zoomTo(_mon(13, 36), _semi);
-      expect(zoomed.closing, (done: 3, total: 80));
+      expect(zoomed.closing, (done: 3, unmatched: 0, total: 80));
       expect(_symbolsOf(zoomed), _symbolsOf(view));
     });
 
@@ -597,7 +599,90 @@ void main() {
         _state(entries: entries, fetchedAt: fetchedAt),
       );
       expect(quiet.quoteStatus, isNull);
-      expect(quiet.closing, (done: 1, total: 80));
+      expect(quiet.closing, (done: 1, unmatched: 0, total: 80));
+    });
+
+    test('🚨 報價中心已放棄的代號：移出登記清單、由下一檔補上；格子寫收盤沒撮合；'
+        '進度另計檔數（整張圖，放大不變）', () {
+      final page = _Page(
+        at: _mon(13, 40),
+        center: _state(
+          entries: {
+            '9900': _quote('9900', closing: true),
+            // 放棄後又拿到收盤報價：算已收盤，不算沒撮合
+            '9901': _quote('9901', closing: true),
+            // 試過但不是收盤報價
+            '9902': _quote('9902', time: '13:29:58'),
+          },
+          // 9905 沒有 entry（列被解析丟掉）；9950 不在全市場前 69、在半導體業；
+          // 't00' 不在圖上
+          givenUpAt: {
+            for (final s in ['9901', '9902', '9905', '9950', 't00'])
+              s: _mon(13, 39),
+          },
+        ),
+      );
+      final view = page.view;
+      expect(_symbolsOf(view), [
+        for (var i = 3; i < 50; i++)
+          if (i != 5) _sym(i),
+        for (var i = 51; i < 74; i++) _sym(i),
+      ]);
+      expect(view.closing, (done: 2, unmatched: 3, total: 80));
+      expect(_changeOf(view, '9901'), _colored);
+      for (final symbol in ['9902', '9905', '9950']) {
+        expect(
+          _changeOf(view, symbol),
+          _hollow(HollowReason.noClosingMatch),
+          reason: symbol,
+        );
+      }
+      expect(_changeOf(view, '9903'), _hollow(HollowReason.noClosingQuote));
+
+      final zoomed = page.zoomTo(_mon(13, 41), _semi);
+      expect(zoomed.closing, (done: 2, unmatched: 3, total: 80));
+      expect(_symbolsOf(zoomed), _symbolsOf(view));
+      final semi = zoomed.data!.industries.firstWhere((i) => i.key == _semi);
+      expect(semi.allNoClosingMatch, isFalse, reason: '9903 還在等');
+    });
+
+    test('🚨 前一天放棄的不算（報價中心換日後第一次發布前，狀態裡還是前一天的）；'
+        '今天放棄的照算', () {
+      final page = _Page(
+        at: _mon(13, 40),
+        center: _state(
+          givenUpAt: {
+            // 上週五放棄，報價中心還沒換日發布
+            '9901': DateTime(2026, 11, 6, 13, 42),
+            '9902': _mon(13, 39),
+          },
+        ),
+      );
+      final view = page.view;
+      expect(_symbolsOf(view), [
+        for (var i = 0; i < 50; i++)
+          if (i != 2) _sym(i),
+        for (var i = 51; i < 71; i++) _sym(i),
+      ], reason: '9901 照常登記、9902 移出');
+      expect(view.closing, (done: 0, unmatched: 1, total: 80));
+      expect(_changeOf(view, '9901'), _hollow(HollowReason.noClosingQuote));
+      expect(_changeOf(view, '9902'), _hollow(HollowReason.noClosingMatch));
+    });
+
+    test('盤中：報價中心的 closingGivenUpAt 不影響登記與上色', () {
+      final page = _Page(
+        at: _mon(10, 30),
+        center: _state(
+          entries: {'9900': _quote('9900')},
+          fetchedAt: {'9900': _mon(10, 30)},
+          // 今天的時刻：沒被日期濾掉，盤中照樣不看
+          givenUpAt: {'9900': _mon(10, 0), '9901': _mon(10, 0)},
+        ),
+      );
+      final view = page.view;
+      expect(_symbolsOf(view), _top69);
+      expect(view.closing, isNull);
+      expect(_changeOf(view, '9901'), _hollow(HollowReason.notLive));
     });
   });
 
@@ -665,12 +750,12 @@ void main() {
       );
       final view = page.view;
       expect(view.data!.liveMode, HeatmapLiveMode.afterClose);
-      expect(view.closing, (done: 1, total: 80));
+      expect(view.closing, (done: 1, unmatched: 0, total: 80));
       expect(view.quoteStatus, isNull);
 
       final zoomed = page.zoomTo(_mon(13, 36), _semi);
       expect(zoomed.data!.liveMode, HeatmapLiveMode.afterClose);
-      expect(zoomed.closing, (done: 1, total: 80));
+      expect(zoomed.closing, (done: 1, unmatched: 0, total: 80));
       expect(zoomed.quoteStatus, isNull);
     });
 
@@ -755,7 +840,11 @@ void main() {
         LiveHeaderStatus? status = const LiveHeaderStatus(
           LiveHeaderKind.pausedNetwork,
         ),
-        ({int done, int total})? closing = (done: 1, total: 10),
+        ({int done, int unmatched, int total})? closing = (
+          done: 1,
+          unmatched: 0,
+          total: 10,
+        ),
       }) => HeatmapLiveView(
         data: data,
         mode: mode,
@@ -778,7 +867,14 @@ void main() {
       expect(view(data: data, mode: HeatmapLiveMode.intraday), isNot(base));
       expect(view(data: data, registrations: const []), isNot(base));
       expect(view(data: data, status: null), isNot(base));
-      expect(view(data: data, closing: (done: 2, total: 10)), isNot(base));
+      expect(
+        view(data: data, closing: (done: 2, unmatched: 0, total: 10)),
+        isNot(base),
+      );
+      expect(
+        view(data: data, closing: (done: 1, unmatched: 1, total: 10)),
+        isNot(base),
+      );
     });
   });
 }

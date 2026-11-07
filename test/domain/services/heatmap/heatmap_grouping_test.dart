@@ -621,4 +621,43 @@ void main() {
       );
     });
   });
+
+  group('heatmapAllNoClosingMatch', () {
+    HeatmapTile tile(TileChange change) => HeatmapTile(
+      symbol: '9901',
+      name: '測試',
+      close: 100,
+      marketCap: 100,
+      baseCap: 0,
+      change: change,
+      isMine: false,
+    );
+    const unmatched = TileChangeHollow(HollowReason.noClosingMatch);
+
+    test('每一格都是收盤沒撮合：true', () {
+      expect(heatmapAllNoClosingMatch([tile(unmatched)]), isTrue);
+      expect(
+        heatmapAllNoClosingMatch([tile(unmatched), tile(unmatched)]),
+        isTrue,
+      );
+    });
+
+    test('混一格別的空心原因或有值：false', () {
+      for (final change in [
+        for (final reason in HollowReason.values)
+          if (reason != HollowReason.noClosingMatch) TileChangeHollow(reason),
+        const TileChangeValue(1),
+      ]) {
+        expect(
+          heatmapAllNoClosingMatch([tile(unmatched), tile(change)]),
+          isFalse,
+          reason: '$change',
+        );
+      }
+    });
+
+    test('🚨 沒有格子：false', () {
+      expect(heatmapAllNoClosingMatch(const []), isFalse);
+    });
+  });
 }

@@ -11,6 +11,7 @@ String heatmapHollowReasonText(HollowReason reason) => switch (reason) {
   HollowReason.noTrade => 'marketHeatmap.hollowNoTrade'.tr(),
   HollowReason.noQuote => 'marketHeatmap.hollowNoQuote'.tr(),
   HollowReason.noClosingQuote => 'marketHeatmap.hollowNoClosingQuote'.tr(),
+  HollowReason.noClosingMatch => 'marketHeatmap.hollowNoClosingMatch'.tr(),
 };
 
 /// 即時（收盤後是已收盤）部分占的市值比例，整數 %：四捨五入後夾在 1～99，
@@ -36,13 +37,20 @@ String heatmapCoverageSemantics(double coverage, HeatmapLiveMode mode) =>
       HeatmapLiveMode.afterClose => 'marketHeatmap.semClosingCoverage',
     }.tr(namedArgs: {'pct': '${heatmapCoveragePercent(coverage)}'});
 
-/// 產業或合併塊沒有加權漲跌時的文字：盤中「未即時」、收盤後「未收盤」、
-/// 正式資料（[mode] null）「無漲跌資料」
-String heatmapNoChangeText(HeatmapLiveMode? mode) => switch (mode) {
-  null => 'marketHeatmap.hollowNoChange'.tr(),
-  HeatmapLiveMode.intraday => 'marketHeatmap.notLive'.tr(),
-  HeatmapLiveMode.afterClose => 'marketHeatmap.notClosed'.tr(),
-};
+/// 產業或合併塊沒有加權漲跌時的文字：區塊裡每一格都是收盤沒撮合
+/// （[allNoClosingMatch]，只在收盤後套色時成立）寫「收盤沒撮合」；否則盤中
+/// 「未即時」、收盤後「未收盤」、正式資料（[mode] null）「無漲跌資料」
+String heatmapNoChangeText(
+  HeatmapLiveMode? mode, {
+  required bool allNoClosingMatch,
+}) {
+  if (allNoClosingMatch) return 'marketHeatmap.hollowNoClosingMatch'.tr();
+  return switch (mode) {
+    null => 'marketHeatmap.hollowNoChange'.tr(),
+    HeatmapLiveMode.intraday => 'marketHeatmap.notLive'.tr(),
+    HeatmapLiveMode.afterClose => 'marketHeatmap.notClosed'.tr(),
+  };
+}
 
 /// 產業或合併塊的加權漲跌：有值寫漲跌幅，即時套色時（[mode] 不是 null）
 /// 後面接即時比例；沒有值寫 [heatmapNoChangeText]
@@ -50,8 +58,11 @@ String heatmapWeightedText({
   required double? percent,
   required double? coverage,
   required HeatmapLiveMode? mode,
+  required bool allNoClosingMatch,
 }) {
-  if (percent == null) return heatmapNoChangeText(mode);
+  if (percent == null) {
+    return heatmapNoChangeText(mode, allNoClosingMatch: allNoClosingMatch);
+  }
   final text = formatHeatmapPercent(percent);
   if (mode == null || coverage == null) return text;
   return '$text${heatmapCoverageSuffix(coverage, mode)}';
@@ -70,11 +81,20 @@ String heatmapPreviousCloseText(({double percent, DateTime date}) previous) =>
 /// 熱力圖頁指數列下方的即時狀態行；空字串表示不顯示。
 ///
 /// 報價暫停、限流等報價中心的狀態放在最前面：這一行最多兩行，窄螢幕截斷時
-/// 先捨後面的收盤進度。收盤後（沒有退回正式資料）再接「今日收盤 N／M 檔」。
+/// 先捨後面的收盤進度。收盤後（沒有退回正式資料）再接「今日收盤 N／M 檔」；
+/// 有收盤沒撮合的檔時另寫檔數（「K 檔收盤沒撮合」）：那幾檔已不再等。
 String heatmapLiveStatusText(HeatmapLiveView view) => [
   if (view.quoteStatus case final status?) status.text(),
   if (view.closing case final closing?)
-    'marketHeatmap.closingProgress'.tr(
-      namedArgs: {'done': '${closing.done}', 'total': '${closing.total}'},
-    ),
+    closing.unmatched > 0
+        ? 'marketHeatmap.closingProgressUnmatched'.tr(
+            namedArgs: {
+              'done': '${closing.done}',
+              'unmatched': '${closing.unmatched}',
+              'total': '${closing.total}',
+            },
+          )
+        : 'marketHeatmap.closingProgress'.tr(
+            namedArgs: {'done': '${closing.done}', 'total': '${closing.total}'},
+          ),
 ].join('marketHeatmap.statusJoin'.tr());

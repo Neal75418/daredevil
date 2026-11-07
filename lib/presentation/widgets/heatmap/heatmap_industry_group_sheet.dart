@@ -50,6 +50,7 @@ class HeatmapIndustryGroupSheet extends StatelessWidget {
       percent: group.weightedChangePercent,
       coverage: group.coverage,
       mode: liveMode,
+      allNoClosingMatch: group.allNoClosingMatch,
     );
     final members = sortHeatmapGroupMembers(group.members);
     return ListView.builder(
@@ -100,12 +101,19 @@ class HeatmapIndustryGroupSheet extends StatelessWidget {
               : Text(name),
           subtitle: Text('$count · $cap'),
           trailing: percent == null
-              ? Text(heatmapNoChangeText(liveMode), style: muted)
+              ? Text(
+                  heatmapNoChangeText(
+                    liveMode,
+                    allNoClosingMatch: industry.allNoClosingMatch,
+                  ),
+                  style: muted,
+                )
               : Text(
                   heatmapWeightedText(
                     percent: percent,
                     coverage: industry.liveCoverage,
                     mode: liveMode,
+                    allNoClosingMatch: industry.allNoClosingMatch,
                   ),
                   style: theme.textTheme.titleSmall?.copyWith(
                     // 與顯示的數字同一個值（0.00% 不上紅綠）

@@ -169,6 +169,7 @@
     "hollowNoTrade": "尚無成交",
     "hollowNoQuote": "無報價",
     "hollowNoClosingQuote": "尚未取得收盤報價",
+    "hollowNoClosingMatch": "收盤沒撮合",
     "tooltipMine": "含自選或持股 {count} 檔",
     "semWithMine": "{base}，含自選或持股 {count} 檔",
     "mineMark": "自選或持股",
@@ -184,6 +185,7 @@
     "notClosed": "未收盤",
     "previousClose": "{date} 收盤 {pct}",
     "closingProgress": "今日收盤 {done}／{total} 檔・待盤後更新",
+    "closingProgressUnmatched": "今日收盤 {done}／{total} 檔・{unmatched} 檔收盤沒撮合・待盤後更新",
     "statusJoin": "・"
   },
   "marketOverview": {

@@ -66,8 +66,9 @@ class HeatmapLiveView {
   final LiveHeaderStatus? quoteStatus;
 
   /// 收盤後的進度：[total] 是整張圖（不論放大、合併）的檔數，[done] 是其中
-  /// 已有今天收盤報價的檔數；收盤後以外與停市日退回時為 null
-  final ({int done, int total})? closing;
+  /// 已有今天收盤報價的檔數，[unmatched] 是其中報價中心今天已放棄（收盤那一
+  /// 盤沒撮合）、而且沒有今天收盤報價的檔數；收盤後以外與停市日退回時為 null
+  final ({int done, int unmatched, int total})? closing;
 
   @override
   bool operator ==(Object other) =>
@@ -140,11 +141,18 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
       return HeatmapLiveView(data: _keep(official));
     }
 
+    // 只用今天放棄的：報價中心換日後第一次發布前，狀態裡可能還是前一天的
+    final givenUp = {
+      for (final MapEntry(key: symbol, value: at)
+          in center.closingGivenUpAt.entries)
+        if (DateContext.isSameDay(at, today)) symbol,
+    };
     final registered = heatmapLiveSymbols(
       official,
       mode: mode,
       zoomIndustryKey: selection.zoom,
       entries: center.entries,
+      closingGivenUp: givenUp,
       today: today,
     );
     final fresh = _track(registered, center.fetchedAt, now);
@@ -176,6 +184,7 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
         symbolStatus: center.symbolStatus,
         registered: registered.toSet(),
         fresh: fresh,
+        closingGivenUp: givenUp,
         today: today,
       ),
     );
@@ -200,7 +209,7 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
         mode: mode,
         stockRegistrations: registrations,
         quoteStatus: paused,
-        closing: _closingProgress(official, center.entries, today),
+        closing: _closingProgress(official, center.entries, givenUp, today),
       ),
     };
   }
@@ -278,22 +287,29 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
     return true;
   }
 
-  /// 收盤後的進度（「今天的收盤報價」與登記清單、套色用同一個判準）
-  static ({int done, int total}) _closingProgress(
+  /// 收盤後的進度（與登記清單、套色同一個判準與順序：今天的收盤報價先於
+  /// 放棄）
+  static ({int done, int unmatched, int total}) _closingProgress(
     HeatmapMarketData official,
     Map<String, LiveQuoteEntry> entries,
+    Set<String> closingGivenUp,
     DateTime today,
   ) {
     var done = 0;
+    var unmatched = 0;
     var total = 0;
     for (final industry in official.industries) {
       for (final tile in industry.tiles) {
         total++;
         final entry = entries[tile.symbol];
-        if (entry != null && isClosingQuoteOfToday(entry, today)) done++;
+        if (entry != null && isClosingQuoteOfToday(entry, today)) {
+          done++;
+        } else if (closingGivenUp.contains(tile.symbol)) {
+          unmatched++;
+        }
       }
     }
-    return (done: done, total: total);
+    return (done: done, unmatched: unmatched, total: total);
   }
 
   /// 新算出的資料與上一次相等時沿用上一次的物件：熱力圖以物件 identity

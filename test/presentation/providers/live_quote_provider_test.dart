@@ -443,6 +443,54 @@ void main() {
       });
     });
 
+    test('🚨 試滿 10 次的代號與第 10 次的時刻出現在發布的 closingGivenUpAt;拿到收盤報價的不在', () {
+      fakeAsync((async) {
+        const other = LiveQuoteRegistration(
+          symbol: '2317',
+          market: MarketCode.twse,
+        );
+        final h = _Harness(async, afterCloseStart)
+          ..respond = (exCh, now) async => _mis([
+            for (final e in exCh)
+              if (_symbolOf(e) == '2317')
+                _row('2317', now, t: '13:30:00')
+              else
+                _row(
+                  _symbolOf(e),
+                  now,
+                  z: '-',
+                  b: '99.5000_',
+                  a: '100.5000_',
+                  t: '13:29:40',
+                ),
+          ]);
+        expect(h.state.closingGivenUpAt, isEmpty, reason: '預設空的');
+        h.center.register('A', const [tsmc, other]);
+        // 每秒前進,直到第 9 個請求送出並套用(最多 20 分鐘)
+        for (
+          var i = 0;
+          i < 1200 &&
+              h.requests.length < LiveQuoteParams.afterCloseMaxAttempts - 1;
+          i++
+        ) {
+          h.elapse(const Duration(seconds: 1));
+        }
+        h.elapse(const Duration(seconds: 1));
+        expect(
+          h.requests,
+          hasLength(LiveQuoteParams.afterCloseMaxAttempts - 1),
+          reason: '前提',
+        );
+        expect(h.state.entries['2317']!.isClosingQuote, isTrue, reason: '前提');
+        expect(h.state.closingGivenUpAt, isEmpty, reason: '第 9 次');
+
+        h.elapse(const Duration(minutes: 2));
+        expect(h.requests, hasLength(LiveQuoteParams.afterCloseMaxAttempts));
+        expect(h.state.closingGivenUpAt, {'2330': h.requests.last.at});
+        h.dispose();
+      });
+    });
+
     test('🚨 網路失敗不計入 10 次;還要抓的期間會判暫停', () {
       fakeAsync((async) {
         final h = _Harness(async, afterCloseStart)

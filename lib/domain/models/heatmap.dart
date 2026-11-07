@@ -70,6 +70,9 @@ enum HollowReason {
 
   /// 收盤後還沒拿到今天的收盤報價
   noClosingQuote,
+
+  /// 收盤後試滿次數仍沒有今天的收盤報價（收盤那一盤沒撮合），不再等
+  noClosingMatch,
 }
 
 /// 即時套色的時段
@@ -237,6 +240,7 @@ class HeatmapIndustry {
     required this.weightedChangePercent,
     required this.tiles,
     this.liveCoverage,
+    this.allNoClosingMatch = false,
   });
 
   /// 產業別；null 是「未分類」
@@ -255,6 +259,10 @@ class HeatmapIndustry {
   /// 市值降冪、同值依代號升冪
   final List<HeatmapTile> tiles;
 
+  /// 每一格都是 [HollowReason.noClosingMatch]（沒有格子時為 false）：只在收盤
+  /// 後套色時可能成立，產業沒有加權漲跌時改寫「收盤沒撮合」
+  final bool allNoClosingMatch;
+
   /// 放大、點擊等用的識別值（未分類為空字串）
   String get key => name ?? '';
 
@@ -265,6 +273,7 @@ class HeatmapIndustry {
       other.marketCap == marketCap &&
       other.weightedChangePercent == weightedChangePercent &&
       other.liveCoverage == liveCoverage &&
+      other.allNoClosingMatch == allNoClosingMatch &&
       const ListEquality<HeatmapTile>().equals(other.tiles, tiles);
 
   @override
@@ -273,6 +282,7 @@ class HeatmapIndustry {
     marketCap,
     weightedChangePercent,
     liveCoverage,
+    allNoClosingMatch,
     const ListEquality<HeatmapTile>().hash(tiles),
   );
 
@@ -280,7 +290,7 @@ class HeatmapIndustry {
   String toString() =>
       'HeatmapIndustry($key, cap: $marketCap, '
       'weighted: $weightedChangePercent, coverage: $liveCoverage, '
-      'tiles: $tiles)';
+      'allNoClosingMatch: $allNoClosingMatch, tiles: $tiles)';
 }
 
 /// 一個市場的熱力圖資料

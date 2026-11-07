@@ -12,12 +12,16 @@ HeatmapTile _tile({double baseCap = 100, TileChange? change}) => HeatmapTile(
   isMine: false,
 );
 
-HeatmapIndustry _industry({double? liveCoverage}) => HeatmapIndustry(
+HeatmapIndustry _industry({
+  double? liveCoverage,
+  bool allNoClosingMatch = false,
+}) => HeatmapIndustry(
   name: '測試業',
   marketCap: 1000,
   weightedChangePercent: 1,
   tiles: [_tile()],
   liveCoverage: liveCoverage,
+  allNoClosingMatch: allNoClosingMatch,
 );
 
 HeatmapMarketData _data({HeatmapLiveMode? liveMode}) => HeatmapMarketData(
@@ -88,6 +92,15 @@ void main() {
     _expectSame(_industry(liveCoverage: 0.5), _industry(liveCoverage: 0.5));
     _expectDistinct(_industry(liveCoverage: 0.5), _industry(liveCoverage: 1));
     _expectDistinct(_industry(), _industry(liveCoverage: 0));
+  });
+
+  test('HeatmapIndustry：allNoClosingMatch 預設 false、納入 ==／hashCode', () {
+    expect(_industry().allNoClosingMatch, isFalse);
+    _expectSame(
+      _industry(allNoClosingMatch: true),
+      _industry(allNoClosingMatch: true),
+    );
+    _expectDistinct(_industry(allNoClosingMatch: true), _industry());
   });
 
   test('HeatmapMarketData：liveMode 預設 null、納入 ==／hashCode', () {

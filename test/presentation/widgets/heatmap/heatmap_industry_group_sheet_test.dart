@@ -40,17 +40,21 @@ HeatmapIndustry _industry(
 
 const HeatmapBox _box = (left: 0, top: 0, width: 100, height: 100);
 
-HeatmapIndustryGroupLayout _group(List<HeatmapIndustry> members) =>
-    HeatmapIndustryGroupLayout(
-      members: members,
-      bounds: _box,
-      paint: _box,
-      interactive: true,
-      marketCap: members.fold(0.0, (a, i) => a + i.marketCap),
-      weightedChangePercent: 0.5,
-      breadth: (up: 4, down: 2, flat: 0, hollow: 2),
-      coverage: 0.7,
-    );
+HeatmapIndustryGroupLayout _group(
+  List<HeatmapIndustry> members, {
+  double? pct = 0.5,
+  bool allNoClosingMatch = false,
+}) => HeatmapIndustryGroupLayout(
+  members: members,
+  bounds: _box,
+  paint: _box,
+  interactive: true,
+  marketCap: members.fold(0.0, (a, i) => a + i.marketCap),
+  weightedChangePercent: pct,
+  breadth: (up: 4, down: 2, flat: 0, hollow: 2),
+  coverage: 0.7,
+  allNoClosingMatch: allNoClosingMatch,
+);
 
 final _members = [
   _industry('甲業', 4e8, 1),
@@ -124,6 +128,45 @@ void main() {
     // 顏色看漲跌（比例不影響）
     final text = tester.widget<Text>(find.text('-2.00%・即時 1%'));
     expect(text.style?.color, AppTheme.getPriceColor(-2, Brightness.light));
+  });
+
+  testWidgets('🚨 收盤後：全部收盤沒撮合的產業寫「收盤沒撮合」，其餘沒有值的寫「未收盤」', (tester) async {
+    HeatmapIndustry unmatched(String name, double cap) => HeatmapIndustry(
+      name: name,
+      marketCap: cap,
+      weightedChangePercent: null,
+      liveCoverage: 0,
+      allNoClosingMatch: true,
+      tiles: [
+        HeatmapTile(
+          symbol: '9909',
+          name: '測試沒撮合',
+          close: 100,
+          marketCap: cap,
+          baseCap: 0,
+          change: const TileChangeHollow(HollowReason.noClosingMatch),
+          isMine: false,
+        ),
+      ],
+    );
+    await pump(
+      tester,
+      _group([
+        unmatched('甲業', 4e8),
+        _industry('乙業', 3e8, null, coverage: 0),
+      ], pct: null),
+      liveMode: HeatmapLiveMode.afterClose,
+    );
+    expect(find.text('市值加權 未收盤'), findsOneWidget);
+    expect(find.text('收盤沒撮合'), findsOneWidget);
+    expect(find.text('未收盤'), findsOneWidget);
+
+    await pump(
+      tester,
+      _group([unmatched('甲業', 4e8)], pct: null, allNoClosingMatch: true),
+      liveMode: HeatmapLiveMode.afterClose,
+    );
+    expect(find.text('市值加權 收盤沒撮合'), findsOneWidget);
   });
 
   testWidgets('產業別空白寫「未分類」', (tester) async {

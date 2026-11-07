@@ -31,9 +31,11 @@ HeatmapLiveMode? heatmapLiveModeAt({
 /// - [HeatmapLiveMode.intraday]：放大到某個產業（[zoomIndustryKey]）時是該產業
 ///   的前幾大，否則是全市場的前幾大。放大的產業不在 [official]（重讀後消失）
 ///   視同沒放大。
-/// - [HeatmapLiveMode.afterClose]：全市場還沒有今天收盤報價的股票中的前幾大，
-///   放大與否都一樣；拿到的移出、下一檔補進，一輪一輪把整個市場收齊。
-///   收盤報價是定值，[entries] 裡哪個畫面抓的都算。
+/// - [HeatmapLiveMode.afterClose]：全市場還沒有今天收盤報價、報價中心也還沒
+///   放棄（[closingGivenUp]，收盤那一盤沒撮合）的股票中的前幾大，放大與否都
+///   一樣；拿到的與放棄的移出、下一檔補進，一輪一輪把整個市場收齊。放棄的
+///   不移出會一直占著名額，報價中心不再抓它們，其餘的就永遠排不進來。
+///   收盤報價是定值，[entries] 裡哪個畫面抓的都算。盤中不看 [closingGivenUp]。
 ///
 /// 純函式。放大時直接取產業內已排好的順序（[HeatmapIndustry.tiles]）。
 List<String> heatmapLiveSymbols(
@@ -41,6 +43,7 @@ List<String> heatmapLiveSymbols(
   required HeatmapLiveMode mode,
   required String? zoomIndustryKey,
   required Map<String, LiveQuoteEntry> entries,
+  required Set<String> closingGivenUp,
   required DateTime today,
 }) {
   final Iterable<HeatmapTile> candidates;
@@ -55,7 +58,8 @@ List<String> heatmapLiveSymbols(
     case HeatmapLiveMode.afterClose:
       candidates = _tilesByMarketCap(official).where((tile) {
         final entry = entries[tile.symbol];
-        return entry == null || !isClosingQuoteOfToday(entry, today);
+        return (entry == null || !isClosingQuoteOfToday(entry, today)) &&
+            !closingGivenUp.contains(tile.symbol);
       });
   }
   return [
@@ -92,10 +96,12 @@ bool isClosingQuoteOfToday(LiveQuoteEntry entry, DateTime today) =>
 /// - [HeatmapLiveMode.intraday]：只用熱力圖自己登記（[registered]）、登記之後
 ///   拿到過（[fresh]）、日期是 [today]、有成交或鎖住價的報價；登記之前中心裡
 ///   別的畫面抓到的報價不用（可能是早上的舊價）。
-/// - [HeatmapLiveMode.afterClose]：只看是不是今天的收盤報價（定值，哪個畫面
-///   抓的都可以）。
+/// - [HeatmapLiveMode.afterClose]：依序判定：今天的收盤報價（定值，哪個畫面
+///   抓的都可以）上色；在 [closingGivenUp]（報價中心試滿次數後放棄）是收盤
+///   沒撮合；其餘是尚未取得收盤報價。
 ///
-/// [symbolStatus] 只用來分辨盤中「無報價」與「未即時」。
+/// [symbolStatus] 只用來分辨盤中「無報價」與「未即時」；[closingGivenUp]
+/// 盤中不看。
 HeatmapMarketData overlayHeatmapLive(
   HeatmapMarketData official, {
   required HeatmapLiveMode mode,
@@ -103,6 +109,7 @@ HeatmapMarketData overlayHeatmapLive(
   required Map<String, LiveSymbolStatus> symbolStatus,
   required Set<String> registered,
   required Set<String> fresh,
+  required Set<String> closingGivenUp,
   required DateTime today,
 }) {
   _Verdict judge(HeatmapTile tile) {
@@ -116,7 +123,11 @@ HeatmapMarketData overlayHeatmapLive(
         status: symbolStatus[tile.symbol],
         today: today,
       ),
-      HeatmapLiveMode.afterClose => _judgeAfterClose(entry, today),
+      HeatmapLiveMode.afterClose => _judgeAfterClose(
+        entry: entry,
+        givenUp: closingGivenUp.contains(tile.symbol),
+        today: today,
+      ),
     };
   }
 
@@ -177,10 +188,19 @@ _Verdict _judgeIntraday({
   return _Colorable(entry);
 }
 
-_Verdict _judgeAfterClose(LiveQuoteEntry? entry, DateTime today) =>
-    entry != null && isClosingQuoteOfToday(entry, today)
-    ? _Colorable(entry)
-    : const _Hollow(HollowReason.noClosingQuote);
+/// 收盤報價先於放棄：報價中心放棄的代號只要有今天的收盤報價就上色
+_Verdict _judgeAfterClose({
+  required LiveQuoteEntry? entry,
+  required bool givenUp,
+  required DateTime today,
+}) {
+  if (entry != null && isClosingQuoteOfToday(entry, today)) {
+    return _Colorable(entry);
+  }
+  return _Hollow(
+    givenUp ? HollowReason.noClosingMatch : HollowReason.noClosingQuote,
+  );
+}
 
 HeatmapIndustry _overlayIndustry(
   HeatmapIndustry industry,
@@ -197,6 +217,7 @@ HeatmapIndustry _overlayIndustry(
     weightedChangePercent: heatmapWeightedChange(tiles),
     tiles: List.unmodifiable(tiles),
     liveCoverage: heatmapValueCoverage(tiles),
+    allNoClosingMatch: heatmapAllNoClosingMatch(tiles),
   );
 }
 

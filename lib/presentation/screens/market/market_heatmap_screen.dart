@@ -355,6 +355,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
             percent: industry.weightedChangePercent,
             coverage: industry.liveCoverage,
             mode: mode,
+            allNoClosingMatch: industry.allNoClosingMatch,
           );
     final industries = [...?data?.industries]
       ..sort((a, b) {
@@ -411,7 +412,10 @@ String _industrySemantics(HeatmapIndustryLayout layout, HeatmapLiveMode? mode) {
     return 'marketHeatmap.semIndustryNoChange'.tr(
       namedArgs: {
         'name': name,
-        'status': heatmapNoChangeText(mode),
+        'status': heatmapNoChangeText(
+          mode,
+          allNoClosingMatch: industry.allNoClosingMatch,
+        ),
         'count': count,
       },
     );
@@ -467,6 +471,7 @@ String _groupSemantics(
       percent: percent,
       breadth: group.breadth,
       coverage: group.coverage,
+      allNoClosingMatch: group.allNoClosingMatch,
       mode: mode,
     ),
     group.mineCount,
@@ -493,6 +498,7 @@ String _otherSemantics(
       percent: other.weightedChangePercent,
       breadth: other.breadth,
       coverage: other.coverage,
+      allNoClosingMatch: other.allNoClosingMatch,
       mode: mode,
     ),
     other.mineCount,
@@ -507,6 +513,7 @@ String _foldSemantics({
   required double? percent,
   required HeatmapBreadth breadth,
   required double coverage,
+  required bool allNoClosingMatch,
   required HeatmapLiveMode? mode,
 }) {
   final pct = percent;
@@ -514,7 +521,10 @@ String _foldSemantics({
     return 'marketHeatmap.semOtherNoChange'.tr(
       namedArgs: {
         'label': label,
-        'status': heatmapNoChangeText(mode),
+        'status': heatmapNoChangeText(
+          mode,
+          allNoClosingMatch: allNoClosingMatch,
+        ),
         'count': '$count',
       },
     );

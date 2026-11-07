@@ -593,12 +593,74 @@ void main() {
         weightedChangePercent: other.weightedChangePercent,
         breadth: other.breadth,
         coverage: coverage,
+        allNoClosingMatch: other.allNoClosingMatch,
       );
       expect(other.coverage, 1.0, reason: '前提：成員都有值');
       expect(withCoverage(1.0), other);
       expect(withCoverage(1.0).hashCode, other.hashCode);
       expect(withCoverage(0.5), isNot(other));
       expect(withCoverage(0.5).hashCode, isNot(other.hashCode));
+    });
+
+    test('🚨 合併塊的 allNoClosingMatch：成員都是收盤沒撮合才成立', () {
+      const unmatched = TileChangeHollow(HollowReason.noClosingMatch);
+      const waiting = TileChangeHollow(HollowReason.noClosingQuote);
+      HeatmapOtherLayout otherOf(TileChange second) => only([
+        tile('A0', 1e6),
+        tile('S0', 1, change: unmatched),
+        tile('S1', 1, change: second),
+      ]).other!;
+      expect(otherOf(unmatched).allNoClosingMatch, isTrue);
+      expect(otherOf(waiting).allNoClosingMatch, isFalse);
+      expect(
+        only([
+          tile('A0', 1e6),
+          tile('S0', 1),
+          tile('S1', 1),
+        ]).other!.allNoClosingMatch,
+        isFalse,
+      );
+    });
+
+    test('整個產業都合併：allNoClosingMatch 與產業一致', () {
+      const unmatched = TileChangeHollow(HollowReason.noClosingMatch);
+      final l = layoutHeatmap(
+        [
+          industry('A', [
+            for (var i = 0; i < 3; i++) tile('A$i', 1, change: unmatched),
+          ]),
+        ],
+        width: 10,
+        height: 10,
+      ).single;
+      expect(l.tiles, isEmpty, reason: '前提：整個產業都合併');
+      expect(l.other!.wholeIndustry, isTrue, reason: '前提');
+      expect(l.other!.allNoClosingMatch, isTrue);
+    });
+
+    test('其他塊：allNoClosingMatch 納入 ==／hashCode', () {
+      final other = only([
+        tile('A0', 1e6),
+        tile('S0', 300),
+        tile('S1', 100),
+      ]).other!;
+      HeatmapOtherLayout withFlag(bool flag) => HeatmapOtherLayout(
+        members: other.members,
+        bounds: other.bounds,
+        paint: other.paint,
+        interactive: other.interactive,
+        wholeIndustry: other.wholeIndustry,
+        marketCap: other.marketCap,
+        weightedChangePercent: other.weightedChangePercent,
+        breadth: other.breadth,
+        coverage: other.coverage,
+        allNoClosingMatch: flag,
+      );
+      expect(other.allNoClosingMatch, isFalse, reason: '前提');
+      expect(withFlag(false), other);
+      expect(withFlag(false).hashCode, other.hashCode);
+      expect(withFlag(true), isNot(other));
+      expect(withFlag(true).hashCode, isNot(other.hashCode));
     });
 
     test('otherAt：點在合併塊上回該產業與合併塊；格子上回 null', () {
@@ -801,12 +863,62 @@ void main() {
             weightedChangePercent: g.weightedChangePercent,
             breadth: g.breadth,
             coverage: coverage,
+            allNoClosingMatch: g.allNoClosingMatch,
           );
       expect(g.coverage, 1.0, reason: '前提：成員都有值');
       expect(withCoverage(1.0), g);
       expect(withCoverage(1.0).hashCode, g.hashCode);
       expect(withCoverage(0.5), isNot(g));
       expect(withCoverage(0.5).hashCode, isNot(g.hashCode));
+    });
+
+    test('🚨 合併塊的 allNoClosingMatch：成員所有個股都是收盤沒撮合才成立', () {
+      const unmatched = TileChangeHollow(HollowReason.noClosingMatch);
+      const waiting = TileChangeHollow(HollowReason.noClosingQuote);
+      HeatmapIndustryGroupLayout groupOf(TileChange last) =>
+          layoutHeatmapMarket(
+            [
+              one('A', 1e6),
+              ind('S1', [
+                stock('S1a', 300, change: unmatched),
+                stock('S1b', 100, change: unmatched),
+              ]),
+              ind('S2', [
+                stock('S2a', 200, change: unmatched),
+                stock('S2b', 200, change: last),
+              ]),
+            ],
+            width: 400,
+            height: 300,
+          ).smallIndustries!;
+      expect(groupOf(unmatched).allNoClosingMatch, isTrue);
+      expect(groupOf(waiting).allNoClosingMatch, isFalse);
+      expect(groupOf(const TileChangeValue(1)).allNoClosingMatch, isFalse);
+    });
+
+    test('小產業合併塊：allNoClosingMatch 納入 ==／hashCode', () {
+      final g = layoutHeatmapMarket(
+        [one('A', 1e6), one('S1', 10), one('S2', 10)],
+        width: 400,
+        height: 300,
+      ).smallIndustries!;
+      HeatmapIndustryGroupLayout withFlag(bool flag) =>
+          HeatmapIndustryGroupLayout(
+            members: g.members,
+            bounds: g.bounds,
+            paint: g.paint,
+            interactive: g.interactive,
+            marketCap: g.marketCap,
+            weightedChangePercent: g.weightedChangePercent,
+            breadth: g.breadth,
+            coverage: g.coverage,
+            allNoClosingMatch: flag,
+          );
+      expect(g.allNoClosingMatch, isFalse, reason: '前提');
+      expect(withFlag(false), g);
+      expect(withFlag(false).hashCode, g.hashCode);
+      expect(withFlag(true), isNot(g));
+      expect(withFlag(true).hashCode, isNot(g.hashCode));
     });
 
     test('合併塊照市值排進降冪序列（比它小的產業排在它後面）', () {

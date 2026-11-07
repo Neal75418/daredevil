@@ -194,8 +194,10 @@ class HeatmapPaintLabels {
   /// 即時套色時接在產業與合併塊漲跌幅後面的比例（「・即時 96%」）
   final String Function(double coverage, HeatmapLiveMode mode) coverageSuffix;
 
-  /// 即時套色時產業與合併塊沒有漲跌的文字（「未即時」）
-  final String Function(HeatmapLiveMode mode) noChangeLabel;
+  /// 即時套色時產業與合併塊沒有漲跌的文字（「未即時」）；[allNoClosingMatch]
+  /// 是區塊的同名欄位（每一格都是收盤沒撮合）
+  final String Function(HeatmapLiveMode mode, {required bool allNoClosingMatch})
+  noChangeLabel;
 
   @override
   bool operator ==(Object other) =>
@@ -303,6 +305,7 @@ class HeatmapPainter extends CustomPainter {
     final (:percent, :suffix) = _weightedTexts(
       industry.industry.weightedChangePercent,
       industry.industry.liveCoverage,
+      allNoClosingMatch: industry.industry.allNoClosingMatch,
     );
     final color = HeatmapColors.headerText(brightness);
     // 同一次繪製裡同一個字串只排版一次：量過的直接拿來畫
@@ -380,7 +383,11 @@ class HeatmapPainter extends CustomPainter {
     if (rect.width <= 0 || rect.height <= 0) return;
     final percent = other.weightedChangePercent;
     final textColor = _paintFoldBlock(canvas, rect, percent, other.mineCount);
-    final (percent: value, :suffix) = _weightedTexts(percent, other.coverage);
+    final (percent: value, :suffix) = _weightedTexts(
+      percent,
+      other.coverage,
+      allNoClosingMatch: other.allNoClosingMatch,
+    );
     final count = other.members.length;
     if (!other.wholeIndustry) {
       // 「其他 N 檔」縮短後看不懂：寫不下就退成「其他」，再寫不下就不寫
@@ -428,7 +435,11 @@ class HeatmapPainter extends CustomPainter {
     if (rect.width <= 0 || rect.height <= 0) return;
     final percent = group.weightedChangePercent;
     final textColor = _paintFoldBlock(canvas, rect, percent, group.mineCount);
-    final (percent: value, :suffix) = _weightedTexts(percent, group.coverage);
+    final (percent: value, :suffix) = _weightedTexts(
+      percent,
+      group.coverage,
+      allNoClosingMatch: group.allNoClosingMatch,
+    );
     _paintLabel(
       canvas,
       rect,
@@ -442,17 +453,20 @@ class HeatmapPainter extends CustomPainter {
   }
 
   /// 產業標題與合併塊的漲跌文字：[percent]（漲跌幅；即時套色時沒有值寫
-  /// [HeatmapPaintLabels.noChangeLabel]：盤中「未即時」、收盤後「未收盤」）
-  /// 與接在後面的即時比例 [suffix]。正式資料（liveMode 為 null）時不寫比例，
-  /// 沒有值也不寫。
+  /// [HeatmapPaintLabels.noChangeLabel]：盤中「未即時」、收盤後「未收盤」，
+  /// 區塊每一格都是收盤沒撮合時「收盤沒撮合」）與接在後面的即時比例
+  /// [suffix]。正式資料（liveMode 為 null）時不寫比例，沒有值也不寫。
   ({String? percent, String? suffix}) _weightedTexts(
     double? change,
-    double? coverage,
-  ) {
+    double? coverage, {
+    required bool allNoClosingMatch,
+  }) {
     final mode = liveMode;
     if (change == null) {
       return (
-        percent: mode == null ? null : labels.noChangeLabel(mode),
+        percent: mode == null
+            ? null
+            : labels.noChangeLabel(mode, allNoClosingMatch: allNoClosingMatch),
         suffix: null,
       );
     }

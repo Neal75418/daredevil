@@ -1,3 +1,4 @@
+import 'package:daredevil/core/constants/live_quote_params.dart';
 import 'package:daredevil/data/models/twse/intraday_quote.dart';
 import 'package:daredevil/data/remote/intraday_quote_client.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
@@ -76,6 +77,30 @@ class LiveQuoteBook {
 
   /// 這幾檔的畫面都離開了:之後再登記時第一輪不閃色
   void forget(Iterable<String> symbols) => _fetchedLastRound.removeAll(symbols);
+
+  /// 今天收盤後已放棄的代號 → 最後一次嘗試的套用時刻(呼叫端傳給 [apply]
+  /// 的 `now`)。
+  ///
+  /// 放棄＝現在不是收盤報價,而且 [LiveQuoteSchedule.afterClosePending] 說
+  /// 不必再抓(「有回應但不是收盤報價」已滿
+  /// [LiveQuoteParams.afterCloseMaxAttempts] 次,收盤那一盤沒撮合)。直接取
+  /// 排程判準的反面:沒有收盤報價的代號不是還要抓、就是在這裡。放棄後收盤後
+  /// 不再請求它,時刻就停在放棄的那一次。換日清空
+  Map<String, DateTime> get closingGivenUpAt {
+    final givenUp = <String, DateTime>{};
+    for (final MapEntry(key: symbol, value: (:attempts, :lastAttemptAt))
+        in _afterClose.entries) {
+      final closing = _entries[symbol]?.isClosingQuote ?? false;
+      if (!closing &&
+          !LiveQuoteSchedule.afterClosePending(
+            hasClosingQuote: closing,
+            attempts: attempts,
+          )) {
+        givenUp[symbol] = lastAttemptAt;
+      }
+    }
+    return Map.unmodifiable(givenUp);
+  }
 
   /// 收盤後 [candidates] 中還要抓的代號(保持輸入順序)
   List<String> pendingAfterClose(Iterable<String> candidates) => [

@@ -406,6 +406,86 @@ void main() {
     });
   });
 
+  group('收盤後已放棄的代號與時刻(closingGivenUpAt)', () {
+    QuoteBatchReport notClosing() =>
+        responded([row('A', b: '99.5000_', a: '100.5000_', t: '13:29:40')]);
+
+    void attempt(QuoteBatchReport r, int minute) => book.apply(
+      r,
+      requested: const ['A'],
+      now: at(13, 31 + minute),
+      afterClose: true,
+    );
+
+    test('🚨 有回應但不是收盤報價:第 9 次不在、第 10 次在', () {
+      for (var i = 0; i < 9; i++) {
+        attempt(notClosing(), i);
+      }
+      expect(book.closingGivenUpAt, isEmpty, reason: '第 9 次');
+      expect(book.pendingAfterClose(const ['A']), ['A'], reason: '前提:還要抓');
+
+      attempt(notClosing(), 9);
+      expect(book.closingGivenUpAt, {'A': at(13, 40)}, reason: '第 10 次的時刻');
+      expect(book.pendingAfterClose(const ['A']), isEmpty, reason: '前提:不再抓');
+    });
+
+    test('🚨 網路失敗(批次失敗)不計', () {
+      for (var i = 0; i < 12; i++) {
+        attempt(failed({'A'}), i);
+      }
+      expect(book.closingGivenUpAt, isEmpty);
+    });
+
+    test('拿到收盤報價的不在', () {
+      attempt(responded([row('A', z: '100.0000', t: '13:30:00')]), 0);
+      expect(book.closingGivenUpAt, isEmpty);
+    });
+
+    test('🚨 試滿 10 次之後才拿到收盤報價:不在', () {
+      for (var i = 0; i < 10; i++) {
+        attempt(notClosing(), i);
+      }
+      expect(book.closingGivenUpAt, {'A': at(13, 40)}, reason: '前提');
+      attempt(responded([row('A', z: '100.0000', t: '13:30:00')]), 10);
+      expect(book.entries['A']!.isClosingQuote, isTrue, reason: '前提');
+      expect(book.closingGivenUpAt, isEmpty);
+    });
+
+    test('盤中的回合不計', () {
+      for (var i = 0; i < 12; i++) {
+        round(notClosing());
+      }
+      expect(book.closingGivenUpAt, isEmpty);
+    });
+
+    test('🚨 換日清空', () {
+      for (var i = 0; i < 10; i++) {
+        attempt(notClosing(), i);
+      }
+      expect(book.closingGivenUpAt, {'A': at(13, 40)}, reason: '前提');
+      expect(book.rollDay(DateTime(2026, 10, 7, 8, 30)), isTrue);
+      expect(book.closingGivenUpAt, isEmpty);
+    });
+
+    test('唯讀', () {
+      for (var i = 0; i < 10; i++) {
+        attempt(notClosing(), i);
+      }
+      expect(
+        () => book.closingGivenUpAt['B'] = at(13, 50),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('🚨 列被解析丟掉(暫停交易、整天沒成交)也算:沒有 entry 照樣在', () {
+      for (var i = 0; i < 10; i++) {
+        attempt(responded([row('A')]), i);
+      }
+      expect(book.entries, isNot(contains('A')), reason: '前提:沒有 entry');
+      expect(book.closingGivenUpAt, {'A': at(13, 40)});
+    });
+  });
+
   group('拿到今天報價的時刻', () {
     /// 9901 有今天的報價、9902 有回應但報價是昨天的、9903 的批次失敗
     QuoteBatchReport mixed() => QuoteBatchReport(

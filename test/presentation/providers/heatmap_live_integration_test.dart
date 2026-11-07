@@ -63,6 +63,7 @@ void main() {
       );
       expect(s.view.closing, (
         done: HeatmapParams.liveTileLimit,
+        unmatched: 0,
         total: _stockCount,
       ));
       expect(_coloredOf(s.view), top, reason: '第一輪拿到的是市值前 69');
@@ -129,7 +130,11 @@ void main() {
 
       final view = s.view;
       expect(view.data!.liveMode, HeatmapLiveMode.afterClose);
-      expect(view.closing, (done: traded, total: _stockCount));
+      expect(view.closing, (
+        done: traded,
+        unmatched: noTrade.length,
+        total: _stockCount,
+      ));
       expect(
         view.quoteStatus,
         isNull,
@@ -149,10 +154,90 @@ void main() {
           isA<TileChangeHollow>().having(
             (c) => c.reason,
             'reason',
-            HollowReason.noClosingQuote,
+            HollowReason.noClosingMatch,
           ),
         );
       }
+      expect(captured, isEmpty);
+      s.dispose();
+    });
+  });
+
+  test('🚨 100 檔收盤那一盤沒撮合（多於登記上限 69）→ 各被請求恰好 10 次後讓出登記名額；'
+      '其餘 978 檔 25 分鐘內收齊；格子寫收盤沒撮合、進度另計檔數', () {
+    // 市值名次 3、13、…、993：散在市值各處，前 69 檔裡有 7 檔
+    final unmatched = {for (var k = 0; k < 100; k++) _byCap[3 + 10 * k]};
+    expect(unmatched, hasLength(greaterThan(HeatmapParams.liveTileLimit)));
+    expect(
+      unmatched.where(_byCap.take(HeatmapParams.liveTileLimit).contains),
+      isNotEmpty,
+      reason: '前提：有幾檔一開始就在前 69 檔',
+    );
+    fakeAsync((async) {
+      final s = _Session(async, unmatched: unmatched);
+      s.elapse(const Duration(minutes: 40));
+
+      final matched = _stockCount - unmatched.length;
+      final filled = s.filledAt(matched);
+      expect(
+        filled,
+        isNotNull,
+        reason: '其餘各檔要全部拿到收盤報價（最後的進度 ${s.view.closing}）',
+      );
+      expect(
+        filled!.isAfter(s.start.add(const Duration(minutes: 25))),
+        isFalse,
+        reason: '收齊於 $filled',
+      );
+      for (final symbol in unmatched) {
+        expect(
+          s.requests.where((r) => r.symbols.contains(symbol)),
+          hasLength(LiveQuoteParams.afterCloseMaxAttempts),
+          reason: symbol,
+        );
+      }
+      expect(
+        s.requestedStocks.where((symbol) => !unmatched.contains(symbol)),
+        [
+          for (final symbol in _byCap)
+            if (!unmatched.contains(symbol)) symbol,
+        ],
+        reason: '其餘依市值由大到小，每檔恰好一次',
+      );
+      expect(
+        s.requests.last.at.isBefore(
+          s.now().subtract(const Duration(minutes: 5)),
+        ),
+        isTrue,
+        reason: '都放棄或收齊之後不再發請求（最後一個請求在 ${s.requests.last.at}）',
+      );
+
+      final view = s.view;
+      expect(view.data!.liveMode, HeatmapLiveMode.afterClose);
+      expect(view.closing, (
+        done: matched,
+        unmatched: unmatched.length,
+        total: _stockCount,
+      ));
+      expect(view.stockRegistrations, isEmpty, reason: '放棄的代號不再占登記名額');
+      final matchedSymbols = _byCap.toSet().difference(unmatched);
+      expect(_coloredOf(view), matchedSymbols);
+      _expectClosingColor(view, matchedSymbols);
+      for (final symbol in unmatched) {
+        expect(
+          _changeOf(view, symbol),
+          isA<TileChangeHollow>().having(
+            (c) => c.reason,
+            'reason',
+            HollowReason.noClosingMatch,
+          ),
+          reason: symbol,
+        );
+      }
+      expect([
+        for (final v in s.views) v.view.quoteStatus,
+      ], everyElement(isNull));
+      expect(s.stalledAt, isEmpty, reason: '報價中心不判暫停');
       expect(captured, isEmpty);
       s.dispose();
     });
@@ -209,6 +294,7 @@ void main() {
       }
       expect(s.view.closing, (
         done: _stockCount - noTrade.length,
+        unmatched: noTrade.length,
         total: _stockCount,
       ));
       expect(captured, isEmpty);
@@ -576,8 +662,12 @@ class _FixedHeatmap extends MarketHeatmapNotifier {
 
 /// 開著的熱力圖頁＋真的報價中心（在 fakeAsync 裡建立）
 class _Session {
-  _Session(this.async, {DateTime? start, this.noTrade = const {}})
-    : start = start ?? _start {
+  _Session(
+    this.async, {
+    DateTime? start,
+    this.noTrade = const {},
+    this.unmatched = const {},
+  }) : start = start ?? _start {
     container = ProviderContainer(
       overrides: [
         appClockProvider.overrideWithValue(_Clock(now)),
@@ -615,6 +705,10 @@ class _Session {
   /// 整天沒成交的代號：MIS 有回應，但沒有成交價、試撮價與五檔（解析時整列
   /// 丟掉）
   final Set<String> noTrade;
+
+  /// 收盤那一盤沒撮合的代號：MIS 回 13:30:00 的列，但沒有成交價，只有五檔
+  /// （代號數字是 5 的倍數的另帶試撮價）
+  final Set<String> unmatched;
   late final ProviderContainer container;
   late final ProviderSubscription<HeatmapLiveView> _view;
   late final ProviderSubscription<LiveQuoteState> _center;
@@ -659,7 +753,8 @@ class _Session {
     return null;
   }
 
-  /// 每檔都回收盤報價（13:30:00 的成交），整天沒成交的回一列解析時會丟掉的
+  /// 每檔都回收盤報價（13:30:00 的成交）；整天沒成交的回一列解析時會丟掉的；
+  /// 收盤沒撮合的回沒有成交價、只有五檔（或試撮價）的列
   Future<String> normal(List<String> symbols, DateTime now) async =>
       jsonEncode({
         'rtcode': '0000',
@@ -667,13 +762,17 @@ class _Session {
           for (final s in symbols)
             {
               'c': s,
-              'z': noTrade.contains(s) ? '-' : '101.0000',
-              'pz': '-',
+              'z': noTrade.contains(s) || unmatched.contains(s)
+                  ? '-'
+                  : '101.0000',
+              'pz': unmatched.contains(s) && int.parse(s.substring(1)) % 5 == 0
+                  ? '100.5000'
+                  : '-',
               'y': '100.0000',
               'd': _ymd(now),
               't': '13:30:00',
-              'b': '-',
-              'a': '-',
+              'b': unmatched.contains(s) ? '100.0000_' : '-',
+              'a': unmatched.contains(s) ? '101.0000_' : '-',
             },
         ],
       });
