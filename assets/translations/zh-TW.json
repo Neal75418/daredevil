@@ -162,6 +162,7 @@
     "semTile": "{name}，{dir} {pct}",
     "semTileHollow": "{name}，{reason}",
     "tooltipPrice": "價格",
+    "tooltipPriceClose": "（{date} 收盤）",
     "tooltipChange": "漲跌幅",
     "tooltipCap": "市值 {value} 億",
     "hollowNoChange": "無漲跌資料",

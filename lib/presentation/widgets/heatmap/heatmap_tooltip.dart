@@ -7,16 +7,25 @@ import 'package:daredevil/domain/services/heatmap/heatmap_layout.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_painter.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_text.dart';
 
-/// 熱力圖格子的提示：名稱、代號與產業、價格、漲跌幅（空心寫原因；盤中未即時
-/// 另附正式資料那天的漲跌與日期）、市值
+/// 熱力圖格子的提示：名稱、代號與產業、價格（即時套色時空心格子的價格是
+/// 正式資料那天的收盤，標出日期）、漲跌幅（空心寫原因；盤中未即時另附正式
+/// 資料那天的漲跌與日期）、市值
 class HeatmapTooltip extends StatelessWidget {
   const HeatmapTooltip({
     super.key,
     required this.tile,
     required this.industryName,
+    required this.dataDate,
+    this.liveMode,
   });
 
   final HeatmapTile tile;
+
+  /// 正式資料的日期（[HeatmapMarketData.dataDate]）
+  final DateTime dataDate;
+
+  /// 資料的即時套色時段（[HeatmapMarketData.liveMode]）；null 是正式資料
+  final HeatmapLiveMode? liveMode;
 
   /// 所屬產業（產業別空白時是「未分類」）：小產業在全市場圖上沒有標題列，
   /// 只能從這裡知道是哪個產業
@@ -46,8 +55,13 @@ class HeatmapTooltip extends StatelessWidget {
           style: theme.textTheme.bodySmall,
         ),
         Text(
-          '${'marketHeatmap.tooltipPrice'.tr()} '
-          '${tile.close.toStringAsFixed(2)}',
+          heatmapTooltipPriceText(
+            tile.close,
+            // 即時套色時只有上色的格子換成即時價，空心的仍是正式資料的收盤
+            closeDate: liveMode != null && change is TileChangeHollow
+                ? dataDate
+                : null,
+          ),
           style: theme.textTheme.bodySmall,
         ),
         Text(

@@ -162,6 +162,7 @@
     "semTile": "{name}, {dir} {pct}",
     "semTileHollow": "{name}: {reason}",
     "tooltipPrice": "Price:",
+    "tooltipPriceClose": " (close {date})",
     "tooltipChange": "Change:",
     "tooltipCap": "Market cap NT${value}B",
     "hollowNoChange": "No change data",

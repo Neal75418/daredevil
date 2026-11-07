@@ -303,7 +303,12 @@ class _HeatmapViewState extends State<HeatmapView> {
         hover.industry!.industry.name ?? widget.labels.uncategorized;
     final tile = hover.tile;
     if (tile != null) {
-      return HeatmapTooltip(tile: tile.tile, industryName: industryName);
+      return HeatmapTooltip(
+        tile: tile.tile,
+        industryName: industryName,
+        dataDate: widget.data.dataDate,
+        liveMode: widget.data.liveMode,
+      );
     }
     final other = hover.other!;
     return HeatmapOtherTooltip(

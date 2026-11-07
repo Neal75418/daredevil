@@ -196,7 +196,8 @@ class HeatmapTile {
   final String symbol;
   final String name;
 
-  /// 顯示的價格：正式資料是收盤，即時是即時價
+  /// 顯示的價格：正式資料是收盤；即時套色時上色的格子是即時價，空心的格子仍是
+  /// 正式資料那天的收盤
   final double close;
 
   /// 收盤 × 已發行股數（元）；面積依它，盤中不變

@@ -557,13 +557,19 @@ void main() {
   });
 
   group('格子提示的空心原因', () {
-    Future<void> pumpTile(WidgetTester tester, TileChange change) async {
+    Future<void> pumpTile(
+      WidgetTester tester,
+      TileChange change, {
+      HeatmapLiveMode? liveMode,
+    }) async {
       await tester.pumpWidget(
         _host(
           Center(
             child: HeatmapTooltip(
               tile: _tile('9901', '測試甲', 1e8, change),
               industryName: 'A',
+              dataDate: DateTime(2026, 11, 6),
+              liveMode: liveMode,
             ),
           ),
         ),
@@ -597,6 +603,58 @@ void main() {
         expect(find.textContaining(RegExp(r'\d+/\d+ ')), findsNothing);
       });
     }
+
+    // 即時模式下空心格子的價格是正式資料那天的收盤，不是現在的價格
+    for (final (mode, reason) in [
+      (HeatmapLiveMode.intraday, HollowReason.notLive),
+      (HeatmapLiveMode.intraday, HollowReason.noTrade),
+      (HeatmapLiveMode.afterClose, HollowReason.noClosingQuote),
+      (HeatmapLiveMode.afterClose, HollowReason.noClosingMatch),
+    ]) {
+      testWidgets('${mode.name}、空心（${reason.name}）：價格標「（M/D 收盤）」', (
+        tester,
+      ) async {
+        await pumpTile(tester, TileChangeHollow(reason), liveMode: mode);
+        expect(find.text('價格 100.00（11/6 收盤）'), findsOneWidget);
+      });
+    }
+
+    testWidgets('即時模式有顏色的格子：價格是即時價，不標日期', (tester) async {
+      await pumpTile(
+        tester,
+        const TileChangeValue(1.5),
+        liveMode: HeatmapLiveMode.intraday,
+      );
+      expect(find.text('價格 100.00'), findsOneWidget);
+    });
+
+    testWidgets('英文：空心格子的價格接「 (close M/D)」', (tester) async {
+      await tester.pumpWidget(
+        buildProviderTestApp(
+          Center(
+            child: HeatmapTooltip(
+              tile: _tile(
+                '9901',
+                '測試甲',
+                1e8,
+                const TileChangeHollow(HollowReason.notLive),
+              ),
+              industryName: 'A',
+              dataDate: DateTime(2026, 11, 6),
+              liveMode: HeatmapLiveMode.intraday,
+            ),
+          ),
+          enTranslations: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Price: 100.00 (close 11/6)'), findsOneWidget);
+    });
+
+    testWidgets('正式資料的空心格子：不標日期（頁面右側已寫 M/D 收盤）', (tester) async {
+      await pumpTile(tester, const TileChangeHollow(HollowReason.noChangeData));
+      expect(find.text('價格 100.00'), findsOneWidget);
+    });
   });
 
   group('小產業合併塊', () {
@@ -774,6 +832,21 @@ void main() {
     await _hover(tester, _center(tester, _tileOf('9902').paint));
     expect(find.text('測試乙'), findsOneWidget);
     expect(find.text('漲跌幅 無漲跌資料'), findsOneWidget);
+  });
+
+  testWidgets('即時套色的資料：空心格子的提示價格標資料日的收盤', (tester) async {
+    bigViewport(tester);
+    final live = HeatmapMarketData(
+      market: _data.market,
+      dataDate: _data.dataDate,
+      excludedForShares: 0,
+      industries: _data.industries,
+      liveMode: HeatmapLiveMode.intraday,
+    );
+    await tester.pumpWidget(_app(data: live));
+    await tester.pumpAndSettle();
+    await _hover(tester, _center(tester, _tileOf('9902').paint));
+    expect(find.text('價格 100.00（10/7 收盤）'), findsOneWidget);
   });
 
   testWidgets('長按顯示提示、按住移動換格子、放開就收', (tester) async {

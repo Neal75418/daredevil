@@ -73,10 +73,21 @@ String heatmapWeightedText({
 String heatmapPreviousCloseText(({double percent, DateTime date}) previous) =>
     'marketHeatmap.previousClose'.tr(
       namedArgs: {
-        'date': '${previous.date.month}/${previous.date.day}',
+        'date': _monthDay(previous.date),
         'pct': formatHeatmapPercent(previous.percent),
       },
     );
+
+/// 格子提示的價格：「價格 150.00」；[closeDate] 不是 null 時這個價格是那天的
+/// 收盤，接「（M/D 收盤）」
+String heatmapTooltipPriceText(double price, {DateTime? closeDate}) {
+  final text =
+      '${'marketHeatmap.tooltipPrice'.tr()} ${price.toStringAsFixed(2)}';
+  if (closeDate == null) return text;
+  return '$text${'marketHeatmap.tooltipPriceClose'.tr(namedArgs: {'date': _monthDay(closeDate)})}';
+}
+
+String _monthDay(DateTime date) => '${date.month}/${date.day}';
 
 /// 熱力圖頁指數列下方的即時狀態行；空字串表示不顯示。
 ///
