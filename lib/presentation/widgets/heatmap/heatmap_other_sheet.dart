@@ -8,12 +8,15 @@ import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/services/heatmap/heatmap_layout.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_mine_mark.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_painter.dart';
+import 'package:daredevil/presentation/widgets/heatmap/heatmap_text.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_tooltip.dart';
 
 /// 「其他 N 檔」的成員清單（從畫面下方拉出）：自選或持股排最前面並加雙線框
 /// 標記（合併塊的自選框表示它們在裡面，打開就要看得到），其餘依漲跌幅排序
 /// （漲最多在上，沒有漲跌資料的放最後），點一列進個股頁。合併的都是小型股，
 /// 打開清單是想找「誰在動」，所以不照市值排；每列仍寫市值。
+///
+/// 內容是打開當下的資料（[other] 與 [liveMode]），之後的即時更新不改它。
 class HeatmapOtherSheet extends StatelessWidget {
   const HeatmapOtherSheet({
     super.key,
@@ -21,6 +24,7 @@ class HeatmapOtherSheet extends StatelessWidget {
     required this.other,
     required this.onStockTap,
     this.scrollController,
+    this.liveMode,
   });
 
   /// 例如「半導體業 · 其他 80 檔」
@@ -31,6 +35,9 @@ class HeatmapOtherSheet extends StatelessWidget {
   /// 放在可拖動的面板裡時，由面板提供
   final ScrollController? scrollController;
 
+  /// 資料的即時套色時段（[HeatmapMarketData.liveMode]）；null 是正式資料
+  final HeatmapLiveMode? liveMode;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -39,7 +46,11 @@ class HeatmapOtherSheet extends StatelessWidget {
     );
     final locale = Localizations.localeOf(context);
     final breadth = heatmapBreadthText(other.breadth);
-    final weighted = other.weightedChangePercent;
+    final weighted = heatmapWeightedText(
+      percent: other.weightedChangePercent,
+      coverage: other.coverage,
+      mode: liveMode,
+    );
     final members = sortHeatmapOtherMembers(other.members);
     return ListView.builder(
       controller: scrollController,
@@ -59,8 +70,7 @@ class HeatmapOtherSheet extends StatelessWidget {
                 Text(title, style: theme.textTheme.titleMedium),
                 Text(breadth, style: muted),
                 Text(
-                  '${'marketHeatmap.tooltipWeighted'.tr()} '
-                  '${weighted == null ? 'marketHeatmap.hollowNoChange'.tr() : formatHeatmapPercent(weighted)}',
+                  '${'marketHeatmap.tooltipWeighted'.tr()} $weighted',
                   style: muted,
                 ),
               ],
@@ -94,8 +104,8 @@ class HeatmapOtherSheet extends StatelessWidget {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            TileChangeHollow() => Text(
-              'marketHeatmap.hollowNoChange'.tr(),
+            TileChangeHollow(:final reason) => Text(
+              heatmapHollowReasonText(reason),
               style: muted,
             ),
           },

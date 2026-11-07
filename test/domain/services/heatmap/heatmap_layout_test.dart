@@ -6,11 +6,18 @@ import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/services/heatmap/heatmap_layout.dart';
 
+/// 平盤市值：市值 ÷ (1 + 漲跌幅 / 100)；空心為 0
+double _baseCapOf(double cap, TileChange change) => switch (change) {
+  TileChangeValue(:final percent) => cap * 100 / (100 + percent),
+  TileChangeHollow() => 0,
+};
+
 HeatmapTile _tile(String symbol, double cap) => HeatmapTile(
   symbol: symbol,
   name: symbol,
   close: 100,
   marketCap: cap,
+  baseCap: _baseCapOf(cap, const TileChangeValue(1)),
   change: const TileChangeValue(1),
   isMine: false,
 );
@@ -390,12 +397,14 @@ void main() {
       String symbol,
       double cap, {
       TileChange change = const TileChangeValue(1),
+      double? baseCap,
       bool mine = false,
     }) => HeatmapTile(
       symbol: symbol,
       name: symbol,
       close: 100,
       marketCap: cap,
+      baseCap: baseCap ?? _baseCapOf(cap, change),
       change: change,
       isMine: mine,
     );
@@ -527,13 +536,35 @@ void main() {
       expect(other.breadth, (up: 1, down: 1, flat: 1, hollow: 1));
     });
 
-    test('算不出平盤市值的成員（漲跌幅 −100%）跳過，其他成員照常加權', () {
+    test('平盤市值 0 的有值成員不參與，其他成員照常加權', () {
       final l = only([
         tile('A0', 1e6),
-        tile('S0', 1, change: const TileChangeValue(-100)),
+        tile('S0', 1, change: const TileChangeValue(-100), baseCap: 0),
         tile('S1', 1, change: const TileChangeValue(2)),
       ]);
       expect(l.other!.weightedChangePercent, closeTo(2, 1e-9));
+    });
+
+    test('合併塊的漲跌用格子帶的平盤市值，不從市值與漲跌幅反推', () {
+      // 兩檔市值 1,000、平盤市值 1,000、+5% 與 −5%：加權後 0。從市值反推平盤
+      // 市值（1,000 ÷ 1.05、1,000 ÷ 0.95）會得到約 −0.25%
+      final l = only([
+        tile('A0', 1e6),
+        tile('S0', 1000, change: const TileChangeValue(5), baseCap: 1000),
+        tile('S1', 1000, change: const TileChangeValue(-5), baseCap: 1000),
+      ]);
+      expect(l.other!.weightedChangePercent, closeTo(0, 1e-12));
+    });
+
+    test('合併塊的 coverage：有漲跌值的成員市值占成員市值合計', () {
+      const hollow = TileChangeHollow(HollowReason.noChangeData);
+      final l = only([
+        tile('A0', 1e6),
+        tile('S0', 300),
+        tile('S1', 100, change: hollow),
+      ]);
+      expect(l.other!.members.map((t) => t.symbol), ['S0', 'S1']);
+      expect(l.other!.coverage, 0.75);
     });
 
     test('合併的成員全是空心：沒有加權漲跌', () {
@@ -544,6 +575,30 @@ void main() {
         tile('S1', 1, change: hollow),
       ]);
       expect(l.other!.weightedChangePercent, isNull);
+    });
+
+    test('其他塊：coverage 納入 ==／hashCode', () {
+      final other = only([
+        tile('A0', 1e6),
+        tile('S0', 300),
+        tile('S1', 100),
+      ]).other!;
+      HeatmapOtherLayout withCoverage(double coverage) => HeatmapOtherLayout(
+        members: other.members,
+        bounds: other.bounds,
+        paint: other.paint,
+        interactive: other.interactive,
+        wholeIndustry: other.wholeIndustry,
+        marketCap: other.marketCap,
+        weightedChangePercent: other.weightedChangePercent,
+        breadth: other.breadth,
+        coverage: coverage,
+      );
+      expect(other.coverage, 1.0, reason: '前提：成員都有值');
+      expect(withCoverage(1.0), other);
+      expect(withCoverage(1.0).hashCode, other.hashCode);
+      expect(withCoverage(0.5), isNot(other));
+      expect(withCoverage(0.5).hashCode, isNot(other.hashCode));
     });
 
     test('otherAt：點在合併塊上回該產業與合併塊；格子上回 null', () {
@@ -589,12 +644,14 @@ void main() {
       String symbol,
       double cap, {
       TileChange change = const TileChangeValue(1),
+      double? baseCap,
       bool mine = false,
     }) => HeatmapTile(
       symbol: symbol,
       name: symbol,
       close: 100,
       marketCap: cap,
+      baseCap: baseCap ?? _baseCapOf(cap, change),
       change: change,
       isMine: mine,
     );
@@ -711,6 +768,45 @@ void main() {
       expect(g.breadth, (up: 1, down: 1, flat: 1, hollow: 1));
       expect(g.stockCount, 4);
       expect(g.mineCount, 1);
+    });
+
+    test('合併塊的 coverage：成員所有個股中有漲跌值的市值占比', () {
+      const hollow = TileChangeHollow(HollowReason.noChangeData);
+      final l = layoutHeatmapMarket(
+        [
+          one('A', 1e6),
+          ind('S1', [stock('S1a', 300), stock('S1b', 100, change: hollow)]),
+          ind('S2', [stock('S2a', 200), stock('S2b', 200, change: hollow)]),
+        ],
+        width: 400,
+        height: 300,
+      );
+      // (300 + 200) ÷ (300 + 100 + 200 + 200)
+      expect(l.smallIndustries!.coverage, 0.625);
+    });
+
+    test('小產業合併塊：coverage 納入 ==／hashCode', () {
+      final g = layoutHeatmapMarket(
+        [one('A', 1e6), one('S1', 10), one('S2', 10)],
+        width: 400,
+        height: 300,
+      ).smallIndustries!;
+      HeatmapIndustryGroupLayout withCoverage(double coverage) =>
+          HeatmapIndustryGroupLayout(
+            members: g.members,
+            bounds: g.bounds,
+            paint: g.paint,
+            interactive: g.interactive,
+            marketCap: g.marketCap,
+            weightedChangePercent: g.weightedChangePercent,
+            breadth: g.breadth,
+            coverage: coverage,
+          );
+      expect(g.coverage, 1.0, reason: '前提：成員都有值');
+      expect(withCoverage(1.0), g);
+      expect(withCoverage(1.0).hashCode, g.hashCode);
+      expect(withCoverage(0.5), isNot(g));
+      expect(withCoverage(0.5).hashCode, isNot(g.hashCode));
     });
 
     test('合併塊照市值排進降冪序列（比它小的產業排在它後面）', () {

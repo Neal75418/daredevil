@@ -21,6 +21,7 @@ HeatmapTile _tile(
   name: name,
   close: 100,
   marketCap: cap,
+  baseCap: change is TileChangeValue ? cap * 100 / (100 + change.percent) : 0,
   change: change,
   isMine: mine,
 );
@@ -46,12 +47,18 @@ final _other = HeatmapOtherLayout(
   marketCap: 1e9,
   weightedChangePercent: 0.5,
   breadth: (up: 2, down: 1, flat: 0, hollow: 1),
+  coverage: 0.7,
 );
 
 void main() {
   setUpAll(() async => setupTestLocalization());
 
-  Future<void> pump(WidgetTester tester, {ValueChanged<String>? onTap}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    ValueChanged<String>? onTap,
+    HeatmapOtherLayout? other,
+    HeatmapLiveMode? liveMode,
+  }) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -59,8 +66,9 @@ void main() {
       buildProviderTestApp(
         HeatmapOtherSheet(
           title: '半導體業 · 其他 4 檔',
-          other: _other,
+          other: other ?? _other,
           onStockTap: onTap ?? (_) {},
+          liveMode: liveMode,
         ),
         zhTranslations: true,
       ),
@@ -71,7 +79,7 @@ void main() {
   testWidgets('標題與摘要：漲跌家數、市值加權漲跌', (tester) async {
     await pump(tester);
     expect(find.text('半導體業 · 其他 4 檔'), findsOneWidget);
-    expect(find.text('漲 2、跌 1、平 0、無漲跌資料 1'), findsOneWidget);
+    expect(find.text('漲 2、跌 1、平 0、空心 1'), findsOneWidget);
     expect(find.text('市值加權 +0.50%'), findsOneWidget);
   });
 
@@ -90,6 +98,61 @@ void main() {
     expect(find.text('+3.00%'), findsOneWidget);
     expect(find.text('-2.00%'), findsOneWidget);
     expect(find.text('無漲跌資料'), findsOneWidget);
+  });
+
+  testWidgets('盤中：加權漲跌接即時比例；空心成員寫各自的原因', (tester) async {
+    final live = HeatmapOtherLayout(
+      members: [
+        _tile('9974', '測試卯', 4e8, const TileChangeValue(3)),
+        _tile(
+          '9973',
+          '測試寅',
+          3e8,
+          TileChangeHollow(
+            HollowReason.notLive,
+            previous: (percent: -0.8, date: DateTime(2026, 11, 6)),
+          ),
+        ),
+        _tile('9972', '測試丑', 2e8, const TileChangeHollow(HollowReason.noTrade)),
+      ],
+      bounds: _box,
+      paint: _box,
+      interactive: true,
+      wholeIndustry: false,
+      marketCap: 9e8,
+      weightedChangePercent: 3,
+      breadth: (up: 1, down: 0, flat: 0, hollow: 2),
+      coverage: 4 / 9,
+    );
+    await pump(tester, other: live, liveMode: HeatmapLiveMode.intraday);
+    expect(find.text('漲 1、跌 0、平 0、空心 2'), findsOneWidget);
+    expect(find.text('市值加權 +3.00%・即時 44%'), findsOneWidget);
+    expect(find.text('盤中未即時'), findsOneWidget);
+    expect(find.text('尚無成交'), findsOneWidget);
+  });
+
+  testWidgets('收盤後：全是空心時加權漲跌寫「未收盤」', (tester) async {
+    final none = HeatmapOtherLayout(
+      members: [
+        _tile(
+          '9973',
+          '測試寅',
+          3e8,
+          const TileChangeHollow(HollowReason.noClosingQuote),
+        ),
+      ],
+      bounds: _box,
+      paint: _box,
+      interactive: true,
+      wholeIndustry: false,
+      marketCap: 3e8,
+      weightedChangePercent: null,
+      breadth: (up: 0, down: 0, flat: 0, hollow: 1),
+      coverage: 0,
+    );
+    await pump(tester, other: none, liveMode: HeatmapLiveMode.afterClose);
+    expect(find.text('市值加權 未收盤'), findsOneWidget);
+    expect(find.text('尚未取得收盤報價'), findsOneWidget);
   });
 
   test('排序看顯示的值：四捨五入後相同就依市值', () {
@@ -139,6 +202,7 @@ void main() {
       marketCap: 3e8,
       weightedChangePercent: 1.3,
       breadth: (up: 2, down: 0, flat: 0, hollow: 0),
+      coverage: 1,
     );
     await tester.pumpWidget(
       buildProviderTestApp(
@@ -175,6 +239,7 @@ void main() {
       marketCap: 1e8,
       weightedChangePercent: 0.004,
       breadth: (up: 0, down: 0, flat: 1, hollow: 0),
+      coverage: 1,
     );
     await tester.pumpWidget(
       buildProviderTestApp(

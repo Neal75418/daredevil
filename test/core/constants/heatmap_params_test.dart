@@ -44,19 +44,36 @@ void main() {
     });
   });
 
-  test('heatmap_params.dart 維持純 Dart（只 import dart: 函式庫、不含 dart:ui）', () {
-    // core_layer_purity_test 只擋上層 import，不擋 Flutter；只准 dart: 函式庫
-    // 才擋得住經由別的 core 檔間接帶進 Flutter
-    final src = File(
-      'lib/core/constants/heatmap_params.dart',
-    ).readAsStringSync();
-    final directives = RegExp(
+  test('heatmap_params.dart 維持純 Dart（遞移只 import dart: 函式庫、不含 dart:ui）', () {
+    // core_layer_purity_test 只擋上層 import，不擋 Flutter；沿著 core/constants
+    // 的 import 一路查到底，只准 dart: 函式庫，才擋得住經由別的 core 檔間接
+    // 帶進 Flutter
+    const constantsPackage = 'package:daredevil/core/constants/';
+    final directive = RegExp(
       r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
       multiLine: true,
-    ).allMatches(src).map((m) => m.group(1)!);
-    for (final uri in directives) {
-      expect(uri.startsWith('dart:') && uri != 'dart:ui', isTrue, reason: uri);
+    );
+    final visited = <String>{};
+    void check(String path) {
+      if (!visited.add(path)) return;
+      final src = File(path).readAsStringSync();
+      for (final m in directive.allMatches(src)) {
+        final uri = m.group(1)!;
+        if (uri.startsWith(constantsPackage)) {
+          check('lib/core/constants/${uri.substring(constantsPackage.length)}');
+        } else {
+          expect(
+            uri.startsWith('dart:') && uri != 'dart:ui',
+            isTrue,
+            reason: '$path → $uri',
+          );
+        }
+      }
     }
+
+    check('lib/core/constants/heatmap_params.dart');
+    // 真的走進了被引用的常數檔（走不進去就不算查過）
+    expect(visited, contains('lib/core/constants/api_endpoints.dart'));
   });
 
   test('isExcludedIndustry：ETF、上櫃ETF、存託憑證排除，一般產業與 null 不排除', () {

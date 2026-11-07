@@ -245,6 +245,21 @@ void main() {
       );
     });
 
+    test('格子帶平盤市值：股數 × (收盤 − 漲跌)；漲跌空值為 0', () {
+      final data = _build([
+        _stock(
+          '9901',
+          close: 110,
+          priceChange: 10,
+          foreign: (shares: 1000, date: _d1001),
+        ),
+        _stock('9902', priceChange: null),
+      ]);
+      final tiles = {for (final t in data.industries.single.tiles) t.symbol: t};
+      expect(tiles['9901']!.baseCap, closeTo(100000, 1e-9));
+      expect(tiles['9902']!.baseCap, 0);
+    });
+
     test('產業漲跌以平盤市值加權、空心成員不計', () {
       final data = _build([
         // 平盤市值 300（平盤價 100 × 3 股）、+2%，今天市值 306
@@ -452,6 +467,158 @@ void main() {
       final data = _build([]);
       expect(data.industries, isEmpty);
       expect(data.excludedForShares, 0);
+    });
+  });
+
+  group('heatmapWeightedChange', () {
+    HeatmapTile tile(
+      String symbol, {
+      required double baseCap,
+      required TileChange change,
+    }) => HeatmapTile(
+      symbol: symbol,
+      name: symbol,
+      close: 100,
+      marketCap: 1000,
+      baseCap: baseCap,
+      change: change,
+      isMine: false,
+    );
+
+    test('平盤市值相同、各 ±10% 加權後為 0', () {
+      final weighted = heatmapWeightedChange([
+        tile('9901', baseCap: 1000, change: const TileChangeValue(10)),
+        tile('9902', baseCap: 1000, change: const TileChangeValue(-10)),
+      ]);
+      expect(weighted, closeTo(0, 1e-12));
+    });
+
+    test('權重是平盤市值，不是格子的市值', () {
+      // 兩格市值相同（1000），平盤市值 300 與 100
+      final weighted = heatmapWeightedChange([
+        tile('9901', baseCap: 300, change: const TileChangeValue(2)),
+        tile('9902', baseCap: 100, change: const TileChangeValue(-2)),
+      ]);
+      expect(weighted, closeTo(1.0, 1e-12));
+    });
+
+    test('只有空心、或沒有格子：null', () {
+      expect(
+        heatmapWeightedChange([
+          tile(
+            '9901',
+            baseCap: 0,
+            change: const TileChangeHollow(HollowReason.noChangeData),
+          ),
+        ]),
+        isNull,
+      );
+      expect(heatmapWeightedChange(const []), isNull);
+    });
+
+    test('平盤市值 0 的有值格子不參與', () {
+      final weighted = heatmapWeightedChange([
+        tile('9901', baseCap: 0, change: const TileChangeValue(50)),
+        tile('9902', baseCap: 100, change: const TileChangeValue(2)),
+      ]);
+      expect(weighted, closeTo(2, 1e-12));
+      // 只剩平盤市值 0 的有值格子：分母 0
+      expect(
+        heatmapWeightedChange([
+          tile('9901', baseCap: 0, change: const TileChangeValue(50)),
+        ]),
+        isNull,
+      );
+    });
+
+    test('平盤市值是負數或 NaN 的有值格子不參與', () {
+      for (final bad in [-100.0, double.nan]) {
+        final weighted = heatmapWeightedChange([
+          tile('9901', baseCap: bad, change: const TileChangeValue(50)),
+          tile('9902', baseCap: 100, change: const TileChangeValue(2)),
+        ]);
+        expect(weighted, closeTo(2, 1e-12), reason: 'baseCap = $bad');
+      }
+    });
+
+    test('空心格子即使帶平盤市值也不參與', () {
+      final weighted = heatmapWeightedChange([
+        tile(
+          '9901',
+          baseCap: 900,
+          change: const TileChangeHollow(HollowReason.noChangeData),
+        ),
+        tile('9902', baseCap: 100, change: const TileChangeValue(3)),
+      ]);
+      expect(weighted, closeTo(3, 1e-12));
+    });
+
+    test('結果不是有限數：null', () {
+      expect(
+        heatmapWeightedChange([
+          tile('9901', baseCap: 1e300, change: const TileChangeValue(1e300)),
+        ]),
+        isNull,
+      );
+      expect(
+        heatmapWeightedChange([
+          tile(
+            '9901',
+            baseCap: double.infinity,
+            change: const TileChangeValue(1),
+          ),
+        ]),
+        isNull,
+      );
+    });
+  });
+
+  group('heatmapValueCoverage', () {
+    HeatmapTile tile(double cap, TileChange change) => HeatmapTile(
+      symbol: '9901',
+      name: '測試',
+      close: 100,
+      marketCap: cap,
+      baseCap: 0,
+      change: change,
+      isMine: false,
+    );
+    const hollow = TileChangeHollow(HollowReason.noChangeData);
+
+    test('有漲跌值的市值占全部市值的比例', () {
+      expect(
+        heatmapValueCoverage([
+          tile(300, const TileChangeValue(1)),
+          tile(100, hollow),
+        ]),
+        0.75,
+      );
+    });
+
+    test('全部有值時恰為 1.0（含無法精確表示的市值）', () {
+      expect(
+        heatmapValueCoverage([
+          for (final cap in [0.1, 0.2, 0.3, 1e15 + 0.1, 7.7])
+            tile(cap, const TileChangeValue(0)),
+        ]),
+        1.0,
+      );
+    });
+
+    test('全部空心：0；沒有格子或總市值 ≤ 0：0', () {
+      expect(heatmapValueCoverage([tile(100, hollow)]), 0);
+      expect(heatmapValueCoverage(const []), 0);
+      expect(heatmapValueCoverage([tile(0, const TileChangeValue(1))]), 0);
+    });
+
+    test('總市值溢位時回 0，不是 NaN', () {
+      expect(
+        heatmapValueCoverage([
+          tile(1e308, const TileChangeValue(1)),
+          tile(1e308, const TileChangeValue(1)),
+        ]),
+        0,
+      );
     });
   });
 }

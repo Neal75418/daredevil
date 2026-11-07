@@ -10,6 +10,7 @@ import 'package:daredevil/core/constants/live_quote_params.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/core/utils/logger.dart';
+import 'package:daredevil/data/models/twse/intraday_quote.dart';
 import 'package:daredevil/data/remote/intraday_quote_client.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
 import 'package:daredevil/presentation/providers/live_quote_provider.dart';
@@ -560,6 +561,48 @@ void main() {
         expect(h.requests, hasLength(3));
         expect(h.state.entries['2330']!.price, 101.0);
         expect(h.state.entries['2330']!.flash, isNull, reason: '比較的是 5 分鐘前的價格');
+        h.dispose();
+      });
+    });
+  });
+
+  group('各檔拿到今天報價的時刻', () {
+    test('🚨 一輪結束後只含拿到今天報價的檔,時刻是套用那一輪的時間;換日清空', () {
+      fakeAsync((async) {
+        var down = false;
+        final client = _ScriptedClient((batch) async {
+          if (down) throw const _NetworkDown();
+          // 9901 有今天的報價、9902 的報價是昨天的、9903 的批次失敗
+          return QuoteBatchReport(
+            quotes: IntradayQuote.parseResponse({
+              'rtcode': '0000',
+              'msgArray': [
+                _row('9901', weekdayMorning),
+                _row('9902', weekdayMorning, d: '20261005'),
+              ],
+            }),
+            errors: const ['DioException.connectionTimeout: 模擬'],
+            respondedSymbols: const {'9901', '9902'},
+            failedSymbols: const {'9903'},
+          );
+        });
+        final h = _Harness(async, weekdayMorning, client: client);
+        expect(h.state.fetchedAt, isEmpty, reason: '還沒有任何一輪');
+        h.center.register('A', const [
+          LiveQuoteRegistration(symbol: '9901', market: MarketCode.twse),
+          LiveQuoteRegistration(symbol: '9902', market: MarketCode.twse),
+          LiveQuoteRegistration(symbol: '9903', market: MarketCode.twse),
+        ]);
+        h.elapse(const Duration(seconds: 1));
+        final firstRoundAt = weekdayMorning.add(const Duration(seconds: 1));
+        expect(h.state.fetchedAt, {'9901': firstRoundAt});
+        expect(h.state.symbolStatus['9902'], LiveSymbolStatus.noQuote);
+        expect(h.state.symbolStatus['9903'], LiveSymbolStatus.batchFailed);
+
+        h.jump = const Duration(hours: 23); // 10/7 09:01:02
+        down = true;
+        h.elapse(const Duration(seconds: 1));
+        expect(h.state.fetchedAt, isEmpty, reason: '昨天的時刻不帶到今天');
         h.dispose();
       });
     });

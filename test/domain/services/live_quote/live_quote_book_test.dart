@@ -406,6 +406,109 @@ void main() {
     });
   });
 
+  group('拿到今天報價的時刻', () {
+    /// 9901 有今天的報價、9902 有回應但報價是昨天的、9903 的批次失敗
+    QuoteBatchReport mixed() => QuoteBatchReport(
+      quotes: IntradayQuote.parseResponse({
+        'rtcode': '0000',
+        'msgArray': [
+          row('9901', z: '100.0000'),
+          row('9902', z: '100.0000', d: '20261005'),
+        ],
+      }),
+      errors: const ['DioException.connectionTimeout: 模擬'],
+      respondedSymbols: const {'9901', '9902'},
+      failedSymbols: const {'9903'},
+    );
+
+    const all = ['9901', '9902', '9903'];
+
+    test('🚨 只記這一輪拿到今天報價的代號,時刻是套用時的 now', () {
+      book.apply(mixed(), requested: all, now: at(10, 0, 5), afterClose: false);
+      expect(book.fetchedAt, {'9901': at(10, 0, 5)});
+    });
+
+    test('🚨 下一輪沒拿到的保留舊時刻;重新拿到的換成新時刻', () {
+      book.apply(mixed(), requested: all, now: at(10, 0, 5), afterClose: false);
+      // 9901 這輪批次失敗、9903 有回應但沒有列、9902 拿到
+      book.apply(
+        QuoteBatchReport(
+          quotes: IntradayQuote.parseResponse({
+            'rtcode': '0000',
+            'msgArray': [row('9902', z: '100.0000')],
+          }),
+          errors: const ['DioException.connectionTimeout: 模擬'],
+          respondedSymbols: const {'9902', '9903'},
+          failedSymbols: const {'9901'},
+        ),
+        requested: all,
+        now: at(10, 0, 20),
+        afterClose: false,
+      );
+      expect(book.fetchedAt, {'9901': at(10, 0, 5), '9902': at(10, 0, 20)});
+
+      book.apply(
+        responded([row('9901', z: '101.0000')]),
+        requested: all,
+        now: at(10, 0, 35),
+        afterClose: false,
+      );
+      expect(book.fetchedAt, {'9901': at(10, 0, 35), '9902': at(10, 0, 20)});
+    });
+
+    test('請求清單以外的代號不記', () {
+      book.apply(
+        responded([row('9901', z: '1.0000'), row('9999', z: '2.0000')]),
+        requested: const ['9901'],
+        now: at(10, 0, 5),
+        afterClose: false,
+      );
+      expect(book.fetchedAt.keys, ['9901']);
+    });
+
+    test('收盤後逐檔抓到的也記', () {
+      book.apply(
+        responded([row('9901', z: '100.0000', t: '13:30:00')]),
+        requested: const ['9901'],
+        now: at(13, 31),
+        afterClose: true,
+      );
+      expect(book.fetchedAt, {'9901': at(13, 31)});
+    });
+
+    test('🚨 換日清空:rollDay', () {
+      book.apply(mixed(), requested: all, now: at(10, 0, 5), afterClose: false);
+      expect(book.rollDay(DateTime(2026, 10, 7, 8, 30)), isTrue);
+      expect(book.fetchedAt, isEmpty);
+    });
+
+    test('🚨 換日清空:隔天第一輪的 apply(那一輪沒拿到報價也不帶昨天的)', () {
+      book.apply(mixed(), requested: all, now: at(10, 0, 5), afterClose: false);
+      book.apply(
+        failed({'9901'}),
+        requested: const ['9901'],
+        now: DateTime(2026, 10, 7, 9, 1),
+        afterClose: false,
+      );
+      expect(book.fetchedAt, isEmpty, reason: '昨天的時刻不帶到今天');
+    });
+
+    test('唯讀,且取到的是快照:之後再套用一輪不改動已取出的那份', () {
+      book.apply(mixed(), requested: all, now: at(10, 0, 5), afterClose: false);
+      final snapshot = book.fetchedAt;
+      expect(() => snapshot['9999'] = at(10, 0, 6), throwsUnsupportedError);
+
+      book.apply(
+        responded([row('9901', z: '101.0000')]),
+        requested: all,
+        now: at(10, 0, 20),
+        afterClose: false,
+      );
+      expect(snapshot, {'9901': at(10, 0, 5)});
+      expect(book.fetchedAt, {'9901': at(10, 0, 20)});
+    });
+  });
+
   group('換日', () {
     test('🚨 App 開著過夜:隔天 rollDay 清空所有記憶', () {
       book.apply(

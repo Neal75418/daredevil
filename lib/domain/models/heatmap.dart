@@ -58,6 +58,27 @@ final class SharesInconsistent extends SharesResolution {
 enum HollowReason {
   /// 漲跌價差是空值、分母 ≤ 0、或收盤／漲跌／計算結果不是有限數
   noChangeData,
+
+  /// 盤中這一檔沒有可用的即時報價（沒登記、登記後還沒拿到、報價不是今天的）
+  notLive,
+
+  /// 盤中只有試撮價或五檔價，還沒有成交
+  noTrade,
+
+  /// 即時資料回應了，但這一檔沒有可用報價（暫停交易、整天無成交無五檔）
+  noQuote,
+
+  /// 收盤後還沒拿到今天的收盤報價
+  noClosingQuote,
+}
+
+/// 即時套色的時段
+enum HeatmapLiveMode {
+  /// 盤中：只有登記之後拿到過今天報價（有成交或鎖住價）的格子上色
+  intraday,
+
+  /// 收盤後、該市場還沒有今天的正式資料：拿到今天收盤報價的格子上色
+  afterClose,
 }
 
 /// 一格的當日漲跌：有值，或空心
@@ -84,19 +105,27 @@ final class TileChangeValue extends TileChange {
 }
 
 final class TileChangeHollow extends TileChange {
-  const TileChangeHollow(this.reason);
+  const TileChangeHollow(this.reason, {this.previous});
 
   final HollowReason reason;
 
+  /// 正式資料那天的漲跌幅（%）與日期；只有 [HollowReason.notLive] 帶，
+  /// 正式資料也是空心時為 null
+  final ({double percent, DateTime date})? previous;
+
   @override
   bool operator ==(Object other) =>
-      other is TileChangeHollow && other.reason == reason;
+      other is TileChangeHollow &&
+      other.reason == reason &&
+      other.previous == previous;
 
   @override
-  int get hashCode => reason.hashCode;
+  int get hashCode => Object.hash(reason, previous);
 
   @override
-  String toString() => 'TileChangeHollow($reason)';
+  String toString() => previous == null
+      ? 'TileChangeHollow($reason)'
+      : 'TileChangeHollow($reason, previous: $previous)';
 }
 
 /// 分組計算的輸入：一檔股票在資料日的價格與兩個股數來源
@@ -156,16 +185,23 @@ class HeatmapTile {
     required this.name,
     required this.close,
     required this.marketCap,
+    required this.baseCap,
     required this.change,
     required this.isMine,
   });
 
   final String symbol;
   final String name;
+
+  /// 顯示的價格：正式資料是收盤，即時是即時價
   final double close;
 
-  /// 收盤 × 已發行股數（元）
+  /// 收盤 × 已發行股數（元）；面積依它，盤中不變
   final double marketCap;
+
+  /// 平盤市值：股數 × 平盤價（正式資料是收盤 − 漲跌，即時是 MIS 的昨收）。
+  /// 產業與合併塊的加權權重；沒有漲跌值時為 0
+  final double baseCap;
   final TileChange change;
 
   /// 自選或持股（畫雙線框）
@@ -178,16 +214,18 @@ class HeatmapTile {
       other.name == name &&
       other.close == close &&
       other.marketCap == marketCap &&
+      other.baseCap == baseCap &&
       other.change == change &&
       other.isMine == isMine;
 
   @override
   int get hashCode =>
-      Object.hash(symbol, name, close, marketCap, change, isMine);
+      Object.hash(symbol, name, close, marketCap, baseCap, change, isMine);
 
   @override
   String toString() =>
-      'HeatmapTile($symbol, cap: $marketCap, $change, mine: $isMine)';
+      'HeatmapTile($symbol, cap: $marketCap, base: $baseCap, $change, '
+      'mine: $isMine)';
 }
 
 /// 一個產業區塊
@@ -198,6 +236,7 @@ class HeatmapIndustry {
     required this.marketCap,
     required this.weightedChangePercent,
     required this.tiles,
+    this.liveCoverage,
   });
 
   /// 產業別；null 是「未分類」
@@ -208,6 +247,10 @@ class HeatmapIndustry {
 
   /// 有漲跌的成員以平盤市值（股數 × 平盤價）加權的漲跌幅（%）；全部空心時為 null
   final double? weightedChangePercent;
+
+  /// 即時套色後：有漲跌值的成員市值占成員市值合計的比例（0～1）；正式資料
+  /// 為 null
+  final double? liveCoverage;
 
   /// 市值降冪、同值依代號升冪
   final List<HeatmapTile> tiles;
@@ -221,6 +264,7 @@ class HeatmapIndustry {
       other.name == name &&
       other.marketCap == marketCap &&
       other.weightedChangePercent == weightedChangePercent &&
+      other.liveCoverage == liveCoverage &&
       const ListEquality<HeatmapTile>().equals(other.tiles, tiles);
 
   @override
@@ -228,13 +272,15 @@ class HeatmapIndustry {
     name,
     marketCap,
     weightedChangePercent,
+    liveCoverage,
     const ListEquality<HeatmapTile>().hash(tiles),
   );
 
   @override
   String toString() =>
       'HeatmapIndustry($key, cap: $marketCap, '
-      'weighted: $weightedChangePercent, tiles: $tiles)';
+      'weighted: $weightedChangePercent, coverage: $liveCoverage, '
+      'tiles: $tiles)';
 }
 
 /// 一個市場的熱力圖資料
@@ -245,9 +291,12 @@ class HeatmapMarketData {
     required this.dataDate,
     required this.industries,
     required this.excludedForShares,
+    this.liveMode,
   });
 
   final String market;
+
+  /// 正式資料的日期；即時套色後仍是正式資料那天，不是今天
   final DateTime dataDate;
 
   /// 市值降冪、同值依 [HeatmapIndustry.key] 升冪
@@ -256,12 +305,16 @@ class HeatmapMarketData {
   /// 缺股數或股數不一致而沒畫的檔數（頁尾）
   final int excludedForShares;
 
+  /// 即時套色的時段；null 是正式資料
+  final HeatmapLiveMode? liveMode;
+
   @override
   bool operator ==(Object other) =>
       other is HeatmapMarketData &&
       other.market == market &&
       other.dataDate == dataDate &&
       other.excludedForShares == excludedForShares &&
+      other.liveMode == liveMode &&
       const ListEquality<HeatmapIndustry>().equals(
         other.industries,
         industries,
@@ -272,11 +325,13 @@ class HeatmapMarketData {
     market,
     dataDate,
     excludedForShares,
+    liveMode,
     const ListEquality<HeatmapIndustry>().hash(industries),
   );
 
   @override
   String toString() =>
       'HeatmapMarketData($market, $dataDate, '
-      'excluded: $excludedForShares, industries: $industries)';
+      'excluded: $excludedForShares, live: $liveMode, '
+      'industries: $industries)';
 }

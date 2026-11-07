@@ -12,6 +12,7 @@ import 'package:daredevil/core/theme/semantic_colors.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/services/heatmap/heatmap_layout.dart';
 import 'package:daredevil/presentation/providers/app_visibility_provider.dart';
+import 'package:daredevil/presentation/providers/heatmap_live_provider.dart';
 import 'package:daredevil/presentation/providers/live_price_provider.dart';
 import 'package:daredevil/presentation/providers/market_heatmap_provider.dart';
 import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
@@ -22,15 +23,21 @@ import 'package:daredevil/presentation/widgets/heatmap/heatmap_industry_group_sh
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_legend.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_other_sheet.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_painter.dart';
+import 'package:daredevil/presentation/widgets/heatmap/heatmap_text.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_view.dart';
 import 'package:daredevil/presentation/widgets/live_quote_scope.dart';
 import 'package:daredevil/presentation/widgets/market_dashboard/market_overview_selectors.dart';
 import 'package:daredevil/presentation/widgets/price_flash.dart';
 
-/// 大盤熱力圖（收盤後）：上市、上櫃各一張，依產業分區、面積是市值、顏色是
-/// 當日漲跌。從大盤總覽頁標題列進入。
+/// 大盤熱力圖：上市、上櫃各一張，依產業分區、面積是市值、顏色是當日漲跌
+/// （盤中與收盤後、盤後資料寫入前用即時報價上色，見 [heatmapLiveProvider]）。
+/// 從大盤總覽頁標題列進入。
 class MarketHeatmapScreen extends ConsumerStatefulWidget {
   const MarketHeatmapScreen({super.key});
+
+  /// 指數列下方的狀態行（即時時段是熱力圖的即時狀態，其餘是指數的狀態）
+  @visibleForTesting
+  static const statusLineKey = ValueKey('marketHeatmap.statusLine');
 
   @override
   ConsumerState<MarketHeatmapScreen> createState() =>
@@ -41,8 +48,6 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
   /// 產業選單的「全市場」（產業 key 可能是空字串，不能拿字串當哨兵值）
   static const _wholeMarket = Object();
 
-  String _market = MarketCode.twse;
-  String? _zoom;
   HeatmapPaintLabels? _labels;
   Locale? _labelsLocale;
 
@@ -64,24 +69,31 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
         groupLabel: _groupLabel,
         groupShortLabel: 'marketHeatmap.groupShort'.tr(),
         groupSemantics: _groupSemantics,
+        coverageSuffix: heatmapCoverageSuffix,
+        noChangeLabel: heatmapNoChangeText,
       );
     }
   }
 
-  void _selectMarket(String market) => setState(() {
-    _market = market;
-    _zoom = null;
-  });
+  HeatmapSelectionNotifier get _selection =>
+      ref.read(heatmapSelectionProvider.notifier);
 
-  void _zoomTo(String industryKey) => setState(() => _zoom = industryKey);
+  void _selectMarket(String market) => _selection.selectMarket(market);
 
-  void _clearZoom() => setState(() => _zoom = null);
+  void _zoomTo(String industryKey) => _selection.zoomTo(industryKey);
+
+  void _clearZoom() => _selection.clearZoom();
+
+  /// 底部清單用打開當下的即時時段（清單是快照，之後不跟著更新）
+  HeatmapLiveMode? get _liveMode =>
+      ref.read(heatmapLiveProvider).data?.liveMode;
 
   void _openStock(String symbol) => context.push(AppRoutes.stockDetail(symbol));
 
   /// 「其他 N 檔」的成員清單；點一檔先收起清單再進個股頁
   void _showOther(HeatmapIndustryLayout industry, HeatmapOtherLayout other) {
     final name = industry.industry.name ?? 'marketHeatmap.uncategorized'.tr();
+    final mode = _liveMode;
     showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -94,6 +106,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
         builder: (_, controller) => HeatmapOtherSheet(
           title: '$name · ${_otherLabel(other.members.length)}',
           other: other,
+          liveMode: mode,
           scrollController: controller,
           onStockTap: (symbol) {
             Navigator.of(sheetContext).pop();
@@ -106,6 +119,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
 
   /// 「其他 N 個產業」的產業清單；點一個先收起清單再放大該產業
   void _showSmallIndustries(HeatmapIndustryGroupLayout group) {
+    final mode = _liveMode;
     showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -118,6 +132,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
         builder: (_, controller) => HeatmapIndustryGroupSheet(
           title: _groupLabel(group.members.length),
           group: group,
+          liveMode: mode,
           scrollController: controller,
           onIndustryTap: (key) {
             Navigator.of(sheetContext).pop();
@@ -130,9 +145,9 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
 
   /// 重讀後放大中的產業不在了：回到全市場（之後它再出現也不自己放大）
   void _dropMissingZoom(MarketHeatmapState next) {
-    final zoom = _zoom;
+    final (:market, :zoom) = ref.read(heatmapSelectionProvider);
     if (zoom == null) return;
-    final industries = next.markets[_market]?.industries ?? const [];
+    final industries = next.markets[market]?.industries ?? const [];
     if (!industries.any((i) => i.key == zoom)) _clearZoom();
   }
 
@@ -144,8 +159,9 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
     // 登記的「是否已有今天正式資料」跟現在有關：跨過午夜等邊界時重算
     ref.watch(liveQuoteBoundaryProvider);
     final live = ref.watch(marketLiveIndicesProvider);
-    final data = state.markets[_market];
-    final zoom = _zoom;
+    final (:market, :zoom) = ref.watch(heatmapSelectionProvider);
+    final view = ref.watch(heatmapLiveProvider);
+    final data = view.data;
     return Scaffold(
       appBar: AppBar(
         title: zoom == null
@@ -160,28 +176,40 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
                 ),
               ),
         actions: [
-          _marketSelector(),
+          _marketSelector(market),
           _industryMenu(data),
           const SizedBox(width: DesignTokens.spacing8),
         ],
       ),
       body: LiveQuoteScope(
-        registrations: marketIndexRegistrations(
-          overview,
-          ref.read(appClockProvider).now(),
-        ),
+        // 只登記正在看的市場的指數，加上熱力圖要上色的個股
+        registrations: [
+          for (final r in marketIndexRegistrations(
+            overview,
+            ref.read(appClockProvider).now(),
+          ))
+            if (r.market == market) r,
+          ...view.stockRegistrations,
+        ],
         // 包住所有狀態：空狀態、錯誤卡片也要輪詢，才等得到背景的第一次寫入
         child: _HeatmapVisibility(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _IndexHeader(
-                market: _market,
+                market: market,
                 overview: overview,
                 live: live,
                 dataDate: data?.dataDate,
+                // 即時時段（含停市日退回）指數下方改寫熱力圖的即時狀態
+                liveStatus: view.mode == null
+                    ? null
+                    : heatmapLiveStatusText(view),
+                // 圖用即時上色時右側的「M/D 收盤」不是格子的日期；停市日
+                // 退回正式資料時保留（看得出顏色是哪天的）
+                showCloseOf: data?.liveMode == null,
               ),
-              Expanded(child: _content(state, data, zoom)),
+              Expanded(child: _content(state, market, data, zoom)),
             ],
           ),
         ),
@@ -191,6 +219,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
 
   Widget _content(
     MarketHeatmapState state,
+    String market,
     HeatmapMarketData? data,
     String? zoom,
   ) {
@@ -249,7 +278,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
     }
     // 兩個市場都讀取失敗時 provider 另設 error，此時兩個市場都在
     // failedMarkets 裡，看這個就夠
-    if (state.failedMarkets.contains(_market)) {
+    if (state.failedMarkets.contains(market)) {
       return Align(
         alignment: Alignment.topCenter,
         child: Padding(
@@ -285,7 +314,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
 
   /// 上市／上櫃切換（樣式同大盤總覽手機版，但不顯示選取勾勾：放在標題列，
   /// 窄螢幕要把寬度留給標題）
-  Widget _marketSelector() => SegmentedButton<String>(
+  Widget _marketSelector(String selected) => SegmentedButton<String>(
     showSelectedIcon: false,
     segments: [
       for (final (market, key) in const [
@@ -300,7 +329,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
           ),
         ),
     ],
-    selected: {_market},
+    selected: {selected},
     onSelectionChanged: (selection) => _selectMarket(selection.first),
     style: ButtonStyle(
       visualDensity: VisualDensity.compact,
@@ -313,9 +342,20 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
     ),
   );
 
-  /// 產業選單：第一項全市場，其餘依市值排序並帶市值加權漲跌。小產業在全市場
-  /// 圖上合成「其他 N 個產業」，也可以從這裡直接放大。
+  /// 產業選單：第一項全市場，其餘依市值排序並帶市值加權漲跌（即時套色時接
+  /// 即時比例、沒有值寫「未即時」）。小產業在全市場圖上合成「其他 N 個
+  /// 產業」，也可以從這裡直接放大。
   Widget _industryMenu(HeatmapMarketData? data) {
+    final mode = data?.liveMode;
+    // 正式資料沒有值時維持「—」；即時套色時寫「未即時」等狀態
+    String changeOf(HeatmapIndustry industry) =>
+        industry.weightedChangePercent == null && mode == null
+        ? '—'
+        : heatmapWeightedText(
+            percent: industry.weightedChangePercent,
+            coverage: industry.liveCoverage,
+            mode: mode,
+          );
     final industries = [...?data?.industries]
       ..sort((a, b) {
         final byCap = b.marketCap.compareTo(a.marketCap);
@@ -342,11 +382,7 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
           PopupMenuItem<Object>(
             value: industry.key,
             child: Text(
-              '${industry.name ?? uncategorized} '
-              '${switch (industry.weightedChangePercent) {
-                final pct? => formatHeatmapPercent(pct),
-                null => '—',
-              }}',
+              '${industry.name ?? uncategorized} ${changeOf(industry)}',
             ),
           ),
       ],
@@ -366,25 +402,44 @@ String _directionKey(double percent) {
 String _unsignedPercent(double percent) =>
     '${HeatmapParams.roundPercent(percent).abs().toStringAsFixed(2)}%';
 
-String _industrySemantics(HeatmapIndustryLayout layout) {
+String _industrySemantics(HeatmapIndustryLayout layout, HeatmapLiveMode? mode) {
   final industry = layout.industry;
   final name = industry.name ?? 'marketHeatmap.uncategorized'.tr();
   final count = '${industry.tiles.length}';
   final pct = industry.weightedChangePercent;
   if (pct == null) {
     return 'marketHeatmap.semIndustryNoChange'.tr(
-      namedArgs: {'name': name, 'count': count},
+      namedArgs: {
+        'name': name,
+        'status': heatmapNoChangeText(mode),
+        'count': count,
+      },
     );
   }
-  return 'marketHeatmap.semIndustry'.tr(
-    namedArgs: {
-      'name': name,
-      'dir': _directionKey(pct).tr(),
-      'pct': _unsignedPercent(pct),
-      'count': count,
-    },
+  return _withCoverage(
+    'marketHeatmap.semIndustry'.tr(
+      namedArgs: {
+        'name': name,
+        'dir': _directionKey(pct).tr(),
+        'pct': _unsignedPercent(pct),
+        'count': count,
+      },
+    ),
+    industry.liveCoverage,
+    mode,
   );
 }
+
+/// 即時套色時在描述後面接即時比例子句（正式資料不接）
+String _withCoverage(String base, double? coverage, HeatmapLiveMode? mode) =>
+    mode == null || coverage == null
+    ? base
+    : 'marketHeatmap.semAppend'.tr(
+        namedArgs: {
+          'base': base,
+          'clause': heatmapCoverageSemantics(coverage, mode),
+        },
+      );
 
 String _otherLabel(int count) =>
     'marketHeatmap.otherLabel'.tr(namedArgs: {'count': '$count'});
@@ -393,9 +448,12 @@ String _groupLabel(int count) =>
     'marketHeatmap.groupLabel'.tr(namedArgs: {'count': '$count'});
 
 /// 小產業合併塊的描述：「其他 N 個產業」、共幾檔（標籤以產業為單位，後面的
-/// 家數是檔，先說總檔數才聽得懂）、市值加權漲跌與漲跌家數；含自選或持股時
-/// 補上檔數。全是空心時的句型本來就寫檔數，不重複。
-String _groupSemantics(HeatmapIndustryGroupLayout group) {
+/// 家數是檔，先說總檔數才聽得懂）、市值加權漲跌與漲跌家數；即時套色時接即時
+/// 比例；含自選或持股時補上檔數。全是空心時的句型本來就寫檔數，不重複。
+String _groupSemantics(
+  HeatmapIndustryGroupLayout group,
+  HeatmapLiveMode? mode,
+) {
   final label = _groupLabel(group.members.length);
   final percent = group.weightedChangePercent;
   return _withMine(
@@ -408,6 +466,8 @@ String _groupSemantics(HeatmapIndustryGroupLayout group) {
       count: group.stockCount,
       percent: percent,
       breadth: group.breadth,
+      coverage: group.coverage,
+      mode: mode,
     ),
     group.mineCount,
   );
@@ -417,8 +477,12 @@ String _wholeLabel(int count) =>
     'marketHeatmap.tooltipStocks'.tr(namedArgs: {'count': '$count'});
 
 /// 合併塊的描述：標籤（整個產業時是產業名稱）、市值加權漲跌與漲跌家數；
-/// 含自選或持股時補上檔數（畫面上是自選框）
-String _otherSemantics(HeatmapIndustryLayout layout, HeatmapOtherLayout other) {
+/// 即時套色時接即時比例；含自選或持股時補上檔數（畫面上是自選框）
+String _otherSemantics(
+  HeatmapIndustryLayout layout,
+  HeatmapOtherLayout other,
+  HeatmapLiveMode? mode,
+) {
   final label = other.wholeIndustry
       ? layout.industry.name ?? 'marketHeatmap.uncategorized'.tr()
       : _otherLabel(other.members.length);
@@ -428,22 +492,31 @@ String _otherSemantics(HeatmapIndustryLayout layout, HeatmapOtherLayout other) {
       count: other.members.length,
       percent: other.weightedChangePercent,
       breadth: other.breadth,
+      coverage: other.coverage,
+      mode: mode,
     ),
     other.mineCount,
   );
 }
 
-/// 合併塊共用的描述句：標籤、市值加權漲跌、漲跌家數（全是空心時寫檔數）
+/// 合併塊共用的描述句：標籤、市值加權漲跌、漲跌家數（空心的念「沒有今日
+/// 漲跌」：報讀軟體使用者看不到空心；全是空心時寫狀態與檔數）、即時比例
 String _foldSemantics({
   required String label,
   required int count,
   required double? percent,
   required HeatmapBreadth breadth,
+  required double coverage,
+  required HeatmapLiveMode? mode,
 }) {
   final pct = percent;
   if (pct == null) {
     return 'marketHeatmap.semOtherNoChange'.tr(
-      namedArgs: {'label': label, 'count': '$count'},
+      namedArgs: {
+        'label': label,
+        'status': heatmapNoChangeText(mode),
+        'count': '$count',
+      },
     );
   }
   final b = breadth;
@@ -455,11 +528,15 @@ String _foldSemantics({
     'down': '${b.down}',
     'flat': '${b.flat}',
   };
-  return b.hollow > 0
-      ? 'marketHeatmap.semOtherWithHollow'.tr(
-          namedArgs: {...args, 'hollow': '${b.hollow}'},
-        )
-      : 'marketHeatmap.semOther'.tr(namedArgs: args);
+  return _withCoverage(
+    b.hollow > 0
+        ? 'marketHeatmap.semOtherWithHollow'.tr(
+            namedArgs: {...args, 'hollow': '${b.hollow}'},
+          )
+        : 'marketHeatmap.semOther'.tr(namedArgs: args),
+    coverage,
+    mode,
+  );
 }
 
 String _withMine(String base, int mineCount) => mineCount > 0
@@ -479,12 +556,7 @@ String _tileSemantics(HeatmapTileLayout layout) {
       },
     ),
     TileChangeHollow(:final reason) => 'marketHeatmap.semTileHollow'.tr(
-      namedArgs: {
-        'name': tile.name,
-        'reason': switch (reason) {
-          HollowReason.noChangeData => 'marketHeatmap.hollowNoChange'.tr(),
-        },
-      },
+      namedArgs: {'name': tile.name, 'reason': heatmapHollowReasonText(reason)},
     ),
   };
 }
@@ -497,12 +569,23 @@ class _IndexHeader extends StatelessWidget {
     required this.overview,
     required this.live,
     required this.dataDate,
+    required this.liveStatus,
+    required this.showCloseOf,
   });
 
   final String market;
   final MarketOverviewState overview;
   final MarketLiveIndices live;
   final DateTime? dataDate;
+
+  /// 即時時段的狀態行（見 [heatmapLiveStatusText]，空字串是不顯示）；這時
+  /// 指數列下方不寫指數自己的狀態與「指數為 M/D 收盤」（同一件事不寫兩次，
+  /// 收盤後總覽已有今天的指數時也不會寫出「指數為今天收盤」）。不在即時時段
+  /// 為 null
+  final String? liveStatus;
+
+  /// 右側寫格子的日期「M/D 收盤」
+  final bool showCloseOf;
 
   @override
   Widget build(BuildContext context) {
@@ -522,18 +605,23 @@ class _IndexHeader extends StatelessWidget {
                 : 'marketOverview.summary.tpex')
             .tr();
     final date = dataDate;
-    // 即時報價的狀態優先；否則指數比格子新時說明指數是哪天的收盤（右側的
-    // 「M/D 收盤」是格子的日期）
-    final closeOf = index == null || date == null
-        ? null
-        : indexCloseOfDate(
-            index: index,
-            isLive: shown?.isLive ?? false,
-            compareDate: date,
-          );
-    final statusText =
-        shown?.statusText ??
-        (closeOf == null ? null : indexCloseOfText(closeOf));
+    final String? statusText;
+    if (liveStatus case final text?) {
+      statusText = text.isEmpty ? null : text;
+    } else {
+      // 即時報價的狀態優先；否則指數比格子新時說明指數是哪天的收盤（右側的
+      // 「M/D 收盤」是格子的日期）
+      final closeOf = index == null || date == null
+          ? null
+          : indexCloseOfDate(
+              index: index,
+              isLive: shown?.isLive ?? false,
+              compareDate: date,
+            );
+      statusText =
+          shown?.statusText ??
+          (closeOf == null ? null : indexCloseOfText(closeOf));
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         DesignTokens.spacing16,
@@ -596,7 +684,7 @@ class _IndexHeader extends StatelessWidget {
                         ],
                       ),
               ),
-              if (date != null)
+              if (date != null && showCloseOf)
                 Text(
                   'marketHeatmap.closeOf'.tr(
                     namedArgs: {'date': '${date.month}/${date.day}'},
@@ -608,6 +696,10 @@ class _IndexHeader extends StatelessWidget {
           if (statusText != null)
             Text(
               statusText,
+              key: MarketHeatmapScreen.statusLineKey,
+              // 窄螢幕最多兩行：暫停、限流放在句首，截掉的是後面的進度
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

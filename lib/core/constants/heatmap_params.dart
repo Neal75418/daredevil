@@ -1,3 +1,5 @@
+import 'package:daredevil/core/constants/api_endpoints.dart';
+
 /// 大盤熱力圖參數（設計見 `docs/plans/2026-10-07-market-heatmap-design.md`）
 abstract final class HeatmapParams {
   /// 不畫的產業：產業別含 `ETF`（上市 `ETF`、上櫃 `上櫃ETF`，與
@@ -32,6 +34,9 @@ abstract final class HeatmapParams {
     }
     return step;
   }
+
+  /// 即時模式登記的個股上限：報價中心一輪兩批，扣掉該市場指數佔的一檔
+  static const int liveTileLimit = ApiEndpoints.misBatchSize * 2 - 1;
 
   /// 頁面可見期間比對內容指紋的間隔
   static const Duration fingerprintPollInterval = Duration(minutes: 1);

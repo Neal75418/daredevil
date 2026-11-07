@@ -10,7 +10,8 @@ import 'package:daredevil/presentation/widgets/heatmap/heatmap_tooltip.dart';
 /// 一個市場的熱力圖：佈局、繪製、點擊、滑鼠與長按提示。
 ///
 /// 佈局依（資料、放大的產業、尺寸）快取，三者不變時沿用同一個 list，
-/// painter 才不會重畫；提示畫在獨立一層，滑鼠移動只重建提示。
+/// painter 才不會重畫；提示畫在獨立一層，滑鼠移動只重建提示。即時套色的
+/// 時段取資料自己的 [HeatmapMarketData.liveMode]。
 class HeatmapView extends StatefulWidget {
   const HeatmapView({
     super.key,
@@ -43,7 +44,8 @@ class HeatmapView extends StatefulWidget {
 }
 
 /// 提示：指著的格子、產業內的合併塊或小產業合併塊（三者擇一）、所屬產業
-/// （小產業合併塊沒有）、位置，以及算出它的那份佈局（佈局換了就不畫）
+/// （小產業合併塊沒有）、位置，以及算出它的那份佈局（佈局換了就在新佈局的
+/// 同一個位置重查）
 typedef _Hover = ({
   HeatmapMarketLayout layout,
   HeatmapIndustryLayout? industry,
@@ -103,14 +105,18 @@ class _HeatmapViewState extends State<HeatmapView> {
     return _layout;
   }
 
-  void _showAt(HeatmapMarketLayout layout, Offset at) {
+  void _showAt(HeatmapMarketLayout layout, Offset at) =>
+      _hover.value = _hoverAt(layout, at);
+
+  /// [at] 在 [layout] 上指著的提示對象；都沒有時為 null（純計算）
+  static _Hover? _hoverAt(HeatmapMarketLayout layout, Offset at) {
     final industries = layout.industries;
     final tile = tileAt(industries, at.dx, at.dy);
     if (tile != null) {
       final industry = industries.firstWhere(
         (l) => l.tiles.any((t) => identical(t, tile)),
       );
-      _hover.value = (
+      return (
         layout: layout,
         industry: industry,
         tile: tile,
@@ -118,11 +124,10 @@ class _HeatmapViewState extends State<HeatmapView> {
         group: null,
         at: at,
       );
-      return;
     }
     final hit = otherAt(industries, at.dx, at.dy);
     if (hit != null) {
-      _hover.value = (
+      return (
         layout: layout,
         industry: hit.industry,
         tile: null,
@@ -130,10 +135,9 @@ class _HeatmapViewState extends State<HeatmapView> {
         group: null,
         at: at,
       );
-      return;
     }
     final group = smallIndustriesAt(layout, at.dx, at.dy);
-    _hover.value = group == null
+    return group == null
         ? null
         : (
             layout: layout,
@@ -143,6 +147,18 @@ class _HeatmapViewState extends State<HeatmapView> {
             group: group,
             at: at,
           );
+  }
+
+  /// 佈局換了（新一輪即時資料、放大、尺寸）而提示還開著：同一個位置在新佈局
+  /// 重查並在這一幀畫出（盤中每輪換資料時提示不空白一幀）；查不到就收起。
+  /// 結果在這一幀結束後才寫回 [_hover]：build 期間不改 notifier；這段時間
+  /// 指標已經移動（[_hover] 換了）就不蓋掉。
+  _Hover? _followLayout(_Hover hover, HeatmapMarketLayout layout) {
+    final next = _hoverAt(layout, hover.at);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(_hover.value, hover)) _hover.value = next;
+    });
+    return next;
   }
 
   // 無障礙節點的點擊：穩定的方法 tear-off，painter 比較時才相等
@@ -214,6 +230,7 @@ class _HeatmapViewState extends State<HeatmapView> {
                       onSmallIndustriesTap: _semanticGroupTap,
                       fontFamily: font?.fontFamily,
                       fontFamilyFallback: font?.fontFamilyFallback,
+                      liveMode: widget.data.liveMode,
                     ),
                   ),
                 ),
@@ -239,12 +256,14 @@ class _HeatmapViewState extends State<HeatmapView> {
               ),
               ValueListenableBuilder<_Hover?>(
                 valueListenable: _hover,
-                // 佈局換了（資料、放大、尺寸改變），舊提示指的格子可能已不在
-                // 原處：不畫，等下一次指標移動。不在 build 期間改 notifier
-                builder: (context, hover, _) =>
-                    hover == null || !identical(hover.layout, layout)
-                    ? const SizedBox.shrink()
-                    : _positioned(hover, size),
+                builder: (context, hover, _) {
+                  final shown = hover == null || identical(hover.layout, layout)
+                      ? hover
+                      : _followLayout(hover, layout);
+                  return shown == null
+                      ? const SizedBox.shrink()
+                      : _positioned(shown, size);
+                },
               ),
             ],
           ),
@@ -277,6 +296,7 @@ class _HeatmapViewState extends State<HeatmapView> {
       return HeatmapIndustryGroupTooltip(
         group: group,
         title: widget.labels.groupLabel(group.members.length),
+        liveMode: widget.data.liveMode,
       );
     }
     final industryName =
@@ -292,6 +312,7 @@ class _HeatmapViewState extends State<HeatmapView> {
           ? industryName
           : widget.labels.otherLabel(other.members.length),
       industryName: industryName,
+      liveMode: widget.data.liveMode,
     );
   }
 }

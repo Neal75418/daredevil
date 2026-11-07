@@ -21,6 +21,7 @@ HeatmapTile _tile(
   name: name ?? '測試$symbol',
   close: 100,
   marketCap: cap,
+  baseCap: change is TileChangeValue ? cap * 100 / (100 + change.percent) : 0,
   change: change,
   isMine: isMine,
 );
@@ -43,15 +44,26 @@ final _industries = [
   ),
 ];
 
-String _industryLabel(HeatmapIndustryLayout l) => 'industry:${l.industry.key}';
+String _industryLabel(HeatmapIndustryLayout l, HeatmapLiveMode? mode) =>
+    'industry:${l.industry.key}';
 String _tileLabel(HeatmapTileLayout t) => 'tile:${t.tile.symbol}';
 String _otherLabel(int count) => 'other:$count';
 String _wholeLabel(int count) => 'all:$count';
-String _otherSemantics(HeatmapIndustryLayout l, HeatmapOtherLayout o) =>
-    'other:${l.industry.key}:${o.members.length}';
+String _otherSemantics(
+  HeatmapIndustryLayout l,
+  HeatmapOtherLayout o,
+  HeatmapLiveMode? mode,
+) => 'other:${l.industry.key}:${o.members.length}';
 String _groupLabel(int count) => 'group:$count';
-String _groupSemantics(HeatmapIndustryGroupLayout g) =>
+String _groupSemantics(HeatmapIndustryGroupLayout g, HeatmapLiveMode? mode) =>
     'group:${g.members.length}';
+
+/// 即時比例與沒有值的文字：照中文措辭的字數，量出來的寬度才接近實際
+String _coverageSuffix(double coverage, HeatmapLiveMode mode) =>
+    '・${mode == HeatmapLiveMode.intraday ? '即時' : '收盤'} '
+    '${(coverage * 100).round()}%';
+String _noChangeLabel(HeatmapLiveMode mode) =>
+    mode == HeatmapLiveMode.intraday ? '未即時' : '未收盤';
 
 const _labels = HeatmapPaintLabels(
   uncategorized: '未分類',
@@ -64,6 +76,8 @@ const _labels = HeatmapPaintLabels(
   groupLabel: _groupLabel,
   groupShortLabel: 'grp',
   groupSemantics: _groupSemantics,
+  coverageSuffix: _coverageSuffix,
+  noChangeLabel: _noChangeLabel,
 );
 
 void _ignore(String _) {}
@@ -82,6 +96,7 @@ HeatmapPainter _painter(
   ValueChanged<HeatmapIndustryGroupLayout> onSmallIndustriesTap = _ignoreGroup,
   String? fontFamily,
   List<String>? fontFamilyFallback,
+  HeatmapLiveMode? liveMode,
 }) => HeatmapPainter(
   layout: layout,
   smallIndustries: smallIndustries,
@@ -94,6 +109,7 @@ HeatmapPainter _painter(
   onOtherTap: onOtherTap,
   fontFamily: fontFamily,
   fontFamilyFallback: fontFamilyFallback,
+  liveMode: liveMode,
 );
 
 /// 單一格子、沒有產業標題的佈局（直接指定格子大小，畫布呼叫只來自這一格）
@@ -192,6 +208,8 @@ void main() {
         groupLabel: _groupLabel,
         groupShortLabel: 'grp',
         groupSemantics: _groupSemantics,
+        coverageSuffix: _coverageSuffix,
+        noChangeLabel: _noChangeLabel,
       );
       expect(
         _painter(layout, labels: other).shouldRepaint(_painter(layout)),
@@ -201,7 +219,8 @@ void main() {
   });
 
   test('labels 換了描述函式也要重畫', () {
-    String otherIndustryLabel(HeatmapIndustryLayout l) => 'x';
+    String otherIndustryLabel(HeatmapIndustryLayout l, HeatmapLiveMode? m) =>
+        'x';
     final other = HeatmapPaintLabels(
       uncategorized: '未分類',
       industrySemantics: otherIndustryLabel,
@@ -213,6 +232,8 @@ void main() {
       groupLabel: _groupLabel,
       groupShortLabel: 'grp',
       groupSemantics: _groupSemantics,
+      coverageSuffix: _coverageSuffix,
+      noChangeLabel: _noChangeLabel,
     );
     expect(
       _painter(layout, labels: other).shouldRepaint(_painter(layout)),
@@ -488,6 +509,7 @@ void main() {
       marketCap: count.toDouble(),
       weightedChangePercent: pct,
       breadth: (up: count, down: 0, flat: 0, hollow: 0),
+      coverage: 1,
     );
 
     List<HeatmapIndustryLayout> withOther(
@@ -592,6 +614,8 @@ void main() {
         groupLabel: _groupLabel,
         groupShortLabel: 'grp',
         groupSemantics: _groupSemantics,
+        coverageSuffix: _coverageSuffix,
+        noChangeLabel: _noChangeLabel,
       );
       expect(
         (Canvas canvas) => _painter(
@@ -627,6 +651,8 @@ void main() {
         groupLabel: _groupLabel,
         groupShortLabel: 'grp',
         groupSemantics: _groupSemantics,
+        coverageSuffix: _coverageSuffix,
+        noChangeLabel: _noChangeLabel,
       );
       // 標題列 200 寬：「甲業」＋「 +1.00%」兩段；合併塊只寫漲跌幅一段
       expect(
@@ -662,6 +688,8 @@ void main() {
           groupLabel: _groupLabel,
           groupShortLabel: 'grp',
           groupSemantics: _groupSemantics,
+          coverageSuffix: _coverageSuffix,
+          noChangeLabel: _noChangeLabel,
         ),
       );
     }
@@ -746,6 +774,7 @@ void main() {
       marketCap: 3,
       weightedChangePercent: pct,
       breadth: (up: 3, down: 0, flat: 0, hollow: 0),
+      coverage: 1,
     );
 
     void Function(Canvas) paintGroup(HeatmapIndustryGroupLayout g) =>
@@ -862,6 +891,8 @@ void main() {
         groupLabel: _groupLabel,
         groupShortLabel: 'x',
         groupSemantics: _groupSemantics,
+        coverageSuffix: _coverageSuffix,
+        noChangeLabel: _noChangeLabel,
       );
       expect(other == _labels, isFalse);
       String g2(int c) => 'g2';
@@ -876,9 +907,11 @@ void main() {
         groupLabel: g2,
         groupShortLabel: 'grp',
         groupSemantics: _groupSemantics,
+        coverageSuffix: _coverageSuffix,
+        noChangeLabel: _noChangeLabel,
       );
       expect(other2 == _labels, isFalse);
-      String s2(HeatmapIndustryGroupLayout g) => 's2';
+      String s2(HeatmapIndustryGroupLayout g, HeatmapLiveMode? m) => 's2';
       final other3 = HeatmapPaintLabels(
         uncategorized: '未分類',
         industrySemantics: _industryLabel,
@@ -890,6 +923,8 @@ void main() {
         groupLabel: _groupLabel,
         groupShortLabel: 'grp',
         groupSemantics: s2,
+        coverageSuffix: _coverageSuffix,
+        noChangeLabel: _noChangeLabel,
       );
       expect(other3 == _labels, isFalse);
     });
@@ -917,18 +952,48 @@ void main() {
   group('heatmapHeaderLayout（每字寬 10）', () {
     double measure(String text) => text.length * 10.0;
     for (final (desc, name, percent, maxWidth, expected) in [
-      ('放得下', '半導體業', '-1.06%', 110.0, (name: '半導體業', showPercent: true)),
-      ('放不下：名稱讓出空間', '半導體業', '-1.06%', 105.0, (name: '半導…', showPercent: true)),
+      (
+        '放得下',
+        '半導體業',
+        '-1.06%',
+        110.0,
+        (name: '半導體業', showPercent: true, showSuffix: false),
+      ),
+      (
+        '放不下：名稱讓出空間',
+        '半導體業',
+        '-1.06%',
+        105.0,
+        (name: '半導…', showPercent: true, showSuffix: false),
+      ),
       (
         '連兩個字＋…都放不下：不寫漲跌幅',
         '半導體業',
         '-1.06%',
         99.0,
-        (name: '半導體業', showPercent: false),
+        (name: '半導體業', showPercent: false, showSuffix: false),
       ),
-      ('兩個字的名稱不必縮', '航運', '+0.10%', 90.0, (name: '航運', showPercent: true)),
-      ('沒有漲跌：名稱照樣可縮', '半導體業', null, 30.0, (name: '半導…', showPercent: false)),
-      ('什麼都放不下', '半導體業', null, 25.0, (name: null, showPercent: false)),
+      (
+        '兩個字的名稱不必縮',
+        '航運',
+        '+0.10%',
+        90.0,
+        (name: '航運', showPercent: true, showSuffix: false),
+      ),
+      (
+        '沒有漲跌：名稱照樣可縮',
+        '半導體業',
+        null,
+        30.0,
+        (name: '半導…', showPercent: false, showSuffix: false),
+      ),
+      (
+        '什麼都放不下',
+        '半導體業',
+        null,
+        25.0,
+        (name: null, showPercent: false, showSuffix: false),
+      ),
     ]) {
       test(desc, () {
         expect(
@@ -942,6 +1007,399 @@ void main() {
         );
       });
     }
+  });
+
+  group('heatmapHeaderLayout 帶即時比例（每字寬 10）', () {
+    double measure(String text) => text.length * 10.0;
+    // 名稱 40、「 -1.06%」70、「・即時 96%」70：全部放得下要 180
+    for (final (desc, maxWidth, expected) in [
+      (
+        '放得下：名稱、漲跌幅、比例都寫',
+        180.0,
+        (name: '半導體業', showPercent: true, showSuffix: true),
+      ),
+      (
+        '差一點：先捨比例，名稱與漲跌幅照寫',
+        179.0,
+        (name: '半導體業', showPercent: true, showSuffix: false),
+      ),
+      // 比例的優先順序最低：不為了留比例去縮名稱
+      (
+        '縮名稱才放得下比例：捨比例、名稱不縮',
+        150.0,
+        (name: '半導體業', showPercent: true, showSuffix: false),
+      ),
+      (
+        '捨了比例還要縮名稱：縮名稱、保留漲跌幅',
+        105.0,
+        (name: '半導…', showPercent: true, showSuffix: false),
+      ),
+      (
+        '漲跌幅也放不下：只寫名稱',
+        99.0,
+        (name: '半導體業', showPercent: false, showSuffix: false),
+      ),
+    ]) {
+      test(desc, () {
+        expect(
+          heatmapHeaderLayout(
+            name: '半導體業',
+            percent: '-1.06%',
+            suffix: '・即時 96%',
+            maxWidth: maxWidth,
+            measure: measure,
+          ),
+          expected,
+        );
+      });
+    }
+  });
+
+  group('即時（painter 的 liveMode）', () {
+    HeatmapBox box(Rect r) =>
+        (left: r.left, top: r.top, width: r.width, height: r.height);
+
+    /// 只有標題列的產業（標題列 16 高）
+    List<HeatmapIndustryLayout> header(
+      double width, {
+      double? pct = 1.83,
+      double? coverage = 0.96,
+    }) => [
+      HeatmapIndustryLayout(
+        industry: HeatmapIndustry(
+          name: '半導體業',
+          marketCap: 1,
+          weightedChangePercent: pct,
+          liveCoverage: coverage,
+          tiles: const [],
+        ),
+        bounds: (left: 0, top: 0, width: width, height: 100),
+        header: (left: 0, top: 0, width: width, height: 16),
+        tiles: const [],
+      ),
+    ];
+
+    HeatmapOtherLayout other(
+      Rect r, {
+      double? pct = 0.5,
+      double coverage = 0.3,
+      int count = 12,
+    }) => HeatmapOtherLayout(
+      members: [
+        for (var i = 0; i < count; i++)
+          _tile('${9950 + i}', 1, const TileChangeValue(0.5)),
+      ],
+      bounds: box(r),
+      paint: box(r),
+      interactive: true,
+      wholeIndustry: false,
+      marketCap: count.toDouble(),
+      weightedChangePercent: pct,
+      breadth: (up: count, down: 0, flat: 0, hollow: 0),
+      coverage: coverage,
+    );
+
+    List<HeatmapIndustryLayout> withOther(HeatmapOtherLayout o) => [
+      HeatmapIndustryLayout(
+        industry: const HeatmapIndustry(
+          name: '甲業',
+          marketCap: 12,
+          weightedChangePercent: 0.5,
+          tiles: [],
+        ),
+        bounds: o.bounds,
+        header: null,
+        tiles: const [],
+        other: o,
+      ),
+    ];
+
+    HeatmapIndustryGroupLayout group(Rect r, {double coverage = 0.5}) =>
+        HeatmapIndustryGroupLayout(
+          members: [
+            for (var i = 0; i < 3; i++)
+              HeatmapIndustry(
+                name: 'S$i',
+                marketCap: 1,
+                weightedChangePercent: 1,
+                tiles: [_tile('${9960 + i}', 1, const TileChangeValue(1))],
+              ),
+          ],
+          bounds: box(r),
+          paint: box(r),
+          interactive: true,
+          marketCap: 3,
+          weightedChangePercent: 1,
+          breadth: (up: 3, down: 0, flat: 0, hollow: 0),
+          coverage: coverage,
+        );
+
+    /// 「其他 N 檔」照中文的字數
+    final zhLabels = HeatmapPaintLabels(
+      uncategorized: '未分類',
+      industrySemantics: _industryLabel,
+      tileSemantics: _tileLabel,
+      otherLabel: (count) => '其他 $count 檔',
+      otherShortLabel: '其他',
+      wholeLabel: _wholeLabel,
+      otherSemantics: _otherSemantics,
+      groupLabel: _groupLabel,
+      groupShortLabel: 'grp',
+      groupSemantics: _groupSemantics,
+      coverageSuffix: _coverageSuffix,
+      noChangeLabel: _noChangeLabel,
+    );
+
+    /// 畫出的每段文字的寬度（測試字型每字一個字級寬）
+    List<double> widths(
+      List<HeatmapIndustryLayout> layout, {
+      HeatmapLiveMode? liveMode,
+      HeatmapIndustryGroupLayout? smallIndustries,
+      HeatmapPaintLabels? labels,
+    }) {
+      final canvas = _WidthCanvas();
+      _painter(
+        layout,
+        liveMode: liveMode,
+        smallIndustries: smallIndustries,
+        labels: labels ?? zhLabels,
+      ).paint(canvas, const Size(800, 600));
+      return canvas.widths;
+    }
+
+    test('只換 liveMode（同一份佈局）也要重畫', () {
+      expect(
+        _painter(
+          layout,
+          liveMode: HeatmapLiveMode.intraday,
+        ).shouldRepaint(_painter(layout)),
+        isTrue,
+      );
+      expect(
+        _painter(
+          layout,
+          liveMode: HeatmapLiveMode.afterClose,
+        ).shouldRepaint(_painter(layout, liveMode: HeatmapLiveMode.intraday)),
+        isTrue,
+      );
+      expect(
+        _painter(
+          layout,
+          liveMode: HeatmapLiveMode.intraday,
+        ).shouldRepaint(_painter(layout, liveMode: HeatmapLiveMode.intraday)),
+        isFalse,
+      );
+    });
+
+    test('正式資料（liveMode null）：不取比例與沒有值的文字，標題與合併塊只寫名稱與漲跌幅', () {
+      final calls = <String>[];
+      final spy = HeatmapPaintLabels(
+        uncategorized: '未分類',
+        industrySemantics: _industryLabel,
+        tileSemantics: _tileLabel,
+        otherLabel: _otherLabel,
+        otherShortLabel: 'oth',
+        wholeLabel: _wholeLabel,
+        otherSemantics: _otherSemantics,
+        groupLabel: _groupLabel,
+        groupShortLabel: 'grp',
+        groupSemantics: _groupSemantics,
+        coverageSuffix: (c, m) {
+          calls.add('suffix');
+          return '';
+        },
+        noChangeLabel: (m) {
+          calls.add('noChange');
+          return '';
+        },
+      );
+      const r = Rect.fromLTWH(0, 0, 400, 60);
+      expect(
+        widths([
+          ...header(300),
+          ...header(300, pct: null),
+          ...withOther(other(r)),
+          ...withOther(other(r, pct: null)),
+        ], labels: spy),
+        // 標題：名稱＋「 +1.83%」、只有名稱；合併塊：兩行、只有標籤
+        [44, 77, 44, 96, 72, 96],
+      );
+      expect(calls, isEmpty);
+    });
+
+    test('盤中產業標題：「半導體業 +1.83%・即時 96%」', () {
+      // 「 +1.83%・即時 96%」14 字
+      expect(widths(header(300), liveMode: HeatmapLiveMode.intraday), [
+        44,
+        154,
+      ]);
+    });
+
+    test('標題放不下時先捨即時比例、保留漲跌幅', () {
+      // 可用 146：名稱 44＋154 放不下；名稱 44＋「 +1.83%」77 放得下
+      expect(widths(header(150), liveMode: HeatmapLiveMode.intraday), [44, 77]);
+    });
+
+    test('收盤後的標題寫「・收盤」；沒有值的產業寫「未收盤」', () {
+      final calls = <(double, HeatmapLiveMode)>[];
+      final modes = <HeatmapLiveMode>[];
+      final spy = HeatmapPaintLabels(
+        uncategorized: '未分類',
+        industrySemantics: _industryLabel,
+        tileSemantics: _tileLabel,
+        otherLabel: _otherLabel,
+        otherShortLabel: 'oth',
+        wholeLabel: _wholeLabel,
+        otherSemantics: _otherSemantics,
+        groupLabel: _groupLabel,
+        groupShortLabel: 'grp',
+        groupSemantics: _groupSemantics,
+        coverageSuffix: (c, m) {
+          calls.add((c, m));
+          return _coverageSuffix(c, m);
+        },
+        noChangeLabel: (m) {
+          modes.add(m);
+          return _noChangeLabel(m);
+        },
+      );
+      expect(
+        widths(
+          [...header(300), ...header(300, pct: null, coverage: 0)],
+          liveMode: HeatmapLiveMode.afterClose,
+          labels: spy,
+        ),
+        // 「 未收盤」4 字
+        [44, 154, 44, 44],
+      );
+      expect(calls, [(0.96, HeatmapLiveMode.afterClose)]);
+      expect(modes, [HeatmapLiveMode.afterClose]);
+    });
+
+    test('合併塊：盤中「其他 12 檔」＋「+0.50%・即時 30%」', () {
+      // 400×60：字級 12；「其他 12 檔」7 字、「+0.50%・即時 30%」13 字
+      expect(heatmapTileFontSize(400, 60), 12);
+      expect(
+        widths(
+          withOther(other(const Rect.fromLTWH(0, 0, 400, 60))),
+          liveMode: HeatmapLiveMode.intraday,
+        ),
+        [84, 156],
+      );
+    });
+
+    test('合併塊窄到放不下時先捨比例', () {
+      // 120×60：字級 12、可用 116；156 放不下，「+0.50%」72 放得下
+      expect(heatmapTileFontSize(120, 60), 12);
+      expect(
+        widths(
+          withOther(other(const Rect.fromLTWH(0, 0, 120, 60))),
+          liveMode: HeatmapLiveMode.intraday,
+        ),
+        [84, 72],
+      );
+    });
+
+    test('盤中整塊空心的合併塊：第二行寫「未即時」', () {
+      expect(
+        widths(
+          withOther(other(const Rect.fromLTWH(0, 0, 400, 60), pct: null)),
+          liveMode: HeatmapLiveMode.intraday,
+        ),
+        [84, 36],
+      );
+    });
+
+    test('小產業合併塊同樣標比例', () {
+      // 「group:3」7 字、「+1.00%・即時 50%」13 字
+      expect(
+        widths(
+          const [],
+          smallIndustries: group(const Rect.fromLTWH(0, 0, 400, 60)),
+          liveMode: HeatmapLiveMode.intraday,
+        ),
+        [84, 156],
+      );
+    });
+
+    test('無障礙描述函式收到 painter 的 liveMode', () {
+      final modes = <String>[];
+      final spy = HeatmapPaintLabels(
+        uncategorized: '未分類',
+        industrySemantics: (l, m) {
+          modes.add('industry:${m?.name}');
+          return 'i';
+        },
+        tileSemantics: _tileLabel,
+        otherLabel: _otherLabel,
+        otherShortLabel: 'oth',
+        wholeLabel: _wholeLabel,
+        otherSemantics: (l, o, m) {
+          modes.add('other:${m?.name}');
+          return 'o';
+        },
+        groupLabel: _groupLabel,
+        groupShortLabel: 'grp',
+        groupSemantics: (g, m) {
+          modes.add('group:${m?.name}');
+          return 'g';
+        },
+        coverageSuffix: _coverageSuffix,
+        noChangeLabel: _noChangeLabel,
+      );
+      _painter(
+        header(300),
+        labels: spy,
+        liveMode: HeatmapLiveMode.intraday,
+        smallIndustries: group(const Rect.fromLTWH(0, 200, 200, 100)),
+      ).semanticsBuilder(const Size(400, 300));
+      _painter(
+        withOther(other(const Rect.fromLTWH(0, 0, 400, 60))),
+        labels: spy,
+        zoomed: true,
+        liveMode: HeatmapLiveMode.afterClose,
+      ).semanticsBuilder(const Size(400, 300));
+      _painter(header(300), labels: spy).semanticsBuilder(const Size(400, 300));
+      expect(modes, [
+        'industry:intraday',
+        'group:intraday',
+        'other:afterClose',
+        'industry:null',
+      ]);
+    });
+
+    test('labels 換了比例或沒有值的文字函式也要重畫', () {
+      String suffix2(double c, HeatmapLiveMode m) => 's';
+      String noChange2(HeatmapLiveMode m) => 'n';
+      HeatmapPaintLabels labels({
+        String Function(double, HeatmapLiveMode) suffix = _coverageSuffix,
+        String Function(HeatmapLiveMode) noChange = _noChangeLabel,
+      }) => HeatmapPaintLabels(
+        uncategorized: '未分類',
+        industrySemantics: _industryLabel,
+        tileSemantics: _tileLabel,
+        otherLabel: _otherLabel,
+        otherShortLabel: 'oth',
+        wholeLabel: _wholeLabel,
+        otherSemantics: _otherSemantics,
+        groupLabel: _groupLabel,
+        groupShortLabel: 'grp',
+        groupSemantics: _groupSemantics,
+        coverageSuffix: suffix,
+        noChangeLabel: noChange,
+      );
+      expect(labels() == _labels, isTrue, reason: '前提：同樣的函式相等');
+      expect(labels().hashCode, _labels.hashCode);
+      expect(labels(suffix: suffix2) == _labels, isFalse);
+      expect(labels(noChange: noChange2) == _labels, isFalse);
+      expect(
+        _painter(
+          layout,
+          labels: labels(suffix: suffix2),
+        ).shouldRepaint(_painter(layout)),
+        isTrue,
+      );
+    });
   });
 
   group('heatmapTileLines', () {
@@ -1088,4 +1546,13 @@ void main() {
     expect(formatHeatmapCap(123440000000, const Locale('en')), '123.4');
     expect(formatHeatmapCap(1234500000000, const Locale('en')), '1,234.5');
   });
+}
+
+/// 畫的當下記下每段文字的寬度（畫完 TextPainter 就 dispose，事後讀不到）
+class _WidthCanvas extends TestRecordingCanvas {
+  final widths = <double>[];
+
+  @override
+  void drawParagraph(ui.Paragraph paragraph, Offset offset) =>
+      widths.add(paragraph.longestLine);
 }

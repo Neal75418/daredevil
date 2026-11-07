@@ -5,6 +5,7 @@ import 'package:meta/meta.dart';
 
 import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
+import 'package:daredevil/domain/services/heatmap/heatmap_grouping.dart';
 
 /// 矩形（邏輯像素），不依賴 `dart:ui`
 typedef HeatmapBox = ({double left, double top, double width, double height});
@@ -59,6 +60,7 @@ class HeatmapOtherLayout {
     required this.marketCap,
     required this.weightedChangePercent,
     required this.breadth,
+    required this.coverage,
   });
 
   /// 被合併的個股（市值降冪）
@@ -78,6 +80,9 @@ class HeatmapOtherLayout {
   final double? weightedChangePercent;
   final HeatmapBreadth breadth;
 
+  /// 成員中有漲跌值的市值占成員市值合計的比例（0～1）
+  final double coverage;
+
   /// 成員中自選或持股的檔數（> 0 時合併塊畫自選框）
   int get mineCount => members.where((t) => t.isMine).length;
 
@@ -91,7 +96,8 @@ class HeatmapOtherLayout {
       other.wholeIndustry == wholeIndustry &&
       other.marketCap == marketCap &&
       other.weightedChangePercent == weightedChangePercent &&
-      other.breadth == breadth;
+      other.breadth == breadth &&
+      other.coverage == coverage;
 
   @override
   int get hashCode => Object.hash(
@@ -103,6 +109,7 @@ class HeatmapOtherLayout {
     marketCap,
     weightedChangePercent,
     breadth,
+    coverage,
   );
 }
 
@@ -162,6 +169,7 @@ class HeatmapIndustryGroupLayout {
     required this.marketCap,
     required this.weightedChangePercent,
     required this.breadth,
+    required this.coverage,
   });
 
   /// 被合併的產業（與輸入同序，市值降冪）
@@ -183,6 +191,9 @@ class HeatmapIndustryGroupLayout {
   /// 成員所有個股的漲跌家數
   final HeatmapBreadth breadth;
 
+  /// 成員所有個股中有漲跌值的市值占市值合計的比例（0～1）
+  final double coverage;
+
   /// 成員的個股檔數
   int get stockCount => members.fold(0, (a, i) => a + i.tiles.length);
 
@@ -199,7 +210,8 @@ class HeatmapIndustryGroupLayout {
       other.interactive == interactive &&
       other.marketCap == marketCap &&
       other.weightedChangePercent == weightedChangePercent &&
-      other.breadth == breadth;
+      other.breadth == breadth &&
+      other.coverage == coverage;
 
   @override
   int get hashCode => Object.hash(
@@ -210,6 +222,7 @@ class HeatmapIndustryGroupLayout {
     marketCap,
     weightedChangePercent,
     breadth,
+    coverage,
   );
 }
 
@@ -286,8 +299,9 @@ HeatmapMarketLayout layoutHeatmapMarket(
           math.min(groupPaint.width, groupPaint.height) >=
           HeatmapParams.minInteractiveSide,
       marketCap: groupCap,
-      weightedChangePercent: _weightedChange(tiles),
+      weightedChangePercent: heatmapWeightedChange(tiles),
       breadth: _breadth(tiles),
+      coverage: heatmapValueCoverage(tiles),
     ),
   );
 }
@@ -402,36 +416,14 @@ HeatmapIndustryLayout _layoutIndustry(
           HeatmapParams.minInteractiveSide,
       wholeIndustry: kept.isEmpty,
       marketCap: otherCap,
-      // 整個產業都合併時直接用產業的值：與標題列寫的是同一個數，不會因兩種
-      // 算法的捨入差 0.01
+      // 整個產業都合併時直接用產業的值：與標題列寫的是同一個數
       weightedChangePercent: kept.isEmpty
           ? industry.weightedChangePercent
-          : _weightedChange(folded),
+          : heatmapWeightedChange(folded),
       breadth: _breadth(folded),
+      coverage: heatmapValueCoverage(folded),
     ),
   );
-}
-
-/// 以平盤市值加權的漲跌幅（與產業漲跌同一算法；產業那邊直接用股數 ×
-/// （收盤 − 漲跌），這裡從格子已有的市值與漲跌幅反推，盤中市值基準不同時要改）。平盤市值＝市值 ÷
-/// (1 + 漲跌幅 / 100)：市值是股數 × 收盤，漲跌幅＝漲跌 ÷（收盤 − 漲跌），
-/// 所以等於股數 ×（收盤 − 漲跌）。
-double? _weightedChange(List<HeatmapTile> tiles) {
-  var sum = 0.0;
-  var base = 0.0;
-  for (final t in tiles) {
-    final change = t.change;
-    if (change is! TileChangeValue) continue;
-    final b = t.marketCap * 100 / (100 + change.percent);
-    // 極端資料下（漲跌幅 −100%）算不出平盤市值：跳過這一檔，不讓整塊變空心
-    // （成員乘積溢位時整塊結果不是有限數，仍回 null）
-    if (!b.isFinite || !(b > 0)) continue;
-    sum += b * change.percent;
-    base += b;
-  }
-  if (!(base > 0)) return null;
-  final weighted = sum / base;
-  return weighted.isFinite ? weighted : null;
 }
 
 HeatmapBreadth _breadth(List<HeatmapTile> tiles) {

@@ -51,6 +51,7 @@ class LiveQuoteState {
   const LiveQuoteState({
     this.entries = const {},
     this.symbolStatus = const {},
+    this.fetchedAt = const {},
     this.stalled = false,
     this.rateLimitedUntil,
     this.lastRespondedAt,
@@ -63,6 +64,12 @@ class LiveQuoteState {
 
   /// 各檔最近一次被請求的結果(卡片的「報價暫停」「無報價」)
   final Map<String, LiveSymbolStatus> symbolStatus;
+
+  /// 各檔最近一次拿到今天報價的那一輪的套用時刻(換日清空);沒拿到過的檔
+  /// 不在裡面。時刻取自報價中心的 `appClockProvider` 時鐘,是套用那一輪的
+  /// 當下:不早於實際抓取,被截斷的一輪記截斷當下。所以拿來判斷「登記之後
+  /// 才抓到」會寬鬆,最多差一輪。其他畫面先抓到的報價也算
+  final Map<String, DateTime> fetchedAt;
 
   /// 報價暫停(網路):計時中,距上一次有回應的一輪超過門檻
   final bool stalled;
@@ -496,6 +503,7 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
     state = LiveQuoteState(
       entries: _book.entries,
       symbolStatus: _book.symbolStatus,
+      fetchedAt: _book.fetchedAt,
       stalled: _stalled,
       rateLimitedUntil: _pending ? _rateLimitedUntil : null,
       lastRespondedAt: _lastRespondedAt,

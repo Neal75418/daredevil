@@ -9,10 +9,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/market_codes.dart';
+import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/models/twse/twse_market_index.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/presentation/providers/market_heatmap_provider.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
+import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/screens/market/market_heatmap_screen.dart';
 
 import '../../../helpers/provider_test_helpers.dart';
@@ -28,6 +30,14 @@ class _FakeHeatmap extends MarketHeatmapNotifier {
 
   @override
   void setVisible(bool visible) {}
+}
+
+/// 資料日隔天開盤前：正式資料、不需要即時（盤中跑也畫同一張圖）
+class _Clock implements AppClock {
+  const _Clock();
+
+  @override
+  DateTime now() => DateTime(2026, 3, 11, 8);
 }
 
 class _FakeMarket extends MarketOverviewNotifier {
@@ -56,6 +66,9 @@ HeatmapTile _tile(int n, double cap, TileChange change, {bool mine = false}) =>
       name: '測試$n',
       close: 100,
       marketCap: cap,
+      baseCap: change is TileChangeValue
+          ? cap * 100 / (100 + change.percent)
+          : 0,
       change: change,
       isMine: mine,
     );
@@ -117,6 +130,7 @@ Widget _build(Brightness brightness) => buildProviderTestApp(
   overrides: [
     marketHeatmapProvider.overrideWith(_FakeHeatmap.new),
     marketOverviewProvider.overrideWith(_FakeMarket.new),
+    appClockProvider.overrideWithValue(const _Clock()),
   ],
   brightness: brightness,
 );

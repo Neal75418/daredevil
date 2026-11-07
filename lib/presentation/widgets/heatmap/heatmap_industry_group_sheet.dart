@@ -8,11 +8,14 @@ import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/services/heatmap/heatmap_layout.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_mine_mark.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_painter.dart';
+import 'package:daredevil/presentation/widgets/heatmap/heatmap_text.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_tooltip.dart';
 
 /// 「其他 N 個產業」的產業清單（從畫面下方拉出），點一列放大該產業。順序與
 /// 「其他 N 檔」的清單同一套：含自選或持股的產業排最前面並加雙線框標記，
 /// 其餘依市值加權漲跌由高到低，沒有漲跌資料的放最後。
+///
+/// 內容是打開當下的資料（[group] 與 [liveMode]），之後的即時更新不改它。
 class HeatmapIndustryGroupSheet extends StatelessWidget {
   const HeatmapIndustryGroupSheet({
     super.key,
@@ -20,6 +23,7 @@ class HeatmapIndustryGroupSheet extends StatelessWidget {
     required this.group,
     required this.onIndustryTap,
     this.scrollController,
+    this.liveMode,
   });
 
   /// 「其他 N 個產業」
@@ -32,6 +36,9 @@ class HeatmapIndustryGroupSheet extends StatelessWidget {
   /// 放在可拖動的面板裡時，由面板提供
   final ScrollController? scrollController;
 
+  /// 資料的即時套色時段（[HeatmapMarketData.liveMode]）；null 是正式資料
+  final HeatmapLiveMode? liveMode;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -39,7 +46,11 @@ class HeatmapIndustryGroupSheet extends StatelessWidget {
       color: theme.colorScheme.onSurfaceVariant,
     );
     final locale = Localizations.localeOf(context);
-    final weighted = group.weightedChangePercent;
+    final weighted = heatmapWeightedText(
+      percent: group.weightedChangePercent,
+      coverage: group.coverage,
+      mode: liveMode,
+    );
     final members = sortHeatmapGroupMembers(group.members);
     return ListView.builder(
       controller: scrollController,
@@ -59,8 +70,7 @@ class HeatmapIndustryGroupSheet extends StatelessWidget {
                 Text(title, style: theme.textTheme.titleMedium),
                 Text(heatmapBreadthText(group.breadth), style: muted),
                 Text(
-                  '${'marketHeatmap.tooltipWeighted'.tr()} '
-                  '${weighted == null ? 'marketHeatmap.hollowNoChange'.tr() : formatHeatmapPercent(weighted)}',
+                  '${'marketHeatmap.tooltipWeighted'.tr()} $weighted',
                   style: muted,
                 ),
               ],
@@ -90,9 +100,13 @@ class HeatmapIndustryGroupSheet extends StatelessWidget {
               : Text(name),
           subtitle: Text('$count · $cap'),
           trailing: percent == null
-              ? Text('marketHeatmap.hollowNoChange'.tr(), style: muted)
+              ? Text(heatmapNoChangeText(liveMode), style: muted)
               : Text(
-                  formatHeatmapPercent(percent),
+                  heatmapWeightedText(
+                    percent: percent,
+                    coverage: industry.liveCoverage,
+                    mode: liveMode,
+                  ),
                   style: theme.textTheme.titleSmall?.copyWith(
                     // 與顯示的數字同一個值（0.00% 不上紅綠）
                     color: context.priceColor(

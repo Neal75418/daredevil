@@ -181,7 +181,7 @@ final heatmapLiveProvider =
 - `mode = heatmapLiveModeAt(...)`；null → `data` 原樣、其餘空或 null。
 - `registered = heatmapLiveSymbols(...)`。欄位 `_since: Map<String, DateTime>`（Notifier 實例跨 build 保留）逐檔記「該檔進入 `registered`」的時刻：新進清單的記 `now`、離開清單的移除；另記 `_sinceDay`（記錄所屬的日期），`now` 換日時整個清空（頁面被蓋住過夜時 provider 暫停、沒有重算，回來時第一次 build 才換日）；頁面可見性不影響（差異 9）。`fresh` ＝ `registered` 中 `fetchedAt[s]` 不早於 `_since[s]` 的代號。
 - **停市日退回**：`center.latestResponseHadToday == false` 且**整個市場圖上所有代號**（不論放大）都沒有今天的報價（`entries[s]?.date` 不是今天）→ `data` 用正式資料（`data.liveMode == null`）、`closing` null、`stockRegistrations` 照常（要靠它們拿到今天的報價才離開退回）、`quoteStatus` ＝`header` 的結果若是 `pausedRateLimit`／`pausedNetwork` 就用它，否則 `LiveHeaderStatus(LiveHeaderKind.noQuotesToday)`。
-- 盤中（沒有退回）`quoteStatus = LiveQuoteStatusRule.header(state: center, merged: [registered 各檔 LiveQuoteMerge.merge(official: OfficialPrice(date: data.dataDate, close: tile.close), live: fresh ? entries[s] : null, now: now)], intradayTime: center.latestQuoteTime)`。
+- 盤中（沒有退回）`quoteStatus = LiveQuoteStatusRule.header(state: center, merged: [registered 各檔 LiveQuoteMerge.merge(official: OfficialPrice(date: data.dataDate, close: tile.close), live: fresh ? entries[s] : null, now: now)], intradayTime: center.latestQuoteTime)`；其中 `noQuotesToday` 去掉（設成 null）——`noQuotesToday` 只由退回規則產生，沒有退回時頁首規則說「尚無報價」只代表登記的這幾檔，市場其他地方有今天的報價（實作時的裁示）。
 - 收盤後（沒有退回）`quoteStatus` 只保留 `header` 的 `pausedRateLimit`、`pausedNetwork`（`noQuotesToday` 只由上面的退回規則產生：收盤後 `registered` 只剩還沒拿到收盤報價的，用它判斷會誤報）；`closing.total` ＝整個市場圖上的檔數（不論放大、合併），`done` ＝其中今天有收盤報價的檔數。
 - 新舊 `data` 相等時沿用舊的物件（`HeatmapView` 以 identity 快取佈局，避免每次 publish 都重排）。
 
@@ -257,7 +257,7 @@ final heatmapLiveProvider =
 
 - [ ] **Step 1**：`flutter test`、`flutter analyze`、`scripts/test_time_shift.sh 90 <本段改動的測試檔>` 全綠；`flutter test --tags golden` 本機跑（正式資料模式的熱力圖 golden 應不變，有差異先查原因）。
 - [ ] **Step 2：mutation**（每項各拔一次，記錄哪條測試轉紅，寫進本計畫末「實作後的修正」）：`overlayHeatmapLive` 的 `fresh`、`registered`、`trialOrBook`、報價日期、`y ≤ 0`、收盤後 `isClosingQuote`、`baseCap` 改回反推、`coverage` 分母；`heatmapLiveModeAt` 各分支；`heatmapLiveSymbols` 的放大、收盤後排除、日期；`fetchedAt` 只記今天報價與換日清空；`_since` 的新進記時、離開移除、換日清空；指數列不顯示自己狀態的條件（`view.mode`）；停市日退回（含「整個市場、不論放大」的範圍）；退回期間照常登記個股；右側「M/D 收盤」的條件（`data.liveMode`，退回時保留）；收盤後只保留兩種暫停；painter 的 `liveMode` 進 `shouldRepaint`；新舊相等時沿用 `data` 物件；只登記目前市場的指數；比例夾 1～99；窄標題先捨即時比例；提示重新查找。
-- [ ] **Step 3：實機**（11/9 週一，spec「驗證」7；另把視窗縮到 360 寬看狀態行，中英文各一次）：盤中前 69 檔每 15 秒變色、其餘空心；放大小產業後整個產業下一輪變色；開盤初期沒成交的格子空心；產業與合併塊的「・即時 N%」；滑鼠停在格子上提示不消失。13:30 之後狀態行「今日收盤 N／M 檔」約 4 分鐘接近填滿、大格子先；盤後寫入後一分鐘內回到「M/D 收盤」。除權息日（有的話）該檔盤中漲跌幅與盤後資料庫一致。結果寫進本計畫末。
+- [ ] **Step 3：實機**（11/9 週一，spec「驗證」7；另把視窗縮到 360 寬看狀態行，中英文各一次）：盤中前 69 檔每 15 秒變色、其餘空心；放大小產業後整個產業下一輪變色；開盤初期沒成交的格子空心；產業與合併塊的「・即時 N%」；滑鼠停在格子上提示不消失。13:30 之後狀態行「今日收盤 N／M 檔」約 4 分鐘接近填滿、大格子先；盤後寫入後一分鐘內回到「M/D 收盤」。除權息日（有的話）該檔盤中漲跌幅與盤後資料庫一致。另外量三件事：(1) 上櫃在 13:45、14:15 各記一次「今日收盤 N／M 檔」，看 N 是否在明顯少於（M − 當天零成交檔數）時就不再增加，並記一檔「白天有成交、收盤那一盤沒撮合」的股票收盤後的 MIS 回應（判斷滾動登記會不會卡住；會的話讓報價中心公開唯讀的「已放棄的代號」、熱力圖名單排除它們）；(2) 即時模式下空心格子的提示「價格」是前一交易日收盤、沒有標日期，看會不會被誤讀成今天的價格（會的話加「（M/D 收盤）」）；(3) 放大某產業時，產業選單裡其他產業全寫「未即時」（spec 的規則如此），看實際是否能接受。結果寫進本計畫末。
 - [ ] **Step 4：審查**：整段送 `pr-review-toolkit:code-reviewer`（opus），Critical／Important 修完；Minor 依風險當段修或記錄。
 - [ ] **Step 5：使用者說「提交」後一次提交**（`feat: 熱力圖盤中即時與收盤後逐批取得收盤報價`，內文寫改了什麼、為什麼）。
 
@@ -265,9 +265,30 @@ final heatmapLiveProvider =
 
 - 交易日曆是寫死的表，颱風停市（例：2026-10-23）不在表上。熱力圖這邊由 Task 4 的「停市日退回」處理；歷史回補 Phase 0 每輪把這種日子當成缺漏的既有行為見 `.claude/rules/update-pipeline.md`「日曆漏標的休市日」，不在本段範圍。
 
+- 收盤後滾動登記的名單包含整天沒成交或停牌的股票；這類股票多到 `liveTileLimit`（69）檔以上時，其餘股票永遠排不進名單、頁首也沒有訊號。本機 DB 2026-10-20～11-06 量：整天零成交上櫃每天 4～13 檔、上市 0～2 檔；前一天有、當天沒有資料（停牌）上櫃最多 3 檔、上市最多 1 檔，離 69 很遠，不處理。查法：`daily_price` 當天 `volume` 為 0 或空值、排除 ETF 與存託憑證、依 `stock_master.market` 分組計數。這個估法可能低估：程式判斷「收盤報價」要求報價日期是今天、時間不早於 13:30:00、價格來自成交或鎖住（`LiveQuoteSchedule.isClosingQuote`），白天有成交、但收盤那一盤沒撮合的股票也可能永遠拿不到收盤報價；這類有多少檔要在 11/9 實機量（Task 7 Step 3）。
+- 報價中心一輪裡只有一批逾時、而整輪算成功時不留任何紀錄（所有即時畫面共用的報價中心 client 關掉逐批記錄，失敗只在整輪失敗時記）；MIS 長期卡在某一批時從日誌看不出來。收盤後整輪網路失敗時，那些股票約 1 分鐘後才再抓（收盤後每檔距上次嘗試滿 `afterCloseRetryInterval` 才再抓，網路失敗也記下嘗試時刻、只是不計次數），收齊約晚 1 分鐘；一批逾時後的約 1 分鐘內每輪少抓那一批。都不違反 spec，不在本段處理。
+
 ## 計畫審查紀錄
 
 - 2026-11-07 第一次審查（opus）：0 Critical、6 Important、多項 Minor，全部納入本版：提示每輪消失（Review Focus 7、Task 5）、停市日全空心（Review Focus 6、差異 8、Task 4）、合併塊只靠少數成員上色（差異 4、Task 1 的 `coverage`）、頁首溢位與重複（差異 7、Review Focus 8、Task 5）、開始即時的時刻改為逐檔（Task 4 的 `_since`）、新列舉值讓畫面的 switch 編譯不過與空心文字未集中（Task 1 的 `heatmap_text.dart`）；Minor：差異 1 措辭、選單沒有值維持「—」、無障礙不用「空心」、測試數值（−0.25%、ASCII 減號、`closeTo`）、比例夾 1～99、文字經 `HeatmapPaintLabels`、窄標題先捨比例、`closing.total` 定義、即時模式不再顯示「指數為 M/D 收盤」、跨 9:00 與午夜、底部清單是快照、Task 6 加時間上限與試滿後不再請求、`liveTileLimit` 改驗關係式、`hollowCount` 改為修改既有兩個鍵。
 - 2026-11-07 第二次審查（opus）：0 Critical、3 Important、11 項 Minor，全部納入本版：頁面可見性改變不觸發重算、`_since` 時機不可預期 → 改為可見性不影響、離開回來最多一輪舊色（差異 9，拿掉 `setPageVisible`）；停市退回的判斷範圍收盤後會誤判 → 改看整張圖、補反向測試與 Task 6 斷言；依模式變化的文字被只依語系建一次的 `_labels` 鎖住 → painter 帶 `liveMode`、文字函式收模式、補跨 13:30 的畫面測試；Minor：提示同步重查不空白一幀、既有測試改寫、新舊相等沿用物件、合併塊圖上標比例、`semIndustryNoChange`／`semOtherNoChange` 改參數、狀態句暫停在前且量行數、`_since` 離開移除的測試、比例同迴圈累加、即時時隱藏右側日期而退回時保留、退回時的狀態優先序、開盤頭幾秒退回後離開的測試。
 - 2026-11-07 第三次審查（opus）：第二次的 3 項 Important 確認解決；新增 1 Important、7 Minor，經使用者同意後納入本版：停市退回時指數列與狀態行重複「證交所今天尚無報價」→ 指數列不顯示自己狀態的條件改看 `view.mode`、測試讓指數真的帶該狀態並斷言只出現一次；Minor：差異 9 補推頁再返回的畫面測試、窄螢幕改用真字型量 `didExceedMaxLines`、`liveMode` 進 `shouldRepaint` 改由 painter 單元測試釘住、停市判斷寫明「整個市場（不論放大）」並補放大變體、退回期間照常登記個股、無障礙比例子句用不帶「・」的鍵、`_since` 換日清空（過夜回來不用別的畫面早上抓的價）、措辭與 `==`（`listEquals`、`HeatmapPaintLabels`）。
 - 2026-11-07 第四次審查（opus，只看第三次的修正）：第三次的 Important 確認解決；新增 1 Important、8 Minor，經使用者同意後納入本版、不再開第五輪（實作時每個 Task 仍各自送審）：窄螢幕真字型測試在 CI（Linux）沒有字型可載 → 拿掉，改以結構（兩行＋省略號）與「暫停在前」的純函式測試保證，360 寬在 Task 7 實機看；Minor：Review Focus 3、6 補 Task 5、模式來源的「一律」限定範圍並註明指數列例外、即時時段指數列整個狀態欄位不顯示（含「指數為 M/D 收盤」）並補測試、停市範圍措辭統一、無障礙比例鍵入清單與共用 `heatmapCoveragePercent`、突變清單補右側日期條件與退回期間照常登記、差異 9 測試寫明前提、退回期間 `closing == null` 與盤中／收盤後各一次的畫面測試。
+
+## 實作後的修正（2026-11-07）
+
+### 與計畫寫法不同的地方（各 Task 審查同意）
+
+- Task 1：所有 `notLive` 都帶 `previous`（不只沒登記的那一種）；即時價 ≤ 0 視同沒有漲跌值（`noChangeData`）；`heatmapValueCoverage` 另擋市值合計溢位；原本依賴「從市值反推平盤市值」的佈局測試改寫成「平盤市值 0 不參與」；另加 `test/domain/models/heatmap_test.dart` 釘新欄位的 `==`／`hashCode`。
+- Task 2：`heatmap_params.dart` 要 import `api_endpoints.dart` 算 `liveTileLimit`，所以「參數檔只能 import `dart:`」的守門測試改成「沿 `core/constants` 的 import 往下，每一檔都要是純 Dart」，並斷言確實走到 `api_endpoints.dart`。「今天的收盤報價」判準公開成 `isClosingQuoteOfToday`，登記清單、收盤後上色、收盤進度三處共用。
+- Task 4（裁示）：盤中沒有退回時，`LiveQuoteStatusRule.header` 給的 `noQuotesToday` 去掉——沒有退回代表市場其他地方有今天的報價，「證交所今天尚無報價」只由退回規則產生（已寫進 Task 4 規則）。
+- Task 5：無障礙描述接即時比例子句另用 `semAppend`（中英文分隔符號不同）；英文 `semIndustryNoChange`／`semOtherNoChange` 改成冒號句型；整塊空心的合併塊在即時模式第二行寫「未即時／未收盤」；產業標題只在完整名稱放得下時才寫即時比例（不為比例縮名稱）；golden 與既有畫面測試固定時鐘（交易時段跑測試時不會進入即時模式）。
+- Task 6：測試的報價 client 以與正式相同的逾時參數建立，假的回應會照逾時拋錯；「回應變慢」拆成「慢 7 秒、跨過 CLI 避讓窗口」與「逾時、那一批約 1 分鐘後再抓一次」兩條；另加「沒成交的股票集中在市值尾端、約 63 秒沒有回應仍不判暫停」一條（收盤後暫停門檻 120 秒由它釘住）。
+
+### 突變（各 Task 實作與審查時各拔一次）
+
+Task 1：48 個中 47 個轉紅，1 個等價（`heatmapWeightedChange` 分母 ≤ 0 的守衛也被 `isFinite` 擋下）。Task 2：25 個＋守門測試 3 個，全紅。Task 3：6 個全紅。Task 4：39 個＋修正輪 3 個，全紅。Task 5：62 個全紅（3 個起初存活，補測試或改寫突變後轉紅）。Task 6：對正式程式暫改 13 個，全紅；審查另加 4 個，全紅。
+
+### 驗證
+
+`flutter test` 全套 6753 條通過、`flutter analyze` 沒有問題；本段改動的 15 個測試檔（golden 另跑）撥 +90 天 517 條通過；golden 14 張通過、圖檔沒有變動。實機（spec「驗證」7 的即時項目）排在 2026-11-09（一）盤中與收盤後，結果補在本節。

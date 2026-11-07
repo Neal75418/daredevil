@@ -75,19 +75,33 @@ String? heatmapFitName(
 /// 先縮名稱（見 [heatmapFitName]），漲跌幅保持完整；名稱縮到兩個字＋…還放不下
 /// 就只寫名稱。被截斷的數字比不寫更糟（「-0.…」可能被讀成任何值）。
 /// [name] 為 null 表示什麼都放不下。
+///
+/// 即時比例（[suffix]，接在漲跌幅後面）最先捨：完整名稱、漲跌幅與比例都放得下
+/// 才寫，不為了留比例去縮名稱。
 @visibleForTesting
-({String? name, bool showPercent}) heatmapHeaderLayout({
+({String? name, bool showPercent, bool showSuffix}) heatmapHeaderLayout({
   required String name,
   required String? percent,
+  String? suffix,
   required double maxWidth,
   required double Function(String text) measure,
 }) {
   if (percent != null) {
+    if (suffix != null &&
+        measure(name) + measure(' $percent$suffix') <= maxWidth) {
+      return (name: name, showPercent: true, showSuffix: true);
+    }
     final room = maxWidth - measure(' $percent');
     final fitted = heatmapFitName(name, room, measure);
-    if (fitted != null) return (name: fitted, showPercent: true);
+    if (fitted != null) {
+      return (name: fitted, showPercent: true, showSuffix: false);
+    }
   }
-  return (name: heatmapFitName(name, maxWidth, measure), showPercent: false);
+  return (
+    name: heatmapFitName(name, maxWidth, measure),
+    showPercent: false,
+    showSuffix: false,
+  );
 }
 
 /// 格子寫哪幾行：名稱優先（顏色已經表示漲跌大小，名稱是顏色給不了的資訊），
@@ -126,8 +140,9 @@ String formatHeatmapCap(double marketCap, Locale locale) {
 typedef HeatmapOtherTap =
     void Function(HeatmapIndustryLayout industry, HeatmapOtherLayout other);
 
-/// 畫在圖上與無障礙描述用的文字（由頁面依語系組好傳入；兩個函式以
-/// identity 比較，頁面要保存同一個實例，painter 才不會一直重畫）
+/// 畫在圖上與無障礙描述用的文字（由頁面依語系組好傳入；函式以 identity
+/// 比較，頁面要保存同一個實例，painter 才不會一直重畫）。依即時模式變化的
+/// 文字收模式參數，由 painter 依自己的 [HeatmapPainter.liveMode] 呼叫。
 @immutable
 class HeatmapPaintLabels {
   const HeatmapPaintLabels({
@@ -141,11 +156,16 @@ class HeatmapPaintLabels {
     required this.groupLabel,
     required this.groupShortLabel,
     required this.groupSemantics,
+    required this.coverageSuffix,
+    required this.noChangeLabel,
   });
 
   /// 產業別為空時的產業名稱
   final String uncategorized;
-  final String Function(HeatmapIndustryLayout industry) industrySemantics;
+
+  /// 產業的描述；[mode] 是 painter 的 [HeatmapPainter.liveMode]
+  final String Function(HeatmapIndustryLayout industry, HeatmapLiveMode? mode)
+  industrySemantics;
   final String Function(HeatmapTileLayout tile) tileSemantics;
 
   /// 合併塊的標籤（「其他 N 檔」）
@@ -159,6 +179,7 @@ class HeatmapPaintLabels {
   final String Function(
     HeatmapIndustryLayout industry,
     HeatmapOtherLayout other,
+    HeatmapLiveMode? mode,
   )
   otherSemantics;
 
@@ -167,7 +188,14 @@ class HeatmapPaintLabels {
 
   /// 「其他 N 個產業」寫不下時退用的短標籤（「其他產業」）
   final String groupShortLabel;
-  final String Function(HeatmapIndustryGroupLayout group) groupSemantics;
+  final String Function(HeatmapIndustryGroupLayout group, HeatmapLiveMode? mode)
+  groupSemantics;
+
+  /// 即時套色時接在產業與合併塊漲跌幅後面的比例（「・即時 96%」）
+  final String Function(double coverage, HeatmapLiveMode mode) coverageSuffix;
+
+  /// 即時套色時產業與合併塊沒有漲跌的文字（「未即時」）
+  final String Function(HeatmapLiveMode mode) noChangeLabel;
 
   @override
   bool operator ==(Object other) =>
@@ -181,7 +209,9 @@ class HeatmapPaintLabels {
       identical(other.wholeLabel, wholeLabel) &&
       identical(other.otherSemantics, otherSemantics) &&
       identical(other.groupLabel, groupLabel) &&
-      identical(other.groupSemantics, groupSemantics);
+      identical(other.groupSemantics, groupSemantics) &&
+      identical(other.coverageSuffix, coverageSuffix) &&
+      identical(other.noChangeLabel, noChangeLabel);
 
   @override
   int get hashCode => Object.hash(
@@ -195,6 +225,8 @@ class HeatmapPaintLabels {
     identityHashCode(otherSemantics),
     identityHashCode(groupLabel),
     identityHashCode(groupSemantics),
+    identityHashCode(coverageSuffix),
+    identityHashCode(noChangeLabel),
   );
 }
 
@@ -215,6 +247,7 @@ class HeatmapPainter extends CustomPainter {
     required this.onSmallIndustriesTap,
     this.fontFamily,
     this.fontFamilyFallback,
+    this.liveMode,
   });
 
   final List<HeatmapIndustryLayout> layout;
@@ -236,6 +269,10 @@ class HeatmapPainter extends CustomPainter {
   /// 決定）；null 用引擎預設字型
   final String? fontFamily;
   final List<String>? fontFamilyFallback;
+
+  /// 資料的即時套色時段（[HeatmapMarketData.liveMode]）；null 是正式資料，
+  /// 產業標題與合併塊不寫即時比例與「未即時」
+  final HeatmapLiveMode? liveMode;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -263,8 +300,10 @@ class HeatmapPainter extends CustomPainter {
       Paint()..color = HeatmapColors.pageBackground(brightness),
     );
     final name = industry.industry.name ?? labels.uncategorized;
-    final change = industry.industry.weightedChangePercent;
-    final percent = change == null ? null : formatHeatmapPercent(change);
+    final (:percent, :suffix) = _weightedTexts(
+      industry.industry.weightedChangePercent,
+      industry.industry.liveCoverage,
+    );
     final color = HeatmapColors.headerText(brightness);
     // 同一次繪製裡同一個字串只排版一次：量過的直接拿來畫
     final painters = <String, TextPainter>{};
@@ -274,6 +313,7 @@ class HeatmapPainter extends CustomPainter {
       final layout = heatmapHeaderLayout(
         name: name,
         percent: percent,
+        suffix: suffix,
         maxWidth: rect.width - 2 * HeatmapParams.textPadding,
         measure: (text) => make(text).width,
       );
@@ -286,7 +326,9 @@ class HeatmapPainter extends CustomPainter {
         Offset(x, rect.top + (rect.height - namePainter.height) / 2),
       );
       if (layout.showPercent) {
-        final percentPainter = make(' $percent');
+        final percentPainter = make(
+          layout.showSuffix ? ' $percent$suffix' : ' $percent',
+        );
         percentPainter.paint(
           canvas,
           Offset(
@@ -319,7 +361,9 @@ class HeatmapPainter extends CustomPainter {
       rect,
       style.text,
       name: tile.tile.name,
-      percent: change is TileChangeValue ? change.percent : null,
+      value: change is TileChangeValue
+          ? formatHeatmapPercent(change.percent)
+          : null,
       shortenName: true,
     );
   }
@@ -336,6 +380,7 @@ class HeatmapPainter extends CustomPainter {
     if (rect.width <= 0 || rect.height <= 0) return;
     final percent = other.weightedChangePercent;
     final textColor = _paintFoldBlock(canvas, rect, percent, other.mineCount);
+    final (percent: value, :suffix) = _weightedTexts(percent, other.coverage);
     final count = other.members.length;
     if (!other.wholeIndustry) {
       // 「其他 N 檔」縮短後看不懂：寫不下就退成「其他」，再寫不下就不寫
@@ -346,7 +391,8 @@ class HeatmapPainter extends CustomPainter {
         textColor,
         name: labels.otherLabel(count),
         fallbackNames: [labels.otherShortLabel],
-        percent: percent,
+        value: value,
+        suffix: suffix,
         shortenName: false,
       );
     } else if (industry.header != null) {
@@ -357,7 +403,8 @@ class HeatmapPainter extends CustomPainter {
         rect,
         textColor,
         name: labels.wholeLabel(count),
-        percent: percent,
+        value: value,
+        suffix: suffix,
         shortenName: false,
         percentWithoutName: true,
       );
@@ -367,7 +414,8 @@ class HeatmapPainter extends CustomPainter {
         rect,
         textColor,
         name: industry.industry.name ?? labels.uncategorized,
-        percent: percent,
+        value: value,
+        suffix: suffix,
         shortenName: true,
       );
     }
@@ -380,14 +428,39 @@ class HeatmapPainter extends CustomPainter {
     if (rect.width <= 0 || rect.height <= 0) return;
     final percent = group.weightedChangePercent;
     final textColor = _paintFoldBlock(canvas, rect, percent, group.mineCount);
+    final (percent: value, :suffix) = _weightedTexts(percent, group.coverage);
     _paintLabel(
       canvas,
       rect,
       textColor,
       name: labels.groupLabel(group.members.length),
       fallbackNames: [labels.groupShortLabel],
-      percent: percent,
+      value: value,
+      suffix: suffix,
       shortenName: false,
+    );
+  }
+
+  /// 產業標題與合併塊的漲跌文字：[percent]（漲跌幅；即時套色時沒有值寫
+  /// [HeatmapPaintLabels.noChangeLabel]：盤中「未即時」、收盤後「未收盤」）
+  /// 與接在後面的即時比例 [suffix]。正式資料（liveMode 為 null）時不寫比例，
+  /// 沒有值也不寫。
+  ({String? percent, String? suffix}) _weightedTexts(
+    double? change,
+    double? coverage,
+  ) {
+    final mode = liveMode;
+    if (change == null) {
+      return (
+        percent: mode == null ? null : labels.noChangeLabel(mode),
+        suffix: null,
+      );
+    }
+    return (
+      percent: formatHeatmapPercent(change),
+      suffix: mode == null || coverage == null
+          ? null
+          : labels.coverageSuffix(coverage, mode),
     );
   }
 
@@ -415,7 +488,8 @@ class HeatmapPainter extends CustomPainter {
     return style.text;
   }
 
-  /// 格子文字：名稱優先，第二行放得下才加漲跌幅（見 [heatmapTileLines]）；
+  /// 格子文字：名稱優先，第二行（[value]：漲跌幅或「未即時」）放得下才加
+  /// （見 [heatmapTileLines]）；即時比例 [suffix] 接在第二行後面，放不下先捨。
   /// 字級隨格子大小（見 [heatmapTileFontSize]）。[shortenName] 為 false 時
   /// 名稱放不下就整格不寫。
   void _paintLabel(
@@ -423,8 +497,9 @@ class HeatmapPainter extends CustomPainter {
     Rect rect,
     Color color, {
     required String name,
-    required double? percent,
+    required String? value,
     required bool shortenName,
+    String? suffix,
     List<String> fallbackNames = const [],
     bool percentWithoutName = false,
   }) {
@@ -446,9 +521,14 @@ class HeatmapPainter extends CustomPainter {
               ...fallbackNames,
             ].where((text) => make(text).width <= maxWidth).firstOrNull;
       final namePainter = fitted == null ? null : make(fitted);
-      final percentPainter = percent == null
+      final withSuffix = value == null || suffix == null
           ? null
-          : make(formatHeatmapPercent(percent));
+          : make('$value$suffix');
+      final percentPainter = withSuffix != null && withSuffix.width <= maxWidth
+          ? withSuffix
+          : value == null
+          ? null
+          : make(value);
       if (namePainter == null) {
         // 名稱由別處標示（例如標題列）時，只寫漲跌幅
         if (percentWithoutName &&
@@ -536,7 +616,8 @@ class HeatmapPainter extends CustomPainter {
       oldDelegate.zoomed != zoomed ||
       oldDelegate.labels != labels ||
       oldDelegate.fontFamily != fontFamily ||
-      !listEquals(oldDelegate.fontFamilyFallback, fontFamilyFallback);
+      !listEquals(oldDelegate.fontFamilyFallback, fontFamilyFallback) ||
+      oldDelegate.liveMode != liveMode;
 
   @override
   SemanticsBuilderCallback get semanticsBuilder => (size) {
@@ -546,7 +627,7 @@ class HeatmapPainter extends CustomPainter {
           CustomPainterSemantics(
             rect: _rect(industry.bounds),
             properties: SemanticsProperties(
-              label: labels.industrySemantics(industry),
+              label: labels.industrySemantics(industry, liveMode),
               textDirection: TextDirection.ltr,
               button: true,
               onTap: () => onIndustryTap(industry.industry.key),
@@ -556,7 +637,7 @@ class HeatmapPainter extends CustomPainter {
           CustomPainterSemantics(
             rect: _rect(group.paint),
             properties: SemanticsProperties(
-              label: labels.groupSemantics(group),
+              label: labels.groupSemantics(group, liveMode),
               textDirection: TextDirection.ltr,
               button: true,
               onTap: () => onSmallIndustriesTap(group),
@@ -581,7 +662,7 @@ class HeatmapPainter extends CustomPainter {
           CustomPainterSemantics(
             rect: _rect(other.paint),
             properties: SemanticsProperties(
-              label: labels.otherSemantics(industry, other),
+              label: labels.otherSemantics(industry, other, liveMode),
               textDirection: TextDirection.ltr,
               button: true,
               onTap: () => onOtherTap(industry, other),
