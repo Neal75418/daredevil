@@ -93,9 +93,10 @@ bool isClosingQuoteOfToday(LiveQuoteEntry entry, DateTime today) =>
 /// 參考價）。y 不可用時畫空心，不退回資料庫的收盤：除權息日會把股息算成
 /// 跌幅。
 ///
-/// - [HeatmapLiveMode.intraday]：只用熱力圖自己登記（[registered]）、登記之後
-///   拿到過（[fresh]）、日期是 [today]、有成交或鎖住價的報價；登記之前中心裡
-///   別的畫面抓到的報價不用（可能是早上的舊價）。
+/// - [HeatmapLiveMode.intraday]：只用熱力圖自己登記（[registered]）、登記前後
+///   拿到過（[fresh]，「前」只放寬一小段時間，由呼叫端決定）、日期是 [today]、
+///   有成交或鎖住價的報價；更早以前中心裡別的畫面抓到的報價不用（可能是早上的
+///   舊價）。
 /// - [HeatmapLiveMode.afterClose]：依序判定：今天的收盤報價（定值，哪個畫面
 ///   抓的都可以）上色；在 [closingGivenUp]（報價中心試滿次數後放棄）是收盤
 ///   沒撮合；其餘是尚未取得收盤報價。

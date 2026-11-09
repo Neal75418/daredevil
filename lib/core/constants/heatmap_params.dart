@@ -38,6 +38,12 @@ abstract final class HeatmapParams {
   /// 即時模式登記的個股上限：報價中心一輪兩批，扣掉該市場指數佔的一檔
   static const int liveTileLimit = ApiEndpoints.misBatchSize * 2 - 1;
 
+  /// 盤中一檔進入登記清單時，往前放寬多久內抓到的報價也算數。熱力圖頁可見時
+  /// 只有它自己登記（被蓋住的頁面、沒在看的分頁都取消登記），報價中心一輪兩批
+  /// 約 15 秒；放寬兩輪＝一輪加上約一輪的離開時間：離開熱力圖頁或放大後很快
+  /// 回來時，上一輪抓到的價格照樣上色，更早抓到的仍當成未即時
+  static const Duration liveRegistrationGrace = Duration(seconds: 30);
+
   /// 頁面可見期間比對內容指紋的間隔
   static const Duration fingerprintPollInterval = Duration(minutes: 1);
 

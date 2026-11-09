@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show immutable, listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
@@ -102,13 +103,16 @@ final heatmapLiveProvider =
 
 /// 把正式資料、報價中心與交易時段組成熱力圖頁要顯示的 [HeatmapLiveView]。
 ///
-/// 盤中只用「這頁開始登記該檔之後」抓到的報價上色：逐檔記該檔進入登記清單
-/// 的時刻，報價中心的 `fetchedAt` 不早於它才算。清單變動（放大、取消放大、
-/// 換市場、收盤後滾動）時新進的記現在、離開的移除，換日時整個清空。頁面被
-/// 蓋住或 App 到背景時不清：已登記的檔，登記之後抓到的報價（哪個畫面抓的
+/// 盤中只用「這頁開始登記該檔之前 [HeatmapParams.liveRegistrationGrace] 起」
+/// 抓到的報價上色：逐檔記該檔進入登記清單的時刻往前放寬那段時間，報價中心的
+/// `fetchedAt` 不早於它才算——擋掉別的畫面很早以前抓的舊價，離開熱力圖頁或
+/// 放大後馬上回來時，上一輪剛抓到的照樣用。清單變動（放大、取消放大、換市場、
+/// 收盤後滾動）時新進的記現在往前放寬的時刻、離開的移除，換日時整個清空。
+/// 頁面被蓋住或 App 到背景時不清：已登記的檔，之後抓到的報價（哪個畫面抓的
 /// 都算）照樣用，報價中心下一輪再換新。
 class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
-  /// 代號 → 進入登記清單的時刻；Notifier 實例跨 build 保留
+  /// 代號 → 這個時刻起抓到的報價才算（進入登記清單的時刻往前放寬
+  /// [HeatmapParams.liveRegistrationGrace]）；Notifier 實例跨 build 保留
   final Map<String, DateTime> _since = {};
 
   /// [_since] 所屬的日期
@@ -214,8 +218,8 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
     };
   }
 
-  /// 更新各檔進入登記清單的時刻，回傳 [registered] 中報價抓到的時刻
-  /// （[fetchedAt]）不早於它的代號
+  /// 更新各檔「這個時刻起的報價才算」的時刻（進入登記清單時記），回傳
+  /// [registered] 中報價抓到的時刻（[fetchedAt]）不早於它的代號
   Set<String> _track(
     List<String> registered,
     Map<String, DateTime> fetchedAt,
@@ -231,14 +235,17 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
     _since.removeWhere((symbol, _) => !kept.contains(symbol));
     final fresh = <String>{};
     for (final symbol in registered) {
-      final since = _since.putIfAbsent(symbol, () => now);
+      final since = _since.putIfAbsent(
+        symbol,
+        () => now.subtract(HeatmapParams.liveRegistrationGrace),
+      );
       final fetched = fetchedAt[symbol];
       if (fetched != null && !fetched.isBefore(since)) fresh.add(symbol);
     }
     return fresh;
   }
 
-  /// 報價中心的頁首規則，套在登記的各檔上（只用這頁登記之後抓到的報價）
+  /// 報價中心的頁首規則，套在登記的各檔上（只用 [fresh] 的報價）
   static LiveHeaderStatus? _header(
     HeatmapMarketData official,
     List<String> registered,

@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:daredevil/core/constants/api_endpoints.dart';
 import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
+import 'package:daredevil/domain/services/live_quote/live_quote_schedule.dart';
 import 'package:daredevil/presentation/providers/heatmap_live_provider.dart';
 import 'package:daredevil/presentation/providers/live_price_provider.dart';
 import 'package:daredevil/presentation/providers/live_quote_provider.dart';
@@ -334,7 +336,7 @@ void main() {
   });
 
   group('開始登記的時刻', () {
-    test('開頁 10:00：10:05 抓到的上色；09:40（開頁前別的畫面抓的）未即時', () {
+    test('開頁 10:00：10:05 抓到的上色；09:40（開頁前 20 分鐘別的畫面抓的）未即時', () {
       final page = _Page(
         at: _mon(10, 0),
         center: _state(
@@ -343,7 +345,7 @@ void main() {
         ),
       );
       expect(_changeOf(page.view, '9902'), _hollow(HollowReason.notLive));
-      // 沒有一檔是這頁登記之後抓的：沒有即時數字可描述
+      // 沒有一檔的報價算數：沒有即時數字可描述
       expect(page.view.quoteStatus, isNull);
 
       final view = page.publish(
@@ -356,6 +358,68 @@ void main() {
       );
       expect(_changeOf(view, '9901'), _colored);
       expect(_changeOf(view, '9902'), _hollow(HollowReason.notLive));
+    });
+
+    test('退出熱力圖頁又馬上回來（新的頁面）：開頁前 30 秒內抓到的照樣上色，'
+        '早於 30 秒的未即時', () {
+      const grace = HeatmapParams.liveRegistrationGrace;
+      final at = _mon(10, 0, 40);
+      final page = _Page(
+        at: at,
+        center: _state(
+          entries: {
+            '9901': _quote('9901'),
+            '9902': _quote('9902'),
+            '9903': _quote('9903'),
+          },
+          fetchedAt: {
+            '9901': at.subtract(const Duration(seconds: 5)),
+            // 恰好 30 秒前：算數
+            '9902': at.subtract(grace),
+            '9903': at.subtract(grace + const Duration(seconds: 1)),
+          },
+          quoteTime: '10:00:34',
+        ),
+      );
+      expect(_changeOf(page.view, '9901'), _colored);
+      expect(_changeOf(page.view, '9902'), _colored);
+      expect(_changeOf(page.view, '9903'), _hollow(HollowReason.notLive));
+      // 有放寬後算數的報價，頁首照樣寫報價時間
+      expect(
+        page.view.quoteStatus,
+        const LiveHeaderStatus(LiveHeaderKind.quoteTime, '10:00:34'),
+      );
+    });
+
+    test('放寬的時間至少是熱力圖單獨登記時的兩輪（一輪加上同樣長的離開時間）', () {
+      // 熱力圖登記的個股加一個指數，分批無條件進位（同報價中心）
+      const batches =
+          (HeatmapParams.liveTileLimit + 1 + ApiEndpoints.misBatchSize - 1) ~/
+          ApiEndpoints.misBatchSize;
+      expect(batches, 2);
+      expect(
+        HeatmapParams.liveRegistrationGrace >=
+            LiveQuoteSchedule.pollInterval(batches) * 2,
+        isTrue,
+      );
+    });
+
+    test('放大後馬上取消放大：剛離開清單、30 秒內被抓過的檔回到清單時照樣上色', () {
+      final page = _Page(at: _mon(10, 0));
+      expect(
+        _symbolsOf(page.zoomTo(_mon(10, 10), _semi)),
+        isNot(contains('9960')),
+      );
+      page.publish(
+        _mon(10, 10, 5),
+        _state(
+          entries: {'9960': _quote('9960')},
+          fetchedAt: {'9960': _mon(10, 10, 5)},
+        ),
+      );
+      final back = page.clearZoom(_mon(10, 10, 20));
+      expect(_symbolsOf(back), contains('9960'));
+      expect(_changeOf(back, '9960'), _colored);
     });
 
     test('全市場 → 放大半導體業 → 取消放大：一直在清單裡的 9901 全程上色；'
@@ -380,8 +444,8 @@ void main() {
       expect(_changeOf(back, '9950'), _hollow(HollowReason.notLive));
     });
 
-    test('離開清單就移除：9960 放大期間被別的畫面抓到，取消放大後未即時，'
-        '直到抓到的時刻不早於重新進清單的時刻', () {
+    test('離開清單就移除：9960 放大期間（取消放大前 3 分鐘）被別的畫面抓到，'
+        '取消放大後未即時，直到抓到的時刻不早於重新進清單前 30 秒', () {
       final page = _Page(at: _mon(10, 0));
       expect(_symbolsOf(page.view), contains('9960'));
 
@@ -400,18 +464,19 @@ void main() {
       final back = page.clearZoom(_mon(10, 15));
       expect(_changeOf(back, '9960'), _hollow(HollowReason.notLive));
 
-      // 相等也算這頁登記之後抓的
+      // 恰好是重新進清單前 30 秒抓的也算
       final fetched = page.publish(
         _mon(10, 15),
         _state(
           entries: {'9960': _quote('9960')},
-          fetchedAt: {'9960': _mon(10, 15)},
+          fetchedAt: {'9960': _mon(10, 14, 30)},
         ),
       );
       expect(_changeOf(fetched, '9960'), _colored);
     });
 
-    test('切到不需要即時的市場再切回：回來的檔重新記開始登記的時刻，切走期間別的畫面抓的不算', () {
+    test('切到不需要即時的市場再切回：回來的檔重新記開始登記的時刻，'
+        '切回前 1 分鐘別的畫面抓的不算', () {
       final page = _Page(
         at: _mon(10, 0),
         markets: {

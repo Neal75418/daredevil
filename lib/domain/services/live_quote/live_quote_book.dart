@@ -46,7 +46,7 @@ class LiveQuoteBook {
   /// 各代號最近一次拿到今天報價的那一輪的套用時刻(換日清空);沒拿到過的
   /// 代號不在裡面。時刻是呼叫端傳給 [apply] 的 `now`(報價中心取自
   /// `appClockProvider`):不早於實際抓取,被截斷的一輪記截斷當下。所以拿來
-  /// 判斷「登記之後才抓到」會寬鬆,最多差一輪
+  /// 判斷「某個時刻之後才抓到」會寬鬆,最多差一輪
   Map<String, DateTime> get fetchedAt => Map.unmodifiable(_fetchedAt);
 
   /// 最近一次有回應的一輪有沒有今天的報價;還沒有任何回應為 null

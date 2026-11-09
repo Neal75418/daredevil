@@ -183,7 +183,7 @@ void main() {
     group('登記了但不在 fresh', () {
       HeatmapMarketData run(LiveSymbolStatus? status) => _overlay(
         _official([_tile('9901')]),
-        // 中心有今天的成交報價也不用：fresh（登記之後拿到過）才算
+        // 中心有今天的成交報價也不用：fresh（登記前後拿到過）才算
         {'9901': _entry('9901')},
         registered: {'9901'},
         fresh: {},
