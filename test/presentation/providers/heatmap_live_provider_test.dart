@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/core/constants/api_endpoints.dart';
 import 'package:daredevil/core/constants/heatmap_params.dart';
+import 'package:daredevil/core/constants/live_quote_params.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/clock.dart';
+import 'package:daredevil/data/models/twse/twse_market_index.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
 import 'package:daredevil/domain/services/live_quote/live_quote_schedule.dart';
@@ -12,6 +14,7 @@ import 'package:daredevil/presentation/providers/heatmap_live_provider.dart';
 import 'package:daredevil/presentation/providers/live_price_provider.dart';
 import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/market_heatmap_provider.dart';
+import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/widgets/live_quote_status.dart';
 
@@ -37,6 +40,29 @@ class _FixedCenter extends LiveQuoteCenter {
   LiveQuoteState build() => initial;
   void replace(LiveQuoteState next) => state = next;
 }
+
+class _FixedOverview extends MarketOverviewNotifier {
+  _FixedOverview(this.initial);
+  final MarketOverviewState initial;
+  @override
+  MarketOverviewState build() => initial;
+  @override
+  Future<void> loadData() async {}
+}
+
+/// 兩個指數的正式資料都是 [date] 那天
+MarketOverviewState _overviewOf(DateTime date) => MarketOverviewState(
+  indices: [
+    for (final name in [MarketIndexNames.taiex, MarketIndexNames.tpexIndex])
+      TwseMarketIndex(
+        date: date,
+        name: name,
+        close: 100,
+        change: 0,
+        changePercent: 0,
+      ),
+  ],
+);
 
 final _friday = DateTime(2026, 11, 6);
 final _monday = DateTime(2026, 11, 9);
@@ -163,10 +189,12 @@ class _Page {
     required DateTime at,
     Map<String, HeatmapMarketData>? markets,
     LiveQuoteState center = const LiveQuoteState(),
+    MarketOverviewState overview = const MarketOverviewState(),
   }) : clock = _Clock(at) {
     container = ProviderContainer(
       overrides: [
         appClockProvider.overrideWithValue(clock),
+        marketOverviewProvider.overrideWith(() => _FixedOverview(overview)),
         marketHeatmapProvider.overrideWith(
           () => _FixedHeatmap(
             MarketHeatmapState(
@@ -333,6 +361,51 @@ void main() {
       expect(view.quoteStatus, isNull);
       expect(view.closing, isNull);
       expect(view.data, same(written));
+    });
+  });
+
+  group('heatmapRegistrationsProvider（交給報價中心的清單）', () {
+    LiveQuoteRegistration index(String market, {bool official = false}) =>
+        LiveQuoteRegistration(
+          symbol: LiveQuoteParams.indexSymbolOf(market),
+          market: market,
+          hasOfficialToday: official,
+        );
+
+    test('目前市場的指數在前，接著是熱力圖的個股；換市場跟著換', () {
+      final page = _Page(at: _mon(10, 30), overview: _overviewOf(_friday));
+      final sub = page.container.listen(
+        heatmapRegistrationsProvider,
+        (_, _) {},
+      );
+      expect(sub.read(), [
+        index(MarketCode.twse),
+        ...page.view.stockRegistrations,
+      ]);
+      expect(sub.read(), hasLength(1 + HeatmapParams.liveTileLimit));
+
+      final tpex = page.selectMarket(_mon(10, 31), MarketCode.tpex);
+      expect(sub.read(), [index(MarketCode.tpex), ...tpex.stockRegistrations]);
+    });
+
+    test('🚨 跨過午夜而熱力圖的檢視沒變：指數的「已有今天正式資料」照樣重算', () {
+      // 週一 14:30：格子與指數的正式資料都是今天，不需要即時
+      final page = _Page(
+        at: _mon(14, 30),
+        markets: {MarketCode.twse: _twse(dataDate: _monday)},
+        overview: _overviewOf(_monday),
+      );
+      final sub = page.container.listen(
+        heatmapRegistrationsProvider,
+        (_, _) {},
+      );
+      final before = page.view;
+      expect(before.mode, isNull, reason: '前提');
+      expect(sub.read(), [index(MarketCode.twse, official: true)]);
+
+      final after = page.crossBoundary(_tue(0, 0, 1));
+      expect(after, before, reason: '前提：熱力圖的檢視沒變，不會通知下游');
+      expect(sub.read(), [index(MarketCode.twse)]);
     });
   });
 

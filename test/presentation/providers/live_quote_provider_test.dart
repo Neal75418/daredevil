@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -44,6 +46,22 @@ void main() {
   final weekdayMorning = DateTime(2026, 10, 6, 10, 1); // 週二 10:01:00
   final afterCloseStart = DateTime(2026, 10, 6, 13, 31);
   List<Duration> secs(List<int> s) => [for (final x in s) Duration(seconds: x)];
+
+  /// 盤中 App 看不見時,兩種平台對外的行為相同:不在背景收集的停計時器,
+  /// 在背景收集的計時器照跑、每一拍自己判斷不抓。[body] 兩種都跑一次
+  void onBothPlatforms(
+    DateTime start,
+    void Function(_Harness h, FakeAsync async, String label) body, {
+    Future<String> Function(List<String> exCh, DateTime now)? respond,
+  }) {
+    for (final collect in [false, true]) {
+      fakeAsync((async) {
+        final h = _Harness(async, start, collectAfterCloseWhenHidden: collect);
+        if (respond != null) h.respond = respond;
+        body(h, async, collect ? '在背景收集的平台' : '不在背景收集的平台');
+      });
+    }
+  }
 
   test('🚨 報價中心的 client:短逾時、不逐批記 warning', () {
     final container = ProviderContainer();
@@ -122,15 +140,14 @@ void main() {
     });
 
     test('🚨 App 隱藏時不抓;回到可見 → 下一拍照常', () {
-      fakeAsync((async) {
-        final h = _Harness(async, weekdayMorning);
+      onBothPlatforms(weekdayMorning, (h, async, label) {
         h.center.register('A', const [tsmc]);
         h.center.setAppVisible(false);
         h.elapse(const Duration(minutes: 2));
-        expect(h.requests, isEmpty);
+        expect(h.requests, isEmpty, reason: label);
         h.center.setAppVisible(true);
         h.elapse(const Duration(seconds: 1));
-        expect(h.requests, hasLength(1));
+        expect(h.requests, hasLength(1), reason: label);
         h.dispose();
       });
     });
@@ -696,24 +713,26 @@ void main() {
     });
 
     test('🚨 App 看不見而作廢的一輪:已回來的與還在路上的批次都不記', () {
-      fakeAsync((async) {
-        final h = _Harness(async, weekdayMorning);
-        h.respond = (exCh, now) {
+      onBothPlatforms(
+        weekdayMorning,
+        respond: (exCh, now) {
           final body = _tradeEach(exCh, now);
           // 第 2 批(5 檔)晚 3 秒才回來
           return exCh.length == 35
               ? body
               : Future.delayed(const Duration(seconds: 3), () => body);
-        };
-        h.center.register('A', stocks(40));
-        h.elapse(const Duration(seconds: 5)); // 第 2 批第 4 秒送出、還在路上
-        expect(h.requests, hasLength(2));
-        h.center.setAppVisible(false);
-        h.elapse(const Duration(seconds: 5)); // 第 7 秒回來
-        expect(h.state.lastReceivedAt, isEmpty);
-        expect(h.state.entries, isEmpty);
-        h.dispose();
-      });
+        },
+        (h, async, label) {
+          h.center.register('A', stocks(40));
+          h.elapse(const Duration(seconds: 5)); // 第 2 批第 4 秒送出、還在路上
+          expect(h.requests, hasLength(2), reason: label);
+          h.center.setAppVisible(false);
+          h.elapse(const Duration(seconds: 5)); // 第 7 秒回來
+          expect(h.state.lastReceivedAt, isEmpty, reason: label);
+          expect(h.state.entries, isEmpty, reason: label);
+          h.dispose();
+        },
+      );
     });
 
     test('🚨 限流丟掉的一輪:先回來的那一批也不記', () {
@@ -1013,25 +1032,26 @@ void main() {
 
   group('可見性、睡眠、換日、釋放', () {
     test('🚨 隱藏期間不計暫停時間', () {
-      fakeAsync((async) {
-        final h = _Harness(async, weekdayMorning)
-          ..respond = (_, _) async => throw const _NetworkDown();
-        h.center.register('A', const [tsmc]);
-        h.elapse(const Duration(seconds: 30));
-        h.center.setAppVisible(false);
-        h.elapse(const Duration(minutes: 10));
-        h.center.setAppVisible(true);
-        h.elapse(const Duration(seconds: 20));
-        expect(h.state.stalled, isFalse, reason: '可見時累計約 48 秒');
-        h.elapse(const Duration(seconds: 15));
-        expect(h.state.stalled, isTrue);
-        h.dispose();
-      });
+      onBothPlatforms(
+        weekdayMorning,
+        respond: (_, _) async => throw const _NetworkDown(),
+        (h, async, label) {
+          h.center.register('A', const [tsmc]);
+          h.elapse(const Duration(seconds: 30));
+          h.center.setAppVisible(false);
+          h.elapse(const Duration(minutes: 10));
+          h.center.setAppVisible(true);
+          h.elapse(const Duration(seconds: 20));
+          expect(h.state.stalled, isFalse, reason: '$label:可見時累計約 48 秒');
+          h.elapse(const Duration(seconds: 15));
+          expect(h.state.stalled, isTrue, reason: label);
+          h.dispose();
+        },
+      );
     });
 
     test('🚨 一輪送到一半就隱藏 → 那一輪作廢,回來後重抓,不把舊批次當新的', () {
-      fakeAsync((async) {
-        final h = _Harness(async, weekdayMorning);
+      onBothPlatforms(weekdayMorning, (h, async, label) {
         h.center.register('A', [
           for (var i = 0; i < 105; i++)
             LiveQuoteRegistration(
@@ -1040,21 +1060,22 @@ void main() {
             ),
         ]);
         h.elapse(const Duration(milliseconds: 1500)); // 第 1 批已回來
-        expect(h.requests, hasLength(1));
+        expect(h.requests, hasLength(1), reason: label);
         h.center.setAppVisible(false);
         h.elapse(const Duration(minutes: 10));
+        expect(h.requests, hasLength(1), reason: '$label:看不見時剩下的批次不送');
         h.center.setAppVisible(true);
         h.elapse(const Duration(seconds: 10));
 
         expect(
           _symbolOf(h.requests[1].exCh.first),
           '1000',
-          reason: '回來後從第 1 批重新開始',
+          reason: '$label:回來後從第 1 批重新開始',
         );
         expect(
           h.state.entries['1000']!.quoteTime,
           '10:11:02',
-          reason: '不是隱藏前 10:01:01 那批',
+          reason: '$label:不是隱藏前 10:01:01 那批',
         );
         h.dispose();
       });
@@ -1108,19 +1129,21 @@ void main() {
     });
 
     test('隱藏時還在路上的請求,回來後丟棄(那一輪作廢)', () {
-      fakeAsync((async) {
-        final h = _Harness(async, weekdayMorning)
-          ..respond = (exCh, now) => Future.delayed(
-            const Duration(seconds: 5),
-            () => _tradeEach(exCh, now),
-          );
-        h.center.register('A', const [tsmc]);
-        h.elapse(const Duration(seconds: 2)); // 第 1 秒送出、第 6 秒才回來
-        h.center.setAppVisible(false);
-        h.elapse(const Duration(seconds: 10));
-        expect(h.state.entries, isEmpty);
-        h.dispose();
-      });
+      onBothPlatforms(
+        weekdayMorning,
+        respond: (exCh, now) => Future.delayed(
+          const Duration(seconds: 5),
+          () => _tradeEach(exCh, now),
+        ),
+        (h, async, label) {
+          h.center.register('A', const [tsmc]);
+          h.elapse(const Duration(seconds: 2)); // 第 1 秒送出、第 6 秒才回來
+          h.center.setAppVisible(false);
+          h.elapse(const Duration(seconds: 10));
+          expect(h.state.entries, isEmpty, reason: label);
+          h.dispose();
+        },
+      );
     });
 
     test('🚨 電腦睡眠喚醒:時鐘跳 2 小時 → 下一拍照常抓', () {
@@ -1168,6 +1191,408 @@ void main() {
         h.elapse(const Duration(seconds: 10));
         expect(async.periodicTimerCount, 0);
         expect(captured, isEmpty, reason: 'dispose 後不可再讀 ref 或寫 state');
+      });
+    });
+  });
+
+  group('App 看不見時收盤後照樣收完(在背景收集的平台)', () {
+    const rateLimitedPage = '<!doctype html><html>Too many requests</html>';
+    const official = LiveQuoteRegistration(
+      symbol: '2330',
+      market: MarketCode.twse,
+      hasOfficialToday: true,
+    );
+
+    /// 10/6(週二)與 10/7(週三)都是交易日
+    DateTime at(int hour, int minute, [int second = 0, int day = 6]) =>
+        DateTime(2026, 10, day, hour, minute, second);
+    final beforeClose = at(13, 25);
+
+    /// 每檔都回收盤報價(13:30:00 的成交)
+    Future<String> closing(List<String> exCh, DateTime now) async => _mis([
+      for (final e in exCh) _row(_symbolOf(e), now, t: '13:30:00'),
+    ], at: now);
+
+    /// 有回應但不是收盤報價(沒有成交、只有五檔)
+    Future<String> notClosing(List<String> exCh, DateTime now) async => _mis([
+      for (final e in exCh)
+        _row(
+          _symbolOf(e),
+          now,
+          z: '-',
+          b: '99.5000_',
+          a: '100.5000_',
+          t: '13:29:40',
+        ),
+    ], at: now);
+
+    /// 一開始就看不見的報價中心
+    _Harness hidden(FakeAsync async, DateTime start, {bool collect = true}) =>
+        _Harness(async, start, collectAfterCloseWhenHidden: collect)
+          ..center.setAppVisible(false);
+
+    List<DateTime> sentTimes(_Harness h) => [for (final r in h.requests) r.at];
+
+    test('🚨 盤中不抓,計時器照跑(每一拍自己判斷)', () {
+      fakeAsync((async) {
+        final h = hidden(async, at(10, 0));
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(minutes: 10));
+        expect(h.requests, isEmpty);
+        expect(async.periodicTimerCount, 1);
+        h.dispose();
+      });
+    });
+
+    test('🚨 看不見時跨過 13:30 自己開始收;都拿到收盤報價後不再發請求', () {
+      fakeAsync((async) {
+        final h = hidden(async, beforeClose)..respond = closing;
+        h.center.register('A', [
+          for (var i = 0; i < 60; i++)
+            LiveQuoteRegistration(
+              symbol: '${2000 + i}',
+              market: MarketCode.twse,
+            ),
+        ]);
+        h.elapse(const Duration(minutes: 5, seconds: 9)); // 13:30:09
+        expect(h.requests, isEmpty, reason: '盤中不抓;13:30:00–09 讓給 CLI');
+        h.elapse(const Duration(seconds: 5)); // 13:30:14
+        expect(sentTimes(h), [at(13, 30, 10), at(13, 30, 13)]);
+        expect(h.state.entries, hasLength(60));
+        expect(h.state.entries.values.every((e) => e.isClosingQuote), isTrue);
+
+        h.elapse(const Duration(hours: 1)); // 14:30:14
+        expect(h.requests, hasLength(2), reason: '收完就不再送');
+        expect(h.state.stalled, isFalse);
+        h.dispose();
+      });
+    });
+
+    test('🚨 看不見時收完、一直看不見到隔天:過夜與隔天盤中都不抓', () {
+      fakeAsync((async) {
+        final h = hidden(async, beforeClose)..respond = closing;
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(hours: 19, minutes: 46)); // 隔天 09:11
+        expect(h.now(), at(9, 11, 0, 7), reason: '前提');
+        expect(sentTimes(h), [at(13, 30, 10)], reason: '只有前一天收盤後那一次');
+        expect(h.state.entries, isEmpty, reason: '換日清空');
+        h.dispose();
+      });
+    });
+
+    test('🚨 前一天收完並停、一直看不見:隔天 13:30 之後照樣開始', () {
+      fakeAsync((async) {
+        final h = hidden(async, beforeClose)..respond = closing;
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(days: 1, minutes: 6)); // 隔天 13:31
+        expect(sentTimes(h), [at(13, 30, 10), at(13, 30, 10, 7)]);
+        expect(h.state.entries['2330']!.date, DateTime(2026, 10, 7));
+        h.dispose();
+      });
+    });
+
+    test('🚨 收盤後一直斷線:判為暫停後不再送;重新可見的下一拍照常送', () {
+      fakeAsync((async) {
+        final h = hidden(async, beforeClose)
+          ..respond = (_, _) async => throw const _NetworkDown();
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(minutes: 7)); // 13:32:00
+        expect(h.state.stalled, isFalse, reason: '13:30:00 起算恰好 120 秒');
+        h.elapse(const Duration(seconds: 1)); // 13:32:01
+        expect(h.state.stalled, isTrue);
+        expect(sentTimes(h), [at(13, 30, 10), at(13, 31, 10)]);
+
+        h.elapse(const Duration(minutes: 8, seconds: 19)); // 13:40:20
+        expect(h.requests, hasLength(2), reason: '沒人看得到,不重試');
+        expect(h.state.stalled, isTrue);
+
+        h.center.setAppVisible(true);
+        h.elapse(const Duration(seconds: 1));
+        expect(sentTimes(h).last, at(13, 40, 21));
+        expect(h.requests, hasLength(3));
+        h.dispose();
+      });
+    });
+
+    test('🚨 判為暫停的那一拍剛好輪到重抓:那一拍也不送', () {
+      fakeAsync((async) {
+        // 13:30:09 第一拍起算(還在 CLI 窗口、不送),13:30:10、13:31:10 各送
+        // 一次;13:32:10 滿 121 秒判為暫停,同一拍也是下一次重抓的時刻
+        final h = hidden(async, at(13, 30, 8))
+          ..respond = (_, _) async => throw const _NetworkDown();
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 121)); // 13:32:09
+        expect(h.state.stalled, isFalse, reason: '前提:恰好 120 秒');
+        expect(sentTimes(h), [at(13, 30, 10), at(13, 31, 10)], reason: '前提');
+        h.elapse(const Duration(seconds: 30)); // 13:32:39
+        expect(h.state.stalled, isTrue);
+        expect(h.requests, hasLength(2), reason: '13:32:10 那一拍判為暫停、不送');
+        h.dispose();
+      });
+    });
+
+    test('🚨 可見時判為暫停、隨即看不見:13:30 之後也不送(收盤後暫停門檻較長,'
+        '暫停不因此自己解除);重新可見的下一拍照常送', () {
+      fakeAsync((async) {
+        final h = _Harness(async, at(13, 27), collectAfterCloseWhenHidden: true)
+          ..respond = (_, _) async => throw const _NetworkDown();
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 61)); // 13:28:01
+        expect(h.state.stalled, isFalse, reason: '前提:13:27:01 起算恰好 60 秒');
+        h.elapse(const Duration(seconds: 1)); // 13:28:02
+        expect(h.state.stalled, isTrue, reason: '前提:盤中門檻 60 秒');
+
+        // 看不見的當下無回應約 89 秒:超過盤中的 60 秒、不到收盤後的 120 秒
+        h.elapse(const Duration(seconds: 28)); // 13:28:30
+        final sentWhileVisible = h.requests.length;
+        h.center.setAppVisible(false);
+        h.elapse(const Duration(minutes: 11, seconds: 50)); // 13:40:20
+        expect(h.requests, hasLength(sentWhileVisible), reason: '看不見之後不送');
+        expect(h.state.stalled, isTrue);
+
+        h.center.setAppVisible(true);
+        h.elapse(const Duration(seconds: 1));
+        expect(sentTimes(h).last, at(13, 40, 21));
+        expect(h.requests, hasLength(sentWhileVisible + 1));
+        h.dispose();
+      });
+    });
+
+    test('🚨 兩個畫面登記同一檔、都說「已有今天正式資料」,其中一個是前一天登記的:'
+        '照樣替它抓(兩種登記順序)', () {
+      for (final staleFirst in [true, false]) {
+        fakeAsync((async) {
+          final h = hidden(async, at(14, 0))..respond = notClosing;
+          // 兩個畫面都在前一天登記;staleFirst 決定哪一個排在前面
+          h.center.register(staleFirst ? 'stale' : 'fresh', const [official]);
+          h.center.register(staleFirst ? 'fresh' : 'stale', const [official]);
+          h.elapse(const Duration(hours: 23)); // 隔天 13:00
+          h.center.register('fresh', const [official]); // 這個畫面隔天重建了
+          h.elapse(const Duration(minutes: 30, seconds: 30)); // 隔天 13:30:30
+          expect(sentTimes(h), [
+            at(13, 30, 10, 7),
+          ], reason: 'staleFirst=$staleFirst:沒重建的那個畫面還沒有今天的正式資料');
+
+          h.center.unregister('stale');
+          h.elapse(const Duration(minutes: 5)); // 隔天 13:35:30
+          expect(
+            h.requests,
+            hasLength(1),
+            reason: 'staleFirst=$staleFirst:只剩今天登記的「已有」',
+          );
+          h.dispose();
+        });
+      }
+    });
+
+    test('🚨 看不見時被限流:到期也不試探;重新可見的下一拍才試探', () {
+      fakeAsync((async) {
+        final h = hidden(async, beforeClose);
+        h.respond = (exCh, now) => h.requests.length == 1
+            ? Future.value(rateLimitedPage)
+            : closing(exCh, now);
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(minutes: 5, seconds: 11)); // 13:30:11
+        expect(sentTimes(h), [at(13, 30, 10)]);
+        expect(h.state.rateLimitedUntil, at(13, 35, 10));
+
+        // 超過 2 × rateLimitPause(13:40:10),避開 13:40:00–09 的 CLI 窗口
+        h.elapse(const Duration(minutes: 10, seconds: 9)); // 13:40:20
+        expect(h.requests, hasLength(1), reason: '限流到期也不在看不見時試探');
+
+        h.center.setAppVisible(true);
+        h.elapse(const Duration(seconds: 1));
+        expect(sentTimes(h), [at(13, 30, 10), at(13, 40, 21)]);
+        expect(h.state.rateLimitedUntil, isNull, reason: '試探成功');
+        expect(h.state.entries['2330']!.isClosingQuote, isTrue);
+        h.dispose();
+      });
+    });
+
+    test('🚨 可見時被限流、隨即看不見:到期後也不試探', () {
+      fakeAsync((async) {
+        final h = _Harness(async, at(13, 30), collectAfterCloseWhenHidden: true)
+          ..respond = (_, _) async => rateLimitedPage;
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 11)); // 13:30:10 送出、被限流
+        expect(sentTimes(h), [at(13, 30, 10)]);
+        expect(h.state.rateLimitedUntil, at(13, 35, 10));
+
+        h.center.setAppVisible(false);
+        h.elapse(const Duration(minutes: 10, seconds: 9)); // 13:40:20
+        expect(h.requests, hasLength(1));
+        h.dispose();
+      });
+    });
+
+    test('🚨 看不見時套用的輪次不閃色(同樣的兩輪在可見時會閃)', () {
+      for (final visible in [true, false]) {
+        fakeAsync((async) {
+          var round = 0;
+          final h =
+              _Harness(async, at(13, 30), collectAfterCloseWhenHidden: true)
+                ..respond = (exCh, now) async => switch (++round) {
+                  // 第 1 輪:13:29:50 的成交,不是收盤報價 → 1 分鐘後再抓
+                  1 => _mis([
+                    _row('2330', now, z: '100.0000', t: '13:29:50'),
+                  ], at: now),
+                  _ => _mis([
+                    _row('2330', now, z: '101.0000', t: '13:30:00'),
+                  ], at: now),
+                };
+          h.center.setAppVisible(visible);
+          h.center.register('A', const [tsmc]);
+          h.elapse(const Duration(seconds: 71)); // 13:30:10、13:31:10 兩輪
+          expect(sentTimes(h), [at(13, 30, 10), at(13, 31, 10)], reason: '前提');
+          final entry = h.state.entries['2330']!;
+          expect(entry.price, 101.0);
+          expect(entry.isClosingQuote, isTrue);
+          expect(
+            entry.flash,
+            visible ? isNotNull : isNull,
+            reason: visible ? '對照:可見時價格變了會閃' : '收完後沒有下一輪,閃色會留到切回來才播',
+          );
+          h.dispose();
+        });
+      }
+    });
+
+    test('🚨 前一天以「已有今天正式資料」登記、看不見跨到隔天:收盤後照樣替它收;'
+        '隔天重新登記後照新的來', () {
+      fakeAsync((async) {
+        final h = hidden(async, at(14, 0))..respond = notClosing;
+        h.center.register('A', const [official]);
+        h.elapse(const Duration(hours: 23, minutes: 30)); // 隔天 13:30:00
+        expect(h.requests, isEmpty, reason: '登記當天已有正式資料;過夜、隔天盤中都不抓');
+
+        h.elapse(const Duration(seconds: 30)); // 隔天 13:30:30
+        expect(sentTimes(h), [
+          at(13, 30, 10, 7),
+        ], reason: '「已有今天正式資料」是前一天登記的,隔天不算數');
+
+        // 頁面重建、以今天的狀態再登記
+        h.center.register('A', const [official]);
+        h.elapse(const Duration(minutes: 5)); // 隔天 13:35:30
+        expect(h.requests, hasLength(1), reason: '今天登記的「已有正式資料」算數');
+        h.dispose();
+      });
+    });
+
+    test('不在背景收集的平台:看不見時計時器停,收盤後也不抓', () {
+      fakeAsync((async) {
+        final h = hidden(async, beforeClose, collect: false)..respond = closing;
+        h.center.register('A', const [tsmc]);
+        expect(async.periodicTimerCount, 0);
+        h.elapse(const Duration(minutes: 15)); // 13:40
+        expect(h.requests, isEmpty);
+        h.dispose();
+      });
+    });
+
+    test('🚨 沒有注入時由目標平台決定:只有 macOS 在背景收集', () {
+      for (final platform in TargetPlatform.values) {
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          fakeAsync((async) {
+            final h = _Harness(async, beforeClose)..respond = closing;
+            h.center.setAppVisible(false);
+            h.center.register('A', const [tsmc]);
+            h.elapse(const Duration(minutes: 6)); // 13:31
+            expect(
+              h.requests,
+              platform == TargetPlatform.macOS ? hasLength(1) : isEmpty,
+              reason: '$platform',
+            );
+            h.dispose();
+          });
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      }
+    });
+
+    group('紀錄', () {
+      /// 跑 [body],回傳 LiveQuote 的 debug 行
+      List<String> debugLines(void Function(FakeAsync async) body) {
+        final lines = <String>[];
+        runZoned(
+          () => fakeAsync(body),
+          zoneSpecification: ZoneSpecification(
+            print: (_, _, _, line) => lines.add(line),
+          ),
+        );
+        return [
+          for (final l in lines)
+            if (l.contains('[D] [LiveQuote]')) l,
+        ];
+      }
+
+      test('看不見時放行的每一拍記一行(與上一拍的間隔、無回應時間、暫停門檻);'
+          '套用的那一輪標明 App 看不見', () {
+        final lines = debugLines((async) {
+          final h = hidden(async, at(13, 29, 58))..respond = closing;
+          h.center.register('A', const [tsmc]);
+          h.elapse(const Duration(seconds: 30)); // 13:30:28
+          h.dispose();
+        });
+        final ticks = [
+          for (final l in lines)
+            if (l.contains('看不見時的一拍')) l,
+        ];
+        // 13:30:00～13:30:10 每秒一拍;之前是盤中、之後已收完,都不記
+        expect(ticks, hasLength(11));
+        expect(ticks.first, contains('距上一拍 1000 毫秒'));
+        expect(ticks.first, contains('無回應 0 秒'));
+        expect(ticks.last, contains('無回應 10 秒'));
+        expect(ticks.last, contains('暫停門檻 120 秒'));
+        final rounds = [
+          for (final l in lines)
+            if (l.contains('一輪結束')) l,
+        ];
+        expect(rounds, hasLength(1));
+        expect(rounds.single, contains('App 看不見'));
+      });
+
+      test('計時器重新啟動後的第一拍沒有「上一拍」(不拿停掉之前的時刻來算)', () {
+        final lines = debugLines((async) {
+          final h = hidden(async, at(13, 20))..respond = notClosing;
+          h.center.register('A', const [tsmc]);
+          h.elapse(const Duration(minutes: 1)); // 計時器跑到 13:21
+          h.center.unregister('A'); // 沒有登記:計時器停
+          h.elapse(const Duration(minutes: 14)); // 13:35
+          h.center.register('A', const [tsmc]);
+          h.elapse(const Duration(seconds: 2));
+          h.dispose();
+        });
+        final ticks = [
+          for (final l in lines)
+            if (l.contains('看不見時的一拍')) l,
+        ];
+        expect(ticks, hasLength(2));
+        expect(ticks[0], contains('距上一拍 無'));
+        expect(ticks[1], contains('距上一拍 1000 毫秒'));
+      });
+
+      test('🚨 看不見時判為暫停:那一拍記一行並註明,之後不再每秒一行', () {
+        final lines = debugLines((async) {
+          final h = hidden(async, at(13, 29, 58))
+            ..respond = (_, _) async => throw const _NetworkDown();
+          h.center.register('A', const [tsmc]);
+          h.elapse(const Duration(minutes: 10)); // 13:39:58
+          h.dispose();
+        });
+        final ticks = [
+          for (final l in lines)
+            if (l.contains('看不見時的一拍')) l,
+        ];
+        // 13:30:00～13:32:01 每秒一拍,最後一拍判為暫停
+        expect(ticks, hasLength(122));
+        expect(ticks.last, contains('無回應 121 秒'));
+        expect(ticks.last, contains('判為暫停'));
+        expect([
+          for (final l in ticks.take(121))
+            if (l.contains('判為暫停')) l,
+        ], isEmpty);
       });
     });
   });
@@ -1270,11 +1695,23 @@ class _Clock implements AppClock {
   DateTime now() => _now();
 }
 
-/// 在 fakeAsync 裡建一個報價中心
+/// 在 fakeAsync 裡建一個報價中心。[collectAfterCloseWhenHidden] 不給就用
+/// 正式的 `liveQuoteCenterProvider`(由目標平台決定)
 class _Harness {
-  _Harness(this.async, this.t0, {IntradayQuoteClient? client}) {
+  _Harness(
+    this.async,
+    this.t0, {
+    IntradayQuoteClient? client,
+    bool? collectAfterCloseWhenHidden,
+  }) {
     container = ProviderContainer(
       overrides: [
+        if (collectAfterCloseWhenHidden != null)
+          liveQuoteCenterProvider.overrideWith(
+            () => LiveQuoteCenter(
+              collectAfterCloseWhenHidden: collectAfterCloseWhenHidden,
+            ),
+          ),
         appClockProvider.overrideWithValue(_Clock(now)),
         liveQuoteClientProvider.overrideWithValue(
           client ??

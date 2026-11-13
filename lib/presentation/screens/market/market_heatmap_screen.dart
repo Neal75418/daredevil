@@ -13,11 +13,9 @@ import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/services/heatmap/heatmap_layout.dart';
 import 'package:daredevil/presentation/providers/app_visibility_provider.dart';
 import 'package:daredevil/presentation/providers/heatmap_live_provider.dart';
-import 'package:daredevil/presentation/providers/live_price_provider.dart';
 import 'package:daredevil/presentation/providers/market_heatmap_provider.dart';
 import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
-import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/widgets/app_bottom_sheet.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_industry_group_sheet.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_legend.dart';
@@ -156,8 +154,6 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
     final state = ref.watch(marketHeatmapProvider);
     ref.listen(marketHeatmapProvider, (_, next) => _dropMissingZoom(next));
     final overview = ref.watch(marketOverviewProvider);
-    // 登記的「是否已有今天正式資料」跟現在有關：跨過午夜等邊界時重算
-    ref.watch(liveQuoteBoundaryProvider);
     final live = ref.watch(marketLiveIndicesProvider);
     final (:market, :zoom) = ref.watch(heatmapSelectionProvider);
     final view = ref.watch(heatmapLiveProvider);
@@ -181,16 +177,10 @@ class _MarketHeatmapScreenState extends ConsumerState<MarketHeatmapScreen> {
           const SizedBox(width: DesignTokens.spacing8),
         ],
       ),
-      body: LiveQuoteScope(
-        // 只登記正在看的市場的指數，加上熱力圖要上色的個股
-        registrations: [
-          for (final r in marketIndexRegistrations(
-            overview,
-            ref.read(appClockProvider).now(),
-          ))
-            if (r.market == market) r,
-          ...view.stockRegistrations,
-        ],
+      // 登記的清單由 provider 交給報價中心：App 看不見時畫面不重畫，收盤後
+      // 「抓到一批換下一批」照樣進行
+      body: LiveQuoteScope.listen(
+        source: heatmapRegistrationsProvider,
         // 包住所有狀態：空狀態、錯誤卡片也要輪詢，才等得到背景的第一次寫入
         child: _HeatmapVisibility(
           child: Column(

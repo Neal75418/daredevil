@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show immutable, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, immutable, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:daredevil/core/constants/api_endpoints.dart';
@@ -74,10 +75,11 @@ class LiveQuoteState {
 
   /// 各檔最近一次拿到今天報價時,那一批回應收到的時刻;沒拿到過的檔不在
   /// 裡面。時刻取自報價中心的 `appClockProvider` 時鐘,是那一批回來的當下、
-  /// 不是整輪套用的時刻。停拍作廢或因限流丟掉的一輪不記;暫停交易(列被
-  /// 丟掉)、批次失敗的那一檔停在上一次。頁首靠它分辨「證交所的資料停住」
-  /// 與「這一檔最近沒有拿到報價」。報價中心換日時才發布清空的版本:計時器
-  /// 停著跨過午夜時,重新計時的第一拍之前讀到的仍是前一天的
+  /// 不是整輪套用的時刻。作廢的(計時器停掉、或 App 看不見而不能抓時還沒
+  /// 套用的那一輪)或因限流丟掉的一輪不記;暫停交易(列被丟掉)、批次失敗的
+  /// 那一檔停在上一次。頁首靠它分辨「證交所的資料停住」與「這一檔最近沒有
+  /// 拿到報價」。報價中心換日時才發布清空的版本:計時器停著跨過午夜時,
+  /// 重新計時的第一拍之前讀到的仍是前一天的
   final Map<String, DateTime> lastReceivedAt;
 
   /// 報價暫停(網路):計時中,距上一次有回應的一輪超過門檻
@@ -124,19 +126,38 @@ final liveQuoteCenterProvider =
 
 /// 盤中即時報價中心(全 App 唯一,2026-10-06)。
 ///
-/// 畫面以 `LiveQuoteScope` 登記要看的股票;中心每秒一拍,在「有登記、App
-/// 可見、排程說該抓」時逐批發請求(任何 60 秒內 ≤ 8 個、相鄰 ≥ 2 秒、
+/// 畫面以 `LiveQuoteScope` 登記要看的股票;中心每秒一拍,在「有登記、這一拍
+/// 可以抓、排程說該抓」時逐批發請求(任何 60 秒內 ≤ 8 個、相鄰 ≥ 2 秒、
 /// 避開 CLI),結果經 [LiveQuoteBook] 算成各檔顯示價放進 state。只存在
 /// 記憶體,不寫資料庫;任何錯誤都不影響盤後資料的顯示。
+///
+/// 「這一拍可以抓」:App 可見時都可以。App 看不見時,macOS 以外的平台停掉
+/// 計時器;macOS 計時器照跑,只在收盤後、還有收盤報價沒收完、不在限流也
+/// 沒有判為暫停時抓,把收盤報價收完(桌面的視窗常被別的 App 蓋住一整個
+/// 下午)。斷線暫停或限流(不論是看不見之前還是之後開始的)就停到重新可見:
+/// 沒人看得到暫停的提示,不重試到午夜。唯一的例外是看不見之前送出、下一拍
+/// 之前就回來的那個請求:照常套用,有回應時暫停或限流因此解除、接著收。
 ///
 /// 🚨 [register]／[unregister]／[setAppVisible] 會在 widget 的
 /// didChangeDependencies／dispose(build 期間)被呼叫,**不可寫 state**
 /// ——Riverpod 不允許 build 期間修改 provider。它們只改內部欄位與計時器,
 /// 結果等下一拍才反映。
 class LiveQuoteCenter extends Notifier<LiveQuoteState> {
+  /// [collectAfterCloseWhenHidden]:App 看不見時要不要把收盤報價收完;不給就
+  /// 只有 macOS 要。用 `defaultTargetPlatform` 而不是 `Platform.isMacOS`:
+  /// 測試底下前者固定是 android,後者跟著跑測試的機器變
+  LiveQuoteCenter({bool? collectAfterCloseWhenHidden})
+    : _collectWhenHidden =
+          collectAfterCloseWhenHidden ??
+          defaultTargetPlatform == TargetPlatform.macOS;
+
   static const String _tag = 'LiveQuote';
 
-  final Map<Object, List<LiveQuoteRegistration>> _registrations = {};
+  final bool _collectWhenHidden;
+
+  /// 各 owner 登記的清單與登記那天的日期
+  final Map<Object, ({List<LiveQuoteRegistration> entries, DateTime day})>
+  _registrations = {};
   final LiveQuoteBook _book = LiveQuoteBook();
 
   /// 最近幾個請求的送出時刻(節流用)。只留最近 [LiveQuoteParams.maxRequestsPerMinute]
@@ -152,10 +173,13 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
   bool _inFlight = false;
   DateTime? _lastRoundStartedAt;
 
+  /// 上一拍的時刻(看不見時記拍子間隔用);計時器停著時為 null
+  DateTime? _lastTickAt;
+
   /// 登記聯集的版本:一輪開始時記下,送下一批前不同就提早結束這一輪
   int _registrationVersion = 0;
 
-  // 暫停計時:只在「排程要抓、App 可見、有登記」的相鄰拍子之間累計
+  // 暫停計時:只在「排程要抓、這一拍可以抓、有登記」的相鄰拍子之間累計
   DateTime? _lastCountedTick;
   Duration _unresponsive = Duration.zero;
   bool _stalled = false;
@@ -184,18 +208,29 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
     return const LiveQuoteState();
   }
 
-  /// 登記 [owner] 要看的股票(同一 owner 再登記即取代)。等下一拍才抓
-  void register(Object owner, List<LiveQuoteRegistration> entries) =>
-      _changeRegistrations(
-        () => _registrations[owner] = List.unmodifiable(entries),
-      );
+  /// 登記 [owner] 要看的股票(同一 owner 再登記即取代)。等下一拍才抓。
+  ///
+  /// 連同今天的日期一起記:清單裡的「已有今天正式資料」只在登記那天算數
+  /// (見 [_union])
+  void register(Object owner, List<LiveQuoteRegistration> entries) {
+    final day = _dayOf(_now());
+    _changeRegistrations(
+      () => _registrations[owner] = (
+        entries: List.unmodifiable(entries),
+        day: day,
+      ),
+    );
+  }
 
+  /// 不讀時鐘、不碰 `ref`:畫面 dispose 時呼叫
   void unregister(Object owner) {
     if (!_registrations.containsKey(owner)) return;
     _changeRegistrations(() => _registrations.remove(owner));
   }
 
   void _changeRegistrations(void Function() change) {
+    // 比的是登記時的原樣(不看登記日):離開的代號與登記日無關;聯集有沒有變
+    // 只決定進行中的一輪要不要截斷
     final before = _union();
     change();
     final after = _union();
@@ -212,7 +247,9 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
     Map<String, LiveQuoteRegistration> b,
   ) => a.length == b.length && a.entries.every((e) => b[e.key] == e.value);
 
-  /// App 生命週期:resumed／inactive 可見,hidden／paused 不可見
+  /// App 生命週期:resumed／inactive 可見,hidden／paused 不可見。看不見時
+  /// macOS 以外的平台停掉計時器;macOS 計時器照跑,由每一拍判斷能不能抓
+  /// (見 [_step])
   void setAppVisible(bool visible) {
     if (_appVisible == visible) return;
     _appVisible = visible;
@@ -227,9 +264,12 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
     for (final r in _union().values) r.symbol: _marketOf(r),
   };
 
+  /// 計時器:有登記,而且 App 可見或這個平台看不見時也要收。看不見時計時器
+  /// 照跑不等於照抓,能不能抓由每一拍判斷(見 [_step])
   void _syncTicker() {
     final shouldRun =
-        _appVisible && _registrations.values.any((l) => l.isNotEmpty);
+        (_appVisible || _collectWhenHidden) &&
+        _registrations.values.any((r) => r.entries.isNotEmpty);
     if (shouldRun && _ticker == null) {
       _ticker = Timer.periodic(LiveQuoteParams.tick, (_) => unawaited(_tick()));
     } else if (!shouldRun && _ticker != null) {
@@ -240,7 +280,13 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
   void _stopTicker() {
     _ticker?.cancel();
     _ticker = null;
-    // 停拍期間不計暫停時間
+    _lastTickAt = null;
+    _suspend();
+  }
+
+  /// 這段時間不抓(計時器停了,或看不見時這一拍不能抓)
+  void _suspend() {
+    // 不抓的期間不計暫停時間
     _lastCountedTick = null;
     // 進行中的那一輪作廢:恢復時已拿到的批次可能是很久以前的,不可當成新的
     // 套用;請求還在路上的,回來後丟棄
@@ -258,10 +304,26 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
 
   Future<void> _step() async {
     final now = _now();
+    final lastTick = _lastTickAt;
+    final sinceLastTick = lastTick == null ? null : now.difference(lastTick);
+    _lastTickAt = now;
     if (_rollDay(now)) _publish();
     final phase = LiveQuoteSchedule.phaseAt(now);
     final afterClose = phase == MarketPhase.afterClose;
     final plan = _plan(phase, now);
+    // App 看不見(只有看不見時也要收的平台會跑到這裡):只在收盤後還有收盤
+    // 報價沒收完、不在限流中、也沒有判為暫停才抓;沒人看得到暫停的提示,
+    // 不在這時重試。限流時刻要到試探那一輪結束才清掉,所以限流到期後也不
+    // 試探。已判為暫停的不再重算:暫停門檻跟著階段與批數變(盤中至少 60 秒、
+    // 收盤後至少 120 秒),重算可能讓看不見之前判的暫停在 13:30 自己解除
+    if (!_appVisible &&
+        !(afterClose &&
+            plan.pending > 0 &&
+            _rateLimitedUntil == null &&
+            !_stalled)) {
+      _suspend();
+      return;
+    }
     final until = _rateLimitedUntil;
     final rateLimited = until != null && now.isBefore(until);
     // 限流暫停期間不計網路暫停:頁首已顯示限流,兩者同時為真時畫面不知該說哪一個
@@ -271,6 +333,14 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
       afterClose: afterClose,
     );
     _setPending(plan.pending > 0);
+    if (!_appVisible) {
+      _noteHiddenTick(sinceLastTick, plan.pending, afterClose);
+      // 這一拍才判為暫停:停到重新可見或午夜換日
+      if (_stalled) {
+        _suspend();
+        return;
+      }
+    }
 
     if (_inFlight) return; // 上一個請求還沒回來:跳過,不疊加
     if (rateLimited) return;
@@ -313,13 +383,15 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
 
   DateTime _now() => ref.read(appClockProvider).now();
 
+  static DateTime _dayOf(DateTime t) => DateTime(t.year, t.month, t.day);
+
   /// 這一拍的計畫:[due] 是若要開新的一輪該抓的代號 → 市場別(保持登記
   /// 順序);[pending] 是排程還要抓的檔數(暫停計時與門檻用)
   ({Map<String, String> due, int pending}) _plan(
     MarketPhase phase,
     DateTime now,
   ) {
-    final union = _union();
+    final union = _union(today: _dayOf(now));
     switch (phase) {
       case MarketPhase.closed:
       case MarketPhase.preOpen:
@@ -345,11 +417,20 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
   }
 
   /// 所有畫面登記的聯集;同一檔只要有任一畫面還沒有今天的正式資料,
-  /// 收盤後就要抓
-  Map<String, LiveQuoteRegistration> _union() {
+  /// 收盤後就要抓。
+  ///
+  /// 給了 [today]:登記日不是 [today] 的清單,「已有今天正式資料」不算數
+  /// (合併之前逐個 owner 套用)。畫面的清單在重建時才重算,App 看不見時
+  /// 不重建;前一天登記的「已有」說的是前一天的資料,隔天收盤後照樣要抓。
+  /// 沒給 [today]:登記時的原樣
+  Map<String, LiveQuoteRegistration> _union({DateTime? today}) {
     final union = <String, LiveQuoteRegistration>{};
-    for (final list in _registrations.values) {
-      for (final r in list) {
+    for (final (:entries, :day) in _registrations.values) {
+      final expired = today != null && day != today;
+      for (final entry in entries) {
+        final r = expired && entry.hasOfficialToday
+            ? LiveQuoteRegistration(symbol: entry.symbol, market: entry.market)
+            : entry;
         final seen = union[r.symbol];
         if (seen == null || (seen.hasOfficialToday && !r.hasOfficialToday)) {
           union[r.symbol] = r;
@@ -463,6 +544,9 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
 
   void _finishRound(_Round round, DateTime now) {
     _rollDay(now);
+    // 看不見時套用的輪次不閃色:閃色留在畫面那筆直到下一次套用,收完之後
+    // 沒有下一輪,會留到切回來的第一幀才播,看起來像剛剛才變
+    if (!_appVisible) _book.forgetLastRound();
     final outcome = _book.apply(
       round.report,
       requested: round.requested,
@@ -558,6 +642,25 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
     }
   }
 
+  /// App 看不見時可以抓的一拍:記拍子間隔與暫停計時。系統可能放慢看不見的
+  /// App 的計時器;無回應時間從上一次有回應的一輪起跨拍累計(一輪的各批
+  /// 之間、等 CLI 讓開的拍子都算),超過暫停門檻就判為暫停、停到重新可見,
+  /// 所以拍子間隔比門檻短也可能累計到
+  void _noteHiddenTick(Duration? sinceLastTick, int pending, bool afterClose) {
+    final threshold = LiveQuoteSchedule.stallThreshold(
+      _batchCount(pending),
+      afterClose: afterClose,
+    );
+    AppLogger.debug(
+      _tag,
+      '看不見時的一拍:距上一拍 '
+      '${sinceLastTick == null ? '無' : '${sinceLastTick.inMilliseconds} 毫秒'}、'
+      '無回應 ${_unresponsive.inSeconds} 秒、'
+      '暫停門檻 ${threshold.inSeconds} 秒'
+      '${_stalled ? '、判為暫停,停到重新可見' : ''}',
+    );
+  }
+
   static String _hms(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:'
       '${t.minute.toString().padLeft(2, '0')}:'
@@ -601,7 +704,7 @@ class _Round {
   final bool probe;
   final bool afterClose;
 
-  /// 停拍時作廢:還在路上的請求回來後丟棄
+  /// 開始不抓時作廢(見 `LiveQuoteCenter._suspend`):還在路上的請求回來後丟棄
   bool discarded = false;
   int _next = 0;
 

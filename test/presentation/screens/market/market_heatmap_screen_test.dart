@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:daredevil/core/constants/app_routes.dart';
+import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/core/constants/live_quote_params.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/theme/heatmap_colors.dart';
@@ -1309,6 +1310,56 @@ void main() {
         page.center.symbols,
         isNot(contains(LiveQuoteParams.indexSymbolOf(MarketCode.twse))),
       );
+    });
+
+    testWidgets('🚨 登記的清單就是 heatmapRegistrationsProvider 的值；App 看不見、畫面停止排程後，'
+        '熱力圖換下一批 → 登記跟著換', (tester) async {
+      final page = await pumpLive(
+        tester,
+        at: monday(13, 40),
+        markets: {MarketCode.twse: twse120()},
+        live: const MarketLiveIndices(),
+      );
+      final first = page.container.read(heatmapRegistrationsProvider);
+      expect(
+        first,
+        hasLength(1 + HeatmapParams.liveTileLimit),
+        reason: '前提：指數＋還沒有收盤報價的前 69 檔',
+      );
+      expect(page.center.registered.values.single, first);
+
+      void setLifecycle(AppLifecycleState state) =>
+          tester.binding.handleAppLifecycleStateChanged(state);
+      addTearDown(() => setLifecycle(AppLifecycleState.resumed));
+      setLifecycle(AppLifecycleState.hidden);
+      await tester.pump(); // 切到 hidden 之前已經排好的那一幀
+      expect(tester.binding.framesEnabled, isFalse, reason: '前提：看不見時不畫幀');
+
+      // 第一批都拿到收盤報價 → 熱力圖改登記剩下的 51 檔
+      page.center.publish(
+        LiveQuoteState(
+          entries: {
+            for (final r in first)
+              r.symbol: quote(r.symbol, 101, closing: true),
+          },
+          latestResponseHadToday: true,
+        ),
+      );
+      // 不帶時間的 pump() 不前進時間，provider 排程重算用的計時器不會跑
+      await tester.pump(const Duration(milliseconds: 1));
+      final next = page.center.registered.values.single;
+      final firstStocks = {for (final r in first.skip(1)) r.symbol};
+      expect(
+        {for (final r in next) r.symbol}.intersection(firstStocks),
+        isEmpty,
+        reason: '第一批的個股已有收盤報價，不再登記',
+      );
+      expect(next, hasLength(1 + 120 - HeatmapParams.liveTileLimit));
+      expect(next, page.container.read(heatmapRegistrationsProvider));
+
+      // 回到可見才拆得掉樹（看不見時不畫幀）
+      setLifecycle(AppLifecycleState.resumed);
+      await tester.pump();
     });
 
     testWidgets('盤中：狀態行顯示報價狀態（最多兩行、省略號）；指數列不顯示自己的狀態、右側不寫「M/D 收盤」', (

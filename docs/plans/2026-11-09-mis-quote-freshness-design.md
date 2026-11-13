@@ -26,7 +26,7 @@
 
 報價中心在 App 看不見時（`AppLifecycleState` 為 `hidden`／`paused`：視窗被整個蓋住、縮到 Dock）停止抓取，盤中與收盤後都一樣。11/9 實機：13:40 上市熱力圖仍是「今日收盤 0／1085 檔」，MIS 早已有 13:30 的收盤報價；拉到前面後約兩分鐘上櫃收到 456／866。盤中被蓋住時暫停是對的（沒人看、省證交所的請求、與盤中提醒共用同一個網路位址）；收盤後的工作量有限（有回應時，每檔拿到收盤報價或試滿 10 次就停），卻也跟著停，使用者切回來時要再等幾分鐘。
 
-另外，App 看不見時 Flutter 停止排程畫面（`SchedulerBinding.handleAppLifecycleStateChanged`：`hidden`／`paused` 時 `framesEnabled` 為 false），而熱力圖收盤後「抓到一批換下一批」的登記清單是在畫面重畫時才交給報價中心（`LiveQuoteScope` 在 `didUpdateWidget` 登記）。所以只讓報價中心在背景繼續，熱力圖只會收完被蓋住那一刻登記的 69 檔。Riverpod 的 provider 在 App 看不見時照常重算、通知 listener：`flutter_riverpod` 3.3.2 的 `ProviderScope.scheduleRefresh` 用 `Timer` 排程（`provider_scope.dart` 312～335 行），不依賴畫面。
+另外，App 看不見時 Flutter 停止排程畫面（`SchedulerBinding.handleAppLifecycleStateChanged`：`hidden`／`paused` 時 `framesEnabled` 為 false），而熱力圖收盤後「抓到一批換下一批」的登記清單是在畫面重畫時才交給報價中心（`LiveQuoteScope` 在 `didUpdateWidget` 登記）。所以只讓報價中心在背景繼續，熱力圖只會收完被蓋住那一刻登記的 69 檔。Riverpod 的 provider 在 App 看不見時照常重算、通知 listener：`flutter_riverpod` 3.3.1（`pubspec.lock` 鎖定的版本）的 `ProviderScope` 以 `_flutterVsync` 用 `Timer` 排程（`provider_scope.dart` 295～320 行），不依賴畫面。
 
 ## 目標
 
@@ -110,8 +110,8 @@
 - 計時器：`_syncTicker` 的條件改成「有登記，而且（可見，或這個平台要在背景收集）」。平台預設用 `defaultTargetPlatform == TargetPlatform.macOS`（不用 `dart:io` 的 `Platform.isMacOS`：本機 Mac 與 CI 結果會不同）。注入點只在報價中心自己（建構參數，測試用 `liveQuoteCenterProvider.overrideWith(() => LiveQuoteCenter(<背景收集>: true))`，或專用 provider）；測試不改全域目標平台（`debugDefaultTargetPlatformOverride`／`TargetPlatformVariant` 會讓整棵 widget 樹照 macOS 版面渲染）。行動平台看不見時照舊停計時器。將來支援 web 時加 `!kIsWeb`（web 的 `defaultTargetPlatform` 是瀏覽器所在的作業系統）。
 - 「這一拍能不能抓」放進 `_step`，排在換日（`_rollDay`）之後：
   - 可見 → 照現在的流程。
-  - 看不見 → 先看「`MarketPhase.afterClose`、收盤後的工作還沒做完（`plan.pending > 0`）、`_rateLimitedUntil` 為 null」：不成立就做和 `_stopTicker` 一樣的收尾（作廢進行中的一輪、`_lastCountedTick` 設成 null、不計暫停時間），然後 return。`_rateLimitedUntil` 從進入限流起不是 null，只在試探那一輪結束（不論成敗）或換日時清掉；看不見時不送試探，所以限流到期也不送；重新可見後下一拍照常試探。
-  - 成立 → 照常 `_countStall`；之後若 `_stalled` 為 true（含這一拍才判為暫停），同樣收尾並 return。判為暫停後看不見時就停到重新可見（或午夜換日），不會「回應先到就自己恢復」。
+  - 看不見 → 先看「`MarketPhase.afterClose`、收盤後的工作還沒做完（`plan.pending > 0`）、`_rateLimitedUntil` 為 null、還沒判為暫停（`_stalled` 為 false）」：不成立就做和 `_stopTicker` 一樣的收尾（作廢進行中的一輪、`_lastCountedTick` 設成 null、不計暫停時間），然後 return。`_rateLimitedUntil` 從進入限流起不是 null，只在試探那一輪結束（不論成敗）或換日時清掉；看不見時不送試探，所以限流到期也不送；重新可見後下一拍照常試探。
+  - 成立 → 照常 `_countStall`；之後若 `_stalled` 為 true（這一拍才判為暫停），同樣收尾並 return。判為暫停後看不見時就停到重新可見（或午夜換日）：已暫停的拍子在上一條就擋下、不再經過 `_countStall`，否則暫停門檻隨階段變長（盤中至少 60 秒、收盤後至少 120 秒）時，看不見之前判的暫停可能在 13:30 自己解除。唯一的例外是看不見之前送出、下一拍之前就回來的那個請求：照常套用，有回應時暫停或限流因此解除。
 - 這樣喚醒、停止、換日、隔天盤中都在同一處判斷，不需要另外排喚醒計時，也不用 `liveQuoteBoundaryProvider`：
   - 看不見時跨過 13:30，下一拍就開始收；前一天收完後一直看不見，隔天第一拍先換日、記帳本清空，13:30 照樣開始。
   - 收完（pending 為 0）之後每一拍都 return，不送請求；隔天 09:00 進入盤中、看不見，照樣不抓。
@@ -120,12 +120,13 @@
 - 看不見時每秒一拍只算計畫、不送請求，成本是每秒一次聯集與計畫的計算（macOS 上可見時本來就這樣跑）。
 - 請求規則全部照舊（每檔每分鐘最多一次、有回應而不是收盤報價試滿 10 次放棄、每分鐘最多 8 個請求、避開 CLI）。量級：上櫃熱力圖 866 檔約 25 個請求，加上收盤沒撮合的約 137 檔各試 10 次（每批 35 檔，約 40 個請求）。
 - 看不見時套用的輪次不產生閃色（`_finishRound` 在看不見時先 `_book.forgetLastRound()` 再 `apply`）：閃色會留在畫面那筆直到下一次套用，收完之後不會再有下一輪，切回來的第一幀才播，看起來像剛剛才變。重新可見時照舊「第一輪不閃色」。
-- macOS 的 App Nap 可能讓看不見時的計時器變慢（Flutter 引擎與本 App 都沒有退出 App Nap；沒量過）。不另做處理，但要知道後果：暫停判斷的「無回應時間」（`_unresponsive`）跨拍累計、只在有回應的一輪結束時歸零，收盤後每檔滿 60 秒才重抓，所以收盤後一輪 1～2 批時，看不見時拍子間隔約 30 秒以上就可能判為暫停，並停到重新可見（保守）。實機驗證看「看不見期間有沒有判為暫停」與「最大拍子間隔是否超過約 30 秒」（A5），有就評估 `ProcessInfo.beginActivity`。
+- macOS 的 App Nap 可能讓看不見時的計時器變慢（Flutter 引擎與本 App 都沒有退出 App Nap；沒量過）。不另做處理，但要知道後果：暫停判斷的「無回應時間」（`_unresponsive`）跨拍累計、只在有回應的一輪結束時歸零，收盤後每檔滿 60 秒才重抓，所以收盤後一輪 2 批時，看不見時拍子間隔超過約 40 秒就會判為暫停，約 25 秒以上、又有一拍碰上 CLI 避讓窗口時也可能（一輪的第 1 批送出後要再等一拍才送第 2 批，等待都算進無回應時間）；一輪 1 批時要更長。判為暫停就停到重新可見（保守）。實機驗證看「看不見期間有沒有判為暫停」與「最大拍子間隔是否超過約 25 秒」（A5），有就評估 `ProcessInfo.beginActivity`。
 
 ### B2. 熱力圖的登記清單不靠畫面重畫：擴充 `LiveQuoteScope`
 
 - `LiveQuoteScope` 多一種用法：給它一個 provider（回傳完整的登記清單），它在同一個 State 裡用 `listenManual` 訂閱，清單一變就以同一個 owner（這個 State）登記，不等 `build`／`didUpdateWidget`。
-- 頁面可見性照舊由同一個 State 判斷：`TickerMode` 關閉（被別的頁面蓋住）時取消登記，並把訂閱 `pause()`，讓熱力圖的 provider 在被蓋住期間不保持 active、不重算；`TickerMode` 打開時 `resume()`，以 `subscription.read()` 取現值重新登記。`pause()` 會累計次數（`resume()` 只減 1）：用欄位記住目前是否暫停，只在 `TickerMode` 的值改變時切換（比照 flutter_riverpod 替 `ref.watch` 做的，`consumer.dart` 420～432 行）；被蓋住期間頁面重建（例如切換深色模式）不能多 pause 一次。App 看不見不會改變 `TickerMode`，所以背景時訂閱照常。
+- 頁面可見性照舊由同一個 State 判斷：`TickerMode` 關閉（被別的頁面蓋住）時取消登記，並把訂閱關掉（`close()`）；清單的 provider 用 autoDispose，沒人聽就釋放，被蓋住期間不保持 active、不重算。`TickerMode` 打開時重新訂閱，以 `subscription.read()` 取現值重新登記。被蓋住期間頁面重建（例如切換深色模式）或 State 被搬到樹上別處時不重複訂閱。App 看不見不會改變 `TickerMode`，所以背景時訂閱照常。
+  - 不用 `pause()`／`resume()`（原本的設計）：暫停時清單的 provider 還掛著、只是不活躍，而它依賴的 `heatmapLiveProvider` 同時被熱力圖頁 `ref.watch`。回到這一頁時 flutter_riverpod 先恢復畫面的訂閱（`consumer.dart` 的 `_updateTickerMode`，405～417 行；它只管 `ref.watch` 的訂閱，`listenManual` 的不管）、當場重算 `heatmapLiveProvider`，通知到那個不活躍的下游，riverpod 3.2.1 內部的暫停計數檢查（`element.dart` 的 `_assertValidInternalPauseState`）就失敗。以純 Riverpod 的最小例子重現過：衍生的 provider 在訂閱暫停期間變過（恢復時要重算）、又還有「掛著但不活躍」而且還沒被標成要重算的下游 provider 時就會發生，與下游是被暫停還是沒人聽（非 autoDispose）無關；下游已釋放就不會。riverpod 3.3.2 的 CHANGELOG 寫「Fixes assertion error when providers are unpaused」（沒有實測；升級是另一件事，關掉訂閱的做法在新版照樣可用）。關掉訂閱之後 provider 要等排程的工作跑過才釋放：flutter_riverpod 3.3.1 的 `ProviderScope` 在兩層 `Timer(Duration.zero)` 之後、或下一幀開頭自己重建時（`provider_scope.dart` 295～320、358～366 行）執行，先到的那個。所以只有同一幀裡先關掉、又恢復畫面的訂閱才會落在釋放之前；頁面被蓋住再回來不會。
 - 熱力圖頁的清單＝目前市場的指數＋`HeatmapLiveView.stockRegistrations`，改由一個 provider 提供（指數依大盤總覽的狀態與時鐘算），交給 `LiveQuoteScope` 的新用法。其他頁照舊用固定清單。
 
 ### B3. 已知
@@ -135,6 +136,7 @@
 ## 已知限制
 
 - 可見時剛被限流或判為暫停、隨即蓋住視窗，當天下午不會在背景收，要等重新可見（使用者決定看不見時不重試）。
+- App 看不見、收盤後正在收的時候電腦睡眠（或計時器被系統停很久）：醒來的第一拍把整段睡眠算進無回應時間，超過暫停門檻（收盤後一輪 8 批以內是 120 秒）就判為暫停，停到重新可見（與 B1 對 App Nap 的保守取捨同一類；可見時醒來也會先判為暫停，但下一輪有回應就解除）。蓋住視窗後闔上筆電、打開後沒切回 App，熱力圖要等切回來才接著收。
 - 價格仍落後 0～115 秒；「報價時間」照實顯示資料的時刻。
 - 快照時刻的新舊判斷假設「時刻較晚＝資料較新」；不同快取上游進度不同時，靠 A2 第 2 條（這一檔自己的 `t` 較新就換）補救。只有五檔變動、`t` 沒變的情況仍可能被較晚的舊快照壓住，要等下一份。
 - 被擋下的舊快照若帶著比「今天記到的成交價」更新的成交，那筆成交不會記下（很少見，價格不會倒退）。
@@ -154,8 +156,8 @@
   - 延遲：盤中途暫停交易的股票不提示延遲（「最近一次收到」不再更新）。
 - 整合（真的報價中心＋假 client）：
   - 假 client 對同一批交替回新、舊快照 → 畫面價格只往前、沒有反向閃色、報價時間只往前、不誤判暫停；熱力圖重新進入時舊快照那幾輪照樣上色；假 client 一直回同一份舊快照超過 3 分鐘 → 出現報價延遲。
-  - App 從 13:25 起看不見、熱力圖頁開著：沿用既有整合測試的資料（上市 1,078 檔、100 檔收盤沒撮合散在市值各處）與 25 分鐘上限，在看不見的情況下全部收完、熱力圖的登記清單在背景一路換下去。測試要先 `tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden)` 讓畫面停止排程，並自己呼叫 `setAppVisible(false)` 與 `appVisibilityProvider` 的設定（正式程式在 `main.dart` 接線，只 pump 熱力圖頁的測試不經過）；切到 hidden 前已排好的那一幀 `tester.pump` 仍會畫，斷言要放在那之後（例如記錄 build 次數確認之後沒有再增加）。這條先在現在的程式上看到紅（登記停在被蓋住時的 69 檔）。
-- 實機（下一個交易日）：用 debug 版（終端機 `flutter run -d macos`，日誌 tee 成檔案；release 版不輸出日誌）；A5 每輪那行帶上「App 看不見」與拍子的時刻；盤中看自選頁「報價時間」不往回跳、日誌有擋下的次數；把網路斷掉不到 1 分鐘再接回、離開自選 50～60 秒再回來，都不出現報價延遲；離開自選 5 分鐘以上再回來，看第一輪會不會閃一次報價延遲（證交所若先回過期的快取就會，盤中沒量過；出現再處理）；熱力圖停在上櫃、13:25 起讓視窗被蓋住，14:15 切回來時「今日收盤 N／M 檔・K 檔收盤沒撮合」已收齊，日誌有背景請求與看不見時每一拍的間隔（App Nap）。
+  - App 從 13:25 起看不見、熱力圖頁開著：沿用既有整合測試的資料（上市 1,078 檔、100 檔收盤沒撮合散在市值各處）與 25 分鐘上限，在看不見的情況下全部收完、熱力圖的登記清單在背景一路換下去。測試要先 `tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden)` 讓畫面停止排程，並自己呼叫 `setAppVisible(false)` 與 `appVisibilityProvider` 的設定（正式程式在 `main.dart` 接線，只 pump 熱力圖頁的測試不經過）；切到 hidden 前已排好的那一幀 `tester.pump` 仍會畫，斷言要放在那之後（例如以 `addPersistentFrameCallback` 記幀數、確認之後沒有再增加，並斷言 `framesEnabled` 為 false；記 scope 底下從外面傳進來的同一個 child 的 build 次數不行，同一個 widget 實例重畫時不重建、數不到）。這條先在現在的程式上看到紅（登記停在被蓋住時的 69 檔）。
+- 實機（下一個交易日）：用 debug 版（終端機 `flutter run -d macos`，日誌 tee 成檔案；release 版不輸出日誌）；A5 每輪那行帶上「App 看不見」與拍子的時刻；盤中看自選頁「報價時間」不往回跳、日誌有擋下的次數；把網路斷掉不到 1 分鐘再接回、離開自選 50～60 秒再回來，都不出現報價延遲；離開自選 5 分鐘以上再回來，看第一輪會不會閃一次報價延遲（證交所若先回過期的快取就會，盤中沒量過；出現再處理）；熱力圖停在上櫃、13:25 起讓視窗被蓋住，14:15 切回來時「今日收盤 N／M 檔・K 檔收盤沒撮合」已收齊，日誌有背景請求與看不見時每一拍的間隔（App Nap）。另外試一次：看不見收集途中讓電腦睡眠 3 分鐘以上再喚醒、不切回 App，日誌預期出現「判為暫停,停到重新可見」，切回來後接著收（這種用法若常見，再評估睡眠那一段不計入無回應時間）。
 
 ## 留給實作者決定
 

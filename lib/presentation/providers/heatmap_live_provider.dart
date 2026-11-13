@@ -12,6 +12,8 @@ import 'package:daredevil/domain/services/live_quote/live_quote_schedule.dart';
 import 'package:daredevil/presentation/providers/live_price_provider.dart';
 import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/market_heatmap_provider.dart';
+import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
+import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/widgets/live_quote_status.dart';
 
@@ -100,6 +102,30 @@ final heatmapLiveProvider =
     NotifierProvider.autoDispose<HeatmapLiveNotifier, HeatmapLiveView>(
       HeatmapLiveNotifier.new,
     );
+
+/// 熱力圖頁要向報價中心登記的清單:正在看的市場的指數,加上熱力圖要上色的
+/// 個股([HeatmapLiveView.stockRegistrations])。
+///
+/// 由 provider 算、交給 `LiveQuoteScope.listen`:收盤後「抓到一批換下一批」
+/// 不必等畫面重畫,App 看不見(畫面停止排程)時清單照樣一路換下去
+final heatmapRegistrationsProvider =
+    Provider.autoDispose<List<LiveQuoteRegistration>>((ref) {
+      final market = ref.watch(
+        heatmapSelectionProvider.select((s) => s.market),
+      );
+      final overview = ref.watch(marketOverviewProvider);
+      // 指數「是否已有今天正式資料」跟現在有關:跨過午夜等邊界時重算
+      ref.watch(liveQuoteBoundaryProvider);
+      final view = ref.watch(heatmapLiveProvider);
+      return [
+        for (final r in marketIndexRegistrations(
+          overview,
+          ref.read(appClockProvider).now(),
+        ))
+          if (r.market == market) r,
+        ...view.stockRegistrations,
+      ];
+    });
 
 /// 把正式資料、報價中心與交易時段組成熱力圖頁要顯示的 [HeatmapLiveView]。
 ///

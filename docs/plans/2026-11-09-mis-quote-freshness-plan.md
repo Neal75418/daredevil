@@ -6,7 +6,7 @@
 
 **Architecture:** 快照時刻從 MIS 回應解析進每一檔 `IntradayQuote`；`LiveQuoteBook.apply` 依快照時刻與每列 `t` 決定換或擋，並記每檔「最近一次收到」；頁首規則用它算延遲。報價中心的計時器在 macOS 看不見時不停，「這一拍能不能抓」在 `_step` 判斷；熱力圖的登記清單改由 provider 經 `LiveQuoteScope.listen` 交給報價中心，不靠畫面重畫。
 
-**Tech Stack:** Flutter／Dart 3、Riverpod 3（flutter_riverpod 3.3.2）、fakeAsync、mocktail。
+**Tech Stack:** Flutter／Dart 3、Riverpod 3（flutter_riverpod 3.3.1，`pubspec.lock` 鎖定的版本）、fakeAsync、mocktail。
 
 **Spec:** `docs/plans/2026-11-09-mis-quote-freshness-design.md`（以下稱 spec；A1～A5、B1～B3 指 spec 的小節）。
 
@@ -260,3 +260,40 @@ Task 1：10 個全紅（3 個差一的邊界突變起初存活，補上界測試
 ### 驗證
 
 `flutter test` 全套 6877 條通過（另 3 條略過）、`flutter analyze` 沒有問題；A 改到的 13 個測試檔撥 +90 天 411 條通過。實機（spec「驗證／實機」）排在下一個交易日，結果補在本節。
+
+## 實作後的修正（B：Task 5～7，2026-11-13）
+
+### 與計畫或 spec 寫法不同的地方
+
+- Task 5：看不見時的閘門多一個條件「還沒判為暫停」（spec B1 與本計畫只寫收盤後、還有要收的、不在限流）。審查發現：盤中可見時判為暫停（門檻 60 秒）、隨即看不見，13:30 一到門檻變成 120 秒，照原寫法每一拍重算會把暫停解除、看不見時照樣送請求，違反目標「看不見之前或之後開始的暫停都不收」。先以測試重現（看不見之後多送 1 個請求）再修；spec B1 已補上這個條件與原因。
+- Task 5：`unregister` 不讀時鐘。`_changeRegistrations` 比的是登記時的原樣（不看登記日），只有每一拍的計畫才套「登記日不是今天的『已有今天正式資料』不算數」。`unregister` 在畫面 dispose 時呼叫，那時不能碰 `ref`。代價：登記日造成的差別不會截斷進行中的一輪，至多把那一輪送完。
+- Task 5：預設平台另寫一條測試，用 `debugDefaultTargetPlatformOverride`（Global Constraints 寫「測試不改全域目標平台」，理由是整棵 widget 樹會照 macOS 版面渲染；這條在 provider 層、沒有 widget 樹，用完還原）。預設值是正式程式唯一的接線，不釘住的話「預設寫錯平台」沒有測試會紅。
+- Task 5：看不見時的每拍 debug 行，判為暫停之後不再記（判定的那一拍記一行並註明）。照「看不見且放行時記」的字面，暫停後每秒一行會記到午夜，與 spec A5「避免整夜每秒一行」相抵。
+- Task 5：既有 5 條「盤中 App 看不見」的測試改成兩種平台都跑（不在背景收集的停計時器、在背景收集的每一拍自己判斷，對外行為相同）。
+- Task 6：`LiveQuoteScope.listen` 在 `TickerMode` 關閉時**關掉**訂閱、打開時重新訂閱，不用 spec B2 與本計畫 Step 3 寫的 `pause()`／`resume()`。照原寫法實作後，既有測試「離開熱力圖再回來」炸在 riverpod 3.2.1 內部的暫停計數檢查（原因與最小重現見 spec B2，已改寫）。Step 5 的三個突變（關閉時不 pause、每次都 pause、恢復時不重新登記）改成對應的三個：關閉時不關訂閱、重複訂閱、恢復時不重新登記。
+- Task 6：listen 模式只有來源物件換了才重新訂閱；同一個來源、頁面重建時不重新訂閱，只以現值再登記一次（每次重建都同步，見下面「固定清單每次重建都重新登記」那一條）。「同一個可見性下再同步一次不能重複訂閱、被蓋住時不能誤登記」除了計畫寫的切深色模式，另用 GlobalKey 把 State 搬到樹上別處來製造（關閉時仍不登記、打開時不重複訂閱各一條）。
+- Task 6：Step 1 第 2 點要求的「scope 子樹的 build 次數在切 hidden 那一幀之後不增加」是空過的斷言（同一個 widget 實例重畫時不重建，看得見時畫了幀也數不到），改成斷言前提 `tester.binding.framesEnabled` 為 false；背景收集的 widget 整合測試另以 `addPersistentFrameCallback` 記幀數（並確認看得見時有在數）。spec「驗證」的範例同此改寫。
+- Task 6（最後審查提出）：固定清單的 `LiveQuoteScope` 改成**每次重建都重新登記**，清單內容沒變也一樣。Task 5 的登記日規則只在 `register` 時更新登記日，而原本清單內容相同就不重新登記：前一天以「已有今天正式資料」登記、看不見跨過午夜、隔天第一次重建時已有當天的正式資料（內容與前一天那份相同），登記日就停在前一天，收盤後多抓（以真的報價中心重現：重建之後仍每分鐘重抓）。七個固定清單的頁面都在 build 裡用當下的時鐘算清單，重建時給的一定是當下的；內容相同的重新登記不換版本、不影響進行中的一輪。
+- Task 6：熱力圖頁的 build 不再 watch `liveQuoteBoundaryProvider`（原本只為了重算登記清單），改由 `heatmapRegistrationsProvider` 自己 watch；provider 層另寫「跨過午夜而熱力圖的檢視沒變，指數的『已有今天正式資料』照樣重算」。
+- Task 6：`heatmap_live_integration_test.dart` 的替身原本自己抄一份清單公式、清單變了才登記，改成聽 `heatmapRegistrationsProvider`、每次通知就登記（與 `LiveQuoteScope.listen` 相同），請求序列的斷言全部照綠。共用資料只搬資料與假回應，mock 類別照 `test/CLAUDE.md` 留在各測試檔。
+
+### 已知的差別與限制（不修）
+
+- macOS 上 App 剛看不見、下一拍之前回來的那一個請求照常套用（不閃色）：盤中是幾秒內的新資料；收盤後若它有回應，先前的暫停或限流因此解除、看不見時接著收。macOS 以外的平台是看不見的當下就作廢。
+- 看不見收集途中電腦睡眠超過暫停門檻（收盤後一輪 8 批以內是 120 秒）：醒來即判為暫停，等切回 App 才接著收（已寫進 spec「已知限制」與實機清單）。
+- `LiveQuoteScope.listen` 的來源要用 autoDispose；不是的話，頁面被蓋住期間上游變過、回來時會踩到同一個 Riverpod 檢查（只有 debug 有這個 assert）。
+- macOS 版的報價中心整合測試（`heatmap_live_integration_test.dart`）不經畫面，只證明報價中心這一層；「真的熱力圖頁在看不見時收得完」由 `market_heatmap_background_test.dart` 證明。
+
+### 順帶發現（範圍外）
+
+- riverpod 3.2.1（`pubspec.lock` 鎖定的版本）：被畫面 watch 的衍生 provider，只要還有「掛著但不活躍」的下游 provider（非 autoDispose、曾被讀過、現在沒人聽，或 listener 被暫停），畫面被蓋住期間上游變過、回來時 debug 就會炸 `pausedActiveSubscriptionCount` 的 assertion。與本功能無關的地方也可能踩到。riverpod 3.3.2 的 CHANGELOG 寫「Fixes assertion error when providers are unpaused」（沒有實測）；升級是依賴變更，另案處理。
+- spec 與本計畫原本寫 flutter_riverpod 3.3.2，`pubspec.lock` 鎖的是 3.3.1；引用的行號已照 3.3.1 改正。
+- `live_quote_scope.dart` 與其測試檔頭的說明帶日期（既有的，不是這次加的）。
+
+### 突變（各 Task 各拔一次）
+
+Task 5：第 1 輪 22 個全紅；審查的 Important 修完後清單改成 23 個重跑全紅（原本「已暫停的拍子照樣每秒記一行」隨 `wasStalled` 拿掉，換成「看不見的閘門拿掉已暫停」；另加「登記日改在合併之後、依勝出那一筆套用」）。修完自查時發現「判為暫停的那一拍收尾並 return」原有測試殺不死，補「判為暫停的那一拍剛好輪到重抓」後轉紅。Task 6：13 個全紅；最後審查改了「固定清單每次重建都重新登記」之後清單對應調整、重跑 13 個全紅（其中「還原成內容相同就不重新登記」只有新補的那條測試會紅）。
+
+### 驗證
+
+`flutter test` 全套 6907 條通過（另 3 條略過）、`flutter analyze` 沒有問題；熱力圖的 golden（`flutter test --tags golden test/presentation/screens/golden/market_heatmap_screen_golden_test.dart`）圖不變；B 改到的 6 個測試檔撥 +90 天 206 條通過。實機（spec「驗證／實機」）排在下一個交易日，結果補在本節。

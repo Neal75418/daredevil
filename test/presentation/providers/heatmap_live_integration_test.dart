@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,18 +19,19 @@ import 'package:daredevil/domain/services/live_quote/live_quote_schedule.dart';
 import 'package:daredevil/presentation/providers/heatmap_live_provider.dart';
 import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/market_heatmap_provider.dart';
-import 'package:daredevil/presentation/providers/market_index_live_provider.dart';
 import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/widgets/live_quote_status.dart';
+
+import '../../helpers/heatmap_live_fixtures.dart';
 
 /// 熱力圖收盤後滾動登記 × 真的報價中心（spec「驗證」2）。
 ///
 /// 真的 `LiveQuoteCenter` 接真的 `IntradayQuoteClient`（假 HTTP adapter）、
 /// 隨 fakeAsync 前進的時鐘；熱力圖讀固定的正式資料（上市 1,078 檔，上一個
-/// 交易日），結果變動時照 `LiveQuoteScope` 的做法向中心重新登記（目前市場的
-/// 指數＋`view.stockRegistrations`）。請求、時刻、進度都量在 HTTP 與
-/// `heatmapLiveProvider` 兩端。
+/// 交易日），登記照 `LiveQuoteScope.listen` 的做法：聽
+/// `heatmapRegistrationsProvider`，每次通知就以新清單向中心登記。請求、
+/// 時刻、進度都量在 HTTP 與 `heatmapLiveProvider` 兩端。
 void main() {
   late List<Object> captured;
 
@@ -167,7 +167,7 @@ void main() {
   test('🚨 100 檔收盤那一盤沒撮合（多於登記上限 69）→ 各被請求恰好 10 次後讓出登記名額；'
       '其餘 978 檔 25 分鐘內收齊；格子寫收盤沒撮合、進度另計檔數', () {
     // 市值名次 3、13、…、993：散在市值各處，前 69 檔裡有 7 檔
-    final unmatched = {for (var k = 0; k < 100; k++) _byCap[3 + 10 * k]};
+    final unmatched = heatmapFixtureUnmatched100();
     expect(unmatched, hasLength(greaterThan(HeatmapParams.liveTileLimit)));
     expect(
       unmatched.where(_byCap.take(HeatmapParams.liveTileLimit).contains),
@@ -502,10 +502,11 @@ void main() {
     });
   });
 
-  test('🚨 一輪送到一半 App 不可見一輪 → 只損失那一輪；回到可見後繼續，6 分鐘內收齊', () {
+  test('🚨 不在背景收集的平台：一輪送到一半 App 不可見一輪 → 只損失那一輪；'
+      '回到可見後繼續，6 分鐘內收齊', () {
     fakeAsync((async) {
       const sentBeforeHiding = 9; // 第 5 輪的第 1 批
-      final s = _Session(async);
+      final s = _Session(async, collectAfterCloseWhenHidden: false);
       s.elapseUntil(() => s.requests.length == sentBeforeHiding);
       s.elapse(const Duration(seconds: 1)); // 第 1 批已回來，第 2 批還沒送
       final doneBefore = s.view.closing!.done;
@@ -542,6 +543,44 @@ void main() {
         _byCap,
         reason: '只重抓作廢的那一批，其餘依市值各抓一次',
       );
+      expect(s.stalledAt, isEmpty, reason: '報價中心不判暫停');
+      expect(
+        [for (final v in s.views) v.view.quoteStatus],
+        everyElement(isNull),
+        reason: '不報「報價暫停」',
+      );
+      expect(captured, isEmpty);
+      s.dispose();
+    });
+  });
+
+  test('🚨 在背景收集的平台：一輪送到一半 App 看不見 → 那一輪照常送完、照常套用，'
+      '看不見時一路收完，和可見時一樣 4 分 30 秒內收齊', () {
+    fakeAsync((async) {
+      const sentBeforeHiding = 9; // 第 5 輪的第 1 批
+      final s = _Session(async, collectAfterCloseWhenHidden: true);
+      s.elapseUntil(() => s.requests.length == sentBeforeHiding);
+      s.elapse(const Duration(seconds: 1)); // 第 1 批已回來，第 2 批還沒送
+      expect(
+        s.view.closing!.done,
+        4 * HeatmapParams.liveTileLimit,
+        reason: '前 4 輪都收到',
+      );
+
+      s.center.setAppVisible(false);
+      final hiddenAt = s.now();
+      s.elapse(const Duration(minutes: 10));
+      final filled = s.filledAt(_stockCount);
+      expect(filled, isNotNull, reason: '看不見時收完');
+      expect(
+        filled!.isAfter(s.start.add(const Duration(minutes: 4, seconds: 30))),
+        isFalse,
+        reason: '收齊於 $filled',
+      );
+      expect(filled.isAfter(hiddenAt), isTrue, reason: '前提：收齊時 App 還看不見');
+      expect(s.requestedStocks, _byCap, reason: '沒有作廢的一輪：依市值各抓一次');
+      expect(s.requests.last.at.isAfter(filled), isFalse, reason: '收齊後不再發請求');
+      _expectClosingColor(s.view, _byCap.toSet());
       expect(s.stalledAt, isEmpty, reason: '報價中心不判暫停');
       expect(
         [for (final v in s.views) v.view.quoteStatus],
@@ -771,57 +810,16 @@ void main() {
 const _rateLimitedPage = '<!doctype html><html>Too many requests</html>';
 
 /// 上市規模（spec「驗證」2）
-const _stockCount = 1078;
+const _stockCount = heatmapFixtureStockCount;
 
 /// 正式資料是上週五；預設 13:31（週一收盤後）開始
-final _friday = DateTime(2026, 11, 6);
 final _start = DateTime(2026, 11, 9, 13, 31);
 
 /// 週一盤中（「資料時間」那幾條的起點）
 final _morning = DateTime(2026, 11, 9, 10, 0);
 
-/// 市值第 [rank] 大（0 起算）的虛構代號。代號順序與市值順序刻意不同
-/// （397 與 1,078 互質，乘上去取餘數是一對一）
-String _symbolAt(int rank) =>
-    'Z${((rank * 397) % _stockCount + 1).toString().padLeft(4, '0')}';
-
 /// 市值由大到小
-final _byCap = [for (var r = 0; r < _stockCount; r++) _symbolAt(r)];
-
-/// 正式資料：收盤 100、漲跌 −0.8%；市值依名次遞減，名次輪流分到 8 個產業
-HeatmapMarketData _twse() {
-  const industryCount = 8;
-  final members = [for (var k = 0; k < industryCount; k++) <HeatmapTile>[]];
-  for (var r = 0; r < _stockCount; r++) {
-    final cap = (_stockCount - r) * 1e9;
-    members[r % industryCount].add(
-      HeatmapTile(
-        symbol: _byCap[r],
-        name: '虛構${_byCap[r]}',
-        close: 100,
-        marketCap: cap,
-        baseCap: cap * 100 / 99.2,
-        change: const TileChangeValue(-0.8),
-        isMine: false,
-      ),
-    );
-  }
-  final industries = [
-    for (var k = 0; k < industryCount; k++)
-      HeatmapIndustry(
-        name: '虛構產業$k',
-        marketCap: members[k].fold(0.0, (a, t) => a + t.marketCap),
-        weightedChangePercent: -0.8,
-        tiles: members[k],
-      ),
-  ]..sort((a, b) => b.marketCap.compareTo(a.marketCap));
-  return HeatmapMarketData(
-    market: MarketCode.twse,
-    dataDate: _friday,
-    industries: industries,
-    excludedForShares: 0,
-  );
-}
+final _byCap = heatmapFixtureByCap;
 
 Set<String> _coloredOf(HeatmapLiveView view) => {
   for (final industry in view.data!.industries)
@@ -859,10 +857,21 @@ class _Clock implements AppClock {
   DateTime now() => _now();
 }
 
+/// 大盤總覽沒有資料:指數一律還沒有今天的正式資料
+class _EmptyOverview extends MarketOverviewNotifier {
+  @override
+  MarketOverviewState build() => const MarketOverviewState();
+
+  @override
+  Future<void> loadData() async {}
+}
+
 class _FixedHeatmap extends MarketHeatmapNotifier {
   @override
-  MarketHeatmapState build() =>
-      MarketHeatmapState(isLoading: false, markets: {MarketCode.twse: _twse()});
+  MarketHeatmapState build() => MarketHeatmapState(
+    isLoading: false,
+    markets: {MarketCode.twse: heatmapFixtureTwse()},
+  );
 }
 
 /// 沒有任何 override 的容器裡，正式的 `liveQuoteClientProvider` 建出的 Dio
@@ -884,9 +893,17 @@ class _Session {
     DateTime? start,
     this.noTrade = const {},
     this.unmatched = const {},
+    bool? collectAfterCloseWhenHidden,
   }) : start = start ?? _start {
     container = ProviderContainer(
       overrides: [
+        // App 看不見時收不收收盤報價;不給就用正式的(由目標平台決定)
+        if (collectAfterCloseWhenHidden != null)
+          liveQuoteCenterProvider.overrideWith(
+            () => LiveQuoteCenter(
+              collectAfterCloseWhenHidden: collectAfterCloseWhenHidden,
+            ),
+          ),
         appClockProvider.overrideWithValue(_Clock(now)),
         // 與正式的 liveQuoteClientProvider 用相同的 createDio 參數（含逾時，
         // 與正式 client 的逾時相同由慢回應那條測試對照），只換 adapter
@@ -901,6 +918,7 @@ class _Session {
           ),
         ),
         marketHeatmapProvider.overrideWith(_FixedHeatmap.new),
+        marketOverviewProvider.overrideWith(_EmptyOverview.new),
       ],
     );
     // 直接聽報價中心：每一次發布的 stalled 都記，不只熱力圖結果有變的那幾次
@@ -924,6 +942,7 @@ class _Session {
   final Set<String> unmatched;
   late final ProviderContainer container;
   ProviderSubscription<HeatmapLiveView>? _view;
+  ProviderSubscription<List<LiveQuoteRegistration>>? _registrations;
   late final ProviderSubscription<LiveQuoteState> _center;
 
   /// 報價中心發布 `stalled == true` 的時刻
@@ -939,27 +958,34 @@ class _Session {
   /// heatmapLiveProvider 每次變動的結果與時刻（含開頁當下）
   final views = <({DateTime at, HeatmapLiveView view})>[];
 
-  List<LiveQuoteRegistration>? _registered;
-
   DateTime now() => start.add(async.elapsed);
   LiveQuoteCenter get center =>
       container.read(liveQuoteCenterProvider.notifier);
   LiveQuoteState get centerState => container.read(liveQuoteCenterProvider);
   HeatmapLiveView get view => _view!.read();
 
-  /// 進入熱力圖頁:開始聽 `heatmapLiveProvider` 並登記
-  void openView() => _view = container.listen(
-    heatmapLiveProvider,
-    (_, next) => _onView(next),
-    fireImmediately: true,
-  );
+  /// 進入熱力圖頁:記下 `heatmapLiveProvider` 每次的結果,並照
+  /// `LiveQuoteScope.listen` 聽登記清單、每次通知就登記(現值先登記一次)
+  void openView() {
+    _view = container.listen(
+      heatmapLiveProvider,
+      (_, next) => views.add((at: now(), view: next)),
+      fireImmediately: true,
+    );
+    _registrations = container.listen(
+      heatmapRegistrationsProvider,
+      (_, next) => center.register(this, next),
+      fireImmediately: true,
+    );
+  }
 
-  /// 離開熱力圖頁:照 `LiveQuoteScope` 取消登記;`heatmapLiveProvider` 沒人聽,
-  /// 下一個事件迴圈就釋放(再進入時是新的一個)
+  /// 離開熱力圖頁:照 `LiveQuoteScope` 關掉訂閱、取消登記;兩個 provider
+  /// 沒人聽,下一個事件迴圈就釋放(再進入時是新的)
   void closeView() {
+    _registrations?.close();
+    _registrations = null;
     _view?.close();
     _view = null;
-    _registered = null;
     center.unregister(this);
   }
 
@@ -985,26 +1011,12 @@ class _Session {
   /// 每檔都回收盤報價（13:30:00 的成交）；整天沒成交的回一列解析時會丟掉的；
   /// 收盤沒撮合的回沒有成交價、只有五檔（或試撮價）的列
   Future<String> normal(List<String> symbols, DateTime now) async =>
-      jsonEncode({
-        'rtcode': '0000',
-        'msgArray': [
-          for (final s in symbols)
-            {
-              'c': s,
-              'z': noTrade.contains(s) || unmatched.contains(s)
-                  ? '-'
-                  : '101.0000',
-              'pz': unmatched.contains(s) && int.parse(s.substring(1)) % 5 == 0
-                  ? '100.5000'
-                  : '-',
-              'y': '100.0000',
-              'd': _ymd(now),
-              't': '13:30:00',
-              'b': unmatched.contains(s) ? '100.0000_' : '-',
-              'a': unmatched.contains(s) ? '101.0000_' : '-',
-            },
-        ],
-      });
+      heatmapFixtureClosingResponse(
+        symbols,
+        now,
+        noTrade: noTrade,
+        unmatched: unmatched,
+      );
 
   /// 一份快照的回應:每檔都是 [price] 的成交,快照時刻與各列的時間都是 [at]
   String snapshot(List<String> symbols, DateTime at, {required double price}) =>
@@ -1043,23 +1055,6 @@ class _Session {
   void dispose() {
     _center.close();
     container.dispose();
-  }
-
-  /// 照 `LiveQuoteScope`：登記清單變了才重新登記（只登記目前市場的指數）
-  void _onView(HeatmapLiveView view) {
-    views.add((at: now(), view: view));
-    final market = container.read(heatmapSelectionProvider).market;
-    final registrations = [
-      for (final r in marketIndexRegistrations(
-        const MarketOverviewState(),
-        now(),
-      ))
-        if (r.market == market) r,
-      ...view.stockRegistrations,
-    ];
-    if (listEquals(registrations, _registered)) return;
-    _registered = registrations;
-    center.register(this, registrations);
   }
 
   Future<String> _serve(List<String> exCh) {
