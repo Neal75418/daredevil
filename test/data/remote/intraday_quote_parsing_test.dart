@@ -331,6 +331,87 @@ void main() {
     });
   });
 
+  /// 回應外層的 `queryTime.sysDate`／`sysTime` 是這份快照產生的時刻,同一份
+  /// 回應的每一檔共用;報價中心靠它擋掉比畫面舊的快照。
+  group('快照時刻', () {
+    Map<String, dynamic> load(String name) =>
+        jsonDecode(File('test/fixtures/$name').readAsStringSync())
+            as Map<String, dynamic>;
+
+    test('每一檔帶同一個快照時刻;快照日期與列上的報價日期可以不同天', () {
+      final q = IntradayQuote.parseResponse(raw);
+      expect(q, hasLength(3));
+      for (final e in q.entries) {
+        expect(
+          e.value.snapshotAt,
+          DateTime(2026, 8, 8, 0, 54, 14),
+          reason: e.key,
+        );
+        expect(e.value.date, DateTime(2026, 8, 7), reason: e.key);
+      }
+    });
+
+    test('queryTime 缺 sysTime → 每一檔的快照時刻為 null', () {
+      final q = IntradayQuote.parseResponse(
+        load('twse_mis_intraday_limit_locked_20261005.json'),
+      );
+      expect(q, hasLength(12));
+      for (final e in q.entries) {
+        expect(e.value.snapshotAt, isNull, reason: e.key);
+      }
+    });
+
+    test('queryTime 不是物件 → 快照時刻為 null,報價照常解析', () {
+      final q = IntradayQuote.parseResponse({
+        'rtcode': '0000',
+        'queryTime': '20261109 13:30:05',
+        'msgArray': [
+          {'c': '5678', 'z': '50.0', 'y': '49.0'},
+        ],
+      });
+      expect(q['5678']!.price, 50.0);
+      expect(q['5678']!.snapshotAt, isNull);
+    });
+
+    test('parseSnapshotTime:日期 8 位數字＋HH:mm:ss → 本地時間', () {
+      expect(
+        IntradayQuote.parseSnapshotTime('20261109', '13:30:05'),
+        DateTime(2026, 11, 9, 13, 30, 5),
+      );
+    });
+
+    test('parseSnapshotTime:範圍的上界與閏日照收', () {
+      expect(
+        IntradayQuote.parseSnapshotTime('20261231', '23:59:59'),
+        DateTime(2026, 12, 31, 23, 59, 59),
+      );
+      expect(
+        IntradayQuote.parseSnapshotTime('20280229', '00:00:00'),
+        DateTime(2028, 2, 29),
+      );
+    });
+
+    test('parseSnapshotTime:缺欄位、格式不符、範圍不合 → null', () {
+      for (final (sysDate, sysTime) in const <(Object?, Object?)>[
+        (null, '13:30:05'),
+        ('20261109', null),
+        ('2026119', '13:30:05'), // 日期 7 位
+        ('20261330', '13:30:05'), // 13 月
+        ('20260230', '13:30:05'), // 2 月 30 日
+        ('20261109', '24:00:00'),
+        ('20261109', '13:60:00'),
+        ('20261109', '13:30:60'),
+        ('20261109', '13:30'), // 沒有秒
+      ]) {
+        expect(
+          IntradayQuote.parseSnapshotTime(sysDate, sysTime),
+          isNull,
+          reason: '$sysDate $sysTime',
+        );
+      }
+    });
+  });
+
   /// 盤中即時報價(2026-10-06):顯示需要報價日期、價格來源與最後一筆成交。
   /// `price` 的取值規則不變(盤中提醒沿用),新欄位只供顯示。
   group('報價日期、價格來源、最後成交', () {

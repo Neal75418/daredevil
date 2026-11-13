@@ -1205,6 +1205,7 @@ void main() {
           previousClose: 100,
           quoteTime: closing ? '13:30:00' : '10:30:00',
           isClosingQuote: closing,
+          rowTime: closing ? '13:30:00' : '10:30:05',
         );
 
     /// 指數自己的報價狀態：與熱力圖的狀態行分得出來
@@ -1320,7 +1321,6 @@ void main() {
           entries: {'9901': quote('9901', 101.83)},
           fetchedAt: {'9901': monday(10, 30)},
           latestResponseHadToday: true,
-          latestQuoteTime: '10:30:05',
         ),
         live: indexLive,
       );

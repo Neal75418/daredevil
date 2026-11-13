@@ -16,6 +16,7 @@ import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/data/remote/intraday_quote_client.dart';
 import 'package:daredevil/data/remote/market_client_mixin.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
+import 'package:daredevil/domain/services/live_quote/live_quote_schedule.dart';
 import 'package:daredevil/presentation/providers/heatmap_live_provider.dart';
 import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/market_heatmap_provider.dart';
@@ -551,6 +552,219 @@ void main() {
       s.dispose();
     });
   });
+
+  group('證交所回較舊的快照（盤中）', () {
+    test('🚨 交替回新、舊快照 20 輪 → 顯示價一直是至今最新那一份、沒有往下閃、'
+        '報價時間不往回、不誤判暫停', () {
+      fakeAsync((async) {
+        final s = _Session(async, start: _morning);
+        // 每一批（同一組代號）各自的快照：第奇數次回一份新的（價格比上一份
+        // 高 1），第偶數次回前一份
+        final shots = <String, List<({DateTime at, double price})>>{};
+        final served = <String, int>{};
+        s.respond = (_, symbols, now) async {
+          final key = symbols.join('|');
+          final list = shots.putIfAbsent(
+            key,
+            () => [(at: now.subtract(const Duration(seconds: 30)), price: 100)],
+          );
+          final n = served.update(key, (v) => v + 1, ifAbsent: () => 1);
+          if (n.isOdd) list.add((at: now, price: list.last.price + 1));
+          final shot = n.isOdd ? list.last : list[list.length - 2];
+          return s.snapshot(symbols, shot.at, price: shot.price);
+        };
+        // 每次發布：當下各檔「至今最新那一份」的價格，與發布的狀態
+        final published =
+            <({LiveQuoteState state, Map<String, double> newest})>[];
+        final sub = s.container.listen(liveQuoteCenterProvider, (_, next) {
+          published.add((
+            state: next,
+            newest: {
+              for (final MapEntry(key: key, value: list) in shots.entries)
+                for (final symbol in key.split('|')) symbol: list.last.price,
+            },
+          ));
+        });
+
+        s.elapse(const Duration(minutes: 5, seconds: 30));
+        expect(served, hasLength(2), reason: '69 檔＋指數兩批');
+        expect(served.values, everyElement(greaterThanOrEqualTo(20)));
+
+        var upFlashes = 0;
+        for (final (:state, :newest) in published) {
+          for (final e in state.entries.values) {
+            expect(e.price, newest[e.symbol], reason: e.symbol);
+            expect(e.flash?.up, isNot(false), reason: '${e.symbol} 往下閃');
+            if (e.flash != null) upFlashes++;
+          }
+        }
+        // 頁首的報價時間不往回
+        var lastQuoteSeconds = 0;
+        var quoteTimes = 0;
+        for (final (:at, :view) in s.views) {
+          final status = view.quoteStatus;
+          if (status == null) continue;
+          expect(status.kind, LiveHeaderKind.quoteTime, reason: '$at');
+          final seconds = LiveQuoteSchedule.secondsOfDay(status.time)!;
+          expect(
+            seconds,
+            greaterThanOrEqualTo(lastQuoteSeconds),
+            reason: '$at',
+          );
+          lastQuoteSeconds = seconds;
+          quoteTimes++;
+        }
+        expect(quoteTimes, greaterThan(0));
+        expect(s.centerState.entries, hasLength(70));
+        expect(upFlashes, greaterThan(0), reason: '新的一份換上時照樣往上閃');
+        expect(s.stalledAt, isEmpty);
+        sub.close();
+        s.dispose();
+      });
+    });
+
+    test('🚨 連續幾輪都拿到較舊的快照，離開熱力圖再回來 → 登記的那幾檔照樣上色', () {
+      fakeAsync((async) {
+        final s = _Session(async, start: _morning);
+        final seen = <String>{};
+        // 每一批第 1 次回當下的快照（101），之後一直回開盤前的舊快照（99）
+        s.respond = (_, symbols, now) async => seen.add(symbols.join('|'))
+            ? s.snapshot(symbols, now, price: 101)
+            : s.snapshot(
+                symbols,
+                _morning.subtract(const Duration(minutes: 1)),
+                price: 99,
+              );
+        s.elapse(const Duration(seconds: 60)); // 10:01:00
+        final stocks = {for (final r in s.view.stockRegistrations) r.symbol};
+        expect(stocks, hasLength(HeatmapParams.liveTileLimit));
+        // 第 1 輪 10:00:13 換上，之後三輪（到 10:00:58）都被擋下
+        expect(s.requests, hasLength(8));
+        for (final symbol in stocks) {
+          expect(s.centerState.entries[symbol]!.price, 101, reason: symbol);
+        }
+
+        s.closeView();
+        s.elapse(Duration.zero);
+        s.openView();
+        expect(_coloredOf(s.view), containsAll(stocks));
+        _expectClosingColor(s.view, stocks);
+        s.dispose();
+      });
+    });
+
+    test('🚨 別的畫面抓到比較新的報價 → 熱力圖頁首的報價時間仍是自己格子裡最新的那一筆', () {
+      fakeAsync((async) {
+        final s = _Session(async, start: _morning);
+        // 另一個畫面登記一檔不在熱力圖裡的股票:它每次都拿到當下的快照;
+        // 熱力圖那兩批的快取還沒換新,一直是 09:59:30 那一份
+        const other = 'OTHER';
+        final cached = DateTime(2026, 11, 9, 9, 59, 30);
+        s.respond = (_, symbols, now) async => s.snapshot(
+          symbols,
+          symbols.contains(other) ? now : cached,
+          price: 101,
+        );
+        s.center.register('other page', const [
+          LiveQuoteRegistration(symbol: other, market: MarketCode.twse),
+        ]);
+        s.elapse(const Duration(seconds: 40));
+
+        expect(
+          s.centerState.entries[other]!.rowTime,
+          isNot('09:59:30'),
+          reason: '前提:另一個畫面那一檔的時間比較新',
+        );
+        expect(
+          s.view.quoteStatus,
+          const LiveHeaderStatus(LiveHeaderKind.quoteTime, '09:59:30'),
+        );
+        s.dispose();
+      });
+    });
+
+    test('🚨 平常的快取落後（兩份各 115 秒換新、錯開 57 秒、交替回）20 分鐘 → '
+        '頁首從不寫報價延遲', () {
+      fakeAsync((async) {
+        final s = _Session(async, start: _morning);
+        const period = Duration(seconds: 115);
+        final originA = DateTime(2026, 11, 9, 9, 0);
+        final originB = originA.subtract(const Duration(seconds: 57));
+        // 某一份快取在 now 當下是什麼時候換新的
+        DateTime refreshedAt(DateTime now, DateTime origin) => origin.add(
+          period * (now.difference(origin).inSeconds ~/ period.inSeconds),
+        );
+        final served = <String, int>{};
+        s.respond = (_, symbols, now) async {
+          final n = served.update(
+            symbols.join('|'),
+            (v) => v + 1,
+            ifAbsent: () => 1,
+          );
+          final shot = refreshedAt(now, n % 3 == 0 ? originB : originA);
+          return s.snapshot(
+            symbols,
+            shot,
+            price: 100 + shot.difference(originA).inSeconds / 1000,
+          );
+        };
+        var maxDelay = Duration.zero;
+        final sub = s.container.listen(liveQuoteCenterProvider, (_, next) {
+          for (final e in next.entries.values) {
+            final received = next.lastReceivedAt[e.symbol];
+            final snapshot = e.snapshotAt;
+            if (received == null || snapshot == null) continue;
+            final delay = received.difference(snapshot);
+            if (delay > maxDelay) maxDelay = delay;
+          }
+        });
+
+        s.elapse(const Duration(minutes: 20));
+        expect(
+          maxDelay,
+          greaterThan(const Duration(seconds: 60)),
+          reason: '前提：確實落後到一分鐘以上',
+        );
+        expect(maxDelay, lessThan(LiveQuoteParams.delayThreshold));
+        final kinds = {
+          for (final v in s.views)
+            if (v.view.quoteStatus case final status?) status.kind,
+        };
+        expect(kinds, {LiveHeaderKind.quoteTime});
+        expect(s.stalledAt, isEmpty);
+        sub.close();
+        s.dispose();
+      });
+    });
+
+    test('🚨 一直回同一份 4 分鐘前的快照 → 第一次發布起頁首就是報價延遲、'
+        '時刻是那份快照的', () {
+      fakeAsync((async) {
+        final s = _Session(async, start: _morning);
+        final stale = DateTime(2026, 11, 9, 9, 56);
+        s.respond = (_, symbols, _) async =>
+            s.snapshot(symbols, stale, price: 101);
+        s.elapse(const Duration(minutes: 2));
+
+        final withStatus = [
+          for (final v in s.views)
+            if (v.view.quoteStatus != null) v,
+        ];
+        expect(withStatus, isNotEmpty);
+        // 10:00:00～09 讓給 CLI，第 1 輪兩批在 10:00:10、10:00:13
+        expect(withStatus.first.at, DateTime(2026, 11, 9, 10, 0, 13));
+        for (final v in withStatus) {
+          expect(
+            v.view.quoteStatus,
+            const LiveHeaderStatus(LiveHeaderKind.delayed, '09:56:00'),
+            reason: '${v.at}',
+          );
+        }
+        expect(s.stalledAt, isEmpty);
+        s.dispose();
+      });
+    });
+  });
 }
 
 /// 證交所限流時回的 HTML（client 判為限流）
@@ -562,6 +776,9 @@ const _stockCount = 1078;
 /// 正式資料是上週五；預設 13:31（週一收盤後）開始
 final _friday = DateTime(2026, 11, 6);
 final _start = DateTime(2026, 11, 9, 13, 31);
+
+/// 週一盤中（「資料時間」那幾條的起點）
+final _morning = DateTime(2026, 11, 9, 10, 0);
 
 /// 市值第 [rank] 大（0 起算）的虛構代號。代號順序與市值順序刻意不同
 /// （397 與 1,078 互質，乘上去取餘數是一對一）
@@ -690,11 +907,7 @@ class _Session {
     _center = container.listen(liveQuoteCenterProvider, (_, next) {
       if (next.stalled) stalledAt.add(now());
     });
-    _view = container.listen(
-      heatmapLiveProvider,
-      (_, next) => _onView(next),
-      fireImmediately: true,
-    );
+    openView();
   }
 
   final FakeAsync async;
@@ -710,7 +923,7 @@ class _Session {
   /// （代號數字是 5 的倍數的另帶試撮價）
   final Set<String> unmatched;
   late final ProviderContainer container;
-  late final ProviderSubscription<HeatmapLiveView> _view;
+  ProviderSubscription<HeatmapLiveView>? _view;
   late final ProviderSubscription<LiveQuoteState> _center;
 
   /// 報價中心發布 `stalled == true` 的時刻
@@ -732,7 +945,23 @@ class _Session {
   LiveQuoteCenter get center =>
       container.read(liveQuoteCenterProvider.notifier);
   LiveQuoteState get centerState => container.read(liveQuoteCenterProvider);
-  HeatmapLiveView get view => _view.read();
+  HeatmapLiveView get view => _view!.read();
+
+  /// 進入熱力圖頁:開始聽 `heatmapLiveProvider` 並登記
+  void openView() => _view = container.listen(
+    heatmapLiveProvider,
+    (_, next) => _onView(next),
+    fireImmediately: true,
+  );
+
+  /// 離開熱力圖頁:照 `LiveQuoteScope` 取消登記;`heatmapLiveProvider` 沒人聽,
+  /// 下一個事件迴圈就釋放(再進入時是新的一個)
+  void closeView() {
+    _view?.close();
+    _view = null;
+    _registered = null;
+    center.unregister(this);
+  }
 
   /// 請求過的個股依序攤平（不含指數）
   List<String> get requestedStocks => stocksExcept(const {});
@@ -773,6 +1002,26 @@ class _Session {
               't': '13:30:00',
               'b': unmatched.contains(s) ? '100.0000_' : '-',
               'a': unmatched.contains(s) ? '101.0000_' : '-',
+            },
+        ],
+      });
+
+  /// 一份快照的回應:每檔都是 [price] 的成交,快照時刻與各列的時間都是 [at]
+  String snapshot(List<String> symbols, DateTime at, {required double price}) =>
+      jsonEncode({
+        'rtcode': '0000',
+        'queryTime': {'sysDate': _ymd(at), 'sysTime': _hms(at)},
+        'msgArray': [
+          for (final s in symbols)
+            {
+              'c': s,
+              'z': price.toStringAsFixed(4),
+              'pz': '-',
+              'y': '100.0000',
+              'd': _ymd(at),
+              't': _hms(at),
+              'b': '-',
+              'a': '-',
             },
         ],
       });
@@ -860,3 +1109,5 @@ class _MisAdapter implements HttpClientAdapter {
 
 String _two(int v) => v.toString().padLeft(2, '0');
 String _ymd(DateTime t) => '${t.year}${_two(t.month)}${_two(t.day)}';
+String _hms(DateTime t) =>
+    '${_two(t.hour)}:${_two(t.minute)}:${_two(t.second)}';

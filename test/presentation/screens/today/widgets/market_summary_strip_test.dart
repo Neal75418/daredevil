@@ -54,6 +54,7 @@ final _withData = MarketOverviewState(
 /// 日期要看得到，所以載入真實 zh-TW 翻譯斷言整組文字。
 void main() {
   late Map<String, dynamic> zhTw;
+  late Map<String, dynamic> en;
 
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
@@ -61,6 +62,9 @@ void main() {
     EasyLocalization.logger.enableLevels = [];
     zhTw =
         json.decode(await File('assets/translations/zh-TW.json').readAsString())
+            as Map<String, dynamic>;
+    en =
+        json.decode(await File('assets/translations/en.json').readAsString())
             as Map<String, dynamic>;
   });
 
@@ -71,17 +75,24 @@ void main() {
     VoidCallback? onRetry,
     double width = 390,
     MarketLiveIndices? live,
+    bool english = false,
   }) async {
     tester.view.physicalSize = Size(width, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    final locale = english
+        ? const Locale('en', 'US')
+        : const Locale('zh', 'TW');
     await tester.pumpWidget(
       EasyLocalization(
-        supportedLocales: const [Locale('zh', 'TW')],
+        // 每個語系各自一棵樹:同一個 State 不會把已載入的翻譯換掉
+        key: ValueKey(locale),
+        supportedLocales: [locale],
         path: 'assets/translations',
-        fallbackLocale: const Locale('zh', 'TW'),
-        startLocale: const Locale('zh', 'TW'),
-        assetLoader: _PreloadedAssetLoader(zhTw),
+        fallbackLocale: locale,
+        startLocale: locale,
+        saveLocale: false,
+        assetLoader: _PreloadedAssetLoader(english ? en : zhTw),
         child: Builder(
           builder: (context) => MaterialApp(
             locale: context.locale,
@@ -359,6 +370,46 @@ void main() {
       await pump(tester, _withData, live: liveTwse);
       expect(find.text('加權 48,524.60 +1.04%'), findsOneWidget);
       expect(find.text('櫃買 285.30 +0.10%'), findsOneWidget);
+    });
+
+    // 最窄的手機、整條都是英文時,每一句報價狀態都不能溢出(最長的是限流
+    // 那句)。每條測試各自建一棵樹、載入自己語系的翻譯,所以這條之後的中文
+    // 測試不受影響
+    testWidgets('🚨 320 寬、英文的每一句報價狀態 → 不溢出,放不下就換行', (tester) async {
+      final statuses = {
+        for (final MapEntry(:key, :value)
+            in (en['liveQuote'] as Map<String, dynamic>).entries)
+          // card 開頭的是卡片上的標示,不在這一行
+          if (!key.startsWith('card'))
+            key: (value as String).replaceAll('{time}', '10:25:59'),
+      };
+      expect(statuses.keys, containsAll(['delayed', 'pausedRateLimit']));
+      var wrapped = 0;
+      for (final MapEntry(key: name, value: text) in statuses.entries) {
+        await pump(
+          tester,
+          _withData,
+          width: 320,
+          english: true,
+          live: MarketLiveIndices(
+            byMarket: liveTwse.byMarket,
+            statusText: text,
+          ),
+        );
+        expect(tester.takeException(), isNull, reason: name);
+        expect(find.textContaining('TAIEX'), findsOneWidget);
+        final status = find.text(text);
+        final fontSize = tester.widget<Text>(status).style!.fontSize!;
+        final size = tester.getSize(status);
+        expect(size.width, lessThanOrEqualTo(320), reason: name);
+        // 測試字型每個字都是字級見方:一行放不下的要換行把整句顯示完,
+        // 不是超出去被裁掉
+        if (text.length * fontSize > 320) {
+          expect(size.height, greaterThanOrEqualTo(fontSize * 2), reason: name);
+          wrapped++;
+        }
+      }
+      expect(wrapped, greaterThan(0), reason: '至少有一句長到要換行');
     });
 
     testWidgets('報價狀態接在指數那一行', (tester) async {

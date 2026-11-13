@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -656,6 +657,315 @@ void main() {
     });
   });
 
+  group('最近一次收到', () {
+    List<LiveQuoteRegistration> stocks(int n) => [
+      for (var i = 0; i < n; i++)
+        LiveQuoteRegistration(symbol: '${2000 + i}', market: MarketCode.twse),
+    ];
+    DateTime sec(int s) => weekdayMorning.add(Duration(seconds: s));
+
+    test('🚨 兩批的一輪:各檔記自己那一批收到的時刻,不是整輪套用的時刻', () {
+      fakeAsync((async) {
+        final h = _Harness(async, weekdayMorning);
+        expect(h.state.lastReceivedAt, isEmpty, reason: '還沒有任何一輪');
+        h.center.register('A', stocks(40));
+        h.elapse(const Duration(seconds: 4)); // 第 1 秒送第 1 批、第 4 秒第 2 批
+        final received = h.state.lastReceivedAt;
+        expect(received, hasLength(40));
+        expect(received['2000'], sec(1));
+        expect(received['2034'], sec(1));
+        expect(received['2035'], sec(4));
+        expect(h.state.fetchedAt['2000'], sec(4), reason: '套用是整輪結束時');
+        h.dispose();
+      });
+    });
+
+    test('🚨 記的是回應回來的當下,不是送出的時刻', () {
+      fakeAsync((async) {
+        final h = _Harness(async, weekdayMorning);
+        h.respond = (exCh, now) => Future.delayed(
+          const Duration(seconds: 2),
+          () => _tradeEach(exCh, now),
+        );
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 3)); // 第 1 秒送出、第 3 秒回來
+        expect(h.sentAt, secs([1]));
+        expect(h.state.lastReceivedAt['2330'], sec(3));
+        h.dispose();
+      });
+    });
+
+    test('🚨 App 看不見而作廢的一輪:已回來的與還在路上的批次都不記', () {
+      fakeAsync((async) {
+        final h = _Harness(async, weekdayMorning);
+        h.respond = (exCh, now) {
+          final body = _tradeEach(exCh, now);
+          // 第 2 批(5 檔)晚 3 秒才回來
+          return exCh.length == 35
+              ? body
+              : Future.delayed(const Duration(seconds: 3), () => body);
+        };
+        h.center.register('A', stocks(40));
+        h.elapse(const Duration(seconds: 5)); // 第 2 批第 4 秒送出、還在路上
+        expect(h.requests, hasLength(2));
+        h.center.setAppVisible(false);
+        h.elapse(const Duration(seconds: 5)); // 第 7 秒回來
+        expect(h.state.lastReceivedAt, isEmpty);
+        expect(h.state.entries, isEmpty);
+        h.dispose();
+      });
+    });
+
+    test('🚨 限流丟掉的一輪:先回來的那一批也不記', () {
+      fakeAsync((async) {
+        final h = _Harness(async, weekdayMorning);
+        h.respond = (exCh, now) async {
+          if (exCh.length != 35) {
+            return '<!doctype html><html>Too many requests</html>';
+          }
+          return _tradeEach(exCh, now);
+        };
+        h.center.register('A', stocks(40));
+        h.elapse(const Duration(seconds: 4));
+        expect(h.state.rateLimitedUntil, isNotNull);
+        expect(h.state.lastReceivedAt, isEmpty);
+        h.dispose();
+      });
+    });
+
+    test('🚨 登記變了而截斷的一輪:已回來的那一批照記它收到的時刻', () {
+      fakeAsync((async) {
+        final h = _Harness(async, weekdayMorning);
+        h.center.register('A', stocks(40));
+        h.elapse(const Duration(seconds: 1)); // 第 1 批回來
+        h.center.register('B', const [
+          LiveQuoteRegistration(symbol: '6538', market: MarketCode.tpex),
+        ]);
+        h.elapse(const Duration(seconds: 1)); // 第 2 秒:截斷並套用
+        expect(h.requests, hasLength(1));
+        expect(h.state.lastReceivedAt, hasLength(35));
+        expect(h.state.lastReceivedAt['2000'], sec(1));
+        expect(h.state.fetchedAt['2000'], sec(2), reason: '套用在截斷的那一拍');
+        h.dispose();
+      });
+    });
+
+    test('🚨 盤中途暫停交易:那一檔停在最後有報價的那一批', () {
+      fakeAsync((async) {
+        var halted = false;
+        final h = _Harness(async, weekdayMorning);
+        h.respond = (exCh, now) async => _mis([
+          for (final symbol in exCh.map(_symbolOf))
+            _row(
+              symbol,
+              now,
+              // 沒有成交也沒有五檔:列被解析丟掉
+              z: halted && symbol == '2001' ? '-' : '100.0000',
+            ),
+        ], at: now);
+        h.center.register('A', stocks(2));
+        h.elapse(const Duration(seconds: 16)); // 1、16 兩輪都有報價
+        halted = true;
+        h.elapse(const Duration(seconds: 30)); // 31、46
+        expect(h.state.symbolStatus['2001'], LiveSymbolStatus.noQuote);
+        expect(h.state.lastReceivedAt['2001'], sec(16));
+        expect(h.state.lastReceivedAt['2000'], sec(46));
+        h.dispose();
+      });
+    });
+
+    test('🚨 批次失敗:那一批的代號維持上一次收到的時刻', () {
+      fakeAsync((async) {
+        var down = false;
+        final h = _Harness(async, weekdayMorning);
+        h.respond = (exCh, now) async {
+          if (down && exCh.length != 35) throw const _NetworkDown();
+          return _tradeEach(exCh, now);
+        };
+        h.center.register('A', stocks(40));
+        h.elapse(const Duration(seconds: 4)); // 1、4
+        down = true;
+        h.elapse(const Duration(seconds: 15)); // 16、19
+        expect(h.state.symbolStatus['2035'], LiveSymbolStatus.batchFailed);
+        expect(h.state.lastReceivedAt['2035'], sec(4));
+        expect(h.state.lastReceivedAt['2000'], sec(16));
+        h.dispose();
+      });
+    });
+
+    test('換日清空', () {
+      fakeAsync((async) {
+        final h = _Harness(async, weekdayMorning);
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 1));
+        expect(h.state.lastReceivedAt, isNotEmpty);
+        h.jump = const Duration(hours: 23); // 10/7 09:01:02
+        h.respond = (_, _) async => throw const _NetworkDown();
+        h.elapse(const Duration(seconds: 1));
+        expect(h.state.lastReceivedAt, isEmpty);
+        h.dispose();
+      });
+    });
+  });
+
+  group('快照時刻的觀測', () {
+    List<String> about(String keyword) => [
+      for (final c in crumbs)
+        if (c.contains(keyword)) c,
+    ];
+
+    test('🚨 整輪都沒有可信的快照時刻:同一天只記一次,換日後再記', () {
+      fakeAsync((async) {
+        var withSnapshot = false;
+        final h = _Harness(async, weekdayMorning);
+        h.respond = (exCh, now) async => _mis([
+          for (final e in exCh) _row(_symbolOf(e), now),
+        ], at: withSnapshot ? now : null);
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 31)); // 1、16、31 三輪
+        expect(about('沒有可信的快照時刻'), hasLength(1));
+
+        withSnapshot = true;
+        h.elapse(const Duration(seconds: 15)); // 46
+        withSnapshot = false;
+        h.elapse(const Duration(seconds: 15)); // 61
+        expect(about('沒有可信的快照時刻'), hasLength(1), reason: '恢復後再缺,同一天不再記');
+        expect(about('快照時刻偏前'), isEmpty);
+
+        h.jump = const Duration(hours: 23); // 10/7 09:02:02
+        h.elapse(const Duration(seconds: 1));
+        expect(about('沒有可信的快照時刻'), hasLength(2));
+        h.dispose();
+      });
+    });
+
+    test('🚨 快照時刻偏前:同一天只記一次,換日後再記', () {
+      fakeAsync((async) {
+        var ahead = const Duration(minutes: 2);
+        final h = _Harness(async, weekdayMorning);
+        h.respond = (exCh, now) async => _mis([
+          for (final e in exCh) _row(_symbolOf(e), now),
+        ], at: now.add(ahead));
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 31)); // 1、16、31 三輪
+        expect(about('快照時刻偏前'), hasLength(1));
+        expect(h.state.entries['2330']!.snapshotAt, isNull);
+
+        ahead = Duration.zero;
+        h.elapse(const Duration(seconds: 15)); // 46
+        expect(h.state.entries['2330']!.snapshotAt, isNotNull);
+        ahead = const Duration(minutes: 2);
+        h.elapse(const Duration(seconds: 15)); // 61
+        expect(about('快照時刻偏前'), hasLength(1), reason: '恢復後再偏前,同一天不再記');
+
+        h.jump = const Duration(hours: 23); // 10/7 09:02:02
+        h.elapse(const Duration(seconds: 1));
+        expect(about('快照時刻偏前'), hasLength(2));
+        h.dispose();
+      });
+    });
+
+    test('🚨 整輪都偏前的那一輪不算缺失:同一天之後真的沒帶快照時刻時照記', () {
+      fakeAsync((async) {
+        DateTime? Function(DateTime now) snapshotOf = (now) =>
+            now.add(const Duration(minutes: 2));
+        final h = _Harness(async, weekdayMorning);
+        h.respond = (exCh, now) async => _mis([
+          for (final e in exCh) _row(_symbolOf(e), now),
+        ], at: snapshotOf(now));
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 1)); // 第 1 輪:偏前
+        expect(about('快照時刻偏前'), hasLength(1));
+        expect(about('沒有可信的快照時刻'), isEmpty);
+
+        snapshotOf = (_) => null;
+        h.elapse(const Duration(seconds: 15)); // 第 2 輪:回應沒帶快照時刻
+        expect(about('沒有可信的快照時刻'), hasLength(1));
+        h.dispose();
+      });
+    });
+
+    test('只有一部分的批次沒有快照時刻:不記(整輪都沒有才記)', () {
+      fakeAsync((async) {
+        final h = _Harness(async, weekdayMorning);
+        h.respond = (exCh, now) async => _mis([
+          for (final e in exCh) _row(_symbolOf(e), now),
+        ], at: exCh.length == 35 ? now : null);
+        h.center.register('A', [
+          for (var i = 0; i < 40; i++)
+            LiveQuoteRegistration(
+              symbol: '${2000 + i}',
+              market: MarketCode.twse,
+            ),
+        ]);
+        h.elapse(const Duration(seconds: 4));
+        expect(h.state.entries['2000']!.snapshotAt, isNotNull);
+        expect(h.state.entries['2035']!.snapshotAt, isNull);
+        expect(about('沒有可信的快照時刻'), isEmpty);
+        h.dispose();
+      });
+    });
+
+    test('🚨 有回應但沒有今天報價的一輪:不記快照時刻的 warning', () {
+      fakeAsync((async) {
+        final h = _Harness(async, weekdayMorning);
+        h.respond = (exCh, now) async => _mis([
+          for (final e in exCh) _row(_symbolOf(e), now, d: '20261005'),
+        ]);
+        h.center.register('A', const [tsmc]);
+        h.elapse(const Duration(seconds: 31));
+        expect(h.state.latestResponseHadToday, isFalse);
+        expect(about('快照時刻'), isEmpty);
+        h.dispose();
+      });
+    });
+
+    test('每一輪結束記一行:擋下、沒有可信快照時刻與偏前的檔數、最舊快照、App 是否可見', () {
+      final lines = <String>[];
+      runZoned(
+        () => fakeAsync((async) {
+          var shift = Duration.zero;
+          var withSnapshot = true;
+          final h = _Harness(async, weekdayMorning);
+          h.respond = (exCh, now) async {
+            // 這份回應的快照時刻與列的時間都是「現在＋shift」
+            final at = now.add(shift);
+            return _mis([
+              for (final e in exCh) _row(_symbolOf(e), at),
+            ], at: withSnapshot ? at : null);
+          };
+          h.center.register('A', const [tsmc]);
+          h.elapse(const Duration(seconds: 1));
+          shift = const Duration(minutes: -1); // 第 2 輪:1 分鐘前的快照
+          h.elapse(const Duration(seconds: 15));
+          shift = const Duration(minutes: 2); // 第 3 輪:偏前
+          h.elapse(const Duration(seconds: 15));
+          shift = Duration.zero; // 第 4 輪:回應沒帶快照時刻
+          withSnapshot = false;
+          h.elapse(const Duration(seconds: 15));
+          h.dispose();
+        }),
+        zoneSpecification: ZoneSpecification(
+          print: (_, _, _, line) => lines.add(line),
+        ),
+      );
+      final rounds = [
+        for (final l in lines)
+          if (l.contains('[D] [LiveQuote]') && l.contains('擋下')) l,
+      ];
+      expect(rounds, hasLength(4));
+      expect(rounds[0], contains('擋下 0 檔'));
+      expect(rounds[0], contains('沒有可信快照時刻 0 檔(其中偏前 0 檔)'));
+      expect(rounds[0], contains('最舊快照 10:01:01'));
+      expect(rounds[0], contains('App 可見'));
+      expect(rounds[1], contains('擋下 1 檔'));
+      expect(rounds[1], contains('最舊快照 無'));
+      expect(rounds[2], contains('擋下 0 檔'));
+      expect(rounds[2], contains('沒有可信快照時刻 1 檔(其中偏前 1 檔)'));
+      expect(rounds[3], contains('沒有可信快照時刻 1 檔(其中偏前 0 檔)'));
+    });
+  });
+
   group('紀錄', () {
     test('🚨 一段連續失敗只在開始與恢復各記一筆;中心的 client 不逐批記', () {
       fakeAsync((async) {
@@ -1055,8 +1365,12 @@ String _hms(DateTime t) =>
 /// tse_2330.tw → 2330
 String _symbolOf(String exCh) => exCh.substring(4, exCh.length - 3);
 
-String _mis(List<Map<String, Object?>> rows) =>
-    jsonEncode({'rtcode': '0000', 'msgArray': rows});
+/// [at] 是這份回應的快照時刻;不給就沒有 `queryTime`
+String _mis(List<Map<String, Object?>> rows, {DateTime? at}) => jsonEncode({
+  'rtcode': '0000',
+  'msgArray': rows,
+  if (at != null) 'queryTime': {'sysDate': _ymd(at), 'sysTime': _hms(at)},
+});
 
 Map<String, Object?> _row(
   String c,
@@ -1081,4 +1395,4 @@ Map<String, Object?> _row(
 };
 
 Future<String> _tradeEach(List<String> exCh, DateTime now) async =>
-    _mis([for (final e in exCh) _row(_symbolOf(e), now)]);
+    _mis([for (final e in exCh) _row(_symbolOf(e), now)], at: now);

@@ -39,6 +39,7 @@ class IntradayQuote {
     this.limitDown,
     required this.hasBid,
     required this.hasAsk,
+    this.snapshotAt,
   });
 
   final String symbol;
@@ -79,6 +80,10 @@ class IntradayQuote {
   final bool hasBid;
   final bool hasAsk;
 
+  /// 這份回應的快照產生時刻(外層 `queryTime`,見 [parseSnapshotTime]);同一份
+  /// 回應的每一檔相同。缺欄位、格式不符、範圍不合為 null
+  final DateTime? snapshotAt;
+
   /// 鎖漲停:價格等於漲停價且沒有賣單(不論當輪有無成交)
   bool get isLimitUpLocked => limitUp != null && price == limitUp && !hasAsk;
 
@@ -95,6 +100,11 @@ class IntradayQuote {
     if (json['rtcode'] != '0000') return const {};
     final rows = json['msgArray'];
     if (rows is! List) return const {};
+
+    final queryTime = json['queryTime'];
+    final snapshotAt = queryTime is Map
+        ? parseSnapshotTime(queryTime['sysDate'], queryTime['sysTime'])
+        : null;
 
     final result = <String, IntradayQuote>{};
     for (final row in rows) {
@@ -155,9 +165,34 @@ class IntradayQuote {
         limitDown: _num(row['w']),
         hasBid: _firstPositive(row['b']) != null,
         hasAsk: _firstPositive(row['a']) != null,
+        snapshotAt: snapshotAt,
       );
     }
     return result;
+  }
+
+  static final RegExp _sysDatePattern = RegExp(r'^(\d{4})(\d{2})(\d{2})$');
+  static final RegExp _sysTimePattern = RegExp(r'^(\d{2}):(\d{2}):(\d{2})$');
+
+  /// `queryTime.sysDate`(yyyyMMdd)＋`sysTime`(HH:mm:ss)→ 本地時間(證交所
+  /// 給的是台北時間);缺任一個、格式不符、範圍不合回 null。
+  static DateTime? parseSnapshotTime(Object? sysDate, Object? sysTime) {
+    final d = _sysDatePattern.firstMatch(sysDate?.toString().trim() ?? '');
+    final t = _sysTimePattern.firstMatch(sysTime?.toString().trim() ?? '');
+    if (d == null || t == null) return null;
+    final year = int.parse(d.group(1)!);
+    final month = int.parse(d.group(2)!);
+    final day = int.parse(d.group(3)!);
+    final hour = int.parse(t.group(1)!);
+    final minute = int.parse(t.group(2)!);
+    final second = int.parse(t.group(3)!);
+    if (hour > 23 || minute > 59 || second > 59) return null;
+    // 月、日不合(13 月、2 月 30 日)時 DateTime 會進位成別的日子
+    final date = DateTime(year, month, day);
+    if (date.year != year || date.month != month || date.day != day) {
+      return null;
+    }
+    return DateTime(year, month, day, hour, minute, second);
   }
 
   /// 漲跌停鎖住、當輪沒有成交時的價格;不是鎖住就回 null 交給五檔中價。

@@ -9,6 +9,7 @@ import 'package:daredevil/presentation/providers/live_price_provider.dart';
 import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
+import 'package:daredevil/presentation/widgets/live_quote_status.dart';
 
 class _Clock implements AppClock {
   _Clock(this.value);
@@ -91,6 +92,36 @@ void main() {
     addTearDown(c.dispose);
     return (c: c, center: center);
   }
+
+  test('🚨 頁首的報價時間:自選這幾檔裡最新的那一列時間,別的畫面抓到更新的不算', () {
+    LiveQuoteEntry at(String symbol, String rowTime) => LiveQuoteEntry(
+      symbol: symbol,
+      date: DateTime(2026, 10, 6),
+      price: 101,
+      displaySource: LiveDisplaySource.lastTrade,
+      previousClose: 100,
+      // 顯示的是更早的那筆成交;頁首取的是列的時間
+      quoteTime: '09:30:00',
+      isClosingQuote: false,
+      rowTime: rowTime,
+    );
+    final s = setup(
+      WatchlistState(items: [item('A'), item('B')]),
+      LiveQuoteState(
+        latestResponseHadToday: true,
+        entries: {
+          'A': at('A', '10:13:40'),
+          'B': at('B', '10:14:05'),
+          // 不在自選(例如剛看過的熱力圖抓的)
+          'X': at('X', '10:14:58'),
+        },
+      ),
+    );
+    expect(
+      s.c.read(watchlistLiveHeaderProvider),
+      const LiveHeaderStatus(LiveHeaderKind.quoteTime, '10:14:05'),
+    );
+  });
 
   test('🚨 正式資料是昨天、有今天的即時 → 用即時價與以 MIS 昨收算的漲跌幅', () {
     final s = setup(

@@ -52,11 +52,11 @@ class LiveQuoteState {
     this.entries = const {},
     this.symbolStatus = const {},
     this.fetchedAt = const {},
+    this.lastReceivedAt = const {},
     this.stalled = false,
     this.rateLimitedUntil,
     this.lastRespondedAt,
     this.latestResponseHadToday,
-    this.latestQuoteTime,
     this.closingGivenUpAt = const {},
   });
 
@@ -72,6 +72,14 @@ class LiveQuoteState {
   /// 之後才抓到」會寬鬆,最多差一輪。其他畫面先抓到的報價也算
   final Map<String, DateTime> fetchedAt;
 
+  /// 各檔最近一次拿到今天報價時,那一批回應收到的時刻;沒拿到過的檔不在
+  /// 裡面。時刻取自報價中心的 `appClockProvider` 時鐘,是那一批回來的當下、
+  /// 不是整輪套用的時刻。停拍作廢或因限流丟掉的一輪不記;暫停交易(列被
+  /// 丟掉)、批次失敗的那一檔停在上一次。頁首靠它分辨「證交所的資料停住」
+  /// 與「這一檔最近沒有拿到報價」。報價中心換日時才發布清空的版本:計時器
+  /// 停著跨過午夜時,重新計時的第一拍之前讀到的仍是前一天的
+  final Map<String, DateTime> lastReceivedAt;
+
   /// 報價暫停(網路):計時中,距上一次有回應的一輪超過門檻
   final bool stalled;
 
@@ -85,9 +93,6 @@ class LiveQuoteState {
   /// 最近一次有回應的一輪有沒有今天的報價;還沒有回應為 null
   /// (頁首「證交所今天尚無報價」)
   final bool? latestResponseHadToday;
-
-  /// 最近一次成功的一輪中,各筆報價時間的最大值(頁首盤中顯示)
-  final String? latestQuoteTime;
 
   /// 收盤後已放棄的代號 → 最後一次嘗試的套用時刻(取自報價中心的
   /// `appClockProvider`)。放棄＝「有回應但不是收盤報價」已滿
@@ -166,6 +171,12 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
   // 紀錄去重:一段連續失敗只記開始與恢復;非預期錯誤一段只送一次
   int _failStreak = 0;
   bool _unexpectedReported = false;
+
+  // 快照時刻的異常:每天各只記一次 warning。「偏前」會跟著證交所快取的
+  // 年齡來回變(本機時鐘慢 X 秒時,快取放不到 X−60 秒的那幾輪才偏前);X 在
+  // 60 秒到「60 秒＋快取存活期」之間時,逐段記會隨快取換新反覆記
+  bool _missingSnapshotsNoted = false;
+  bool _futureSnapshotsNoted = false;
 
   @override
   LiveQuoteState build() {
@@ -293,7 +304,7 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
       return;
     }
     if (round.discarded) return;
-    round.add(report);
+    round.add(report, after);
     if (round.isDone) {
       _round = null;
       _finishRound(round, after);
@@ -378,6 +389,8 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
     _rateLimitedUntil = null;
     _probing = false;
     _lastRespondedAt = null;
+    _missingSnapshotsNoted = false;
+    _futureSnapshotsNoted = false;
     return true;
   }
 
@@ -455,7 +468,9 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
       requested: round.requested,
       now: now,
       afterClose: round.afterClose,
+      receivedAt: round.receivedAt,
     );
+    _noteSnapshots();
     if (round.probe) {
       _probing = false;
       _rateLimitedUntil = null;
@@ -502,6 +517,52 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
     _failStreak = 0;
   }
 
+  /// 剛套用的那一輪的快照時刻:每輪記一行 debug(擋下幾檔是實機確認「價格
+  /// 不倒退」有在作用的依據);整輪的報價都沒有可信的快照時刻、有快照時刻
+  /// 偏前,各自每天只記一次 warning
+  void _noteSnapshots() {
+    final stats = _book.lastApplyStats;
+    if (stats == null) return;
+    final oldest = stats.oldestSnapshot;
+    AppLogger.debug(
+      _tag,
+      '一輪結束:今天的報價 ${stats.applied} 檔、擋下 ${stats.rejected} 檔'
+      '(快照比畫面舊)、沒有可信快照時刻 ${stats.missingSnapshots} 檔'
+      '(其中偏前 ${stats.futureSnapshots} 檔)、'
+      '換上的最舊快照 ${oldest == null ? '無' : _hms(oldest)}、'
+      'App ${_appVisible ? '可見' : '看不見'}',
+    );
+
+    // 今天的報價都沒有可信的快照時刻,而且不是整輪都偏前。整輪都偏前的下面
+    // 另外記,不該用掉這一條當天的那一次;沒有今天報價的一輪兩邊都是 0,後半
+    // 不成立
+    final allMissing =
+        stats.missingSnapshots == stats.applied &&
+        stats.futureSnapshots < stats.applied;
+    if (allMissing && !_missingSnapshotsNoted) {
+      _missingSnapshotsNoted = true;
+      AppLogger.warning(
+        _tag,
+        '這一輪的報價都沒有可信的快照時刻(回應沒帶 queryTime、格式不符、時刻'
+        '偏前或日期不是今天):價格不倒退的保護與報價延遲的提示沒有作用',
+      );
+    }
+    if (stats.futureSnapshots > 0 && !_futureSnapshotsNoted) {
+      _futureSnapshotsNoted = true;
+      AppLogger.warning(
+        _tag,
+        '快照時刻偏前:${stats.futureSnapshots} 檔的快照時刻比收到的時刻晚超過 '
+        '${LiveQuoteParams.snapshotFutureTolerance.inSeconds} 秒,當成沒有'
+        '(多半是本機時鐘偏慢)',
+      );
+    }
+  }
+
+  static String _hms(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:'
+      '${t.minute.toString().padLeft(2, '0')}:'
+      '${t.second.toString().padLeft(2, '0')}';
+
   /// 非預期錯誤 → error 帶例外物件(送 Sentry);一段只送一次
   void _reportUnexpected(({Object error, StackTrace stackTrace}) u) {
     if (_unexpectedReported) return;
@@ -514,11 +575,11 @@ class LiveQuoteCenter extends Notifier<LiveQuoteState> {
       entries: _book.entries,
       symbolStatus: _book.symbolStatus,
       fetchedAt: _book.fetchedAt,
+      lastReceivedAt: _book.lastReceivedAt,
       stalled: _stalled,
       rateLimitedUntil: _pending ? _rateLimitedUntil : null,
       lastRespondedAt: _lastRespondedAt,
       latestResponseHadToday: _book.latestResponseHadToday,
-      latestQuoteTime: _book.latestQuoteTime,
       closingGivenUpAt: _book.closingGivenUpAt,
     );
   }
@@ -550,6 +611,9 @@ class _Round {
   final List<String> _errors = [];
   final Set<String> _responded = {};
   final Set<String> _failed = {};
+
+  /// 有報價的各代號 → 所在那一批回應收到的時刻
+  final Map<String, DateTime> receivedAt = {};
   ({Object error, StackTrace stackTrace})? unexpected;
 
   bool get isDone => _next >= batches.length;
@@ -557,8 +621,12 @@ class _Round {
   List<String> get requested => [for (final b in batches) ...b.keys];
   String? get firstError => _errors.isEmpty ? null : _errors.first;
 
-  void add(QuoteBatchReport r) {
+  /// 加進一批的結果;[at] 是這一批回應收到的時刻
+  void add(QuoteBatchReport r, DateTime at) {
     _quotes.addAll(r.quotes);
+    for (final symbol in r.quotes.keys) {
+      receivedAt[symbol] = at;
+    }
     _errors.addAll(r.errors);
     _responded.addAll(r.respondedSymbols);
     _failed.addAll(r.failedSymbols);

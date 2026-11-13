@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -347,6 +350,51 @@ void main() {
           ),
         );
         expect(tester.takeException(), isNull);
+      });
+    }
+
+    // 價格欄的寬度不受限,下方那一行報價狀態太長會把整列撐爆。用真實的英文
+    // 翻譯字串量每一句(最長的是限流那句)
+    for (final scenario in phoneScenarios.where((s) => s.textScale == 1.0)) {
+      testWidgets('🚨 手機版面 $scenario:英文的每一句報價狀態都不溢位', (tester) async {
+        final en =
+            jsonDecode(File('assets/translations/en.json').readAsStringSync())
+                as Map<String, dynamic>;
+        final statuses = {
+          for (final MapEntry(:key, :value)
+              in (en['liveQuote'] as Map<String, dynamic>).entries)
+            // card 開頭的是卡片上的標示,不在這一行
+            if (!key.startsWith('card'))
+              key: (value as String).replaceAll('{time}', '10:25:59'),
+        };
+        expect(statuses.keys, containsAll(['delayed', 'pausedRateLimit']));
+        applyPhoneScenario(tester, scenario);
+        for (final MapEntry(key: name, value: status) in statuses.entries) {
+          await tester.pumpWidget(
+            buildTestApp(
+              StockDetailHeader(
+                data: const StockHeaderData(
+                  stockName: '台積電',
+                  latestClose: 1000,
+                  priceChange: 1,
+                ),
+                symbol: '2330',
+                live: StockHeaderLive(
+                  price: 1005,
+                  changePercent: 1.5,
+                  change: 15,
+                  statusText: status,
+                  open: 1000,
+                  high: 1010,
+                  low: 995.5,
+                  volumeLots: 123456,
+                ),
+              ),
+            ),
+          );
+          expect(tester.takeException(), isNull, reason: name);
+          expect(find.text(status), findsOneWidget, reason: name);
+        }
       });
     }
 

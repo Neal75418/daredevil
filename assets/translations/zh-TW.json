@@ -676,6 +676,7 @@
     "pausedNetwork": "報價暫停（網路）・最後更新 {time}",
     "pausedNetworkNoTime": "報價暫停（網路）",
     "noQuotesToday": "證交所今天尚無報價",
+    "delayed": "報價延遲（證交所資料停在 {time}）",
     "quoteTime": "報價時間 {time}",
     "closingPending": "今日收盤・待盤後更新",
     "lastQuote": "最後報價 {time}",

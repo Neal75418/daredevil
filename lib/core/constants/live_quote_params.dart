@@ -46,6 +46,21 @@ abstract final class LiveQuoteParams {
   static const Duration connectTimeout = Duration(seconds: 5);
   static const Duration receiveTimeout = Duration(seconds: 8);
 
+  /// 快照時刻比收到它的時刻晚超過這麼多就不採信、當成沒有快照時刻(本機
+  /// 時鐘偏差或回應異常)。採信的話,之後時刻比它早、那一列的 `t` 也沒有
+  /// 更新的快照都換不上去,直到快照時刻追上它
+  static const Duration snapshotFutureTolerance = Duration(seconds: 60);
+
+  /// 判斷「報價延遲」時只看這段時間內收到過今天報價的卡片。更久沒收到的,
+  /// 手上的資料舊是因為沒去抓或證交所沒給,不是證交所的資料停住
+  static const Duration delayActiveWindow = Duration(minutes: 2);
+
+  /// 卡片的延遲＝最近一次收到今天報價的時刻－畫面那筆的快照時刻(沒換上去
+  /// 的舊快照,它自己的時刻不拿來算),超過這麼多頁首才寫「報價延遲」。延遲
+  /// 的上限是證交所的快取存活期(量到過約 100～115 秒)加上請求在路上與時鐘
+  /// 的誤差(約 10 秒),門檻要在那之上
+  static const Duration delayThreshold = Duration(minutes: 3);
+
   /// 報價中心的節拍:登記變動、可見性變動都等下一拍才動作
   static const Duration tick = Duration(seconds: 1);
 

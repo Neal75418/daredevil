@@ -202,6 +202,7 @@ class StockHeaderLive {
     required MergedPrice merged,
     required LiveQuoteState state,
     required bool flashEnabled,
+    required DateTime now,
   }) {
     final live = merged.live;
     final price = merged.price;
@@ -221,6 +222,7 @@ class StockHeaderLive {
             state: state,
             merged: [merged],
             intradayTime: merged.quoteTime,
+            now: now,
           )?.text() ??
           '',
       open: live.open,
@@ -303,26 +305,30 @@ class StockDetailHeader extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildNameRow(theme),
-                      const SizedBox(height: DesignTokens.spacing4),
-                      if (data.reasons.isNotEmpty) _buildReasonTags(theme),
-                    ],
+            LayoutBuilder(
+              builder: (context, constraints) => Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildNameRow(theme),
+                        const SizedBox(height: DesignTokens.spacing4),
+                        if (data.reasons.isNotEmpty) _buildReasonTags(theme),
+                      ],
+                    ),
                   ),
-                ),
-                _buildPriceColumn(
-                  theme,
-                  priceChange,
-                  isPositive,
-                  isNeutral,
-                  priceColor,
-                ),
-              ],
+                  _buildPriceColumn(
+                    theme,
+                    priceChange,
+                    isPositive,
+                    isNeutral,
+                    priceColor,
+                    statusMaxWidth:
+                        constraints.maxWidth * _liveStatusMaxWidthFraction,
+                  ),
+                ],
+              ),
             ),
             _buildTradingRow(theme),
             const SizedBox(height: DesignTokens.spacing12),
@@ -468,13 +474,19 @@ class StockDetailHeader extends StatelessWidget {
     return close * pctChange / (100 + pctChange);
   }
 
+  /// 價格下方那一行即時報價狀態最多占整列多寬,超過就換行。價格欄在 Row 裡
+  /// 寬度不受限,狀態太長(「報價延遲」「報價暫停(限流)」的英文)會把左邊的
+  /// 股名欄擠到溢位
+  static const double _liveStatusMaxWidthFraction = 0.6;
+
   Widget _buildPriceColumn(
     ThemeData theme,
     double? priceChange,
     bool isPositive,
     bool isNeutral,
-    Color priceColor,
-  ) {
+    Color priceColor, {
+    required double statusMaxWidth,
+  }) {
     final absChange = _absChange;
     final live = this.live;
 
@@ -556,10 +568,14 @@ class StockDetailHeader extends StatelessWidget {
         if (live != null)
           Padding(
             padding: const EdgeInsets.only(top: DesignTokens.spacing4),
-            child: Text(
-              live.statusText,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: statusMaxWidth),
+              child: Text(
+                live.statusText,
+                textAlign: TextAlign.end,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           )

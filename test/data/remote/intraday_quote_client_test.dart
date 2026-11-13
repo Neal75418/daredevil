@@ -74,10 +74,9 @@ void main() {
     expect(url, isNot(contains('tse_6538')));
   });
 
-  test('🚨 每個請求帶不同的 _ 參數(同一網址會被 MIS 快取約 45 秒)', () async {
-    // 2026-10-07 盤中實測:同一網址每 15 秒問一次,連續 3 次拿到同一份
-    // (sysTime 停在 13:02:49),約 45 秒後才換新;加上每次不同的 _ 參數
-    // (MIS 自己的網頁也這樣做)就拿得到新資料
+  test('每個請求帶不同的 _ 參數', () async {
+    // MIS 自己的網頁也帶這個參數,所以保留。它不保證拿到新資料:證交所的快取
+    // 以 ex_ch 字串為鍵,_ 不同照樣回同一份
     final adapter = _FakeAdapter((_, _) => _misBody(['2330']));
     final client = clientWith(adapter);
     await client.fetchQuotes({'2330': 'TWSE'});

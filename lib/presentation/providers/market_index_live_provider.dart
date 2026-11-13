@@ -47,6 +47,7 @@ class MarketIndexLive {
     required MergedPrice merged,
     required LiveQuoteState center,
     required bool flashEnabled,
+    required DateTime now,
   }) {
     final statusText = merged.kind == MergedPriceKind.official
         ? null
@@ -54,6 +55,7 @@ class MarketIndexLive {
             state: center,
             merged: [merged],
             intradayTime: merged.quoteTime,
+            now: now,
           )?.text();
     final live = merged.live;
     final price = merged.price;
@@ -138,6 +140,7 @@ final marketLiveIndicesProvider = Provider.autoDispose<MarketLiveIndices>((
 ) {
   final center = ref.watch(liveQuoteCenterProvider);
   final flashEnabled = ref.watch(settingsProvider.select((s) => s.priceFlash));
+  final now = ref.read(appClockProvider).now();
   final byMarket = <String, MarketIndexLive>{};
   final merged = <MergedPrice>[];
   for (final market in const [MarketCode.twse, MarketCode.tpex]) {
@@ -151,6 +154,7 @@ final marketLiveIndicesProvider = Provider.autoDispose<MarketLiveIndices>((
       merged: m,
       center: center,
       flashEnabled: flashEnabled,
+      now: now,
     );
     if (item != null) byMarket[market] = item;
   }
@@ -163,6 +167,7 @@ final marketLiveIndicesProvider = Provider.autoDispose<MarketLiveIndices>((
             state: center,
             merged: merged,
             intradayTime: null,
+            now: now,
           )?.text(),
   );
 });

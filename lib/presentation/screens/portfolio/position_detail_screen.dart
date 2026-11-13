@@ -55,6 +55,7 @@ class PositionDetailScreen extends ConsumerWidget {
             state: center,
             merged: [merged],
             intradayTime: merged.quoteTime,
+            now: ref.read(appClockProvider).now(),
           )?.text();
 
     return Scaffold(

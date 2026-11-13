@@ -372,6 +372,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
                             merged: merged,
                             state: center,
                             flashEnabled: flashOn,
+                            now: ref.read(appClockProvider).now(),
                           );
                           final limit = limitOn
                               ? PriceLimit.statusOf(

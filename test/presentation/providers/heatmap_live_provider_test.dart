@@ -119,12 +119,14 @@ HeatmapMarketData _tpex({DateTime? dataDate}) => HeatmapMarketData(
   excludedForShares: 0,
 );
 
-/// 成交價 103、昨收 100（上色時漲 3%）
+/// 成交價 103、昨收 100（上色時漲 3%）；[time] 同時是顯示的報價時間與那一列
+/// 的時間
 LiveQuoteEntry _quote(
   String symbol, {
   DateTime? date,
   bool closing = false,
   String time = '10:04:50',
+  String? rowTime,
 }) => LiveQuoteEntry(
   symbol: symbol,
   date: date ?? _monday,
@@ -133,6 +135,7 @@ LiveQuoteEntry _quote(
   previousClose: 100,
   quoteTime: time,
   isClosingQuote: closing,
+  rowTime: rowTime ?? time,
 );
 
 LiveQuoteState _state({
@@ -142,7 +145,6 @@ LiveQuoteState _state({
   bool stalled = false,
   DateTime? rateLimitedUntil,
   DateTime? lastRespondedAt,
-  String? quoteTime,
   Map<String, DateTime> givenUpAt = const {},
 }) => LiveQuoteState(
   entries: entries,
@@ -151,7 +153,6 @@ LiveQuoteState _state({
   rateLimitedUntil: rateLimitedUntil,
   lastRespondedAt: lastRespondedAt,
   latestResponseHadToday: hadToday,
-  latestQuoteTime: quoteTime,
   closingGivenUpAt: givenUpAt,
 );
 
@@ -353,7 +354,6 @@ void main() {
         _state(
           entries: {'9901': _quote('9901'), '9902': _quote('9902')},
           fetchedAt: {'9901': _mon(10, 5), '9902': _mon(9, 40)},
-          quoteTime: '10:04:58',
         ),
       );
       expect(_changeOf(view, '9901'), _colored);
@@ -368,9 +368,10 @@ void main() {
         at: at,
         center: _state(
           entries: {
-            '9901': _quote('9901'),
-            '9902': _quote('9902'),
-            '9903': _quote('9903'),
+            '9901': _quote('9901', time: '10:00:34'),
+            '9902': _quote('9902', time: '10:00:09'),
+            // 不算數的那一檔時間最新：頁首不看它
+            '9903': _quote('9903', time: '10:00:38'),
           },
           fetchedAt: {
             '9901': at.subtract(const Duration(seconds: 5)),
@@ -378,13 +379,12 @@ void main() {
             '9902': at.subtract(grace),
             '9903': at.subtract(grace + const Duration(seconds: 1)),
           },
-          quoteTime: '10:00:34',
         ),
       );
       expect(_changeOf(page.view, '9901'), _colored);
       expect(_changeOf(page.view, '9902'), _colored);
       expect(_changeOf(page.view, '9903'), _hollow(HollowReason.notLive));
-      // 有放寬後算數的報價，頁首照樣寫報價時間
+      // 有放寬後算數的報價，頁首照樣寫報價時間（算數的格子裡最新的那一列）
       expect(
         page.view.quoteStatus,
         const LiveHeaderStatus(LiveHeaderKind.quoteTime, '10:00:34'),
@@ -541,10 +541,12 @@ void main() {
       final live = page.publish(
         _mon(10, 5),
         _state(
-          entries: {'9901': _quote('9901')},
+          // 顯示的是 10:04:30 那筆成交,列的時間是 10:04:58:頁首取列的時間
+          entries: {
+            '9901': _quote('9901', time: '10:04:30', rowTime: '10:04:58'),
+          },
           fetchedAt: {'9901': _mon(10, 5)},
           lastRespondedAt: _mon(10, 5),
-          quoteTime: '10:04:58',
         ),
       );
       expect(
@@ -556,10 +558,9 @@ void main() {
       final stalled = page.publish(
         _mon(10, 7),
         _state(
-          entries: {'9901': _quote('9901')},
+          entries: {'9901': _quote('9901', time: '10:04:58')},
           fetchedAt: {'9901': _mon(10, 5)},
           lastRespondedAt: _mon(10, 5),
-          quoteTime: '10:04:58',
           stalled: true,
         ),
       );
@@ -859,7 +860,6 @@ void main() {
         _state(
           entries: {'9901': _quote('9901', time: '09:00:15')},
           fetchedAt: {'9901': _mon(9, 0, 20)},
-          quoteTime: '09:00:15',
         ),
       );
       expect(view.data!.liveMode, HeatmapLiveMode.intraday);
@@ -878,7 +878,6 @@ void main() {
       LiveQuoteState center() => _state(
         entries: {'9901': _quote('9901')},
         fetchedAt: {'9901': _mon(10, 5)},
-        quoteTime: '10:04:58',
       );
       final before = page.publish(_mon(10, 5), center());
       final notified = page.notified;

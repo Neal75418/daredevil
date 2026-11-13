@@ -81,13 +81,14 @@ final watchlistLiveHeaderProvider = Provider.autoDispose<LiveHeaderStatus?>((
   final items = ref.watch(watchlistProvider.select((s) => s.items));
   final center = ref.watch(liveQuoteCenterProvider);
   final now = ref.read(appClockProvider).now();
+  final merged = [
+    for (final item in items) item.mergedWith(center.entries[item.symbol], now),
+  ];
   return LiveQuoteStatusRule.header(
     state: center,
-    merged: [
-      for (final item in items)
-        item.mergedWith(center.entries[item.symbol], now),
-    ],
-    intradayTime: center.latestQuoteTime,
+    merged: merged,
+    intradayTime: LiveQuoteStatusRule.latestRowTime(merged),
+    now: now,
   );
 });
 

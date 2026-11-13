@@ -53,7 +53,7 @@ class IntradayQuoteClient {
   static const String _tag = 'MIS';
   final Dio _dio;
 
-  /// 防快取參數的序號:同一毫秒內的兩個請求也不會撞同一個網址
+  /// `_` 參數的序號:同一毫秒內的兩個請求也不會撞同一個網址
   static int _requestSeq = 0;
 
   /// 單批失敗是否記 `AppLogger.warning`。盤中即時報價每 15 秒一輪,失敗改
@@ -157,9 +157,11 @@ class IntradayQuoteClient {
         .join('|');
     final response = await _dio.get(
       ApiEndpoints.twseMisIntraday,
-      // `_` 每次不同(2026-10-07 盤中實測):MIS 對完全相同的網址約 45 秒
-      // 內都回同一份快取,每 15 秒一輪就有兩輪拿到舊資料;MIS 自己的網頁
-      // 也帶這個參數
+      // `_` 每次不同:MIS 自己的網頁也帶這個參數,所以保留。它不保證拿到新
+      // 資料——證交所的快取以 `ex_ch` 字串為鍵,`_` 不同照樣回同一份;這份
+      // 快取多久換新會變(量到過約 45 秒,也量到過約 115 秒)。`_` 對更前面
+      // 的中間層快取有沒有作用不確定。回來的快照是什麼時候的,看回應的
+      // `queryTime`(`IntradayQuote.snapshotAt`)
       queryParameters: {
         'ex_ch': exCh,
         'json': 1,

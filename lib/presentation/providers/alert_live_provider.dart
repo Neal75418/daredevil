@@ -81,5 +81,6 @@ final alertsLiveHeaderProvider = Provider.autoDispose<String?>((ref) {
         ref.watch(alertLivePriceProvider(symbol)),
     ],
     intradayTime: null,
+    now: ref.read(appClockProvider).now(),
   )?.text();
 });

@@ -38,17 +38,30 @@ void main() {
     ...extra,
   };
 
-  /// 每列所在的批次都有回應
-  QuoteBatchReport responded(List<Map<String, Object?>> rows) =>
-      QuoteBatchReport(
-        quotes: IntradayQuote.parseResponse({
-          'rtcode': '0000',
-          'msgArray': rows,
-        }),
-        errors: const [],
-        respondedSymbols: {for (final r in rows) r['c'] as String},
-        failedSymbols: const <String>{},
-      );
+  String two(int v) => v.toString().padLeft(2, '0');
+
+  /// 每列所在的批次都有回應;[snapshot] 是這份回應的快照時刻(不給就沒有
+  /// `queryTime`)
+  QuoteBatchReport responded(
+    List<Map<String, Object?>> rows, {
+    DateTime? snapshot,
+  }) => QuoteBatchReport(
+    quotes: IntradayQuote.parseResponse({
+      'rtcode': '0000',
+      'msgArray': rows,
+      if (snapshot != null)
+        'queryTime': {
+          'sysDate':
+              '${snapshot.year}${two(snapshot.month)}${two(snapshot.day)}',
+          'sysTime':
+              '${two(snapshot.hour)}:${two(snapshot.minute)}:'
+              '${two(snapshot.second)}',
+        },
+    }),
+    errors: const [],
+    respondedSymbols: {for (final r in rows) r['c'] as String},
+    failedSymbols: const <String>{},
+  );
 
   QuoteBatchReport failed(Set<String> symbols) => QuoteBatchReport(
     quotes: const {},
@@ -314,18 +327,6 @@ void main() {
       expect(book.entries['A']!.price, 100.0);
       expect(book.symbolStatus['A'], LiveSymbolStatus.batchFailed);
       expect(book.latestResponseHadToday, isTrue, reason: '失敗不改「最近一次有回應」的判斷');
-    });
-
-    test('latestQuoteTime 取本輪各筆 t 的最大值,格式不符的不算', () {
-      round(
-        responded([
-          row('A', z: '1.0000', t: '10:00:05'),
-          row('B', z: '1.0000', t: '10:00:12'),
-          row('C', z: '1.0000', t: '9:9'),
-        ]),
-        requested: const ['A', 'B', 'C'],
-      );
-      expect(book.latestQuoteTime, '10:00:12');
     });
 
     test('請求清單以外的報價不收', () {
@@ -601,7 +602,6 @@ void main() {
       expect(book.entries, isEmpty);
       expect(book.symbolStatus, isEmpty);
       expect(book.latestResponseHadToday, isNull);
-      expect(book.latestQuoteTime, isNull);
       expect(book.pendingAfterClose(const ['A']), ['A']);
     });
 
@@ -638,6 +638,504 @@ void main() {
       );
       expect(book.entries['A']!.displaySource, LiveDisplaySource.trialOrBook);
       expect(book.entries['A']!.price, 102.5);
+    });
+  });
+
+  /// 證交所的快取會回比上一輪舊的快照。比畫面那筆舊、那一列自己也沒有更新
+  /// 的不換上去;但它仍是今天的報價,「這一輪有拿到」的記帳照做。
+  group('快照時刻:不倒退', () {
+    /// 盤中套一輪(只問 A)。[receivedAt] 不給時取 [now] 前 2 秒
+    RoundOutcome applyA(
+      QuoteBatchReport r,
+      DateTime now, {
+      DateTime? receivedAt,
+      bool afterClose = false,
+    }) => book.apply(
+      r,
+      requested: const ['A'],
+      now: now,
+      afterClose: afterClose,
+      receivedAt: {'A': receivedAt ?? now.subtract(const Duration(seconds: 2))},
+    );
+
+    test('🚨 較舊的快照、那一列的 t 也沒有比較新 → 不換價格、不閃色,其餘照記', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000', t: '10:00:00'),
+        ], snapshot: at(10, 0, 0)),
+        at(10, 0, 5),
+      );
+      final outcome = applyA(
+        responded([
+          row('A', z: '99.0000', t: '09:59:30'),
+        ], snapshot: at(9, 59, 30)),
+        at(10, 0, 20),
+        receivedAt: at(10, 0, 18),
+      );
+
+      final e = book.entries['A']!;
+      expect(e.price, 100.0);
+      expect(e.flash, isNull);
+      expect(e.snapshotAt, at(10, 0, 0));
+      expect(e.rowTime, '10:00:00');
+      expect(book.fetchedAt['A'], at(10, 0, 20), reason: '這一輪有拿到今天的報價');
+      expect(book.symbolStatus['A'], LiveSymbolStatus.ok);
+      expect(book.lastReceivedAt['A'], at(10, 0, 18));
+      expect(book.lastApplyStats!.applied, 1);
+      expect(book.lastApplyStats!.rejected, 1);
+      expect(outcome, RoundOutcome.success);
+      expect(book.latestResponseHadToday, isTrue);
+    });
+
+    test('較舊的快照、那一列的 t 與畫面那筆相同 → 不換', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000', t: '10:00:00'),
+        ], snapshot: at(10, 0, 5)),
+        at(10, 0, 6),
+      );
+      applyA(
+        responded([
+          row('A', z: '99.0000', t: '10:00:00'),
+        ], snapshot: at(10, 0, 2)),
+        at(10, 0, 21),
+      );
+      expect(book.entries['A']!.price, 100.0);
+    });
+
+    test('🚨 快照較舊、但那一列的 t 比畫面那筆晚 → 照換(這一檔自己有更新)', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000', t: '10:00:00'),
+        ], snapshot: at(10, 0, 5)),
+        at(10, 0, 6),
+      );
+      applyA(
+        responded([
+          row('A', z: '99.0000', t: '10:00:02'),
+        ], snapshot: at(10, 0, 3)),
+        at(10, 0, 21),
+      );
+      final e = book.entries['A']!;
+      expect(e.price, 99.0);
+      expect(e.snapshotAt, at(10, 0, 3));
+      expect(e.rowTime, '10:00:02');
+      expect(book.lastApplyStats!.rejected, 0);
+    });
+
+    test('🚨 畫面那筆的 t 無法解析、新的快照較舊 → 不換(無法比較不算比較新)', () {
+      applyA(
+        responded([row('A', z: '100.0000', t: '9:9')], snapshot: at(10, 0, 5)),
+        at(10, 0, 6),
+      );
+      applyA(
+        responded([
+          row('A', z: '99.0000', t: '10:00:04'),
+        ], snapshot: at(10, 0, 3)),
+        at(10, 0, 21),
+      );
+      expect(book.entries['A']!.price, 100.0);
+      expect(book.lastApplyStats!.rejected, 1);
+      expect(book.entries['A']!.rowTime, '9:9', reason: '畫面那筆的列時間不動');
+    });
+
+    test('快照時刻相等 → 照換', () {
+      applyA(
+        responded([row('A', z: '100.0000')], snapshot: at(10, 0, 0)),
+        at(10, 0, 5),
+      );
+      applyA(
+        responded([row('A', z: '101.0000')], snapshot: at(10, 0, 0)),
+        at(10, 0, 20),
+      );
+      expect(book.entries['A']!.price, 101.0);
+    });
+
+    test('🚨 新的沒有快照時刻 → 照換,畫面那筆的快照時刻變成 null', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000', t: '10:00:00'),
+        ], snapshot: at(10, 0, 0)),
+        at(10, 0, 5),
+      );
+      applyA(responded([row('A', z: '99.0000', t: '09:59:30')]), at(10, 0, 20));
+      expect(book.entries['A']!.price, 99.0);
+      expect(book.entries['A']!.snapshotAt, isNull);
+      expect(book.lastApplyStats!.missingSnapshots, 1);
+      expect(book.lastApplyStats!.futureSnapshots, 0);
+    });
+
+    test('畫面那筆沒有快照時刻 → 照換', () {
+      applyA(responded([row('A', z: '100.0000', t: '10:00:00')]), at(10, 0, 5));
+      applyA(
+        responded([
+          row('A', z: '99.0000', t: '09:59:30'),
+        ], snapshot: at(9, 59, 30)),
+        at(10, 0, 20),
+      );
+      expect(book.entries['A']!.price, 99.0);
+      expect(book.entries['A']!.snapshotAt, at(9, 59, 30));
+    });
+
+    test('🚨 快照時刻比收到的時刻晚超過 60 秒 → 當成沒有;之後正常的快照照常換上', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000', t: '10:00:00'),
+        ], snapshot: at(10, 1, 21)),
+        at(10, 0, 20),
+      );
+      expect(book.entries['A']!.price, 100.0);
+      expect(book.entries['A']!.snapshotAt, isNull);
+      expect(book.lastApplyStats!.futureSnapshots, 1);
+      expect(book.lastApplyStats!.missingSnapshots, 1);
+
+      applyA(
+        responded([
+          row('A', z: '101.0000', t: '10:00:00'),
+        ], snapshot: at(10, 0, 30)),
+        at(10, 0, 35),
+      );
+      expect(book.entries['A']!.price, 101.0, reason: '偏前的那一份不能讓這一檔停住');
+      expect(book.entries['A']!.snapshotAt, at(10, 0, 30));
+      expect(book.lastApplyStats!.futureSnapshots, 0);
+    });
+
+    test('快照時刻恰好比收到的時刻晚 60 秒 → 照用', () {
+      applyA(
+        responded([row('A', z: '100.0000')], snapshot: at(10, 1, 20)),
+        at(10, 0, 25),
+        receivedAt: at(10, 0, 20),
+      );
+      expect(book.entries['A']!.snapshotAt, at(10, 1, 20));
+      expect(book.lastApplyStats!.futureSnapshots, 0);
+      expect(book.lastApplyStats!.missingSnapshots, 0);
+    });
+
+    test('🚨 偏前與否比的是那一批收到的時刻,不是整輪套用的時刻', () {
+      // 多批的一輪:這一批 10:00:20 收到,整輪到 10:01:00 才套用
+      applyA(
+        responded([row('A', z: '100.0000')], snapshot: at(10, 1, 21)),
+        at(10, 1, 0),
+        receivedAt: at(10, 0, 20),
+      );
+      expect(book.entries['A']!.snapshotAt, isNull);
+      expect(book.lastApplyStats!.futureSnapshots, 1);
+    });
+
+    test('沒給收到的時刻 → 偏前與否改跟套用的時刻比', () {
+      book.apply(
+        responded([row('A', z: '100.0000')], snapshot: at(10, 1, 21)),
+        requested: const ['A'],
+        now: at(10, 0, 20),
+        afterClose: false,
+      );
+      expect(book.entries['A']!.snapshotAt, isNull);
+      expect(book.lastApplyStats!.futureSnapshots, 1);
+    });
+
+    test('🚨 快照日期不是今天 → 當成沒有(不算偏前)', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000'),
+        ], snapshot: DateTime(2026, 10, 5, 13, 30)),
+        at(10, 0, 5),
+      );
+      expect(book.entries['A']!.price, 100.0);
+      expect(book.entries['A']!.snapshotAt, isNull);
+      expect(book.lastApplyStats!.futureSnapshots, 0);
+      expect(book.lastApplyStats!.missingSnapshots, 1);
+    });
+
+    test('🚨 剛閃過色的那一檔,下一輪收到較舊的快照 → 不換、不閃', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000', t: '10:00:00'),
+        ], snapshot: at(10, 0, 0)),
+        at(10, 0, 5),
+      );
+      applyA(
+        responded([
+          row('A', z: '101.0000', t: '10:00:15'),
+        ], snapshot: at(10, 0, 16)),
+        at(10, 0, 20),
+      );
+      expect(book.entries['A']!.flash?.up, isTrue);
+
+      applyA(
+        responded([
+          row('A', z: '100.5000', t: '10:00:08'),
+        ], snapshot: at(10, 0, 9)),
+        at(10, 0, 35),
+      );
+      expect(book.entries['A']!.price, 101.0);
+      expect(book.entries['A']!.flash, isNull);
+    });
+
+    test('🚨 擋下一輪之後,下一輪換上去的價格變動照樣閃色', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000', t: '10:00:00'),
+        ], snapshot: at(10, 0, 1)),
+        at(10, 0, 5),
+      );
+      applyA(
+        responded([
+          row('A', z: '99.0000', t: '09:59:40'),
+        ], snapshot: at(9, 59, 41)),
+        at(10, 0, 20),
+      );
+      expect(book.lastApplyStats!.rejected, 1);
+      applyA(
+        responded([
+          row('A', z: '101.0000', t: '10:00:30'),
+        ], snapshot: at(10, 0, 31)),
+        at(10, 0, 35),
+      );
+      expect(book.entries['A']!.flash?.up, isTrue, reason: '比的是畫面上的 100');
+    });
+
+    test('🚨 被擋下的那一檔:上一輪批次失敗的卡片狀態回到 ok', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000', t: '10:00:00'),
+        ], snapshot: at(10, 0, 1)),
+        at(10, 0, 5),
+      );
+      book.apply(
+        failed({'A'}),
+        requested: const ['A'],
+        now: at(10, 0, 20),
+        afterClose: false,
+      );
+      expect(book.symbolStatus['A'], LiveSymbolStatus.batchFailed);
+
+      applyA(
+        responded([
+          row('A', z: '99.0000', t: '09:59:40'),
+        ], snapshot: at(9, 59, 41)),
+        at(10, 0, 35),
+      );
+      expect(book.lastApplyStats!.rejected, 1);
+      expect(book.symbolStatus['A'], LiveSymbolStatus.ok);
+    });
+
+    test('整輪都被擋下,仍算最近一次有回應的一輪有今天的報價', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000', t: '10:00:00'),
+        ], snapshot: at(10, 0, 1)),
+        at(10, 0, 5),
+      );
+      // 這一輪有回應、但列的日期是昨天
+      applyA(
+        responded([
+          row('A', z: '100.0000', d: '20261005', t: '13:30:00'),
+        ], snapshot: at(10, 0, 15)),
+        at(10, 0, 20),
+      );
+      expect(book.latestResponseHadToday, isFalse);
+
+      final outcome = applyA(
+        responded([
+          row('A', z: '99.0000', t: '09:59:40'),
+        ], snapshot: at(9, 59, 41)),
+        at(10, 0, 35),
+      );
+      expect(book.lastApplyStats!.rejected, 1);
+      expect(outcome, RoundOutcome.success);
+      expect(book.latestResponseHadToday, isTrue);
+    });
+
+    test('🚨 比的是那一列的 t,不是顯示用的成交時間', () {
+      // 當輪沒有成交:顯示 trade 記著的 10:00:10 那筆,列的 t 是 10:00:40
+      applyA(
+        responded([
+          row(
+            'A',
+            b: '100.5000_',
+            a: '101.5000_',
+            t: '10:00:40',
+            trade: const {'t': '10:00:10', 'z': '101.0000'},
+          ),
+        ], snapshot: at(10, 0, 41)),
+        at(10, 0, 45),
+      );
+      expect(book.entries['A']!.quoteTime, '10:00:10');
+      expect(book.entries['A']!.rowTime, '10:00:40');
+
+      // 較舊的快照,列的 t 10:00:29 比顯示的成交時間晚、但比畫面那一列早
+      applyA(
+        responded([
+          row('A', z: '99.0000', t: '10:00:29'),
+        ], snapshot: at(10, 0, 30)),
+        at(10, 1, 0),
+      );
+      expect(book.entries['A']!.price, 101.0);
+      expect(book.lastApplyStats!.rejected, 1);
+    });
+
+    test('withoutFlash 保留快照時刻與那一列的 t', () {
+      final e = LiveQuoteEntry(
+        symbol: 'A',
+        date: at(0, 0),
+        price: 100,
+        displaySource: LiveDisplaySource.trade,
+        previousClose: 99,
+        quoteTime: '10:00:00',
+        isClosingQuote: false,
+        flash: const LiveQuoteFlash(id: 1, up: true),
+        snapshotAt: at(10, 0, 1),
+        rowTime: '10:00:00',
+      ).withoutFlash();
+      expect(e.flash, isNull);
+      expect(e.snapshotAt, at(10, 0, 1));
+      expect(e.rowTime, '10:00:00');
+    });
+
+    test('🚨 被擋下的那一份不更新今天記到的成交價', () {
+      applyA(
+        responded([
+          row('A', z: '101.0000', t: '10:00:10'),
+        ], snapshot: at(10, 0, 11)),
+        at(10, 0, 12),
+      );
+      applyA(
+        responded([
+          row('A', z: '99.0000', t: '10:00:01'),
+        ], snapshot: at(10, 0, 2)),
+        at(10, 0, 27),
+      );
+      // 只有五檔、沒有 trade:顯示價走今天記到的成交價
+      applyA(
+        responded([
+          row('A', b: '102.0000_', a: '103.0000_', t: '10:00:40'),
+        ], snapshot: at(10, 0, 41)),
+        at(10, 0, 42),
+      );
+      final e = book.entries['A']!;
+      expect(e.displaySource, LiveDisplaySource.lastTrade);
+      expect(e.price, 101.0);
+    });
+
+    test('🚨 收盤後被擋下仍計一次嘗試:試滿 10 次就不再抓', () {
+      QuoteBatchReport notClosing(DateTime snapshot) => responded([
+        row('A', b: '99.5000_', a: '100.5000_', t: '13:29:40'),
+      ], snapshot: snapshot);
+
+      applyA(notClosing(at(13, 30, 55)), at(13, 31), afterClose: true);
+      for (var i = 1; i < 10; i++) {
+        expect(book.pendingAfterClose(const ['A']), ['A'], reason: '第 $i 次後');
+        applyA(notClosing(at(13, 30, 50)), at(13, 31 + i), afterClose: true);
+        expect(book.lastApplyStats!.rejected, 1, reason: '第 ${i + 1} 次');
+      }
+      expect(book.pendingAfterClose(const ['A']), isEmpty);
+    });
+
+    test('🚨 最近一次收到:只記拿到今天報價的代號', () {
+      // A 有今天的報價、B 的列被解析丟掉、C 的報價是昨天的、D 沒帶收到時刻
+      book.apply(
+        responded([
+          row('A', z: '100.0000'),
+          row('B'),
+          row('C', z: '100.0000', d: '20261005'),
+          row('D', z: '100.0000'),
+        ]),
+        requested: const ['A', 'B', 'C', 'D'],
+        now: at(10, 0, 5),
+        afterClose: false,
+        receivedAt: {'A': at(10, 0, 3), 'B': at(10, 0, 3), 'C': at(10, 0, 3)},
+      );
+      expect(book.lastReceivedAt, {'A': at(10, 0, 3)});
+      expect(
+        () => book.lastReceivedAt['Z'] = at(10, 0, 3),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('最近一次收到:這一輪沒拿到的保留舊時刻', () {
+      applyA(responded([row('A', z: '100.0000')]), at(10, 0, 5));
+      book.apply(
+        failed({'A'}),
+        requested: const ['A'],
+        now: at(10, 0, 20),
+        afterClose: false,
+        receivedAt: {'A': at(10, 0, 19)},
+      );
+      expect(book.lastReceivedAt, {'A': at(10, 0, 3)});
+    });
+
+    test('這一次套用的統計:換上與擋下都算進總數,最舊快照只看換上去的', () {
+      expect(book.lastApplyStats, isNull, reason: '還沒有套用過');
+      QuoteBatchReport merged(List<QuoteBatchReport> parts) => QuoteBatchReport(
+        quotes: {for (final p in parts) ...p.quotes},
+        errors: const [],
+        respondedSymbols: {for (final p in parts) ...p.respondedSymbols},
+        failedSymbols: const <String>{},
+      );
+      const abc = ['A', 'B', 'C'];
+      book.apply(
+        merged([
+          responded([row('A', z: '100.0000')], snapshot: at(10, 0, 0)),
+          responded([row('B', z: '50.0000')], snapshot: at(10, 0, 2)),
+          responded([row('C', z: '10.0000')], snapshot: at(10, 0, 4)),
+        ]),
+        requested: abc,
+        now: at(10, 0, 5),
+        afterClose: false,
+      );
+      expect(book.lastApplyStats, (
+        applied: 3,
+        rejected: 0,
+        futureSnapshots: 0,
+        missingSnapshots: 0,
+        oldestSnapshot: at(10, 0, 0),
+      ));
+
+      // A 收到更舊的(擋下)、B 與 C 各換上一份較新的
+      book.apply(
+        merged([
+          responded([row('A', z: '99.0000')], snapshot: at(9, 59, 0)),
+          responded([row('B', z: '51.0000')], snapshot: at(10, 0, 18)),
+          responded([row('C', z: '11.0000')], snapshot: at(10, 0, 12)),
+        ]),
+        requested: abc,
+        now: at(10, 0, 20),
+        afterClose: false,
+      );
+      expect(book.lastApplyStats, (
+        applied: 3,
+        rejected: 1,
+        futureSnapshots: 0,
+        missingSnapshots: 0,
+        oldestSnapshot: at(10, 0, 12),
+      ));
+
+      book.apply(
+        failed({'A', 'B', 'C'}),
+        requested: abc,
+        now: at(10, 0, 35),
+        afterClose: false,
+      );
+      expect(book.lastApplyStats, (
+        applied: 0,
+        rejected: 0,
+        futureSnapshots: 0,
+        missingSnapshots: 0,
+        oldestSnapshot: null,
+      ));
+    });
+
+    test('🚨 換日清空:最近一次收到、統計', () {
+      applyA(
+        responded([
+          row('A', z: '100.0000', t: '10:00:05'),
+        ], snapshot: at(10, 0, 6)),
+        at(10, 0, 7),
+      );
+      expect(book.lastReceivedAt, isNotEmpty);
+      expect(book.rollDay(DateTime(2026, 10, 7, 8, 30)), isTrue);
+      expect(book.lastReceivedAt, isEmpty);
+      expect(book.lastApplyStats, isNull);
     });
   });
 }

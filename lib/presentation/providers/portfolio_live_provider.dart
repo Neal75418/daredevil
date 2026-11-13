@@ -87,6 +87,7 @@ final portfolioLiveProvider = Provider.autoDispose<PortfolioLive>((ref) {
       state: center,
       merged: merged.values,
       intradayTime: null,
+      now: now,
     )?.text(),
   );
 });

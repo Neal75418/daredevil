@@ -574,7 +574,6 @@ void main() {
         LiveQuoteState(
           entries: {'2330': entry()},
           latestResponseHadToday: true,
-          latestQuoteTime: '10:14:58',
         ),
       );
       await tester.pumpWidget(

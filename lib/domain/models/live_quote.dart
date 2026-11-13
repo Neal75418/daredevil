@@ -58,6 +58,8 @@ class LiveQuoteEntry {
     this.isLimitUpLocked = false,
     this.isLimitDownLocked = false,
     this.flash,
+    this.snapshotAt,
+    this.rowTime,
   });
 
   final String symbol;
@@ -90,6 +92,15 @@ class LiveQuoteEntry {
   /// id 當作已看過,不補閃
   final LiveQuoteFlash? flash;
 
+  /// 這筆報價所在回應的快照時刻(`IntradayQuote.snapshotAt`);回應沒帶、或
+  /// 記帳本不採信(見 `LiveQuoteBook.apply`)時為 null。記帳本靠它擋掉比這筆
+  /// 舊的快照
+  final DateTime? snapshotAt;
+
+  /// 這筆報價那一列自己的時間(MIS 列的 `t`)。和 [quoteTime] 不同:顯示價取
+  /// 最後成交時,[quoteTime] 是那筆成交的時間
+  final String? rowTime;
+
   /// 同一筆、拿掉閃色
   LiveQuoteEntry withoutFlash() => LiveQuoteEntry(
     symbol: symbol,
@@ -107,5 +118,7 @@ class LiveQuoteEntry {
     limitDown: limitDown,
     isLimitUpLocked: isLimitUpLocked,
     isLimitDownLocked: isLimitDownLocked,
+    snapshotAt: snapshotAt,
+    rowTime: rowTime,
   );
 }

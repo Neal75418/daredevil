@@ -676,6 +676,7 @@
     "pausedNetwork": "Quotes paused (network) · last update {time}",
     "pausedNetworkNoTime": "Quotes paused (network)",
     "noQuotesToday": "No quotes from the exchange yet today",
+    "delayed": "Quotes delayed (exchange data as of {time})",
     "quoteTime": "Quoted at {time}",
     "closingPending": "Today's close · after-hours data pending",
     "lastQuote": "Last quote {time}",

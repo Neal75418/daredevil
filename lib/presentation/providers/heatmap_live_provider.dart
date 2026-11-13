@@ -257,20 +257,22 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
       for (final industry in official.industries)
         for (final tile in industry.tiles) tile.symbol: tile.close,
     };
+    final merged = [
+      for (final symbol in registered)
+        LiveQuoteMerge.merge(
+          official: OfficialPrice(
+            date: official.dataDate,
+            close: closes[symbol],
+          ),
+          live: fresh.contains(symbol) ? center.entries[symbol] : null,
+          now: now,
+        ),
+    ];
     return LiveQuoteStatusRule.header(
       state: center,
-      merged: [
-        for (final symbol in registered)
-          LiveQuoteMerge.merge(
-            official: OfficialPrice(
-              date: official.dataDate,
-              close: closes[symbol],
-            ),
-            live: fresh.contains(symbol) ? center.entries[symbol] : null,
-            now: now,
-          ),
-      ],
-      intradayTime: center.latestQuoteTime,
+      merged: merged,
+      intradayTime: LiveQuoteStatusRule.latestRowTime(merged),
+      now: now,
     );
   }
 
