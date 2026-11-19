@@ -238,31 +238,34 @@ void main() {
       expect(_symbols(data), ['9901']);
     });
 
-    test('🚨 先排除再取市值前 30 檔', () {
+    // 可畫的比圖上的檔數多 5 檔
+    const top = HeatmapParams.topTileCount;
+    const drawable = top + 5;
+
+    test('🚨 先排除再取市值前 topTileCount 檔', () {
       final data = _build([
-        // 市值隨序號遞增：前 30 大是序號 34～5
-        for (var i = 0; i < 35; i++)
+        // 市值隨序號遞增：前 top 大是序號 drawable − 1 到 5
+        for (var i = 0; i < drawable; i++)
           _stock(_sym(i), foreign: (shares: 1000 + i, date: _d1001)),
-        // 市值比它們都大、但不畫的：先取前 30 才排除的話會占掉名額
+        // 市值比它們都大、但不畫的：先取前 top 才排除的話會占掉名額
         _stock('0050', industry: 'ETF', foreign: (shares: 1e9, date: _d1001)),
         _stock('9105', industry: '存託憑證', foreign: (shares: 1e9, date: _d1001)),
         _stock('9998', foreign: null),
       ]);
-      expect(HeatmapParams.topTileCount, 30, reason: '前提：下面的名次照 30 檔寫');
-      expect(_symbols(data), [for (var i = 34; i >= 5; i--) _sym(i)]);
+      expect(_symbols(data), [for (var i = drawable - 1; i >= 5; i--) _sym(i)]);
       expect(data.excludedForShares, 1);
     });
 
     test('🚨 覆蓋率＝圖上的市值 ÷ 全部可畫股票的市值（不畫的不算）', () {
       final data = _build([
-        for (var i = 0; i < 35; i++) _stock(_sym(i)),
+        for (var i = 0; i < drawable; i++) _stock(_sym(i)),
         _stock('0050', industry: 'ETF', foreign: (shares: 1e9, date: _d1001)),
       ]);
-      expect(data.tiles, hasLength(30));
-      expect(data.capCoverage, closeTo(30 / 35, 1e-12));
+      expect(data.tiles, hasLength(top));
+      expect(data.capCoverage, closeTo(top / drawable, 1e-12));
     });
 
-    test('不足 30 檔：全部都畫，覆蓋率恰為 1.0', () {
+    test('不足 topTileCount 檔：全部都畫，覆蓋率恰為 1.0', () {
       final data = _build([
         _stock('9901', close: 0.1),
         _stock('9902', close: 0.2),

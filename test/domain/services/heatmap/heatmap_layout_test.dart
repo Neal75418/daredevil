@@ -101,13 +101,14 @@ void main() {
       }
     });
 
-    test('🚨 圖區極小時 30 檔照樣排、不丟例外', () {
+    test('🚨 圖區極小時圖上的檔數照樣排、不丟例外', () {
+      const n = HeatmapParams.topTileCount;
       final tiles = [
-        for (var i = 0; i < 30; i++)
-          _tile('T${i.toString().padLeft(2, '0')}', 30.0 - i),
+        for (var i = 0; i < n; i++)
+          _tile('T${i.toString().padLeft(2, '0')}', n - i + 0.0),
       ];
       final layout = layoutHeatmapTiles(tiles, width: 3, height: 2);
-      expect(layout, hasLength(30));
+      expect(layout, hasLength(n));
       expect([for (final l in layout) l.interactive], everyElement(isFalse));
     });
 

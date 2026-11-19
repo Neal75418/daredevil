@@ -324,6 +324,12 @@
 
 `flutter analyze` 沒有問題；`flutter test` 全套 6737 條通過（另 3 條略過）；改到的 16 個測試檔撥 +90 天 458 條通過；golden 通過；`dart compile kernel tool/daily_update.dart` 成功。
 
+### 評估過改成 50 檔（同日，維持 30）
+
+- 數字與決定見設計文件開頭的「同日評估」。
+- 只把 `topTileCount` 改成 50 時，紅的只有分組測試裡寫死 30 的兩條（「先排除再取前 N 檔」「覆蓋率」）；其餘測試（含一輪變兩批的整合測試與背景收集）不用改就通過，與先前「一批改成 20 檔」的反向檢查一致。那兩條改成照常數寫，版面測試「圖區極小」也改成用 `topTileCount` 檔，維持 30 後留著。
+- 圖上的檔加指數超過一批（`topTileCount` > `ApiEndpoints.misBatchSize` − 1）時，Task 2 刪掉的三條整合測試（一輪送到一半被限流；送到一半 App 看不見，兩種平台各一條）又會成立。改成 50 檔時曾照新檔數寫回並以突變驗過；維持 30 後一輪只有一批，沒有留下。日後再加檔數要一起加回，原本的寫法在 86ea61e0 的 `test/presentation/providers/heatmap_live_integration_test.dart`。
+
 ### 實機
 
 待下一個交易日（Task 3 Step 6），結果寫在這裡。
