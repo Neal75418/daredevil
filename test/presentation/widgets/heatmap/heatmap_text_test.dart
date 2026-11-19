@@ -92,124 +92,17 @@ void main() {
 
   // 沒載入翻譯時 `.tr()` 回 key：用 key 確認模式對到的文字；實際措辭見下方翻譯檔
   // 測試與畫面測試
-  test('即時比例與沒有值的文字依模式選 key', () {
+  test('圖例的覆蓋率文字用 legendCoverage 這個 key；提示的價格小數 2 位', () {
+    // 沒載入翻譯時 `.tr()` 回 key 字串
     expect(
-      heatmapCoverageSuffix(0.5, HeatmapLiveMode.intraday),
-      'marketHeatmap.liveCoverage',
+      heatmapLegendCoverageText(
+        tileCount: 30,
+        marketLabel: 'x',
+        coverage: 0.74,
+      ),
+      'marketHeatmap.legendCoverage',
     );
-    expect(
-      heatmapCoverageSuffix(0.5, HeatmapLiveMode.afterClose),
-      'marketHeatmap.closingCoverage',
-    );
-    expect(
-      heatmapCoverageSemantics(0.5, HeatmapLiveMode.intraday),
-      'marketHeatmap.semLiveCoverage',
-    );
-    expect(
-      heatmapCoverageSemantics(0.5, HeatmapLiveMode.afterClose),
-      'marketHeatmap.semClosingCoverage',
-    );
-    expect(
-      heatmapNoChangeText(null, allNoClosingMatch: false),
-      'marketHeatmap.hollowNoChange',
-    );
-    expect(
-      heatmapNoChangeText(HeatmapLiveMode.intraday, allNoClosingMatch: false),
-      'marketHeatmap.notLive',
-    );
-    expect(
-      heatmapNoChangeText(HeatmapLiveMode.afterClose, allNoClosingMatch: false),
-      'marketHeatmap.notClosed',
-    );
-  });
-
-  test('🚨 區塊每一格都是收盤沒撮合：沒有值寫「收盤沒撮合」（與格子同一個 key）', () {
-    expect(
-      heatmapNoChangeText(HeatmapLiveMode.afterClose, allNoClosingMatch: true),
-      'marketHeatmap.hollowNoClosingMatch',
-    );
-    expect(
-      heatmapNoChangeText(HeatmapLiveMode.afterClose, allNoClosingMatch: true),
-      heatmapHollowReasonText(HollowReason.noClosingMatch),
-    );
-  });
-
-  group('heatmapWeightedText', () {
-    test('正式資料：只有漲跌幅；沒有值寫無漲跌資料', () {
-      expect(
-        heatmapWeightedText(
-          percent: -0.8,
-          coverage: null,
-          mode: null,
-          allNoClosingMatch: false,
-        ),
-        '-0.80%',
-      );
-      expect(
-        heatmapWeightedText(
-          percent: -0.8,
-          coverage: 0.5,
-          mode: null,
-          allNoClosingMatch: false,
-        ),
-        '-0.80%',
-        reason: '正式資料不標比例',
-      );
-      expect(
-        heatmapWeightedText(
-          percent: null,
-          coverage: null,
-          mode: null,
-          allNoClosingMatch: false,
-        ),
-        'marketHeatmap.hollowNoChange',
-      );
-    });
-
-    test('即時：漲跌幅後接比例；沒有值寫模式的文字', () {
-      expect(
-        heatmapWeightedText(
-          percent: 1.83,
-          coverage: 0.96,
-          mode: HeatmapLiveMode.intraday,
-          allNoClosingMatch: false,
-        ),
-        '+1.83%marketHeatmap.liveCoverage',
-      );
-      expect(
-        heatmapWeightedText(
-          percent: null,
-          coverage: 0,
-          mode: HeatmapLiveMode.afterClose,
-          allNoClosingMatch: false,
-        ),
-        'marketHeatmap.notClosed',
-      );
-    });
-
-    test('🚨 收盤後區塊每一格都是收盤沒撮合：寫「收盤沒撮合」', () {
-      expect(
-        heatmapWeightedText(
-          percent: null,
-          coverage: 0,
-          mode: HeatmapLiveMode.afterClose,
-          allNoClosingMatch: true,
-        ),
-        'marketHeatmap.hollowNoClosingMatch',
-      );
-    });
-
-    test('即時但沒有比例：只寫漲跌幅', () {
-      expect(
-        heatmapWeightedText(
-          percent: 1.83,
-          coverage: null,
-          mode: HeatmapLiveMode.intraday,
-          allNoClosingMatch: false,
-        ),
-        '+1.83%',
-      );
-    });
+    expect(heatmapTooltipPriceText(53.4), 'marketHeatmap.tooltipPrice 53.40');
   });
 
   group('heatmapLiveStatusText', () {
@@ -295,26 +188,14 @@ void main() {
     });
   });
 
-  test('即時相關的新文字在 zh-TW 與 en 都有；無障礙的比例子句不帶「・」', () {
+  test('狀態行與圖例的文字在 zh-TW 與 en 都有，參數名稱一致', () {
     const zhExpected = {
-      'liveCoverage': '・即時 {pct}%',
-      'closingCoverage': '・收盤 {pct}%',
-      'semLiveCoverage': '即時部分占 {pct}%',
-      'semClosingCoverage': '已收盤部分占 {pct}%',
-      'semAppend': '{base}，{clause}',
-      'notLive': '未即時',
-      'notClosed': '未收盤',
       'previousClose': '{date} 收盤 {pct}',
       'closingProgress': '今日收盤 {done}／{total} 檔・待盤後更新',
       'closingProgressUnmatched':
           '今日收盤 {done}／{total} 檔・{unmatched} 檔收盤沒撮合・待盤後更新',
       'statusJoin': '・',
-      'tooltipBreadthWithHollow': '漲 {up}、跌 {down}、平 {flat}、空心 {hollow}',
-      'semOtherWithHollow':
-          '{label}，市值加權{dir} {pct}，漲 {up}、跌 {down}、平 {flat}、'
-          '沒有今日漲跌 {hollow}',
-      'semIndustryNoChange': '{name}，{status}，共 {count} 檔',
-      'semOtherNoChange': '{label}，{status}，共 {count} 檔',
+      'legendCoverage': '市值前 {count} 檔・占{market}市值 {pct}%',
     };
     for (final locale in ['zh-TW', 'en']) {
       final root =
@@ -340,25 +221,17 @@ void main() {
           block['closingProgress'],
           "Today's close {done}/{total} · after-hours data pending",
         );
-      }
-      for (final key in ['semLiveCoverage', 'semClosingCoverage']) {
-        expect(block[key] as String, isNot(contains('・')), reason: key);
-        expect(block[key] as String, isNot(contains('·')), reason: key);
+        expect(
+          block['legendCoverage'],
+          'Top {count} by market cap · {pct}% of {market} market cap',
+        );
       }
       // 參數名稱一致：翻譯少了參數，畫面會印出 {pct} 之類的字
       for (final (key, params) in [
-        ('liveCoverage', ['{pct}']),
-        ('closingCoverage', ['{pct}']),
-        ('semLiveCoverage', ['{pct}']),
-        ('semClosingCoverage', ['{pct}']),
         ('previousClose', ['{date}', '{pct}']),
         ('closingProgress', ['{done}', '{total}']),
         ('closingProgressUnmatched', ['{done}', '{unmatched}', '{total}']),
-        ('semIndustryNoChange', ['{name}', '{status}', '{count}']),
-        ('semOtherNoChange', ['{label}', '{status}', '{count}']),
-        ('tooltipBreadthWithHollow', ['{hollow}']),
-        ('semOtherWithHollow', ['{hollow}']),
-        ('semAppend', ['{base}', '{clause}']),
+        ('legendCoverage', ['{count}', '{market}', '{pct}']),
       ]) {
         for (final param in params) {
           expect(block[key] as String, contains(param), reason: '$locale $key');

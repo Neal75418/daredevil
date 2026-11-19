@@ -6,7 +6,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/core/constants/live_quote_params.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/utils/clock.dart';
@@ -25,30 +24,25 @@ import '../../../helpers/heatmap_live_fixtures.dart';
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
 
-/// 收盤後 App 看不見時，真的熱力圖頁＋真的報價中心把整張圖收完。
+/// 收盤後 App 看不見時，真的熱力圖頁＋真的報價中心把圖上的檔收完。
 ///
 /// 真的 `MarketHeatmapScreen`、真的 `LiveQuoteCenter`（看不見時也收）、真的
-/// `IntradayQuoteClient`（假 HTTP adapter）。App 看不見時 Flutter 不畫幀，
-/// 熱力圖「抓到一批換下一批」的登記清單不能靠畫面重畫才交給報價中心。
+/// `IntradayQuoteClient`（假 HTTP adapter）。App 看不見時 Flutter 不畫幀：
+/// 這裡確認整段在背景完成，不靠任何一幀。
 void main() {
   setUpAll(() async => setupTestLocalization());
 
-  testWidgets('🚨 13:25 起 App 看不見、熱力圖頁開著：收盤後在背景收完整張圖'
-      '（上市 1,078 檔、100 檔收盤沒撮合），登記清單不靠畫面重畫一路換下去', (tester) async {
+  testWidgets('🚨 13:25 起 App 看不見、熱力圖頁開著：收盤後在背景把圖上的 30 檔收完'
+      '（3 檔收盤沒撮合，每分鐘重試到放棄），看不見期間不畫任何一幀', (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    final unmatched = heatmapFixtureUnmatched100();
-    final matched = heatmapFixtureStockCount - unmatched.length;
-    // 與報價中心的整合測試同一個絕對上限
-    final deadline = DateTime(
-      2026,
-      11,
-      9,
-      13,
-      31,
-    ).add(const Duration(minutes: 25));
+    final tiles = heatmapFixtureTiles;
+    final unmatched = heatmapFixtureUnmatched3();
+    final matched = tiles.length - unmatched.length;
+    // 沒撮合的每分鐘重試一次、滿 10 次（約 13:40）放棄；留 5 分鐘餘裕
+    final deadline = DateTime(2026, 11, 9, 13, 45);
 
     // 時鐘＝起點＋測試推進的時間（每次 pump 之前先加）
     final start = DateTime(2026, 11, 9, 13, 25);
@@ -96,11 +90,10 @@ void main() {
       tester.element(find.byType(MarketHeatmapScreen)),
     );
     final center = container.read(liveQuoteCenterProvider.notifier);
-    expect(
-      center.registeredMarkets,
-      hasLength(1 + HeatmapParams.liveTileLimit),
-      reason: '前提：盤中登記指數＋市值前 69 檔',
-    );
+    expect(center.registeredMarkets.keys.toSet(), {
+      LiveQuoteParams.twseIndexSymbol,
+      ...tiles,
+    }, reason: '前提：盤中登記指數＋圖上的 30 檔');
 
     // App 看不見：照 main.dart 的接線通知報價中心與可見性 provider，並讓
     // Flutter 停止排程畫面
@@ -123,33 +116,66 @@ void main() {
     expect(framesWhenHidden, greaterThan(0), reason: '前提：看得見時幀數有在數');
     expect(tester.binding.framesEnabled, isFalse, reason: '前提：看不見時不畫幀');
 
-    // 逐秒前進（看不見時不畫幀，計時器照跑），直到報價中心都收完或超過上限
-    bool collected() {
-      final state = container.read(liveQuoteCenterProvider);
-      return state.entries.values.where((e) => e.isClosingQuote).length >=
-              matched + 1 &&
-          state.closingGivenUpAt.length >= unmatched.length;
-    }
+    // 逐秒前進（看不見時不畫幀，計時器照跑），直到報價中心都收完或超過上限；
+    // 途中記下「有撮合的都拿到收盤報價」的時刻
+    int closingQuotes() => container
+        .read(liveQuoteCenterProvider)
+        .entries
+        .values
+        .where((e) => e.isClosingQuote)
+        .length;
+    bool collected() =>
+        closingQuotes() >= matched + 1 &&
+        container.read(liveQuoteCenterProvider).closingGivenUpAt.length >=
+            unmatched.length;
 
+    DateTime? matchedAt;
     while (!collected() && now().isBefore(deadline)) {
       elapsed += const Duration(seconds: 1);
       await tester.pump(const Duration(seconds: 1));
+      if (matchedAt == null && closingQuotes() >= matched + 1) {
+        matchedAt = now();
+      }
     }
     final finishedAt = now();
+    // 收完之後繼續走到上限：不再送請求、仍然不畫幀
+    final requestsWhenFinished = requests.length;
+    while (now().isBefore(deadline)) {
+      elapsed += const Duration(seconds: 1);
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(
+      requests,
+      hasLength(requestsWhenFinished),
+      reason: '$finishedAt 收完之後到 $deadline 都不再送請求',
+    );
     expect(frames, framesWhenHidden, reason: '前提：看不見期間沒有畫任何一幀');
     expect(
       requests.where((r) => r.at.isBefore(DateTime(2026, 11, 9, 13, 30))),
       isEmpty,
       reason: '看不見時盤中不抓',
     );
+    expect(matchedAt, isNotNull);
+    expect(
+      matchedAt!.isBefore(DateTime(2026, 11, 9, 13, 31)),
+      isTrue,
+      reason: '有撮合的 $matched 檔第一輪就收到（$matchedAt）',
+    );
 
     final view = container.read(heatmapLiveProvider);
     expect(view.closing, (
       done: matched,
       unmatched: unmatched.length,
-      total: heatmapFixtureStockCount,
+      total: tiles.length,
     ), reason: '$finishedAt 時的進度（上限 $deadline）');
-    expect(finishedAt.isBefore(deadline), isTrue, reason: '收齊於 $finishedAt');
+    expect(finishedAt.isBefore(deadline), isTrue, reason: '收完於 $finishedAt');
+    for (final symbol in unmatched) {
+      expect(
+        requests.where((r) => r.symbols.contains(symbol)),
+        hasLength(LiveQuoteParams.afterCloseMaxAttempts),
+        reason: '$symbol 在背景重試到滿',
+      );
+    }
     expect(view.stockRegistrations, isEmpty);
     expect(center.registeredMarkets.keys, [
       LiveQuoteParams.twseIndexSymbol,
@@ -157,16 +183,16 @@ void main() {
     expect(
       {for (final r in requests) ...r.symbols}
         ..remove(LiveQuoteParams.twseIndexSymbol),
-      heatmapFixtureByCap.toSet(),
-      reason: '整張圖每一檔都在背景抓過',
+      tiles.toSet(),
+      reason: '只問圖上的檔，每一檔都在背景抓過',
     );
 
-    // 切回來：第一幀就是收齊的進度
+    // 切回來：第一幀就是收完的進度
     setVisible(true);
     await tester.pump();
     expect(
       tester.widget<Text>(find.byKey(MarketHeatmapScreen.statusLineKey)).data,
-      '今日收盤 $matched／$heatmapFixtureStockCount 檔・'
+      '今日收盤 $matched／${tiles.length} 檔・'
       '${unmatched.length} 檔收盤沒撮合・待盤後更新',
     );
   });
@@ -180,7 +206,8 @@ class _Clock implements AppClock {
   DateTime now() => _now();
 }
 
-/// 固定的正式資料（上市 1,078 檔，上一個交易日）；不讀資料庫、不輪詢
+/// 固定的正式資料（上市 1,078 檔的市場、圖上 30 檔，上一個交易日）；不讀資料庫、
+/// 不輪詢
 class _FixedHeatmap extends MarketHeatmapNotifier {
   @override
   MarketHeatmapState build() => MarketHeatmapState(

@@ -5,11 +5,26 @@ import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
 import 'package:daredevil/core/theme/heatmap_colors.dart';
 import 'package:daredevil/presentation/widgets/heatmap/heatmap_mine_mark.dart';
+import 'package:daredevil/presentation/widgets/heatmap/heatmap_text.dart';
 
 /// 熱力圖圖例：13 格色階（跌 6 階、平盤、漲 6 階，兩端寫「跌／漲 ≥ 最深一階」）、
-/// 自選雙線框、空心格子、產業漲跌的算法
+/// 自選雙線框、空心格子，以及這張圖代表多少（畫了幾檔、占這個市場市值多少）
 class HeatmapLegend extends StatelessWidget {
-  const HeatmapLegend({super.key});
+  const HeatmapLegend({
+    super.key,
+    required this.tileCount,
+    required this.marketLabel,
+    required this.coverage,
+  });
+
+  /// 圖上實際畫出來的檔數
+  final int tileCount;
+
+  /// 市場名稱（上市／上櫃）
+  final String marketLabel;
+
+  /// 圖上的格子占這個市場全部可畫股票市值的比例（0～1）
+  final double coverage;
 
   /// 第 [index] 格色塊（0＝跌最深、6＝平盤、12＝漲最深）
   static Key swatchKey(int index) => ValueKey('heatmapLegendSwatch$index');
@@ -76,7 +91,14 @@ class HeatmapLegend extends StatelessWidget {
           'marketHeatmap.legendHollow'.tr(),
           style,
         ),
-        Text('marketHeatmap.legendWeighted'.tr(), style: style),
+        Text(
+          heatmapLegendCoverageText(
+            tileCount: tileCount,
+            marketLabel: marketLabel,
+            coverage: coverage,
+          ),
+          style: style,
+        ),
       ],
     );
   }

@@ -248,7 +248,7 @@ void main() {
       repo.mine = {'9901'};
       async.elapse(const Duration(minutes: 1));
       expect(repo.loads(_twse), 2);
-      final tile = _state(c).markets[_twse]!.industries.single.tiles.single;
+      final tile = _state(c).markets[_twse]!.tiles.single;
       expect(tile.isMine, isTrue);
       async.elapse(const Duration(minutes: 2));
       expect(repo.loads(_twse), 2, reason: '重讀後基準更新，不再重讀');

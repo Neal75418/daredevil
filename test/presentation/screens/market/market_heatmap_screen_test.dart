@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart' show EasyLocalization;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:daredevil/core/constants/app_routes.dart';
-import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/core/constants/live_quote_params.dart';
 import 'package:daredevil/core/constants/market_codes.dart';
 import 'package:daredevil/core/theme/heatmap_colors.dart';
@@ -14,7 +14,6 @@ import 'package:daredevil/core/utils/clock.dart';
 import 'package:daredevil/data/models/twse/twse_market_index.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
-import 'package:daredevil/domain/services/heatmap/heatmap_grouping.dart';
 import 'package:daredevil/presentation/providers/app_visibility_provider.dart';
 import 'package:daredevil/presentation/providers/heatmap_live_provider.dart';
 import 'package:daredevil/presentation/providers/live_price_provider.dart';
@@ -66,84 +65,55 @@ HeatmapTile _tile(
   double cap,
   double pct, {
   bool mine = false,
+  String? industry = '半導體業',
 }) => HeatmapTile(
   symbol: symbol,
   name: name,
+  industry: industry,
   close: 100,
   marketCap: cap,
-  baseCap: cap * 100 / (100 + pct),
   change: TileChangeValue(pct),
   isMine: mine,
 );
 
-HeatmapTile _hollowTile(String symbol, String name, double cap) => HeatmapTile(
+HeatmapTile _hollowTile(
+  String symbol,
+  String name,
+  double cap, {
+  String? industry = '半導體業',
+}) => HeatmapTile(
   symbol: symbol,
   name: name,
+  industry: industry,
   close: 100,
   marketCap: cap,
-  baseCap: 0,
   change: const TileChangeHollow(HollowReason.noChangeData),
   isMine: false,
 );
 
-HeatmapIndustry _industry(
-  String? name,
-  List<HeatmapTile> tiles,
-  double? pct, {
-  double? coverage,
-}) => HeatmapIndustry(
-  name: name,
-  marketCap: tiles.fold(0.0, (s, t) => s + t.marketCap),
-  weightedChangePercent: pct,
-  tiles: tiles,
-  liveCoverage: coverage,
+/// 上市六檔（市值降冪）
+HeatmapMarketData _twse({int excluded = 0}) => HeatmapMarketData(
+  market: MarketCode.twse,
+  dataDate: DateTime(2026, 10, 7),
+  capCoverage: 0.74,
+  excludedForShares: excluded,
+  tiles: [
+    _tile('9901', '測試甲', 8e11, 1.8),
+    _tile('9911', '測試丁', 5e11, -0.4, industry: '其他電子零組件業'),
+    _tile('9902', '測試乙', 2e11, 1.8),
+    _hollowTile('9931', '測試航運', 2e11, industry: '航運業'),
+    _tile('9912', '測試平', 1e11, 0, industry: '其他電子零組件業'),
+    // 四捨五入到 0.00% 的漲跌：顏色是平盤，描述也要唸平盤
+    _tile('9913', '測試微', 1e11, 0.004, industry: '其他電子零組件業'),
+  ],
 );
-
-/// 產業刻意不照市值排列：選單要自己排
-HeatmapMarketData _twse({int excluded = 0, bool withShipping = true}) =>
-    HeatmapMarketData(
-      market: MarketCode.twse,
-      dataDate: DateTime(2026, 10, 7),
-      excludedForShares: excluded,
-      industries: [
-        if (withShipping)
-          _industry('航運業', [_hollowTile('9931', '測試航運', 2e11)], null),
-        _industry('半導體業', [
-          _tile('9901', '測試甲', 8e11, 1.8),
-          _tile('9902', '測試乙', 2e11, 1.8),
-        ], 1.8),
-        _industry('其他電子零組件業', [
-          _tile('9911', '測試丁', 5e11, -0.4),
-          _tile('9912', '測試平', 1e11, 0),
-          // 四捨五入到 0.00% 的漲跌：顏色是平盤，描述也要唸平盤
-          _tile('9913', '測試微', 1e11, 0.004),
-        ], -0.4),
-      ],
-    );
 
 final _tpex = HeatmapMarketData(
   market: MarketCode.tpex,
   dataDate: DateTime(2026, 10, 6),
+  capCoverage: 0.52,
   excludedForShares: 0,
-  industries: [
-    _industry('生技醫療業', [_tile('9951', '測試戊', 1e11, -2)], -2),
-  ],
-);
-
-/// 大、中產業加兩個放不下標題列的小產業（其中一檔自選）：小產業合成一塊
-/// （只有一個大產業時，合併塊會被擠成點不到的細條）
-HeatmapMarketData _withSmallIndustries() => HeatmapMarketData(
-  market: MarketCode.twse,
-  dataDate: DateTime(2026, 10, 7),
-  excludedForShares: 0,
-  industries: [
-    _industry('大業', [_tile('9901', '測試甲', 1e12, 1)], 1),
-    _industry('中甲業', [_tile('9911', '測試乙', 3e11, 1)], 1),
-    _industry('中乙業', [_tile('9921', '測試丙', 2e11, 1)], 1),
-    _industry('中丙業', [_tile('9931', '測試丁', 1e11, 1)], 1),
-    _industry('小甲業', [_tile('9961', '測試己', 5e9, 1, mine: true)], 1),
-    _industry('小乙業', [_tile('9971', '測試庚', 5e9, 1)], 1),
-  ],
+  tiles: [_tile('9951', '測試戊', 1e11, -2, industry: '生技醫療業')],
 );
 
 MarketHeatmapState _loaded(Map<String, HeatmapMarketData> markets) =>
@@ -209,7 +179,7 @@ HeatmapPainter _painterOf(WidgetTester tester) =>
 Offset _tileCenter(WidgetTester tester, String symbol) {
   final tile = _painterOf(
     tester,
-  ).layout.expand((l) => l.tiles).firstWhere((t) => t.tile.symbol == symbol);
+  ).layout.firstWhere((t) => t.tile.symbol == symbol);
   final b = tile.paint;
   return tester.getTopLeft(find.byType(HeatmapView)) +
       Offset(b.left + b.width / 2, b.top + b.height / 2);
@@ -301,11 +271,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     return fake;
-  }
-
-  Future<void> openIndustryMenu(WidgetTester tester) async {
-    await tester.tap(find.byTooltip('產業'));
-    await tester.pumpAndSettle();
   }
 
   group('狀態', () {
@@ -457,9 +422,9 @@ void main() {
           tester.getTopLeft(find.byKey(HeatmapLegend.swatchKey(12))).dx,
         ),
       );
-      expect(find.text('雙線框＝含自選或持股'), findsOneWidget);
+      expect(find.text('雙線框＝自選或持股'), findsOneWidget);
       expect(find.text('空心＝沒有今日漲跌'), findsOneWidget);
-      expect(find.text('產業漲跌為市值加權'), findsOneWidget);
+      expect(find.text('市值前 6 檔・占上市市值 74%'), findsOneWidget);
 
       await tester.pumpWidget(app(Brightness.dark));
       await tester.pumpAndSettle();
@@ -472,13 +437,69 @@ void main() {
         for (final text in [
           '跌 ≥ 9.5%',
           '漲 ≥ 9.5%',
-          '雙線框＝含自選或持股',
+          '雙線框＝自選或持股',
           '空心＝沒有今日漲跌',
-          '產業漲跌為市值加權',
+          '市值前 6 檔・占上市市值 74%',
         ])
           tester.getTopLeft(find.text(text).first).dy,
       };
       expect(tops, hasLength(1));
+    });
+
+    testWidgets('🚨 切到上櫃：市場名稱、檔數與百分比跟著換', (tester) async {
+      await pump(
+        tester,
+        _loaded({MarketCode.twse: _twse(), MarketCode.tpex: _tpex}),
+      );
+      expect(find.text('市值前 6 檔・占上市市值 74%'), findsOneWidget);
+      await tester.tap(find.text('上櫃'));
+      await tester.pumpAndSettle();
+      expect(find.text('市值前 1 檔・占上櫃市值 52%'), findsOneWidget);
+      expect(find.textContaining('占上市市值'), findsNothing);
+    });
+
+    testWidgets('🚨 可畫的只有 3 檔、全部都畫：寫 3 檔、100%', (tester) async {
+      await pump(
+        tester,
+        _loaded({
+          MarketCode.twse: HeatmapMarketData(
+            market: MarketCode.twse,
+            dataDate: DateTime(2026, 10, 7),
+            capCoverage: 1,
+            excludedForShares: 0,
+            tiles: [
+              _tile('9901', '測試甲', 3e11, 1),
+              _tile('9902', '測試乙', 2e11, 1),
+              _tile('9903', '測試丙', 1e11, 1),
+            ],
+          ),
+        }),
+      );
+      expect(find.text('市值前 3 檔・占上市市值 100%'), findsOneWidget);
+    });
+
+    testWidgets('🚨 還有沒畫的就不寫 100%：覆蓋率 99.6% 寫 99%', (tester) async {
+      await pump(
+        tester,
+        _loaded({
+          MarketCode.twse: HeatmapMarketData(
+            market: MarketCode.twse,
+            dataDate: DateTime(2026, 10, 7),
+            capCoverage: 0.996,
+            excludedForShares: 0,
+            tiles: [_tile('9901', '測試甲', 3e11, 1)],
+          ),
+        }),
+      );
+      expect(find.text('市值前 1 檔・占上市市值 99%'), findsOneWidget);
+    });
+
+    testWidgets('標題列只有上市／上櫃切換，沒有別的動作按鈕', (tester) async {
+      await pump(tester, _loaded({MarketCode.twse: _twse()}));
+      final bar = tester.widget<AppBar>(find.byType(AppBar));
+      expect(bar.actions!.whereType<SegmentedButton<String>>(), hasLength(1));
+      expect(find.byType(PopupMenuButton<Object>), findsNothing);
+      expect(find.text('大盤熱力圖'), findsOneWidget);
     });
   });
 
@@ -576,352 +597,15 @@ void main() {
     });
   });
 
-  group('放大', () {
-    List<String?> menuTexts(WidgetTester tester) => [
-      for (final item in tester.widgetList<PopupMenuItem<Object>>(
-        find.byWidgetPredicate((w) => w is PopupMenuItem<Object>),
-      ))
-        (item.child! as Text).data,
-    ];
-
-    testWidgets('產業選單依市值排序並帶漲跌；選了就放大、標題換成「← 全市場」', (tester) async {
-      await pump(tester, _loaded({MarketCode.twse: _twse()}));
-      expect(find.text('大盤熱力圖'), findsOneWidget);
-      await openIndustryMenu(tester);
-      expect(menuTexts(tester), [
-        '全市場',
-        '半導體業 +1.80%',
-        '其他電子零組件業 -0.40%',
-        '航運業 —',
-      ]);
-      await tester.tap(find.text('其他電子零組件業 -0.40%'));
-      await tester.pumpAndSettle();
-      final painter = _painterOf(tester);
-      expect(painter.zoomed, isTrue);
-      expect(painter.layout.map((l) => l.industry.name), ['其他電子零組件業']);
-      expect(find.text('← 全市場'), findsOneWidget);
-      expect(find.text('大盤熱力圖'), findsNothing);
-
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('全市場').last);
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isFalse);
-      expect(find.text('大盤熱力圖'), findsOneWidget);
-    });
-
-    testWidgets('點產業標題放大、點「← 全市場」回來', (tester) async {
-      await pump(tester, _loaded({MarketCode.twse: _twse()}));
-      final header = _painterOf(
-        tester,
-      ).layout.firstWhere((l) => l.industry.name == '半導體業').header!;
-      await tester.tapAt(
-        tester.getTopLeft(find.byType(HeatmapView)) +
-            Offset(
-              header.left + header.width / 2,
-              header.top + header.height / 2,
-            ),
-      );
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isTrue);
-      await tester.tap(find.text('← 全市場'));
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isFalse);
-    });
-
-    testWidgets('窄螢幕放大狀態點得到「← 全市場」', (tester) async {
-      final router = testRouter();
-      await pumpRouter(
-        tester,
-        router,
-        _loaded({MarketCode.twse: _twse()}),
-        size: const Size(360, 800),
-      );
-      await tester.tap(find.text('open'));
-      await tester.pumpAndSettle();
-      expect(find.byType(BackButton), findsOneWidget);
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('其他電子零組件業 -0.40%'));
-      await tester.pumpAndSettle();
-      final back = find.widgetWithText(TextButton, '← 全市場');
-      expect(tester.getSize(back).width, greaterThanOrEqualTo(48));
-      await tester.tap(back);
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isFalse);
-    });
-
-    testWidgets('英文窄螢幕放大狀態：「← All industries」一行、在標題列內、點得到', (tester) async {
-      viewport(tester, size: const Size(360, 800));
-      final router = testRouter();
-      final fake = _FakeHeatmap(_loaded({MarketCode.twse: _twse()}));
-      await tester.pumpWidget(
-        buildProviderTestApp(
-          const SizedBox(),
-          overrides: _overrides(fake),
-          router: router,
-          enTranslations: true,
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('open'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Industry'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('半導體業 +1.80%'));
-      await tester.pumpAndSettle();
-      final back = find.widgetWithText(TextButton, '← All industries');
-      expect(tester.getSize(back).width, greaterThanOrEqualTo(48));
-      final label = tester.getRect(find.text('← All industries'));
-      final appBar = tester.getRect(find.byType(AppBar));
-      // 一行：高度不超過一行字（測試字型行高＝字級）
-      final style = tester.widget<Text>(find.text('← All industries'));
-      expect(style.maxLines, 1);
-      expect(label.top, greaterThanOrEqualTo(appBar.top));
-      expect(label.bottom, lessThanOrEqualTo(appBar.bottom));
-      expect(label.height, lessThanOrEqualTo(24));
-      await tester.tap(back);
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isFalse);
-    });
-
-    testWidgets('切換市場清掉放大', (tester) async {
-      await pump(
-        tester,
-        _loaded({MarketCode.twse: _twse(), MarketCode.tpex: _tpex}),
-      );
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('半導體業 +1.80%'));
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isTrue);
-      await tester.tap(find.text('上櫃'));
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isFalse);
-      await tester.tap(find.text('上市'));
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isFalse);
-      expect(find.text('大盤熱力圖'), findsOneWidget);
-    });
-
-    testWidgets('放大中的產業在重讀後消失時回到全市場', (tester) async {
-      final fake = await pump(tester, _loaded({MarketCode.twse: _twse()}));
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('航運業 —'));
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isTrue);
-      fake.state = _loaded({MarketCode.twse: _twse(withShipping: false)});
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isFalse);
-      expect(_painterOf(tester).layout, hasLength(2));
-      expect(find.text('大盤熱力圖'), findsOneWidget);
-
-      // 之後又出現：維持全市場，不自己放大回去
-      fake.state = _loaded({MarketCode.twse: _twse()});
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).zoomed, isFalse);
-      expect(_painterOf(tester).layout, hasLength(3));
-    });
-
-    testWidgets('產業選單市值相同時依產業名排序', (tester) async {
-      await pump(
-        tester,
-        _loaded({
-          MarketCode.twse: HeatmapMarketData(
-            market: MarketCode.twse,
-            dataDate: DateTime(2026, 10, 7),
-            excludedForShares: 0,
-            industries: [
-              _industry('甲業', [_tile('9971', '測試甲甲', 1e11, 1)], 1),
-              _industry('乙業', [_tile('9972', '測試乙乙', 1e11, 1)], 1),
-            ],
-          ),
-        }),
-      );
-      await openIndustryMenu(tester);
-      // 字串比較：乙（U+4E59）在甲（U+7532）之前
-      expect(menuTexts(tester), ['全市場', '乙業 +1.00%', '甲業 +1.00%']);
-    });
-  });
-
   group('無障礙描述', () {
-    testWidgets('全市場唸產業、放大後唸格子', (tester) async {
+    testWidgets('🚨 每一格唸股名與漲跌；空心唸原因；四捨五入到 0.00% 的唸平盤', (tester) async {
       final handle = tester.ensureSemantics();
       await pump(tester, _loaded({MarketCode.twse: _twse()}));
-      expect(find.semantics.byLabel('半導體業，市值加權上漲 1.80%，共 2 檔'), findsOneWidget);
-      expect(
-        find.semantics.byLabel('其他電子零組件業，市值加權下跌 0.40%，共 3 檔'),
-        findsOneWidget,
-      );
-      expect(find.semantics.byLabel('航運業，無漲跌資料，共 1 檔'), findsOneWidget);
-
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('其他電子零組件業 -0.40%'));
-      await tester.pumpAndSettle();
+      expect(find.semantics.byLabel('測試甲，上漲 1.80%'), findsOneWidget);
       expect(find.semantics.byLabel('測試丁，下跌 0.40%'), findsOneWidget);
       expect(find.semantics.byLabel('測試平，平盤 0.00%'), findsOneWidget);
       expect(find.semantics.byLabel('測試微，平盤 0.00%'), findsOneWidget);
-
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('航運業 —'));
-      await tester.pumpAndSettle();
       expect(find.semantics.byLabel('測試航運，無漲跌資料'), findsOneWidget);
-      handle.dispose();
-    });
-
-    HeatmapMarketData folded(List<HeatmapTile> tiles) => HeatmapMarketData(
-      market: MarketCode.twse,
-      dataDate: DateTime(2026, 10, 7),
-      excludedForShares: 0,
-      industries: [_industry('測試業', tiles, 1)],
-    );
-
-    testWidgets('放大後合併塊的描述寫檔數、加權漲跌與漲跌家數', (tester) async {
-      final handle = tester.ensureSemantics();
-      await pump(
-        tester,
-        _loaded({
-          // 一檔大的、四檔中型、40 檔太小（只有大的加合併塊時，合併塊會被
-          // 擠成細長條）
-          MarketCode.twse: folded([
-            _tile('9901', '測試甲', 1e12, 1),
-            for (var i = 0; i < 4; i++) _tile('${9902 + i}', '中$i', 1e11, 1),
-            for (var i = 0; i < 40; i++) _tile('${9940 + i}', '小$i', 1e9, 1),
-          ]),
-        }),
-      );
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('測試業 +1.00%'));
-      await tester.pumpAndSettle();
-      expect(
-        find.semantics.byLabel('其他 40 檔，市值加權上漲 1.00%，漲 40、跌 0、平 0'),
-        findsOneWidget,
-      );
-      handle.dispose();
-    });
-
-    testWidgets('合併塊有空心成員時，描述補上沒有今日漲跌的檔數', (tester) async {
-      final handle = tester.ensureSemantics();
-      await pump(
-        tester,
-        _loaded({
-          MarketCode.twse: folded([
-            _tile('9901', '測試甲', 1e12, 1),
-            for (var i = 0; i < 4; i++) _tile('${9902 + i}', '中$i', 1e11, 1),
-            for (var i = 0; i < 40; i++) _tile('${9940 + i}', '小$i', 1e9, 1),
-            _hollowTile('9939', '小空', 1e9),
-          ]),
-        }),
-      );
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('測試業 +1.00%'));
-      await tester.pumpAndSettle();
-      expect(
-        find.semantics.byLabel('其他 41 檔，市值加權上漲 1.00%，漲 40、跌 0、平 0、沒有今日漲跌 1'),
-        findsOneWidget,
-      );
-      handle.dispose();
-    });
-
-    testWidgets('合併塊有自選或持股時，描述補上含幾檔', (tester) async {
-      final handle = tester.ensureSemantics();
-      await pump(
-        tester,
-        _loaded({
-          MarketCode.twse: folded([
-            _tile('9901', '測試甲', 1e12, 1),
-            for (var i = 0; i < 4; i++) _tile('${9902 + i}', '中$i', 1e11, 1),
-            for (var i = 0; i < 40; i++)
-              _tile('${9940 + i}', '小$i', 1e9, 1, mine: i < 2),
-          ]),
-        }),
-      );
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('測試業 +1.00%'));
-      await tester.pumpAndSettle();
-      expect(
-        find.semantics.byLabel('其他 40 檔，市值加權上漲 1.00%，漲 40、跌 0、平 0，含自選或持股 2 檔'),
-        findsOneWidget,
-      );
-      handle.dispose();
-    });
-
-    testWidgets('小產業合併塊的描述寫產業數、檔數、加權漲跌、家數與含幾檔自選', (tester) async {
-      final handle = tester.ensureSemantics();
-      await pump(tester, _loaded({MarketCode.twse: _withSmallIndustries()}));
-      expect(
-        find.semantics.byLabel(
-          '其他 2 個產業，共 2 檔，市值加權上漲 1.00%，漲 2、跌 0、平 0，含自選或持股 1 檔',
-        ),
-        findsOneWidget,
-      );
-      handle.dispose();
-    });
-
-    testWidgets('小產業合併塊全是空心時，描述寫個股檔數（不是產業數）', (tester) async {
-      final handle = tester.ensureSemantics();
-      final data = _withSmallIndustries();
-      await pump(
-        tester,
-        _loaded({
-          MarketCode.twse: HeatmapMarketData(
-            market: data.market,
-            dataDate: data.dataDate,
-            excludedForShares: 0,
-            industries: [
-              ...data.industries.take(4),
-              _industry('小甲業', [
-                _hollowTile('9961', '測試己', 2.5e9),
-                _hollowTile('9962', '測試辛', 2.5e9),
-              ], null),
-              _industry('小乙業', [
-                _hollowTile('9971', '測試庚', 2.5e9),
-                _hollowTile('9972', '測試壬', 2.5e9),
-              ], null),
-            ],
-          ),
-        }),
-      );
-      expect(find.semantics.byLabel('其他 2 個產業，無漲跌資料，共 4 檔'), findsOneWidget);
-      handle.dispose();
-    });
-
-    testWidgets('整個產業都合併時，描述用產業名稱', (tester) async {
-      final handle = tester.ensureSemantics();
-      await pump(
-        tester,
-        _loaded({
-          MarketCode.twse: folded([
-            for (var i = 0; i < 1000; i++) _tile('${i + 1000}', '小$i', 1, 1),
-          ]),
-        }),
-      );
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('測試業 +1.00%'));
-      await tester.pumpAndSettle();
-      expect(
-        find.semantics.byLabel('測試業，市值加權上漲 1.00%，漲 1000、跌 0、平 0'),
-        findsOneWidget,
-      );
-      handle.dispose();
-    });
-
-    testWidgets('產業別空白時寫「未分類」', (tester) async {
-      final handle = tester.ensureSemantics();
-      await pump(
-        tester,
-        _loaded({
-          MarketCode.twse: HeatmapMarketData(
-            market: MarketCode.twse,
-            dataDate: DateTime(2026, 10, 7),
-            excludedForShares: 0,
-            industries: [
-              _industry(null, [_tile('9961', '測試己', 1e11, 0.5)], 0.5),
-            ],
-          ),
-        }),
-      );
-      expect(find.semantics.byLabel('未分類，市值加權上漲 0.50%，共 1 檔'), findsOneWidget);
-      expect(_painterOf(tester).labels.uncategorized, '未分類');
-      await openIndustryMenu(tester);
-      expect(find.text('未分類 +0.50%'), findsOneWidget);
       handle.dispose();
     });
   });
@@ -938,14 +622,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(
-      find.semantics.byLabel('半導體業, cap-weighted up 1.80%, 2 stocks'),
-      findsOneWidget,
-    );
-    expect(
-      find.semantics.byLabel('航運業: No change data, 1 stocks'),
-      findsOneWidget,
-    );
+    expect(find.semantics.byLabel('測試甲, up 1.80%'), findsOneWidget);
+    expect(find.semantics.byLabel('測試航運: No change data'), findsOneWidget);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
@@ -957,12 +635,41 @@ void main() {
     await tester.pump();
     expect(find.text('Price: 100.00'), findsOneWidget);
     expect(find.text('Change: +1.80%'), findsOneWidget);
+    handle.dispose();
+  });
 
-    await tester.tap(find.byTooltip('Industry'));
+  testWidgets('🚨 同一頁換語系：交給 painter 的 labels 換成新語系的，描述改用新語系的句型', (
+    tester,
+  ) async {
+    viewport(tester);
+    final handle = tester.ensureSemantics();
+    final fake = _FakeHeatmap(_loaded({MarketCode.twse: _twse()}));
+    await tester.pumpWidget(
+      buildProviderTestApp(
+        const MarketHeatmapScreen(),
+        overrides: _overrides(fake),
+        switchableTranslations: true,
+      ),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('航運業 —'));
+    final state = tester.state(find.byType(MarketHeatmapScreen));
+    final before = _painterOf(tester).labels;
+    expect(before.locale, const Locale('zh', 'TW'));
+    expect(find.semantics.byLabel('測試甲，上漲 1.80%'), findsOneWidget);
+
+    await EasyLocalization.of(
+      tester.element(find.byType(MarketHeatmapScreen)),
+    )!.setLocale(const Locale('en', 'US'));
     await tester.pumpAndSettle();
-    expect(find.semantics.byLabel('測試航運: No change data'), findsOneWidget);
+    expect(
+      tester.state(find.byType(MarketHeatmapScreen)),
+      same(state),
+      reason: '前提：還是同一頁（State 沒有重建）',
+    );
+    final after = _painterOf(tester).labels;
+    expect(after.locale, const Locale('en', 'US'));
+    expect(after, isNot(before), reason: '與換語系前的不相等，painter 才重建描述');
+    expect(find.semantics.byLabel('測試甲, up 1.80%'), findsOneWidget);
     handle.dispose();
   });
 
@@ -1002,61 +709,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(router.state.matchedLocation, '/stock/9901');
     expect(find.text('stock 9901'), findsOneWidget);
-  });
-
-  testWidgets('點「其他 N 檔」拉出成員清單，點一檔進個股頁', (tester) async {
-    final router = testRouter(initial: AppRoutes.marketHeatmap);
-    await pumpRouter(
-      tester,
-      router,
-      _loaded({
-        MarketCode.twse: HeatmapMarketData(
-          market: MarketCode.twse,
-          dataDate: DateTime(2026, 10, 7),
-          excludedForShares: 0,
-          industries: [
-            _industry('測試業', [
-              _tile('9901', '測試甲', 1e12, 1),
-              for (var i = 0; i < 4; i++) _tile('${9902 + i}', '中$i', 1e11, 1),
-              // 「小0」漲最多：清單依漲跌幅排序，它排第一列
-              for (var i = 0; i < 40; i++)
-                _tile('${9940 + i}', '小$i', 1e9, i == 0 ? 9.9 : 1),
-            ], 1),
-          ],
-        ),
-      }),
-    );
-    final other = _painterOf(tester).layout.single.other!;
-    expect(other.members, hasLength(40), reason: '前提：40 檔被合併');
-    final p = other.paint;
-    await tester.tapAt(
-      tester.getTopLeft(find.byType(HeatmapView)) +
-          Offset(p.left + p.width / 2, p.top + p.height / 2),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('測試業 · 其他 40 檔'), findsOneWidget);
-    await tester.tap(find.text('小0'));
-    await tester.pumpAndSettle();
-    expect(router.state.matchedLocation, '/stock/9940');
-  });
-
-  testWidgets('點「其他 N 個產業」拉出產業清單，點一個放大該產業', (tester) async {
-    await pump(tester, _loaded({MarketCode.twse: _withSmallIndustries()}));
-    final group = _painterOf(tester).smallIndustries!;
-    expect(group.members, hasLength(2), reason: '前提：兩個小產業合併');
-    expect(group.interactive, isTrue, reason: '前提：點得到');
-    final p = group.paint;
-    await tester.tapAt(
-      tester.getTopLeft(find.byType(HeatmapView)) +
-          Offset(p.left + p.width / 2, p.top + p.height / 2),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('其他 2 個產業'), findsOneWidget);
-    await tester.tap(find.text('小乙業'));
-    await tester.pumpAndSettle();
-    expect(find.text('其他 2 個產業'), findsNothing, reason: '清單收起');
-    expect(_painterOf(tester).zoomed, isTrue);
-    expect(_painterOf(tester).layout.single.industry.key, '小乙業');
   });
 
   group('可見性', () {
@@ -1132,48 +784,42 @@ void main() {
         DateTime(2026, 11, 9, h, m, s);
     final today = DateTime(2026, 11, 9);
 
-    /// 上市三個產業、上櫃兩個產業，資料日上週五
+    /// 上市五檔、上櫃三檔（市值降冪），資料日上週五
     HeatmapMarketData twse() => HeatmapMarketData(
       market: MarketCode.twse,
       dataDate: friday,
+      capCoverage: 0.74,
       excludedForShares: 0,
-      industries: [
-        _industry('半導體業', [
-          _tile('9901', '測試甲', 8e11, -0.8),
-          _tile('9902', '測試乙', 2e11, -0.8),
-        ], -0.8),
-        _industry('其他電子零組件業', [
-          _tile('9911', '測試丁', 5e11, -0.4),
-          _tile('9912', '測試平', 1e11, 0),
-        ], -0.33),
-        _industry('航運業', [_tile('9931', '測試航運', 2e11, 0.5)], 0.5),
+      tiles: [
+        _tile('9901', '測試甲', 8e11, -0.8),
+        _tile('9911', '測試丁', 5e11, -0.4, industry: '其他電子零組件業'),
+        _tile('9902', '測試乙', 2e11, -0.8),
+        _tile('9931', '測試航運', 2e11, 0.5, industry: '航運業'),
+        _tile('9912', '測試平', 1e11, 0, industry: '其他電子零組件業'),
       ],
     );
 
     HeatmapMarketData tpex() => HeatmapMarketData(
       market: MarketCode.tpex,
       dataDate: friday,
+      capCoverage: 0.52,
       excludedForShares: 0,
-      industries: [
-        _industry('生技醫療業', [
-          _tile('9951', '測試戊', 3e11, -2),
-          _tile('9952', '測試己', 1e11, -2),
-        ], -2),
-        _industry('觀光餐旅業', [_tile('9961', '測試庚', 1e11, 1)], 1),
+      tiles: [
+        _tile('9951', '測試戊', 3e11, -2, industry: '生技醫療業'),
+        _tile('9952', '測試己', 1e11, -2, industry: '生技醫療業'),
+        _tile('9961', '測試庚', 1e11, 1, industry: '觀光餐旅業'),
       ],
     );
 
-    /// 上市 120 檔（收盤後的進度用；檔數超過 99xx，虛構代號以英文字母開頭）
-    HeatmapMarketData twse120() => HeatmapMarketData(
+    /// 上市 30 檔（收盤後的進度用），市值降冪。虛構代號以英文字母開頭
+    HeatmapMarketData twse30() => HeatmapMarketData(
       market: MarketCode.twse,
       dataDate: friday,
+      capCoverage: 0.74,
       excludedForShares: 0,
-      industries: [
-        for (var g = 0; g < 3; g++)
-          _industry('測試$g業', [
-            for (var i = 0; i < 40; i++)
-              _tile('Z$g${i.toString().padLeft(2, '0')}', '測$g$i', 1e9, 1),
-          ], 1),
+      tiles: [
+        for (var i = 0; i < 30; i++)
+          _tile('Z${i.toString().padLeft(2, '0')}', '測$i', (100 - i) * 1e9, 1),
       ],
     );
 
@@ -1268,11 +914,13 @@ void main() {
     Text statusLine(WidgetTester tester) =>
         tester.widget<Text>(find.byKey(MarketHeatmapScreen.statusLineKey));
 
-    HeatmapTile tileOf(WidgetTester tester, String symbol) => _painterOf(tester)
-        .layout
-        .expand((l) => l.tiles)
-        .firstWhere((t) => t.tile.symbol == symbol)
-        .tile;
+    HeatmapTile tileOf(WidgetTester tester, String symbol) => _painterOf(
+      tester,
+    ).layout.firstWhere((t) => t.tile.symbol == symbol).tile;
+
+    /// 畫面拿到的資料的即時模式
+    HeatmapLiveMode? liveModeOf(WidgetTester tester) =>
+        tester.widget<HeatmapView>(find.byType(HeatmapView)).data.liveMode;
 
     testWidgets('盤中登記目前市場的指數＋熱力圖的個股；切到上櫃換成上櫃的，不含另一個市場的指數', (tester) async {
       final page = await pumpLive(
@@ -1313,19 +961,15 @@ void main() {
     });
 
     testWidgets('🚨 登記的清單就是 heatmapRegistrationsProvider 的值；App 看不見、畫面停止排程後，'
-        '熱力圖換下一批 → 登記跟著換', (tester) async {
+        '拿到收盤報價的移出 → 登記跟著換', (tester) async {
       final page = await pumpLive(
         tester,
         at: monday(13, 40),
-        markets: {MarketCode.twse: twse120()},
+        markets: {MarketCode.twse: twse30()},
         live: const MarketLiveIndices(),
       );
       final first = page.container.read(heatmapRegistrationsProvider);
-      expect(
-        first,
-        hasLength(1 + HeatmapParams.liveTileLimit),
-        reason: '前提：指數＋還沒有收盤報價的前 69 檔',
-      );
+      expect(first, hasLength(1 + 30), reason: '前提：指數＋還沒有收盤報價的 30 檔');
       expect(page.center.registered.values.single, first);
 
       void setLifecycle(AppLifecycleState state) =>
@@ -1335,26 +979,23 @@ void main() {
       await tester.pump(); // 切到 hidden 之前已經排好的那一幀
       expect(tester.binding.framesEnabled, isFalse, reason: '前提：看不見時不畫幀');
 
-      // 第一批都拿到收盤報價 → 熱力圖改登記剩下的 51 檔
+      // 前 10 檔拿到收盤報價 → 熱力圖只登記剩下的 20 檔
+      final got = [for (final r in first.skip(1).take(10)) r.symbol];
       page.center.publish(
         LiveQuoteState(
-          entries: {
-            for (final r in first)
-              r.symbol: quote(r.symbol, 101, closing: true),
-          },
+          entries: {for (final s in got) s: quote(s, 101, closing: true)},
           latestResponseHadToday: true,
         ),
       );
       // 不帶時間的 pump() 不前進時間，provider 排程重算用的計時器不會跑
       await tester.pump(const Duration(milliseconds: 1));
       final next = page.center.registered.values.single;
-      final firstStocks = {for (final r in first.skip(1)) r.symbol};
       expect(
-        {for (final r in next) r.symbol}.intersection(firstStocks),
+        {for (final r in next) r.symbol}.intersection(got.toSet()),
         isEmpty,
-        reason: '第一批的個股已有收盤報價，不再登記',
+        reason: '已有收盤報價的不再登記',
       );
-      expect(next, hasLength(1 + 120 - HeatmapParams.liveTileLimit));
+      expect(next, hasLength(1 + 20));
       expect(next, page.container.read(heatmapRegistrationsProvider));
 
       // 回到可見才拆得掉樹（看不見時不畫幀）
@@ -1380,7 +1021,7 @@ void main() {
       expect(statusLine(tester).overflow, TextOverflow.ellipsis);
       expect(find.text('指數自己的狀態'), findsNothing);
       expect(find.text('11/6 收盤'), findsNothing);
-      expect(_painterOf(tester).liveMode, HeatmapLiveMode.intraday);
+      expect(liveModeOf(tester), HeatmapLiveMode.intraday);
     });
 
     testWidgets('盤中中心還沒有任何狀態：不顯示狀態行（指數的狀態也不顯示）', (tester) async {
@@ -1390,16 +1031,16 @@ void main() {
       expect(find.text('11/6 收盤'), findsNothing);
     });
 
-    testWidgets('收盤後：「今日收盤 3／120 檔・待盤後更新」；指數已是今天也不寫「指數為 M/D 收盤」', (
+    testWidgets('收盤後：「今日收盤 3／30 檔・待盤後更新」；指數已是今天也不寫「指數為 M/D 收盤」', (
       tester,
     ) async {
       await pumpLive(
         tester,
         at: monday(13, 40),
-        markets: {MarketCode.twse: twse120()},
+        markets: {MarketCode.twse: twse30()},
         state: LiveQuoteState(
           entries: {
-            for (final s in ['Z000', 'Z001', 'Z100'])
+            for (final s in ['Z00', 'Z01', 'Z10'])
               s: quote(s, 101, closing: true),
           },
           latestResponseHadToday: true,
@@ -1417,33 +1058,33 @@ void main() {
         ),
         live: const MarketLiveIndices(),
       );
-      expect(statusLine(tester).data, '今日收盤 3／120 檔・待盤後更新');
+      expect(statusLine(tester).data, '今日收盤 3／30 檔・待盤後更新');
       expect(find.textContaining('指數為'), findsNothing);
       expect(find.text('11/6 收盤'), findsNothing);
     });
 
     for (final (locale, english, expected) in [
-      ('zh-TW', false, '今日收盤 3／120 檔・2 檔收盤沒撮合・待盤後更新'),
+      ('zh-TW', false, '今日收盤 3／30 檔・2 檔收盤沒撮合・待盤後更新'),
       (
         'en',
         true,
-        "Today's close 3/120 · 2 no closing match · after-hours data pending",
+        "Today's close 3/30 · 2 no closing match · after-hours data pending",
       ),
     ]) {
       testWidgets('🚨 收盤後有收盤沒撮合的檔（$locale）：進度另寫檔數', (tester) async {
         await pumpLive(
           tester,
           at: monday(13, 40),
-          markets: {MarketCode.twse: twse120()},
+          markets: {MarketCode.twse: twse30()},
           state: LiveQuoteState(
             entries: {
-              for (final s in ['Z000', 'Z001', 'Z100'])
+              for (final s in ['Z00', 'Z01', 'Z10'])
                 s: quote(s, 101, closing: true),
             },
             latestResponseHadToday: true,
-            // Z001 放棄後又拿到收盤報價：算已收盤
+            // Z01 放棄後又拿到收盤報價：算已收盤
             closingGivenUpAt: {
-              for (final s in ['Z001', 'Z002', 'Z239']) s: monday(13, 35),
+              for (final s in ['Z01', 'Z02', 'Z29']) s: monday(13, 35),
             },
           ),
           live: const MarketLiveIndices(),
@@ -1459,23 +1100,23 @@ void main() {
       await pumpLive(
         tester,
         at: monday(13, 40),
-        markets: {MarketCode.twse: twse120()},
+        markets: {MarketCode.twse: twse30()},
         state: LiveQuoteState(
           entries: {
-            for (final s in ['Z000', 'Z001', 'Z100'])
+            for (final s in ['Z00', 'Z01', 'Z10'])
               s: quote(s, 101, closing: true),
           },
           rateLimitedUntil: monday(13, 41),
           latestResponseHadToday: true,
           closingGivenUpAt: {
-            for (final s in ['Z002', 'Z239']) s: monday(13, 35),
+            for (final s in ['Z02', 'Z29']) s: monday(13, 35),
           },
         ),
         live: const MarketLiveIndices(),
       );
       expect(
         statusLine(tester).data,
-        '報價暫停（證交所限流，13:41 再試）・今日收盤 3／120 檔・2 檔收盤沒撮合・待盤後更新',
+        '報價暫停（證交所限流，13:41 再試）・今日收盤 3／30 檔・2 檔收盤沒撮合・待盤後更新',
       );
     });
 
@@ -1483,10 +1124,10 @@ void main() {
       await pumpLive(
         tester,
         at: monday(13, 40),
-        markets: {MarketCode.twse: twse120()},
+        markets: {MarketCode.twse: twse30()},
         state: LiveQuoteState(
           entries: {
-            for (final s in ['Z000', 'Z001', 'Z100'])
+            for (final s in ['Z00', 'Z01', 'Z10'])
               s: quote(s, 101, closing: true),
           },
           rateLimitedUntil: monday(13, 41),
@@ -1494,10 +1135,7 @@ void main() {
         ),
         live: const MarketLiveIndices(),
       );
-      expect(
-        statusLine(tester).data,
-        '報價暫停（證交所限流，13:41 再試）・今日收盤 3／120 檔・待盤後更新',
-      );
+      expect(statusLine(tester).data, '報價暫停（證交所限流，13:41 再試）・今日收盤 3／30 檔・待盤後更新');
     });
 
     for (final (desc, at) in [
@@ -1525,7 +1163,7 @@ void main() {
         expect(statusLine(tester).data, '證交所今天尚無報價');
         expect(find.textContaining('今日收盤'), findsNothing);
         expect(find.text('11/6 收盤'), findsOneWidget);
-        expect(_painterOf(tester).liveMode, isNull);
+        expect(liveModeOf(tester), isNull);
       });
     }
 
@@ -1560,7 +1198,7 @@ void main() {
       );
       expect(find.byKey(MarketHeatmapScreen.statusLineKey), findsNothing);
       expect(find.text('11/6 收盤'), findsOneWidget);
-      expect(_painterOf(tester).liveMode, isNull);
+      expect(liveModeOf(tester), isNull);
     });
 
     testWidgets('不需要即時時指數列顯示指數自己的狀態', (tester) async {
@@ -1569,10 +1207,8 @@ void main() {
       expect(find.text('11/6 收盤'), findsOneWidget);
     });
 
-    testWidgets('跨過 13:30：painter 的模式跟著換，標題與描述改成「收盤」、沒有值的產業寫「未收盤」', (
-      tester,
-    ) async {
-      final handle = tester.ensureSemantics();
+    testWidgets('跨過 13:30：資料的模式跟著換，盤中上色的格子改成尚未取得收盤報價、'
+        '拿到收盤報價的上色', (tester) async {
       final page = await pumpLive(
         tester,
         at: monday(13, 29),
@@ -1584,12 +1220,8 @@ void main() {
         live: const MarketLiveIndices(),
       );
       final before = _painterOf(tester);
-      expect(before.liveMode, HeatmapLiveMode.intraday);
-      expect(before.labels.coverageSuffix(0.8, before.liveMode!), '・即時 80%');
-      expect(
-        find.semantics.byLabel('半導體業，市值加權上漲 1.00%，共 2 檔，即時部分占 80%'),
-        findsOneWidget,
-      );
+      expect(liveModeOf(tester), HeatmapLiveMode.intraday);
+      expect(tileOf(tester, '9901').change, const TileChangeValue(1));
 
       page.clock.value = monday(13, 31);
       page.center.publish(
@@ -1605,26 +1237,16 @@ void main() {
       page.container.invalidate(liveQuoteBoundaryProvider);
       await tester.pump();
       final after = _painterOf(tester);
-      expect(after.liveMode, HeatmapLiveMode.afterClose);
+      expect(liveModeOf(tester), HeatmapLiveMode.afterClose);
       expect(after.shouldRepaint(before), isTrue);
-      expect(after.labels.coverageSuffix(0.8, after.liveMode!), '・收盤 80%');
       expect(
-        after.labels.noChangeLabel(after.liveMode!, allNoClosingMatch: false),
-        '未收盤',
+        tileOf(tester, '9901').change,
+        const TileChangeHollow(HollowReason.noClosingQuote),
       );
-      expect(
-        after.labels.noChangeLabel(after.liveMode!, allNoClosingMatch: true),
-        '收盤沒撮合',
-      );
-      expect(find.semantics.byLabel('半導體業，未收盤，共 2 檔'), findsOneWidget);
-      expect(
-        find.semantics.byLabel('其他電子零組件業，市值加權上漲 2.00%，共 2 檔，已收盤部分占 83%'),
-        findsOneWidget,
-      );
-      handle.dispose();
+      expect(tileOf(tester, '9911').change, const TileChangeValue(2));
     });
 
-    testWidgets('離開熱力圖再回來：仍在原市場與放大，格子先維持離開前的顏色', (tester) async {
+    testWidgets('離開熱力圖再回來：仍在原市場，格子先維持離開前的顏色', (tester) async {
       final router = testRouter(initial: AppRoutes.marketHeatmap);
       final page = await pumpLive(
         tester,
@@ -1634,9 +1256,6 @@ void main() {
       );
       // 用上櫃：預設是上市，選取被重設時看得出來
       await tester.tap(find.text('上櫃'));
-      await tester.pumpAndSettle();
-      await openIndustryMenu(tester);
-      await tester.tap(find.text('生技醫療業 未即時'));
       await tester.pumpAndSettle();
 
       page.clock.value = monday(10, 30, 15);
@@ -1668,9 +1287,6 @@ void main() {
       page.clock.value = monday(10, 31, 30);
       router.pop();
       await tester.pumpAndSettle();
-      final painter = _painterOf(tester);
-      expect(painter.zoomed, isTrue);
-      expect(painter.layout.single.industry.key, '生技醫療業');
       expect(
         tester
             .widget<SegmentedButton<String>>(
@@ -1694,354 +1310,6 @@ void main() {
       await tester.pump();
       expect(tileOf(tester, '9952').change, const TileChangeValue(-2));
       expect(tileOf(tester, '9951').change, const TileChangeValue(3));
-    });
-
-    group('畫面上的即時比例（固定的即時資料）', () {
-      /// 盤中：半導體業 +1.83%（即時 96%）、其他電子零組件業 −0.40%（即時
-      /// 0.4%）、航運業全部未即時
-      HeatmapMarketData liveData() => HeatmapMarketData(
-        market: MarketCode.twse,
-        dataDate: friday,
-        excludedForShares: 0,
-        liveMode: HeatmapLiveMode.intraday,
-        industries: [
-          _industry(
-            '半導體業',
-            [_tile('9901', '測試甲', 8e11, 1.83), _tile('9902', '測試乙', 2e11, 0)],
-            1.83,
-            coverage: 0.96,
-          ),
-          _industry(
-            '其他電子零組件業',
-            [_tile('9911', '測試丁', 5e11, -0.4)],
-            -0.4,
-            coverage: 0.004,
-          ),
-          _industry(
-            '航運業',
-            [_hollowTile('9931', '測試航運', 2e11)],
-            null,
-            coverage: 0,
-          ),
-        ],
-      );
-
-      Future<ProviderContainer> pumpFixed(
-        WidgetTester tester,
-        HeatmapMarketData data,
-      ) async {
-        viewport(tester);
-        final fake = _FakeHeatmap(_loaded({MarketCode.twse: data}));
-        await tester.pumpWidget(
-          buildProviderTestApp(
-            const MarketHeatmapScreen(),
-            overrides: [
-              ..._overrides(fake),
-              heatmapLiveProvider.overrideWith(
-                () => _FixedLive(
-                  HeatmapLiveView(data: data, mode: data.liveMode),
-                ),
-              ),
-            ],
-            zhTranslations: true,
-          ),
-        );
-        await tester.pumpAndSettle();
-        return ProviderScope.containerOf(
-          tester.element(find.byType(MarketHeatmapScreen)),
-        );
-      }
-
-      List<String?> menuTexts(WidgetTester tester) => [
-        for (final item in tester.widgetList<PopupMenuItem<Object>>(
-          find.byWidgetPredicate((w) => w is PopupMenuItem<Object>),
-        ))
-          (item.child! as Text).data,
-      ];
-
-      testWidgets('產業選單：漲跌接即時比例（0.4% 寫 1%）；全部未即時寫「未即時」', (tester) async {
-        await pumpFixed(tester, liveData());
-        await openIndustryMenu(tester);
-        expect(menuTexts(tester), [
-          '全市場',
-          '半導體業 +1.83%・即時 96%',
-          '其他電子零組件業 -0.40%・即時 1%',
-          '航運業 未即時',
-        ]);
-      });
-
-      testWidgets('無障礙：產業描述接即時比例子句（不念「・」）；未即時的產業說「未即時」', (tester) async {
-        final handle = tester.ensureSemantics();
-        await pumpFixed(tester, liveData());
-        expect(
-          find.semantics.byLabel('半導體業，市值加權上漲 1.83%，共 2 檔，即時部分占 96%'),
-          findsOneWidget,
-        );
-        expect(
-          find.semantics.byLabel('其他電子零組件業，市值加權下跌 0.40%，共 1 檔，即時部分占 1%'),
-          findsOneWidget,
-        );
-        expect(find.semantics.byLabel('航運業，未即時，共 1 檔'), findsOneWidget);
-        handle.dispose();
-      });
-
-      /// 一檔大的、四檔中型、40 檔被合併（[hollow] 檔另外空心）
-      HeatmapMarketData folded({required bool allHollow}) => HeatmapMarketData(
-        market: MarketCode.twse,
-        dataDate: friday,
-        excludedForShares: 0,
-        liveMode: HeatmapLiveMode.intraday,
-        industries: [
-          _industry(
-            '測試業',
-            [
-              _tile('9901', '測試甲', 1e12, 1),
-              for (var i = 0; i < 4; i++) _tile('${9902 + i}', '中$i', 1e11, 1),
-              for (var i = 0; i < 40; i++)
-                allHollow
-                    ? _hollowTile('${9940 + i}', '小$i', 1e9)
-                    : _tile('${9940 + i}', '小$i', 1e9, 1),
-              if (!allHollow) _hollowTile('9939', '小空', 1e9),
-            ],
-            1,
-            coverage: 0.9,
-          ),
-        ],
-      );
-
-      testWidgets('無障礙：合併塊寫「沒有今日漲跌 N」並接即時比例', (tester) async {
-        final handle = tester.ensureSemantics();
-        final container = await pumpFixed(tester, folded(allHollow: false));
-        container.read(heatmapSelectionProvider.notifier).zoomTo('測試業');
-        await tester.pumpAndSettle();
-        // 40 檔有值、1 檔空心，市值相同：即時 40/41 ≈ 98%
-        expect(
-          find.semantics.byLabel(
-            '其他 41 檔，市值加權上漲 1.00%，漲 40、跌 0、平 0、沒有今日漲跌 1，即時部分占 98%',
-          ),
-          findsOneWidget,
-        );
-        handle.dispose();
-      });
-
-      testWidgets('無障礙：盤中整塊空心的合併塊說「未即時」', (tester) async {
-        final handle = tester.ensureSemantics();
-        final container = await pumpFixed(tester, folded(allHollow: true));
-        container.read(heatmapSelectionProvider.notifier).zoomTo('測試業');
-        await tester.pumpAndSettle();
-        expect(find.semantics.byLabel('其他 40 檔，未即時，共 40 檔'), findsOneWidget);
-        handle.dispose();
-      });
-
-      group('收盤後區塊每一格都是收盤沒撮合', () {
-        HeatmapTile unmatched(String symbol, String name, double cap) =>
-            HeatmapTile(
-              symbol: symbol,
-              name: name,
-              close: 100,
-              marketCap: cap,
-              baseCap: 0,
-              change: const TileChangeHollow(HollowReason.noClosingMatch),
-              isMine: false,
-            );
-
-        HeatmapTile waiting(String symbol, String name, double cap) =>
-            HeatmapTile(
-              symbol: symbol,
-              name: name,
-              close: 100,
-              marketCap: cap,
-              baseCap: 0,
-              change: const TileChangeHollow(HollowReason.noClosingQuote),
-              isMine: false,
-            );
-
-        HeatmapIndustry block(String name, List<HeatmapTile> tiles) =>
-            HeatmapIndustry(
-              name: name,
-              marketCap: tiles.fold(0.0, (s, t) => s + t.marketCap),
-              weightedChangePercent: null,
-              tiles: tiles,
-              liveCoverage: 0,
-              allNoClosingMatch: heatmapAllNoClosingMatch(tiles),
-            );
-
-        /// 航運業全部收盤沒撮合；觀光餐旅業混一檔尚未取得收盤報價
-        HeatmapMarketData afterCloseData() => HeatmapMarketData(
-          market: MarketCode.twse,
-          dataDate: friday,
-          excludedForShares: 0,
-          liveMode: HeatmapLiveMode.afterClose,
-          industries: [
-            _industry('半導體業', [_tile('9901', '測試甲', 8e11, 1)], 1, coverage: 1),
-            block('航運業', [
-              unmatched('9931', '測試航運', 2e11),
-              unmatched('9932', '測試航運乙', 1e11),
-            ]),
-            block('觀光餐旅業', [
-              unmatched('9961', '測試庚', 1e11),
-              waiting('9962', '測試辛', 1e11),
-            ]),
-          ],
-        );
-
-        testWidgets('產業選單：全部沒撮合寫「收盤沒撮合」，混一檔未收盤的寫「未收盤」', (tester) async {
-          await pumpFixed(tester, afterCloseData());
-          await openIndustryMenu(tester);
-          expect(menuTexts(tester), [
-            '全市場',
-            '半導體業 +1.00%・收盤 100%',
-            '航運業 收盤沒撮合',
-            '觀光餐旅業 未收盤',
-          ]);
-        });
-
-        testWidgets('無障礙：產業描述', (tester) async {
-          final handle = tester.ensureSemantics();
-          await pumpFixed(tester, afterCloseData());
-          expect(find.semantics.byLabel('航運業，收盤沒撮合，共 2 檔'), findsOneWidget);
-          expect(find.semantics.byLabel('觀光餐旅業，未收盤，共 2 檔'), findsOneWidget);
-          handle.dispose();
-        });
-
-        testWidgets('無障礙：合併塊全部沒撮合說「收盤沒撮合」；格子說原因', (tester) async {
-          final handle = tester.ensureSemantics();
-          final container = await pumpFixed(
-            tester,
-            HeatmapMarketData(
-              market: MarketCode.twse,
-              dataDate: friday,
-              excludedForShares: 0,
-              liveMode: HeatmapLiveMode.afterClose,
-              industries: [
-                block('測試業', [
-                  unmatched('9901', '測試甲', 1e12),
-                  for (var i = 0; i < 4; i++)
-                    unmatched('${9902 + i}', '中$i', 1e11),
-                  for (var i = 0; i < 40; i++)
-                    unmatched('${9940 + i}', '小$i', 1e9),
-                ]),
-              ],
-            ),
-          );
-          container.read(heatmapSelectionProvider.notifier).zoomTo('測試業');
-          await tester.pumpAndSettle();
-          expect(
-            find.semantics.byLabel('其他 40 檔，收盤沒撮合，共 40 檔'),
-            findsOneWidget,
-          );
-          expect(find.semantics.byLabel('測試甲，收盤沒撮合'), findsOneWidget);
-          handle.dispose();
-        });
-
-        testWidgets('無障礙：小產業合併塊全部沒撮合說「收盤沒撮合」', (tester) async {
-          final handle = tester.ensureSemantics();
-          final small = _withSmallIndustries();
-          await pumpFixed(
-            tester,
-            HeatmapMarketData(
-              market: small.market,
-              dataDate: friday,
-              excludedForShares: 0,
-              liveMode: HeatmapLiveMode.afterClose,
-              industries: [
-                for (final i in small.industries)
-                  block(i.name!, [
-                    for (final t in i.tiles)
-                      unmatched(t.symbol, t.name, t.marketCap),
-                  ]),
-              ],
-            ),
-          );
-          final group = _painterOf(tester).smallIndustries!;
-          expect(group.allNoClosingMatch, isTrue, reason: '前提');
-          expect(
-            find.semantics.byLabel(
-              '其他 ${group.members.length} 個產業，收盤沒撮合，'
-              '共 ${group.stockCount} 檔',
-            ),
-            findsOneWidget,
-          );
-          handle.dispose();
-        });
-      });
-
-      testWidgets('無障礙：小產業合併塊寫「沒有今日漲跌 N」並接即時比例', (tester) async {
-        final handle = tester.ensureSemantics();
-        final small = _withSmallIndustries();
-        await pumpFixed(
-          tester,
-          HeatmapMarketData(
-            market: small.market,
-            dataDate: friday,
-            excludedForShares: 0,
-            liveMode: HeatmapLiveMode.intraday,
-            industries: [
-              ...small.industries.take(5),
-              _industry(
-                '小乙業',
-                [_hollowTile('9971', '測試庚', 5e9)],
-                null,
-                coverage: 0,
-              ),
-            ],
-          ),
-        );
-        // 兩檔市值相同、一檔即時：即時 50%
-        expect(
-          find.semantics.byLabel(
-            '其他 2 個產業，共 2 檔，市值加權上漲 1.00%，漲 1、跌 0、平 0、'
-            '沒有今日漲跌 1，即時部分占 50%，含自選或持股 1 檔',
-          ),
-          findsOneWidget,
-        );
-        handle.dispose();
-      });
-
-      testWidgets('點「其他 N 個產業」拉出的清單用當下的模式寫比例', (tester) async {
-        final small = _withSmallIndustries();
-        await pumpFixed(
-          tester,
-          HeatmapMarketData(
-            market: small.market,
-            dataDate: friday,
-            excludedForShares: 0,
-            liveMode: HeatmapLiveMode.afterClose,
-            industries: [
-              for (final i in small.industries)
-                _industry(
-                  i.name,
-                  i.tiles,
-                  i.weightedChangePercent,
-                  coverage: 1,
-                ),
-            ],
-          ),
-        );
-        final p = _painterOf(tester).smallIndustries!.paint;
-        await tester.tapAt(
-          tester.getTopLeft(find.byType(HeatmapView)) +
-              Offset(p.left + p.width / 2, p.top + p.height / 2),
-        );
-        await tester.pumpAndSettle();
-        expect(find.text('市值加權 +1.00%・收盤 100%'), findsOneWidget);
-        expect(find.text('+1.00%・收盤 100%'), findsNWidgets(2));
-      });
-
-      testWidgets('點「其他 N 檔」拉出的清單用當下的模式寫比例', (tester) async {
-        final container = await pumpFixed(tester, folded(allHollow: false));
-        container.read(heatmapSelectionProvider.notifier).zoomTo('測試業');
-        await tester.pumpAndSettle();
-        final other = _painterOf(tester).layout.single.other!;
-        final p = other.paint;
-        await tester.tapAt(
-          tester.getTopLeft(find.byType(HeatmapView)) +
-              Offset(p.left + p.width / 2, p.top + p.height / 2),
-        );
-        await tester.pumpAndSettle();
-        expect(find.text('市值加權 +1.00%・即時 98%'), findsOneWidget);
-        expect(find.text('漲 40、跌 0、平 0、空心 1'), findsOneWidget);
-      });
     });
   });
 }
@@ -2077,13 +1345,4 @@ class _LiveCenter extends LiveQuoteCenter {
 class _FakeSettings extends SettingsNotifier {
   @override
   SettingsState build() => const SettingsState();
-}
-
-/// 固定的熱力圖即時檢視（只驗畫面怎麼寫，不經過即時套色）
-class _FixedLive extends HeatmapLiveNotifier {
-  _FixedLive(this.view);
-  final HeatmapLiveView view;
-
-  @override
-  HeatmapLiveView build() => view;
 }

@@ -45,7 +45,8 @@ abstract final class HeatmapColors {
 
   static bool _isDark(Brightness b) => b == Brightness.dark;
 
-  /// 頁面底色（＝主題的 scaffold 底色；格子間隔露出的就是它）
+  /// 頁面底色（＝主題的 scaffold 底色）：格子間隔露出的、空心格子底下的都是
+  /// 它。空心的邊框與文字、自選框對它的對比由守門測試檢查
   static Color pageBackground(Brightness b) => _isDark(b)
       ? SemanticColors.darkBackground
       : SemanticColors.lightBackground;
@@ -81,10 +82,6 @@ abstract final class HeatmapColors {
   /// 空心格子的變淡文字（畫在頁面底色上）
   static Color hollowText(Brightness b) =>
       _isDark(b) ? const Color(0xFFA1A1A1) : const Color(0xFF717171);
-
-  /// 產業標題列的文字（標題列底色＝頁面底色）
-  static Color headerText(Brightness b) =>
-      _isDark(b) ? SemanticColors.darkTextPrimary : const Color(0xFF18181B);
 
   /// 自選或持股的雙線框：外深內淺各 1px，任何填色上至少一條看得見
   static const Color mineOuter = Color(0xFF000000);

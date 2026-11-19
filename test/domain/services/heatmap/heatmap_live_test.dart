@@ -17,12 +17,13 @@ HeatmapTile _tile(
   double cap = 100000,
   TileChange change = const TileChangeValue(-0.8),
   bool mine = false,
+  String? industry,
 }) => HeatmapTile(
   symbol: symbol,
   name: '測試$symbol',
+  industry: industry,
   close: 100,
   marketCap: cap,
-  baseCap: change is TileChangeValue ? cap * 100 / (100 + change.percent) : 0,
   change: change,
   isMine: mine,
 );
@@ -31,14 +32,8 @@ HeatmapMarketData _official(List<HeatmapTile> tiles, {int excluded = 0}) =>
     HeatmapMarketData(
       market: MarketCode.twse,
       dataDate: _officialDate,
-      industries: [
-        HeatmapIndustry(
-          name: '測試業',
-          marketCap: tiles.fold(0.0, (a, t) => a + t.marketCap),
-          weightedChangePercent: -0.8,
-          tiles: tiles,
-        ),
-      ],
+      tiles: tiles,
+      capCoverage: 1,
       excludedForShares: excluded,
     );
 
@@ -79,11 +74,10 @@ HeatmapMarketData _overlay(
   today: _today,
 );
 
-HeatmapTile _only(HeatmapMarketData data) =>
-    data.industries.single.tiles.single;
+HeatmapTile _only(HeatmapMarketData data) => data.tiles.single;
 
 HeatmapTile _tileOf(HeatmapMarketData data, String symbol) =>
-    data.industries.single.tiles.firstWhere((t) => t.symbol == symbol);
+    data.tiles.firstWhere((t) => t.symbol == symbol);
 
 TileChange _changeOf(HeatmapMarketData data, [String symbol = '9901']) =>
     _tileOf(data, symbol).change;
@@ -97,28 +91,21 @@ double _percentOf(HeatmapMarketData data, [String symbol = '9901']) {
 /// 虛構代號 99NN（NN 是兩位數序號，0～99）
 String _sym(int i) => '99${i.toString().padLeft(2, '0')}';
 
-/// 一個產業：格子照正式資料的順序（市值降冪、同值代號升冪）排好
-HeatmapIndustry _industry(String? name, List<HeatmapTile> tiles) {
+/// 正式資料：格子照市值降冪、同值代號升冪排好（與 `buildHeatmapMarket` 的輸出相同）
+HeatmapMarketData _market(List<HeatmapTile> tiles) {
   final sorted = [...tiles]
     ..sort((a, b) {
       final byCap = b.marketCap.compareTo(a.marketCap);
       return byCap != 0 ? byCap : a.symbol.compareTo(b.symbol);
     });
-  return HeatmapIndustry(
-    name: name,
-    marketCap: sorted.fold(0.0, (a, t) => a + t.marketCap),
-    weightedChangePercent: null,
+  return HeatmapMarketData(
+    market: MarketCode.twse,
+    dataDate: _officialDate,
     tiles: sorted,
+    capCoverage: 1,
+    excludedForShares: 0,
   );
 }
-
-HeatmapMarketData _market(List<HeatmapIndustry> industries) =>
-    HeatmapMarketData(
-      market: MarketCode.twse,
-      dataDate: _officialDate,
-      industries: industries,
-      excludedForShares: 0,
-    );
 
 /// 登記清單的上限：兩批 MIS 請求扣掉一個指數
 const _limit = 69;
@@ -126,28 +113,20 @@ const _limit = 69;
 List<String> _symbols(
   HeatmapMarketData official, {
   HeatmapLiveMode mode = HeatmapLiveMode.intraday,
-  String? zoom,
   Map<String, LiveQuoteEntry> entries = const {},
   Set<String> givenUp = const {},
 }) => heatmapLiveSymbols(
   official,
   mode: mode,
-  zoomIndustryKey: zoom,
   entries: entries,
   closingGivenUp: givenUp,
   today: _today,
 );
 
-/// 以代號查市值
-Map<String, double> _capsOf(HeatmapMarketData market) => {
-  for (final i in market.industries)
-    for (final t in i.tiles) t.symbol: t.marketCap,
-};
-
-/// 市值是 [from]、[from] − 1、…、[to]（單位千元）的降冪序列
-List<double> _capsDescending(int from, int to) => [
-  for (var c = from; c >= to; c--) c * 1000.0,
-];
+/// 市值依序號降冪的 [count] 檔：序號就是市值名次
+HeatmapMarketData _ranked(int count) => _market([
+  for (var i = 0; i < count; i++) _tile(_sym(i), cap: (1000 - i) * 1.0),
+]);
 
 void main() {
   group('盤中', () {
@@ -159,25 +138,35 @@ void main() {
       expect(_percentOf(data), closeTo(3, 1e-9));
       expect(tile.close, 103);
       expect(tile.marketCap, 100000);
-      expect(tile.baseCap, closeTo(100000, 1e-9));
     });
 
-    test('y 是參考價（除權息日）：以 y 為基準，平盤市值跟著 y', () {
+    test('y 是參考價（除權息日）：以 y 為基準', () {
       final data = _overlay(_official([_tile('9901')]), {
         '9901': _entry('9901', price: 99.75, y: 95),
       });
       expect(_percentOf(data), closeTo(5, 1e-9));
-      expect(_only(data).baseCap, closeTo(95000, 1e-9));
     });
 
-    test('不改名稱、代號、自選標記', () {
-      final data = _overlay(_official([_tile('9901', mine: true)]), {
-        '9901': _entry('9901'),
-      });
-      final tile = _only(data);
-      expect(tile.symbol, '9901');
-      expect(tile.name, '測試9901');
-      expect(tile.isMine, isTrue);
+    test('🚨 不改名稱、代號、產業別、自選標記（上色與空心的格子都一樣）', () {
+      final data = _overlay(
+        _official([
+          _tile('9901', mine: true, industry: '半導體業'),
+          _tile('9902', mine: true, industry: '航運業'),
+        ]),
+        {'9901': _entry('9901')},
+        registered: {'9901', '9902'},
+      );
+      final colored = _tileOf(data, '9901');
+      expect(colored.change, isA<TileChangeValue>());
+      expect(colored.symbol, '9901');
+      expect(colored.name, '測試9901');
+      expect(colored.industry, '半導體業');
+      expect(colored.isMine, isTrue);
+      final hollow = _tileOf(data, '9902');
+      expect(hollow.change, isA<TileChangeHollow>());
+      expect(hollow.name, '測試9902');
+      expect(hollow.industry, '航運業');
+      expect(hollow.isMine, isTrue);
     });
 
     group('登記了但不在 fresh', () {
@@ -214,10 +203,8 @@ void main() {
         }
       });
 
-      test('格子不套即時價：顯示價與平盤市值是空心的樣子', () {
-        final tile = _only(run(LiveSymbolStatus.noQuote));
-        expect(tile.close, 100);
-        expect(tile.baseCap, 0);
+      test('格子不套即時價：顯示價是正式資料的收盤', () {
+        expect(_only(run(LiveSymbolStatus.noQuote)).close, 100);
       });
     });
 
@@ -256,7 +243,6 @@ void main() {
         );
         final tile = _only(data);
         expect(tile.close, 100);
-        expect(tile.baseCap, 0);
       });
 
       test('正式資料是空心：不附漲跌', () {
@@ -282,7 +268,6 @@ void main() {
           '9901': _entry('9901', source: LiveDisplaySource.trialOrBook),
         });
         expect(_changeOf(data), const TileChangeHollow(HollowReason.noTrade));
-        expect(_only(data).baseCap, 0);
       });
 
       test('漲跌停鎖住照常上色', () {
@@ -345,7 +330,6 @@ void main() {
             const TileChangeHollow(HollowReason.noChangeData),
             reason: 'y = $y',
           );
-          expect(_only(data).baseCap, 0, reason: 'y = $y');
         }
       });
 
@@ -367,9 +351,9 @@ void main() {
             HeatmapTile(
               symbol: '9901',
               name: '測試9901',
+              industry: null,
               close: close,
               marketCap: cap,
-              baseCap: 0,
               change: const TileChangeHollow(HollowReason.noChangeData),
               isMine: false,
             );
@@ -428,7 +412,6 @@ void main() {
           reason: '登記 $registered、fresh $fresh',
         );
         expect(_only(data).close, 102);
-        expect(_only(data).baseCap, closeTo(100000, 1e-9));
       }
     });
 
@@ -442,7 +425,6 @@ void main() {
         _changeOf(data),
         const TileChangeHollow(HollowReason.noClosingQuote),
       );
-      expect(_only(data).baseCap, 0);
     });
 
     test('中心沒有這一檔：尚未取得收盤報價', () {
@@ -503,7 +485,6 @@ void main() {
             const TileChangeHollow(HollowReason.noClosingMatch),
             reason: '$entry',
           );
-          expect(_only(data).baseCap, 0);
           expect(_only(data).close, 100, reason: '顯示價維持正式資料');
         }
       });
@@ -557,132 +538,7 @@ void main() {
     });
   });
 
-  group('產業與整體', () {
-    HeatmapMarketData twoTiles({
-      required Map<String, LiveQuoteEntry> entries,
-      HeatmapLiveMode mode = HeatmapLiveMode.intraday,
-      Set<String>? registered,
-      Set<String>? fresh,
-    }) => _overlay(
-      _official([_tile('9901', cap: 100), _tile('9902', cap: 100)]),
-      entries,
-      mode: mode,
-      registered: registered,
-      fresh: fresh,
-    );
-
-    test('只用已即時的成員算加權漲跌，coverage 是已即時的市值占比', () {
-      final data = twoTiles(
-        entries: {'9901': _entry('9901', price: 102)},
-        registered: {'9901'},
-      );
-      final industry = data.industries.single;
-      expect(industry.weightedChangePercent, closeTo(2, 1e-9));
-      expect(industry.liveCoverage, 0.5);
-    });
-
-    test('權重是即時平盤市值（股數 × y），不是市值', () {
-      final data = _overlay(
-        _official([
-          // 股數 1、y 100、+10%：平盤市值 100
-          _tile('9901', cap: 100),
-          // 股數 10、y 50、0%：平盤市值 500
-          _tile('9902', cap: 1000),
-        ]),
-        {
-          '9901': _entry('9901', price: 110),
-          '9902': _entry('9902', price: 50, y: 50),
-        },
-      );
-      final industry = data.industries.single;
-      expect(_tileOf(data, '9902').baseCap, closeTo(500, 1e-9));
-      // (100 × 10 + 500 × 0) ÷ 600；用市值當權重會得 0.909
-      expect(industry.weightedChangePercent, closeTo(10 / 6, 1e-9));
-      expect(industry.liveCoverage, 1.0);
-    });
-
-    test('全部未即時：沒有加權漲跌，coverage 0', () {
-      final data = twoTiles(entries: {}, registered: {}, fresh: {});
-      final industry = data.industries.single;
-      expect(industry.weightedChangePercent, isNull);
-      expect(industry.liveCoverage, 0);
-    });
-
-    test('收盤後也算 coverage（已取得收盤報價的比例）', () {
-      final data = twoTiles(
-        mode: HeatmapLiveMode.afterClose,
-        entries: {'9901': _entry('9901', price: 101, closing: true)},
-      );
-      final industry = data.industries.single;
-      expect(industry.weightedChangePercent, closeTo(1, 1e-9));
-      expect(industry.liveCoverage, 0.5);
-    });
-
-    group('產業的 allNoClosingMatch（每一格都是收盤沒撮合）', () {
-      HeatmapIndustry afterClose(
-        List<HeatmapTile> tiles,
-        Map<String, LiveQuoteEntry> entries,
-        Set<String> givenUp,
-      ) => _overlay(
-        _official(tiles),
-        entries,
-        mode: HeatmapLiveMode.afterClose,
-        givenUp: givenUp,
-      ).industries.single;
-
-      test('🚨 每一格都放棄：true（加權漲跌 null、coverage 0）', () {
-        final industry = afterClose(
-          [_tile('9901'), _tile('9902')],
-          {},
-          {'9901', '9902'},
-        );
-        expect(industry.allNoClosingMatch, isTrue);
-        expect(industry.weightedChangePercent, isNull);
-        expect(industry.liveCoverage, 0);
-      });
-
-      test('🚨 混一格尚未取得收盤報價：false', () {
-        expect(
-          afterClose(
-            [_tile('9901'), _tile('9902')],
-            {},
-            {'9901'},
-          ).allNoClosingMatch,
-          isFalse,
-        );
-      });
-
-      test('混一格有收盤報價：false', () {
-        expect(
-          afterClose(
-            [_tile('9901'), _tile('9902')],
-            {'9902': _entry('9902', closing: true)},
-            {'9901'},
-          ).allNoClosingMatch,
-          isFalse,
-        );
-      });
-
-      test('🚨 空產業不算：false', () {
-        expect(afterClose([], {}, {'9901'}).allNoClosingMatch, isFalse);
-      });
-
-      test('盤中與正式資料：false', () {
-        final official = _official([_tile('9901')]);
-        expect(
-          _overlay(
-            official,
-            {},
-            registered: {},
-            fresh: {},
-            givenUp: {'9901'},
-          ).industries.single.allNoClosingMatch,
-          isFalse,
-        );
-        expect(official.industries.single.allNoClosingMatch, isFalse);
-      });
-    });
-
+  group('整體', () {
     test('liveMode 帶入結果', () {
       for (final mode in HeatmapLiveMode.values) {
         final data = _overlay(
@@ -696,30 +552,20 @@ void main() {
       }
     });
 
-    test('市場、資料日、頁尾檔數、產業與格子順序、市值都與正式資料相同', () {
+    test('🚨 市場、資料日、頁尾檔數、覆蓋率、格子順序、市值都與正式資料相同', () {
       final official = HeatmapMarketData(
         market: MarketCode.tpex,
         dataDate: _officialDate,
-        industries: [
-          HeatmapIndustry(
-            name: '甲業',
-            marketCap: 700,
-            weightedChangePercent: 1,
-            tiles: [_tile('9903', cap: 400), _tile('9901', cap: 300)],
-          ),
-          HeatmapIndustry(
-            name: null,
-            marketCap: 200,
-            weightedChangePercent: null,
-            tiles: [
-              _tile(
-                '9902',
-                cap: 200,
-                change: const TileChangeHollow(HollowReason.noChangeData),
-              ),
-            ],
+        tiles: [
+          _tile('9903', cap: 400),
+          _tile('9901', cap: 300),
+          _tile(
+            '9902',
+            cap: 200,
+            change: const TileChangeHollow(HollowReason.noChangeData),
           ),
         ],
+        capCoverage: 0.52,
         excludedForShares: 3,
       );
       final data = _overlay(
@@ -731,13 +577,9 @@ void main() {
       expect(data.market, MarketCode.tpex);
       expect(data.dataDate, _officialDate);
       expect(data.excludedForShares, 3);
-      expect(data.industries.map((i) => i.name), ['甲業', null]);
-      expect(data.industries.map((i) => i.marketCap), [700, 200]);
+      expect(data.capCoverage, 0.52);
       expect(
-        [
-          for (final i in data.industries)
-            for (final t in i.tiles) (t.symbol, t.marketCap),
-        ],
+        [for (final t in data.tiles) (t.symbol, t.marketCap)],
         [('9903', 400), ('9901', 300), ('9902', 200)],
       );
     });
@@ -880,200 +722,86 @@ void main() {
       expect(HeatmapParams.liveTileLimit, _limit);
     });
 
-    test('沒有產業或產業沒有格子：空清單', () {
+    test('沒有格子：空清單', () {
       for (final mode in HeatmapLiveMode.values) {
         expect(_symbols(_market([]), mode: mode), isEmpty);
-        expect(_symbols(_market([_industry('甲業', [])]), mode: mode), isEmpty);
       }
     });
 
-    group('盤中全市場', () {
-      test('三個產業共 100 檔：全市場市值前 69，市值降冪', () {
-        final groups = <List<HeatmapTile>>[[], [], []];
-        for (var i = 0; i < 100; i++) {
-          // 37 與 100 互質：市值是 1000～100000 的一個排列，且分散在三個產業
-          groups[i % 3].add(_tile(_sym(i), cap: ((i * 37) % 100 + 1) * 1000.0));
+    Map<String, LiveQuoteEntry> closingToday(Iterable<int> indexes) => {
+      for (final i in indexes) _sym(i): _entry(_sym(i), closing: true),
+    };
+
+    group('盤中', () {
+      test('圖上的檔全部登記，照正式資料的順序', () {
+        expect(_symbols(_ranked(30)), [for (var i = 0; i < 30; i++) _sym(i)]);
+      });
+
+      test('🚨 照 tiles 的順序（市值），不是代號順序', () {
+        final market = _market([
+          _tile('9903', cap: 300),
+          _tile('9901', cap: 200),
+          _tile('9902', cap: 100),
+        ]);
+        for (final mode in HeatmapLiveMode.values) {
+          expect(_symbols(market, mode: mode), ['9903', '9901', '9902']);
         }
-        final market = _market([
-          _industry('甲業', groups[0]),
-          _industry('乙業', groups[1]),
-          _industry(null, groups[2]),
-        ]);
-        final symbols = _symbols(market);
-        final caps = _capsOf(market);
-        expect(symbols, hasLength(_limit));
-        expect(symbols.toSet(), hasLength(_limit));
-        expect([
-          for (final s in symbols) caps[s],
-        ], _capsDescending(100, 100 - _limit + 1));
       });
 
-      test('市值相同：跨產業依代號升冪', () {
-        final market = _market([
-          _industry('甲業', [_tile('9905', cap: 500), _tile('9901', cap: 500)]),
-          _industry('乙業', [_tile('9903', cap: 500), _tile('9902', cap: 700)]),
-        ]);
-        expect(_symbols(market), ['9902', '9901', '9903', '9905']);
-      });
-
-      test('市值相同的格子跨過上限：留下代號小的', () {
-        final market = _market([
-          _industry('甲業', [
-            for (var i = 0; i < 70; i += 2) _tile(_sym(i), cap: 500),
-          ]),
-          _industry('乙業', [
-            for (var i = 1; i < 70; i += 2) _tile(_sym(i), cap: 500),
-          ]),
-        ]);
-        expect(_symbols(market), [for (var i = 0; i < _limit; i++) _sym(i)]);
-      });
-
-      test('不到 69 檔：全部', () {
-        final market = _market([
-          _industry('甲業', [
-            for (var i = 0; i < 30; i++) _tile(_sym(i), cap: 1000.0 + i),
-          ]),
-          _industry('乙業', [
-            for (var i = 30; i < 50; i++) _tile(_sym(i), cap: 1000.0 + i),
-          ]),
-        ]);
-        final symbols = _symbols(market);
-        expect(symbols, hasLength(50));
-        expect(symbols.first, _sym(49));
-        expect(symbols.last, _sym(0));
-      });
-
-      test('不看報價中心裡的報價（收盤報價也不排除）', () {
-        final market = _market([
-          _industry('甲業', [
-            for (var i = 0; i < 80; i++) _tile(_sym(i), cap: (1000 - i) * 1.0),
-          ]),
-        ]);
-        final entries = {
-          for (var i = 0; i < 80; i++) _sym(i): _entry(_sym(i), closing: true),
-        };
-        expect(_symbols(market, entries: entries), [
+      test('🚨 超過登記上限時只登記前 69 檔', () {
+        expect(_symbols(_ranked(80)), [
           for (var i = 0; i < _limit; i++) _sym(i),
         ]);
       });
-    });
 
-    group('盤中放大', () {
-      // 甲業 80 檔（市值 1000～80000 的排列）、乙業 10 檔（市值遠大於甲業）
-      final market = _market([
-        _industry('甲業', [
-          for (var i = 0; i < 80; i++)
-            _tile(_sym(i), cap: ((i * 37) % 80 + 1) * 1000.0),
-        ]),
-        _industry('乙業', [
-          for (var i = 0; i < 10; i++)
-            _tile(_sym(80 + i), cap: (200 + i) * 1000.0),
-        ]),
-      ]);
-      final caps = _capsOf(market);
-      final b = {for (var i = 80; i < 90; i++) _sym(i)};
-
-      test('80 檔的產業：該產業的前 69，不被別的產業的大格子擠掉', () {
-        final symbols = _symbols(market, zoom: '甲業');
-        expect(symbols, hasLength(_limit));
-        expect(symbols.toSet().intersection(b), isEmpty);
-        expect([
-          for (final s in symbols) caps[s],
-        ], _capsDescending(80, 80 - _limit + 1));
-      });
-
-      test('10 檔的產業：10 檔，市值降冪', () {
-        final symbols = _symbols(market, zoom: '乙業');
-        expect(symbols.toSet(), b);
-        expect([for (final s in symbols) caps[s]], _capsDescending(209, 200));
-      });
-
-      test('放大的產業不存在（重讀後消失）：視同全市場', () {
-        final whole = _symbols(market);
-        expect(_symbols(market, zoom: '消失業'), whole);
-        // 全市場是乙業 10 檔加甲業前 59 檔
+      test('不看報價中心裡的報價（收盤報價也不排除）', () {
         expect(
-          [for (final s in whole) caps[s]],
-          [..._capsDescending(209, 200), ..._capsDescending(80, 22)],
+          _symbols(
+            _ranked(30),
+            entries: closingToday([for (var i = 0; i < 30; i++) i]),
+          ),
+          [for (var i = 0; i < 30; i++) _sym(i)],
         );
       });
 
-      test('未分類的產業用空字串識別', () {
-        final uncategorized = _market([
-          _industry('甲業', [_tile('9901', cap: 900), _tile('9902', cap: 800)]),
-          _industry(null, [_tile('9903', cap: 100), _tile('9904', cap: 300)]),
-        ]);
-        expect(_symbols(uncategorized, zoom: ''), ['9904', '9903']);
-        expect(_symbols(uncategorized), ['9901', '9902', '9904', '9903']);
+      test('🚨 不看 closingGivenUp（今天放棄的照常登記）', () {
+        expect(
+          _symbols(
+            _ranked(30),
+            givenUp: {for (var i = 0; i < 10; i++) _sym(i)},
+          ),
+          [for (var i = 0; i < 30; i++) _sym(i)],
+        );
       });
     });
 
     group('收盤後', () {
-      // 兩個產業共 80 檔，市值依序號降冪：序號就是市值名次
-      final market = _market([
-        _industry('甲業', [
-          for (var i = 0; i < 80; i += 2) _tile(_sym(i), cap: (1000 - i) * 1.0),
-        ]),
-        _industry('乙業', [
-          for (var i = 1; i < 80; i += 2) _tile(_sym(i), cap: (1000 - i) * 1.0),
-        ]),
-      ]);
+      final market = _ranked(30);
 
-      Map<String, LiveQuoteEntry> closingToday(Iterable<int> indexes) => {
-        for (final i in indexes) _sym(i): _entry(_sym(i), closing: true),
-      };
-
-      test('前 69 大裡 5 檔已有今天的收盤報價：由第 70～74 名補上', () {
-        const acquired = {0, 10, 20, 30, 68};
-        final symbols = _symbols(
-          market,
-          mode: HeatmapLiveMode.afterClose,
-          entries: closingToday(acquired),
-        );
-        expect(symbols, [
-          for (var i = 0; i < 74; i++)
-            if (!acquired.contains(i)) _sym(i),
-        ]);
-        expect(symbols, hasLength(_limit));
-      });
-
-      test('沒有任何收盤報價：市值前 69', () {
+      test('沒有任何收盤報價：圖上全部', () {
         expect(_symbols(market, mode: HeatmapLiveMode.afterClose), [
-          for (var i = 0; i < _limit; i++) _sym(i),
+          for (var i = 0; i < 30; i++) _sym(i),
         ]);
       });
 
-      test('放大與否結果相同（含放大的產業已不存在）', () {
-        const acquired = {0, 1, 2};
-        final entries = closingToday(acquired);
-        final expected = _symbols(
-          market,
-          mode: HeatmapLiveMode.afterClose,
-          entries: entries,
+      test('已有今天收盤報價的移出', () {
+        const acquired = {0, 10, 29};
+        expect(
+          _symbols(
+            market,
+            mode: HeatmapLiveMode.afterClose,
+            entries: closingToday(acquired),
+          ),
+          [
+            for (var i = 0; i < 30; i++)
+              if (!acquired.contains(i)) _sym(i),
+          ],
         );
-        for (final zoom in ['甲業', '乙業', '消失業']) {
-          expect(
-            _symbols(
-              market,
-              mode: HeatmapLiveMode.afterClose,
-              zoom: zoom,
-              entries: entries,
-            ),
-            expected,
-            reason: '放大 $zoom',
-          );
-        }
-        expect(expected, [for (var i = 3; i < 72; i++) _sym(i)]);
       });
 
       test('前一天的收盤報價、不是收盤報價的、別檔的報價都不算已取得', () {
-        final small = _market([
-          _industry('甲業', [
-            for (var i = 0; i < 10; i++) _tile(_sym(i), cap: (1000 - i) * 1.0),
-          ]),
-        ]);
         final symbols = _symbols(
-          small,
+          _ranked(10),
           mode: HeatmapLiveMode.afterClose,
           entries: {
             // 前一天的收盤報價
@@ -1096,41 +824,20 @@ void main() {
         ]);
       });
 
-      test('整個市場不到 69 檔：全部（扣掉已取得的）', () {
-        final small = _market([
-          _industry('甲業', [
-            for (var i = 0; i < 50; i++) _tile(_sym(i), cap: (1000 - i) * 1.0),
-          ]),
-        ]);
-        expect(_symbols(small, mode: HeatmapLiveMode.afterClose), [
-          for (var i = 0; i < 50; i++) _sym(i),
-        ]);
+      test('🚨 報價中心已放棄的移出；與已取得的一起扣掉', () {
+        const givenUp = {1, 5, 29};
         expect(
           _symbols(
-            small,
+            market,
             mode: HeatmapLiveMode.afterClose,
-            entries: closingToday([4, 7]),
+            entries: closingToday([0, 2]),
+            givenUp: {for (final i in givenUp) _sym(i)},
           ),
           [
-            for (var i = 0; i < 50; i++)
-              if (i != 4 && i != 7) _sym(i),
+            for (var i = 0; i < 30; i++)
+              if (!givenUp.contains(i) && i != 0 && i != 2) _sym(i),
           ],
         );
-      });
-
-      test('🚨 報價中心已放棄的移出，由下一檔補上；與已取得的一起扣掉', () {
-        const givenUp = {1, 5, 68};
-        final symbols = _symbols(
-          market,
-          mode: HeatmapLiveMode.afterClose,
-          entries: closingToday([0, 2]),
-          givenUp: {for (final i in givenUp) _sym(i)},
-        );
-        expect(symbols, [
-          for (var i = 0; i < 74; i++)
-            if (!givenUp.contains(i) && i != 0 && i != 2) _sym(i),
-        ]);
-        expect(symbols, hasLength(_limit));
       });
 
       test('全部都放棄或已取得：空清單', () {
@@ -1138,36 +845,27 @@ void main() {
           _symbols(
             market,
             mode: HeatmapLiveMode.afterClose,
-            entries: closingToday([for (var i = 0; i < 80; i += 2) i]),
-            givenUp: {for (var i = 1; i < 80; i += 2) _sym(i)},
+            entries: closingToday([for (var i = 0; i < 30; i += 2) i]),
+            givenUp: {for (var i = 1; i < 30; i += 2) _sym(i)},
           ),
           isEmpty,
         );
       });
 
-      test('🚨 盤中同一組代號照常登記（盤中不看 closingGivenUp）', () {
-        final givenUp = {for (var i = 0; i < 10; i++) _sym(i)};
-        expect(_symbols(market, givenUp: givenUp), [
-          for (var i = 0; i < _limit; i++) _sym(i),
-        ]);
-        expect(_symbols(market, zoom: '甲業', givenUp: givenUp), [
-          for (var i = 0; i < 80; i += 2) _sym(i),
-        ]);
-      });
-
-      test('市值相同：跨產業依代號升冪', () {
-        final tied = _market([
-          _industry('甲業', [_tile('9905', cap: 500), _tile('9901', cap: 500)]),
-          _industry('乙業', [_tile('9903', cap: 500), _tile('9902', cap: 700)]),
-        ]);
-        expect(
-          _symbols(
-            tied,
-            mode: HeatmapLiveMode.afterClose,
-            entries: closingToday([]),
-          ),
-          ['9902', '9901', '9903', '9905'],
+      test('🚨 超過登記上限：扣掉已取得與放棄的之後取前 69 檔', () {
+        const acquired = {0, 10, 20};
+        const givenUp = {30, 68};
+        final symbols = _symbols(
+          _ranked(80),
+          mode: HeatmapLiveMode.afterClose,
+          entries: closingToday(acquired),
+          givenUp: {for (final i in givenUp) _sym(i)},
         );
+        expect(symbols, [
+          for (var i = 0; i < 74; i++)
+            if (!acquired.contains(i) && !givenUp.contains(i)) _sym(i),
+        ]);
+        expect(symbols, hasLength(_limit));
       });
     });
   });

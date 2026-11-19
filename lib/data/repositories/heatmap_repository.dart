@@ -3,7 +3,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/database/dao/heatmap_dao.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 
-/// 大盤熱力圖的資料來源：組出分組計算的輸入（只讀資料庫）
+/// 大盤熱力圖的資料來源：組出 `buildHeatmapMarket` 的輸入（只讀資料庫）
 class HeatmapRepository {
   HeatmapRepository(this._db);
 

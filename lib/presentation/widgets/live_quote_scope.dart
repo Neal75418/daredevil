@@ -16,7 +16,7 @@ import 'package:daredevil/presentation/providers/live_quote_provider.dart';
 /// - 預設建構子:固定清單,畫面每次重建時給當下算的、重新登記。
 /// - [LiveQuoteScope.listen]:給一個 provider,清單一變就登記,不等畫面重畫。
 ///   App 看不見時 Flutter 不畫幀,要在那時跟著換清單的頁面(熱力圖收盤後
-///   抓到一批換下一批)用這個。這一頁看不見(`TickerMode` 關閉)時不聽這個
+///   把拿到收盤報價的移出清單)用這個。這一頁看不見(`TickerMode` 關閉)時不聽這個
 ///   provider,看得見時才聽。provider 要用 autoDispose:沒人聽時要被釋放;
 ///   還掛著的話,回到這一頁時會踩到 Riverpod 的暫停計數檢查(見
 ///   `_LiveQuoteScopeState._subscription` 的說明)。

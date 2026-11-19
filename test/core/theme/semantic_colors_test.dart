@@ -75,13 +75,12 @@ void main() {
       }
     });
 
-    test('熱力圖的平盤、空心邊框、空心文字、標題文字、自選框不得落在股價色相區（兩主題）', () {
+    test('熱力圖的平盤、空心邊框、空心文字、自選框不得落在股價色相區（兩主題）', () {
       for (final b in Brightness.values) {
         for (final c in [
           HeatmapColors.flat(b),
           HeatmapColors.hollowBorder(b),
           HeatmapColors.hollowText(b),
-          HeatmapColors.headerText(b),
           HeatmapColors.mineOuter,
           HeatmapColors.mineInner,
         ]) {

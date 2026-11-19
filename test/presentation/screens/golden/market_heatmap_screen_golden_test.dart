@@ -1,5 +1,5 @@
-/// Golden test: MarketHeatmapScreen（虛構資料：3 個產業、20 檔，含各階、
-/// 平盤、空心、自選框）
+/// Golden test: MarketHeatmapScreen（虛構資料：市值前 30 檔，含各階、平盤、
+/// 空心、自選框）
 ///
 /// 平台相依（字型渲染），只在本機跑；CI 以 --exclude-tags golden 排除。
 @Tags(['golden'])
@@ -60,58 +60,50 @@ class _FakeMarket extends MarketOverviewNotifier {
 
 const _hollow = TileChangeHollow(HollowReason.noChangeData);
 
-HeatmapTile _tile(int n, double cap, TileChange change, {bool mine = false}) =>
-    HeatmapTile(
-      symbol: '${9900 + n}',
-      name: '測試$n',
-      close: 100,
-      marketCap: cap,
-      baseCap: change is TileChangeValue
-          ? cap * 100 / (100 + change.percent)
-          : 0,
-      change: change,
-      isMine: mine,
-    );
+/// 30 檔的市值（降冪，第一檔特別大）與漲跌：每一階的漲、跌，平盤與空心都有
+const _caps = [
+  9e11, 3e11, 2e11, 2e11, 1.5e11, 1.5e11, 1.2e11, 1e11, 1e11, 8e10, //
+  8e10, 7e10, 6e10, 6e10, 5e10, 5e10, 4e10, 4e10, 4e10, 3e10, //
+  3e10, 3e10, 2.5e10, 2.5e10, 2e10, 2e10, 2e10, 1.5e10, 1.5e10, 1e10,
+];
 
-HeatmapIndustry _industry(String name, double? pct, List<HeatmapTile> tiles) =>
-    HeatmapIndustry(
-      name: name,
-      marketCap: tiles.fold(0.0, (s, t) => s + t.marketCap),
-      weightedChangePercent: pct,
-      tiles: tiles,
-    );
+const List<TileChange> _changes = [
+  TileChangeValue(1.2),
+  TileChangeValue(10),
+  TileChangeValue(-10),
+  TileChangeValue(7),
+  TileChangeValue(-7),
+  TileChangeValue(4),
+  TileChangeValue(-4),
+  TileChangeValue(2),
+  TileChangeValue(-2),
+  TileChangeValue(0.3),
+  TileChangeValue(-0.3),
+  TileChangeValue(0),
+  _hollow,
+  TileChangeValue(1),
+  TileChangeValue(-1),
+];
+
+/// 畫雙線框的名次（一檔有漲跌、一檔空心）
+const _mine = {0, 12};
 
 final _data = HeatmapMarketData(
   market: MarketCode.twse,
   dataDate: DateTime(2026, 3, 10),
+  capCoverage: 0.74,
   excludedForShares: 3,
-  industries: [
-    _industry('半導體業', 1.2, [
-      _tile(1, 9e11, const TileChangeValue(1.2), mine: true),
-      _tile(2, 2e11, const TileChangeValue(10)),
-      _tile(3, 1.5e11, const TileChangeValue(7)),
-      _tile(4, 1e11, const TileChangeValue(4)),
-      _tile(5, 8e10, const TileChangeValue(2)),
-      _tile(6, 6e10, const TileChangeValue(0.3)),
-      _tile(7, 4e10, _hollow),
-    ]),
-    _industry('金融保險業', -0.8, [
-      _tile(11, 3e11, const TileChangeValue(-0.8)),
-      _tile(12, 2e11, const TileChangeValue(-10)),
-      _tile(13, 1.5e11, const TileChangeValue(-7), mine: true),
-      _tile(14, 1e11, const TileChangeValue(-4)),
-      _tile(15, 7e10, const TileChangeValue(-2)),
-      _tile(16, 5e10, const TileChangeValue(-0.3)),
-    ]),
-    _industry('航運業', 0, [
-      _tile(21, 1.2e11, const TileChangeValue(0)),
-      _tile(22, 8e10, const TileChangeValue(1)),
-      _tile(23, 6e10, _hollow, mine: true),
-      _tile(24, 4e10, const TileChangeValue(-1)),
-      _tile(25, 3e10, const TileChangeValue(0)),
-      _tile(26, 2e10, const TileChangeValue(-0.3)),
-      _tile(27, 1e10, const TileChangeValue(0.3)),
-    ]),
+  tiles: [
+    for (var n = 0; n < _caps.length; n++)
+      HeatmapTile(
+        symbol: '${9901 + n}',
+        name: '測試${n + 1}',
+        industry: n.isEven ? '半導體業' : null,
+        close: 50 + n * 61.5,
+        marketCap: _caps[n],
+        change: _changes[n % _changes.length],
+        isMine: _mine.contains(n),
+      ),
   ],
 );
 

@@ -38,6 +38,10 @@ final _testDb = AppDatabase.forTesting();
 /// 檔各自一個 isolate）。
 ///
 /// [enTranslations] 同上，但載入 en 翻譯、語系 en_US（驗英文字串的版面）。
+///
+/// [switchableTranslations] 兩種翻譯都支援，從 zh_TW 開始；測試裡對畫面的
+/// context 呼叫 `setLocale` 換成 en_US（驗同一頁換語系之後的行為）。三者只能
+/// 選一個。
 Widget buildProviderTestApp(
   Widget child, {
   List<Override> overrides = const [],
@@ -45,20 +49,33 @@ Widget buildProviderTestApp(
   GoRouter? router,
   bool zhTranslations = false,
   bool enTranslations = false,
+  bool switchableTranslations = false,
   LiveQuoteCenter Function()? liveQuoteCenter,
 }) {
-  assert(!(zhTranslations && enTranslations), '只能載入一種翻譯');
-  if (zhTranslations || enTranslations) {
-    final locale = zhTranslations
-        ? const Locale('zh', 'TW')
-        : const Locale('en', 'US');
+  assert(
+    [
+          zhTranslations,
+          enTranslations,
+          switchableTranslations,
+        ].where((on) => on).length <=
+        1,
+    '只能選一種載入翻譯的方式',
+  );
+  if (zhTranslations || enTranslations || switchableTranslations) {
+    const zh = Locale('zh', 'TW');
+    const en = Locale('en', 'US');
+    final start = enTranslations ? en : zh;
     return EasyLocalization(
-      supportedLocales: [locale],
+      supportedLocales: switchableTranslations ? const [zh, en] : [start],
       path: 'assets/translations',
-      fallbackLocale: locale,
-      startLocale: locale,
+      fallbackLocale: start,
+      startLocale: start,
       saveLocale: false,
-      assetLoader: zhTranslations ? _ZhTwAssetLoader() : _EnAssetLoader(),
+      assetLoader: switchableTranslations
+          ? _BilingualAssetLoader()
+          : zhTranslations
+          ? _ZhTwAssetLoader()
+          : _EnAssetLoader(),
       child: Builder(
         builder: (context) => _buildProviderApp(
           child,
@@ -67,6 +84,7 @@ Widget buildProviderTestApp(
           router: router,
           liveQuoteCenter: liveQuoteCenter,
           locale: context.locale,
+          supportedLocales: context.supportedLocales,
           localizationsDelegates: context.localizationDelegates,
         ),
       ),
@@ -99,6 +117,13 @@ class _EnAssetLoader extends AssetLoader {
   Future<Map<String, dynamic>> load(String path, Locale locale) async => _en;
 }
 
+/// 依要求的語系給翻譯：英文給 en，其餘給 zh-TW
+class _BilingualAssetLoader extends AssetLoader {
+  @override
+  Future<Map<String, dynamic>> load(String path, Locale locale) async =>
+      locale.languageCode == 'en' ? _EnAssetLoader._en : _ZhTwAssetLoader._zhTw;
+}
+
 Widget _buildProviderApp(
   Widget child, {
   required List<Override> overrides,
@@ -106,14 +131,12 @@ Widget _buildProviderApp(
   required GoRouter? router,
   required LiveQuoteCenter Function()? liveQuoteCenter,
   Locale? locale,
+  List<Locale> supportedLocales = const [Locale('en', 'US')],
   Iterable<LocalizationsDelegate<dynamic>>? localizationsDelegates,
 }) {
   final theme = brightness == Brightness.light
       ? AppTheme.lightTheme
       : AppTheme.darkTheme;
-  final supportedLocales = locale == null
-      ? const [Locale('en', 'US')]
-      : [locale];
   return ProviderScope(
     overrides: [
       databaseProvider.overrideWithValue(_testDb),

@@ -1,6 +1,8 @@
 import 'package:daredevil/core/constants/api_endpoints.dart';
 
-/// 大盤熱力圖參數（設計見 `docs/plans/2026-10-07-market-heatmap-design.md`）
+/// 大盤熱力圖參數（設計見 `docs/plans/2026-10-07-market-heatmap-design.md`；
+/// 圖上只畫市值前幾檔的部分見
+/// `docs/plans/2026-11-19-market-heatmap-top30-design.md`）
 abstract final class HeatmapParams {
   /// 不畫的產業：產業別含 `ETF`（上市 `ETF`、上櫃 `上櫃ETF`，與
   /// `isEtfIndustry` 同判準）或等於 [_depositaryReceipt]
@@ -35,47 +37,27 @@ abstract final class HeatmapParams {
     return step;
   }
 
-  /// 即時模式登記的個股上限：報價中心一輪兩批，扣掉該市場指數佔的一檔
+  /// 圖上畫的檔數：每個市場市值最大的幾檔。不得超過 [liveTileLimit]，圖上
+  /// 每一檔才都登記得到即時報價
+  static const int topTileCount = 30;
+
+  /// 即時登記的個股上限：報價中心兩批的檔數，扣掉該市場指數佔的一檔。圖上的
+  /// 檔數（[topTileCount]）不超過它；登記清單另以它為保險上限
   static const int liveTileLimit = ApiEndpoints.misBatchSize * 2 - 1;
 
   /// 盤中一檔進入登記清單時，往前放寬多久內抓到的報價也算數。熱力圖頁可見時
-  /// 只有它自己登記（被蓋住的頁面、沒在看的分頁都取消登記），報價中心一輪兩批
-  /// 約 15 秒；放寬兩輪＝一輪加上約一輪的離開時間：離開熱力圖頁或放大後很快
-  /// 回來時，上一輪抓到的價格照樣上色，更早抓到的仍當成未即時
+  /// 只有它自己登記（被蓋住的頁面、沒在看的分頁都取消登記），報價中心一輪約
+  /// 15 秒；放寬兩輪＝一輪加上約一輪的離開時間：離開熱力圖頁很快回來時，上
+  /// 一輪抓到的價格照樣上色，更早抓到的仍當成未即時
   static const Duration liveRegistrationGrace = Duration(seconds: 30);
 
   /// 頁面可見期間比對內容指紋的間隔
   static const Duration fingerprintPollInterval = Duration(minutes: 1);
 
-  /// 產業區塊之間的間隔（頁面底色）；明顯比格子間隔寬，才看得出產業分界
-  static const double industryGap = 4.0;
-
-  /// 格子之間的間隔
+  /// 格子之間的間隔（露出頁面底色）
   static const double tileGap = 1.0;
 
-  /// 產業標題列高度
-  static const double industryHeaderHeight = 16.0;
-
-  /// 產業區塊（內縮後）寬、高都達到才畫標題列；寬 40 扣掉左右空白放得下
-  /// 「兩個字＋…」（11px 字約 33px，標題放不下時名稱最短縮到這樣）
-  static const double industryHeaderMinWidth = 40.0;
-  static const double industryHeaderMinHeight = 40.0;
-
-  /// 小格子合併：個股在產業內的預期面積（市值占比 × 格子區面積）小於
-  /// 「[foldMinSide]² × [foldAspectAllowance]」就合併成一塊「其他」。24 是
-  /// 無障礙規範的最小點擊目標；乘上形狀放寬倍數，長寬比 2 以內的格子短邊仍有
-  /// 24。用預期面積而非排版後的邊長判斷，同樣資料每次結果相同。
-  static const double foldMinSide = 24.0;
-  static const double foldAspectAllowance = 2.0;
-
-  /// 小產業合併：產業的預期面積（市值占比 × 圖區面積）小於
-  /// 「[industryFoldMinSide]² × [foldAspectAllowance]」就在全市場圖上合成
-  /// 一塊「其他 N 個產業」。放不下標題列的產業認不出是哪個產業，格子多半也
-  /// 寫不下字；邊長＝標題列門檻加上四邊各半個產業間隔。
-  static const double industryFoldMinSide =
-      industryHeaderMinWidth + industryGap;
-
-  /// 標題列的字級，也是格子字級的下限
+  /// 格子字級的下限
   static const double labelFontSize = 11.0;
 
   /// 格子字級的上限：格子越大字越大，取「寬 ÷ [tileFontWidthRatio]」與
@@ -84,7 +66,7 @@ abstract final class HeatmapParams {
   static const double tileFontWidthRatio = 8.0;
   static const double tileFontHeightRatio = 5.0;
 
-  /// 文字左右各留的空白（格子文字、標題列）
+  /// 格子文字左右各留的空白
   static const double textPadding = 2.0;
 
   /// 提示與指標的距離

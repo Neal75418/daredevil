@@ -71,77 +71,41 @@ DateTime _mon(int h, int m, [int s = 0]) => DateTime(2026, 11, 9, h, m, s);
 
 DateTime _tue(int h, int m, [int s = 0]) => DateTime(2026, 11, 10, h, m, s);
 
-const _semi = '半導體業';
-
-/// 半導體業的成員；9950 市值最小，不在全市場前 69 檔、放大後才登記
-const _semiMembers = {'9901', '9902', '9903', '9950'};
-
 /// 虛構代號 99NN
 String _sym(int i) => '99${i.toString().padLeft(2, '0')}';
 
-/// 市值依代號遞減，9950 最小
-double _capOf(int i) => i == 50 ? 0.5e6 : (100 - i) * 1e6;
+/// 市值依代號遞減
+double _capOf(int i) => (100 - i) * 1e6;
 
-/// 上市全市場市值前 69 檔：9900～9949、9951～9969
-final _top69 = [
-  for (var i = 0; i < 50; i++) _sym(i),
-  for (var i = 51; i < 70; i++) _sym(i),
-];
+/// 上市圖上的 30 檔：9900～9929
+final _twseSymbols = [for (var i = 0; i < 30; i++) _sym(i)];
 
 /// 正式資料的一格：收盤 100、漲跌 −0.8%
 HeatmapTile _tile(String symbol, double cap) => HeatmapTile(
   symbol: symbol,
   name: '測試$symbol',
+  industry: null,
   close: 100,
   marketCap: cap,
-  baseCap: cap * 100 / 99.2,
   change: const TileChangeValue(-0.8),
   isMine: false,
 );
 
-HeatmapIndustry _industry(String name, List<HeatmapTile> tiles) {
-  final sorted = [...tiles]
-    ..sort((a, b) {
-      final byCap = b.marketCap.compareTo(a.marketCap);
-      return byCap != 0 ? byCap : a.symbol.compareTo(b.symbol);
-    });
-  return HeatmapIndustry(
-    name: name,
-    marketCap: sorted.fold(0.0, (a, t) => a + t.marketCap),
-    weightedChangePercent: -0.8,
-    tiles: sorted,
-  );
-}
-
-/// 上市：9900～9979 共 80 檔，分「測試業」與半導體業
-HeatmapMarketData _twse({DateTime? dataDate}) {
-  final tiles = [for (var i = 0; i < 80; i++) _tile(_sym(i), _capOf(i))];
-  return HeatmapMarketData(
-    market: MarketCode.twse,
-    dataDate: dataDate ?? _friday,
-    industries: [
-      _industry('測試業', [
-        for (final t in tiles)
-          if (!_semiMembers.contains(t.symbol)) t,
-      ]),
-      _industry(_semi, [
-        for (final t in tiles)
-          if (_semiMembers.contains(t.symbol)) t,
-      ]),
-    ],
-    excludedForShares: 0,
-  );
-}
+/// 上市：9900～9929 共 30 檔，市值依代號遞減
+HeatmapMarketData _twse({DateTime? dataDate}) => HeatmapMarketData(
+  market: MarketCode.twse,
+  dataDate: dataDate ?? _friday,
+  tiles: [for (var i = 0; i < 30; i++) _tile(_sym(i), _capOf(i))],
+  capCoverage: 0.74,
+  excludedForShares: 0,
+);
 
 /// 上櫃：9980～9989 共 10 檔
 HeatmapMarketData _tpex({DateTime? dataDate}) => HeatmapMarketData(
   market: MarketCode.tpex,
   dataDate: dataDate ?? _friday,
-  industries: [
-    _industry('測試丙業', [
-      for (var i = 80; i < 90; i++) _tile(_sym(i), _capOf(i)),
-    ]),
-  ],
+  tiles: [for (var i = 80; i < 90; i++) _tile(_sym(i), _capOf(i))],
+  capCoverage: 0.52,
   excludedForShares: 0,
 );
 
@@ -238,18 +202,6 @@ class _Page {
     return view;
   }
 
-  HeatmapLiveView zoomTo(DateTime at, String key) {
-    clock.value = at;
-    container.read(heatmapSelectionProvider.notifier).zoomTo(key);
-    return view;
-  }
-
-  HeatmapLiveView clearZoom(DateTime at) {
-    clock.value = at;
-    container.read(heatmapSelectionProvider.notifier).clearZoom();
-    return view;
-  }
-
   HeatmapLiveView selectMarket(DateTime at, String market) {
     clock.value = at;
     container.read(heatmapSelectionProvider.notifier).selectMarket(market);
@@ -264,12 +216,8 @@ class _Page {
   }
 }
 
-TileChange _changeOf(HeatmapLiveView view, String symbol) => view
-    .data!
-    .industries
-    .expand((i) => i.tiles)
-    .firstWhere((t) => t.symbol == symbol)
-    .change;
+TileChange _changeOf(HeatmapLiveView view, String symbol) =>
+    view.data!.tiles.firstWhere((t) => t.symbol == symbol).change;
 
 final _colored = isA<TileChangeValue>().having(
   (c) => c.percent,
@@ -286,35 +234,38 @@ List<String> _symbolsOf(HeatmapLiveView view) => [
 
 void main() {
   group('heatmapSelectionProvider', () {
-    test('開頁是上市、全市場；換市場清掉放大；放大與取消放大不換市場', () {
+    test('開頁是上市；換市場', () {
       final c = ProviderContainer();
       addTearDown(c.dispose);
       final sub = c.listen(heatmapSelectionProvider, (_, _) {});
-      final notifier = c.read(heatmapSelectionProvider.notifier);
 
-      expect(sub.read(), (market: MarketCode.twse, zoom: null));
-      notifier.zoomTo(_semi);
-      expect(sub.read(), (market: MarketCode.twse, zoom: _semi));
-      notifier.selectMarket(MarketCode.tpex);
-      expect(sub.read(), (market: MarketCode.tpex, zoom: null));
-      // 未分類的 key 是空字串，仍是放大
-      notifier.zoomTo('');
-      expect(sub.read(), (market: MarketCode.tpex, zoom: ''));
-      notifier.clearZoom();
-      expect(sub.read(), (market: MarketCode.tpex, zoom: null));
+      expect(sub.read(), MarketCode.twse);
+      c.read(heatmapSelectionProvider.notifier).selectMarket(MarketCode.tpex);
+      expect(sub.read(), MarketCode.tpex);
+    });
+
+    test('🚨 沒有人聽之後重新讀，回到上市（離開頁面再進來不沿用上次選的市場）', () async {
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final sub = c.listen(heatmapSelectionProvider, (_, _) {});
+      c.read(heatmapSelectionProvider.notifier).selectMarket(MarketCode.tpex);
+      expect(sub.read(), MarketCode.tpex);
+
+      sub.close();
+      await c.pump();
+      expect(c.read(heatmapSelectionProvider), MarketCode.twse);
     });
   });
 
   group('模式與登記', () {
-    test('週一 10:30、資料日上週五 → 盤中，登記全市場市值前 69 檔，'
+    test('週一 10:30、資料日上週五 → 盤中，登記圖上全部的檔，'
         '都沒有今天的正式資料、市場別照目前市場', () {
       final page = _Page(at: _mon(10, 30));
       final view = page.view;
 
       expect(view.mode, HeatmapLiveMode.intraday);
       expect(view.data!.liveMode, HeatmapLiveMode.intraday);
-      expect(view.stockRegistrations, hasLength(HeatmapParams.liveTileLimit));
-      expect(_symbolsOf(view), _top69);
+      expect(_symbolsOf(view), _twseSymbols);
       expect(
         view.stockRegistrations.every(
           (r) => r.market == MarketCode.twse && !r.hasOfficialToday,
@@ -382,10 +333,18 @@ void main() {
         index(MarketCode.twse),
         ...page.view.stockRegistrations,
       ]);
-      expect(sub.read(), hasLength(1 + HeatmapParams.liveTileLimit));
+      expect(sub.read(), hasLength(1 + 30));
 
       final tpex = page.selectMarket(_mon(10, 31), MarketCode.tpex);
       expect(sub.read(), [index(MarketCode.tpex), ...tpex.stockRegistrations]);
+      // 前一個市場的檔與指數不殘留
+      expect(
+        {for (final r in sub.read()) r.symbol}.intersection({
+          ..._twseSymbols,
+          LiveQuoteParams.indexSymbolOf(MarketCode.twse),
+        }),
+        isEmpty,
+      );
     });
 
     test('🚨 跨過午夜而熱力圖的檢視沒變：指數的「已有今天正式資料」照樣重算', () {
@@ -465,87 +424,16 @@ void main() {
     });
 
     test('放寬的時間至少是熱力圖單獨登記時的兩輪（一輪加上同樣長的離開時間）', () {
-      // 熱力圖登記的個股加一個指數，分批無條件進位（同報價中心）
+      // 登記上限的檔數加一個指數，分批無條件進位（同報價中心）：批數最多、
+      // 一輪最長的情形
       const batches =
           (HeatmapParams.liveTileLimit + 1 + ApiEndpoints.misBatchSize - 1) ~/
           ApiEndpoints.misBatchSize;
-      expect(batches, 2);
       expect(
         HeatmapParams.liveRegistrationGrace >=
             LiveQuoteSchedule.pollInterval(batches) * 2,
         isTrue,
       );
-    });
-
-    test('放大後馬上取消放大：剛離開清單、30 秒內被抓過的檔回到清單時照樣上色', () {
-      final page = _Page(at: _mon(10, 0));
-      expect(
-        _symbolsOf(page.zoomTo(_mon(10, 10), _semi)),
-        isNot(contains('9960')),
-      );
-      page.publish(
-        _mon(10, 10, 5),
-        _state(
-          entries: {'9960': _quote('9960')},
-          fetchedAt: {'9960': _mon(10, 10, 5)},
-        ),
-      );
-      final back = page.clearZoom(_mon(10, 10, 20));
-      expect(_symbolsOf(back), contains('9960'));
-      expect(_changeOf(back, '9960'), _colored);
-    });
-
-    test('全市場 → 放大半導體業 → 取消放大：一直在清單裡的 9901 全程上色；'
-        '放大時才進清單的 9950 未即時', () {
-      final page = _Page(at: _mon(10, 0));
-      final center = _state(
-        entries: {'9901': _quote('9901'), '9950': _quote('9950')},
-        fetchedAt: {'9901': _mon(10, 5), '9950': _mon(9, 40)},
-      );
-      final whole = page.publish(_mon(10, 5), center);
-      expect(_changeOf(whole, '9901'), _colored);
-      expect(_changeOf(whole, '9950'), _hollow(HollowReason.notLive));
-
-      final zoomed = page.zoomTo(_mon(10, 6), _semi);
-      expect(_symbolsOf(zoomed), ['9901', '9902', '9903', '9950']);
-      expect(_changeOf(zoomed, '9901'), _colored);
-      expect(_changeOf(zoomed, '9950'), _hollow(HollowReason.notLive));
-
-      final back = page.clearZoom(_mon(10, 7));
-      expect(_symbolsOf(back), _top69);
-      expect(_changeOf(back, '9901'), _colored);
-      expect(_changeOf(back, '9950'), _hollow(HollowReason.notLive));
-    });
-
-    test('離開清單就移除：9960 放大期間（取消放大前 3 分鐘）被別的畫面抓到，'
-        '取消放大後未即時，直到抓到的時刻不早於重新進清單前 30 秒', () {
-      final page = _Page(at: _mon(10, 0));
-      expect(_symbolsOf(page.view), contains('9960'));
-
-      expect(
-        _symbolsOf(page.zoomTo(_mon(10, 10), _semi)),
-        isNot(contains('9960')),
-      );
-      page.publish(
-        _mon(10, 12),
-        _state(
-          entries: {'9960': _quote('9960')},
-          fetchedAt: {'9960': _mon(10, 12)},
-        ),
-      );
-
-      final back = page.clearZoom(_mon(10, 15));
-      expect(_changeOf(back, '9960'), _hollow(HollowReason.notLive));
-
-      // 恰好是重新進清單前 30 秒抓的也算
-      final fetched = page.publish(
-        _mon(10, 15),
-        _state(
-          entries: {'9960': _quote('9960')},
-          fetchedAt: {'9960': _mon(10, 14, 30)},
-        ),
-      );
-      expect(_changeOf(fetched, '9960'), _colored);
     });
 
     test('切到不需要即時的市場再切回：回來的檔重新記開始登記的時刻，'
@@ -663,8 +551,8 @@ void main() {
   });
 
   group('收盤後', () {
-    test('13:35：登記還沒拿到收盤報價的前 69 檔；進度是整張圖的檔數與今天'
-        '有收盤報價的檔數，放大不變', () {
+    test('13:35：登記還沒拿到收盤報價的檔；進度是圖上的檔數與今天有收盤報價的'
+        '檔數', () {
       final page = _Page(
         at: _mon(13, 35),
         center: _state(
@@ -684,17 +572,10 @@ void main() {
       final view = page.view;
       expect(view.mode, HeatmapLiveMode.afterClose);
       expect(view.data!.liveMode, HeatmapLiveMode.afterClose);
-      expect(_symbolsOf(view), [
-        for (var i = 3; i < 50; i++) _sym(i),
-        for (var i = 51; i < 73; i++) _sym(i),
-      ]);
-      expect(view.closing, (done: 3, unmatched: 0, total: 80));
+      expect(_symbolsOf(view), [for (var i = 3; i < 30; i++) _sym(i)]);
+      expect(view.closing, (done: 3, unmatched: 0, total: 30));
       expect(_changeOf(view, '9900'), _colored);
       expect(_changeOf(view, '9903'), _hollow(HollowReason.noClosingQuote));
-
-      final zoomed = page.zoomTo(_mon(13, 36), _semi);
-      expect(zoomed.closing, (done: 3, unmatched: 0, total: 80));
-      expect(_symbolsOf(zoomed), _symbolsOf(view));
     });
 
     test('13:35：狀態只保留報價暫停（限流、網路），沒有暫停為 null', () {
@@ -738,11 +619,10 @@ void main() {
         _state(entries: entries, fetchedAt: fetchedAt),
       );
       expect(quiet.quoteStatus, isNull);
-      expect(quiet.closing, (done: 1, unmatched: 0, total: 80));
+      expect(quiet.closing, (done: 1, unmatched: 0, total: 30));
     });
 
-    test('🚨 報價中心已放棄的代號：移出登記清單、由下一檔補上；格子寫收盤沒撮合；'
-        '進度另計檔數（整張圖，放大不變）', () {
+    test('🚨 報價中心已放棄的代號：移出登記清單；格子寫收盤沒撮合；進度另計檔數', () {
       final page = _Page(
         at: _mon(13, 40),
         center: _state(
@@ -753,23 +633,21 @@ void main() {
             // 試過但不是收盤報價
             '9902': _quote('9902', time: '13:29:58'),
           },
-          // 9905 沒有 entry（列被解析丟掉）；9950 不在全市場前 69、在半導體業；
-          // 't00' 不在圖上
+          // 9905、9920 沒有 entry（列被解析丟掉）；'t00' 不在圖上
           givenUpAt: {
-            for (final s in ['9901', '9902', '9905', '9950', 't00'])
+            for (final s in ['9901', '9902', '9905', '9920', 't00'])
               s: _mon(13, 39),
           },
         ),
       );
       final view = page.view;
       expect(_symbolsOf(view), [
-        for (var i = 3; i < 50; i++)
-          if (i != 5) _sym(i),
-        for (var i = 51; i < 74; i++) _sym(i),
+        for (var i = 3; i < 30; i++)
+          if (i != 5 && i != 20) _sym(i),
       ]);
-      expect(view.closing, (done: 2, unmatched: 3, total: 80));
+      expect(view.closing, (done: 2, unmatched: 3, total: 30));
       expect(_changeOf(view, '9901'), _colored);
-      for (final symbol in ['9902', '9905', '9950']) {
+      for (final symbol in ['9902', '9905', '9920']) {
         expect(
           _changeOf(view, symbol),
           _hollow(HollowReason.noClosingMatch),
@@ -777,12 +655,6 @@ void main() {
         );
       }
       expect(_changeOf(view, '9903'), _hollow(HollowReason.noClosingQuote));
-
-      final zoomed = page.zoomTo(_mon(13, 41), _semi);
-      expect(zoomed.closing, (done: 2, unmatched: 3, total: 80));
-      expect(_symbolsOf(zoomed), _symbolsOf(view));
-      final semi = zoomed.data!.industries.firstWhere((i) => i.key == _semi);
-      expect(semi.allNoClosingMatch, isFalse, reason: '9903 還在等');
     });
 
     test('🚨 前一天放棄的不算（報價中心換日後第一次發布前，狀態裡還是前一天的）；'
@@ -799,11 +671,10 @@ void main() {
       );
       final view = page.view;
       expect(_symbolsOf(view), [
-        for (var i = 0; i < 50; i++)
+        for (var i = 0; i < 30; i++)
           if (i != 2) _sym(i),
-        for (var i = 51; i < 71; i++) _sym(i),
       ], reason: '9901 照常登記、9902 移出');
-      expect(view.closing, (done: 0, unmatched: 1, total: 80));
+      expect(view.closing, (done: 0, unmatched: 1, total: 30));
       expect(_changeOf(view, '9901'), _hollow(HollowReason.noClosingQuote));
       expect(_changeOf(view, '9902'), _hollow(HollowReason.noClosingMatch));
     });
@@ -819,7 +690,7 @@ void main() {
         ),
       );
       final view = page.view;
-      expect(_symbolsOf(view), _top69);
+      expect(_symbolsOf(view), _twseSymbols);
       expect(view.closing, isNull);
       expect(_changeOf(view, '9901'), _hollow(HollowReason.notLive));
     });
@@ -834,7 +705,7 @@ void main() {
     }) => _state(
       entries: {
         '9901': _quote('9901', date: _friday),
-        '9960': _quote('9960', date: _friday, closing: true),
+        '9920': _quote('9920', date: _friday, closing: true),
         't00': _quote('t00'),
       },
       hadToday: false,
@@ -857,7 +728,7 @@ void main() {
           view.quoteStatus,
           const LiveHeaderStatus(LiveHeaderKind.noQuotesToday),
         );
-        expect(_symbolsOf(view), _top69);
+        expect(_symbolsOf(view), _twseSymbols);
         expect(view.closing, isNull);
       });
 
@@ -879,7 +750,7 @@ void main() {
     }
 
     test('不誤退回：收盤後最近一輪沒有今天的報價、但圖上已有今天的收盤 → '
-        '照常套色；放大到沒有收盤報價的產業也一樣', () {
+        '照常套色', () {
       final page = _Page(
         at: _mon(13, 35),
         center: _state(
@@ -889,31 +760,28 @@ void main() {
       );
       final view = page.view;
       expect(view.data!.liveMode, HeatmapLiveMode.afterClose);
-      expect(view.closing, (done: 1, unmatched: 0, total: 80));
+      expect(view.closing, (done: 1, unmatched: 0, total: 30));
       expect(view.quoteStatus, isNull);
-
-      final zoomed = page.zoomTo(_mon(13, 36), _semi);
-      expect(zoomed.data!.liveMode, HeatmapLiveMode.afterClose);
-      expect(zoomed.closing, (done: 1, unmatched: 0, total: 80));
-      expect(zoomed.quoteStatus, isNull);
     });
 
-    test('不誤退回：盤中放大到沒有今天報價的產業，圖上別處有 → 照常套色、'
+    test('不誤退回：盤中圖上有今天的報價、但不是這頁登記之後抓的 → 照常套色、'
         '不說證交所今天尚無報價', () {
       final page = _Page(
         at: _mon(10, 30),
         center: _state(
-          entries: {'9960': _quote('9960')},
-          fetchedAt: {'9960': _mon(10, 30)},
+          // 別的畫面半小時前抓的：圖上有今天的報價，但這頁不拿它上色
+          entries: {'9920': _quote('9920')},
+          fetchedAt: {'9920': _mon(10, 0)},
           hadToday: false,
         ),
       );
-      final zoomed = page.zoomTo(_mon(10, 31), _semi);
-      expect(zoomed.data!.liveMode, HeatmapLiveMode.intraday);
-      // 頁首規則在 latestResponseHadToday 為 false、登記的幾檔都沒有報價時
-      // 會說「證交所今天尚無報價」；這裡沒有退回，代表圖上某處（9960）有今天
-      // 的報價，那句話是錯的，所以頁首不顯示
-      expect(zoomed.quoteStatus, isNull);
+      final view = page.view;
+      expect(view.data!.liveMode, HeatmapLiveMode.intraday);
+      expect(_changeOf(view, '9920'), _hollow(HollowReason.notLive));
+      // 頁首規則在 latestResponseHadToday 為 false、登記的幾檔都沒有算數的
+      // 報價時會說「證交所今天尚無報價」；這裡沒有退回，代表圖上某處有今天的
+      // 報價，那句話是錯的，所以頁首不顯示
+      expect(view.quoteStatus, isNull);
     });
 
     test('開盤頭幾秒退回，第一筆今天的報價一到就離開', () {

@@ -17,27 +17,19 @@ import 'package:daredevil/presentation/providers/market_overview_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
 import 'package:daredevil/presentation/widgets/live_quote_status.dart';
 
-/// 熱力圖頁正在看的市場（`MarketCode.twse`／`MarketCode.tpex`）與放大的產業
-/// （[HeatmapIndustry.key]；null 是全市場）
-typedef HeatmapSelection = ({String market, String? zoom});
-
+/// 熱力圖頁正在看的市場（`MarketCode.twse`／`MarketCode.tpex`）。autoDispose：
+/// 離開頁面後重新進來回到上市
 final heatmapSelectionProvider =
-    NotifierProvider.autoDispose<HeatmapSelectionNotifier, HeatmapSelection>(
+    NotifierProvider.autoDispose<HeatmapSelectionNotifier, String>(
       HeatmapSelectionNotifier.new,
     );
 
-/// 熱力圖頁的選取；開頁是上市、全市場
-class HeatmapSelectionNotifier extends Notifier<HeatmapSelection> {
+/// 熱力圖頁的選取；開頁是上市
+class HeatmapSelectionNotifier extends Notifier<String> {
   @override
-  HeatmapSelection build() => (market: MarketCode.twse, zoom: null);
+  String build() => MarketCode.twse;
 
-  /// 換市場並回到全市場（放大的產業屬於原本的市場）
-  void selectMarket(String market) => state = (market: market, zoom: null);
-
-  void zoomTo(String industryKey) =>
-      state = (market: state.market, zoom: industryKey);
-
-  void clearZoom() => state = (market: state.market, zoom: null);
+  void selectMarket(String market) => state = market;
 }
 
 /// 熱力圖頁要畫的資料與即時狀態
@@ -68,7 +60,7 @@ class HeatmapLiveView {
   /// 沒有為 null
   final LiveHeaderStatus? quoteStatus;
 
-  /// 收盤後的進度：[total] 是整張圖（不論放大、合併）的檔數，[done] 是其中
+  /// 收盤後的進度：[total] 是圖上的檔數，[done] 是其中
   /// 已有今天收盤報價的檔數，[unmatched] 是其中報價中心今天已放棄（收盤那一
   /// 盤沒撮合）、而且沒有今天收盤報價的檔數；收盤後以外與停市日退回時為 null
   final ({int done, int unmatched, int total})? closing;
@@ -106,13 +98,11 @@ final heatmapLiveProvider =
 /// 熱力圖頁要向報價中心登記的清單:正在看的市場的指數,加上熱力圖要上色的
 /// 個股([HeatmapLiveView.stockRegistrations])。
 ///
-/// 由 provider 算、交給 `LiveQuoteScope.listen`:收盤後「抓到一批換下一批」
-/// 不必等畫面重畫,App 看不見(畫面停止排程)時清單照樣一路換下去
+/// 由 provider 算、交給 `LiveQuoteScope.listen`:收盤後把拿到收盤報價的移出
+/// 清單不必等畫面重畫,App 看不見(畫面停止排程)時清單照樣跟著換
 final heatmapRegistrationsProvider =
     Provider.autoDispose<List<LiveQuoteRegistration>>((ref) {
-      final market = ref.watch(
-        heatmapSelectionProvider.select((s) => s.market),
-      );
+      final market = ref.watch(heatmapSelectionProvider);
       final overview = ref.watch(marketOverviewProvider);
       // 指數「是否已有今天正式資料」跟現在有關:跨過午夜等邊界時重算
       ref.watch(liveQuoteBoundaryProvider);
@@ -131,9 +121,9 @@ final heatmapRegistrationsProvider =
 ///
 /// 盤中只用「這頁開始登記該檔之前 [HeatmapParams.liveRegistrationGrace] 起」
 /// 抓到的報價上色：逐檔記該檔進入登記清單的時刻往前放寬那段時間，報價中心的
-/// `fetchedAt` 不早於它才算——擋掉別的畫面很早以前抓的舊價，離開熱力圖頁或
-/// 放大後馬上回來時，上一輪剛抓到的照樣用。清單變動（放大、取消放大、換市場、
-/// 收盤後滾動）時新進的記現在往前放寬的時刻、離開的移除，換日時整個清空。
+/// `fetchedAt` 不早於它才算——擋掉別的畫面很早以前抓的舊價，離開熱力圖頁
+/// 馬上回來時，上一輪剛抓到的照樣用。清單變動（換市場、收盤後拿到報價的
+/// 移出）時新進的記現在往前放寬的時刻、離開的移除，換日時整個清空。
 /// 頁面被蓋住或 App 到背景時不清：已登記的檔，之後抓到的報價（哪個畫面抓的
 /// 都算）照樣用，報價中心下一輪再換新。
 class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
@@ -149,9 +139,9 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
 
   @override
   HeatmapLiveView build() {
-    final selection = ref.watch(heatmapSelectionProvider);
+    final market = ref.watch(heatmapSelectionProvider);
     final official = ref.watch(
-      marketHeatmapProvider.select((s) => s.markets[selection.market]),
+      marketHeatmapProvider.select((s) => s.markets[market]),
     );
     final center = ref.watch(liveQuoteCenterProvider);
     // 跨過開盤、收盤、午夜時重算模式
@@ -180,7 +170,6 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
     final registered = heatmapLiveSymbols(
       official,
       mode: mode,
-      zoomIndustryKey: selection.zoom,
       entries: center.entries,
       closingGivenUp: givenUp,
       today: today,
@@ -221,8 +210,8 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
     return switch (mode) {
       // 「證交所今天尚無報價」只由停市日退回產生：頁首規則只在
       // `latestResponseHadToday == false` 時說它，而那時沒有退回，代表圖上
-      // 某處有今天的報價；頁首規則只看登記的那幾檔（例如放大到還沒抓到的
-      // 產業），說出來會是錯的
+      // 某處有今天的報價；頁首規則只看這頁登記之後抓到的報價（別的畫面早先
+      // 抓的不算），說出來會是錯的
       HeatmapLiveMode.intraday => HeatmapLiveView(
         data: data,
         mode: mode,
@@ -279,10 +268,7 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
     LiveQuoteState center,
     DateTime now,
   ) {
-    final closes = {
-      for (final industry in official.industries)
-        for (final tile in industry.tiles) tile.symbol: tile.close,
-    };
+    final closes = {for (final tile in official.tiles) tile.symbol: tile.close};
     final merged = [
       for (final symbol in registered)
         LiveQuoteMerge.merge(
@@ -303,7 +289,7 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
   }
 
   /// 停市日（日曆沒標的颱風假等）：報價中心最近一輪有回應但沒有今天的報價，
-  /// 而且整張圖上（不論放大）沒有任何一檔有今天的報價。開盤頭幾秒同樣成立，
+  /// 而且圖上沒有任何一檔有今天的報價。開盤頭幾秒同樣成立，
   /// 第一筆今天的報價到了就不成立
   static bool _noQuotesToday(
     HeatmapMarketData official,
@@ -311,12 +297,10 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
     DateTime today,
   ) {
     if (center.latestResponseHadToday != false) return false;
-    for (final industry in official.industries) {
-      for (final tile in industry.tiles) {
-        final entry = center.entries[tile.symbol];
-        if (entry != null && DateContext.isSameDay(entry.date, today)) {
-          return false;
-        }
+    for (final tile in official.tiles) {
+      final entry = center.entries[tile.symbol];
+      if (entry != null && DateContext.isSameDay(entry.date, today)) {
+        return false;
       }
     }
     return true;
@@ -333,15 +317,13 @@ class HeatmapLiveNotifier extends Notifier<HeatmapLiveView> {
     var done = 0;
     var unmatched = 0;
     var total = 0;
-    for (final industry in official.industries) {
-      for (final tile in industry.tiles) {
-        total++;
-        final entry = entries[tile.symbol];
-        if (entry != null && isClosingQuoteOfToday(entry, today)) {
-          done++;
-        } else if (closingGivenUp.contains(tile.symbol)) {
-          unmatched++;
-        }
+    for (final tile in official.tiles) {
+      total++;
+      final entry = entries[tile.symbol];
+      if (entry != null && isClosingQuoteOfToday(entry, today)) {
+        done++;
+      } else if (closingGivenUp.contains(tile.symbol)) {
+        unmatched++;
       }
     }
     return (done: done, unmatched: unmatched, total: total);

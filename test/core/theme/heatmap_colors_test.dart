@@ -30,7 +30,6 @@ const _table = {
     flat: 0xFF303030,
     hollowBorder: 0xFF6B6B6B,
     hollowText: 0xFFA1A1A1,
-    headerText: 0xFFF4F4F5,
   ),
   Brightness.light: (
     bg: 0xFFFFFFFF,
@@ -53,7 +52,6 @@ const _table = {
     flat: 0xFFE4E4E4,
     hollowBorder: 0xFF8C8C8C,
     hollowText: 0xFF717171,
-    headerText: 0xFF18181B,
   ),
 };
 
@@ -75,7 +73,6 @@ void main() {
         expect(HeatmapColors.flat(b), Color(t.flat));
         expect(HeatmapColors.hollowBorder(b), Color(t.hollowBorder));
         expect(HeatmapColors.hollowText(b), Color(t.hollowText));
-        expect(HeatmapColors.headerText(b), Color(t.headerText));
         expect(HeatmapColors.mineOuter, const Color(0xFF000000));
         expect(HeatmapColors.mineInner, const Color(0xFFFFFFFF));
         // 文字對比與自選框兩道守門逐一檢查 allFills：內容錯了就會漏查
@@ -147,17 +144,13 @@ void main() {
         expect(ColorContrast.ratio(flat, down1), greaterThanOrEqualTo(1.15));
       });
 
-      test('空心邊框對頁面底色 ≥ 3.0；空心文字、產業標題文字對頁面底色 ≥ 4.5', () {
+      test('空心邊框對頁面底色 ≥ 3.0；空心文字對頁面底色 ≥ 4.5', () {
         expect(
           ColorContrast.ratio(HeatmapColors.hollowBorder(b), bg),
           greaterThanOrEqualTo(3.0),
         );
         expect(
           ColorContrast.ratio(HeatmapColors.hollowText(b), bg),
-          greaterThanOrEqualTo(4.5),
-        );
-        expect(
-          ColorContrast.ratio(HeatmapColors.headerText(b), bg),
           greaterThanOrEqualTo(4.5),
         );
       });

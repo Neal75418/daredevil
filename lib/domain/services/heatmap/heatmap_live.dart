@@ -1,10 +1,7 @@
-import 'package:collection/collection.dart';
-
 import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/domain/models/heatmap.dart';
 import 'package:daredevil/domain/models/live_quote.dart';
-import 'package:daredevil/domain/services/heatmap/heatmap_grouping.dart';
 import 'package:daredevil/domain/services/live_quote/live_quote_schedule.dart';
 
 /// 現在該用哪種即時模式；null 是不需要即時（全部用正式資料）。
@@ -25,57 +22,35 @@ HeatmapLiveMode? heatmapLiveModeAt({
   };
 }
 
-/// 熱力圖要向報價中心登記的個股代號，最多 [HeatmapParams.liveTileLimit] 檔，
-/// 依市值降冪、同值依代號升冪。
+/// 熱力圖要向報價中心登記的個股代號：照 [HeatmapMarketData.tiles] 的順序
+/// （市值降冪），最多 [HeatmapParams.liveTileLimit] 檔。
 ///
-/// - [HeatmapLiveMode.intraday]：放大到某個產業（[zoomIndustryKey]）時是該產業
-///   的前幾大，否則是全市場的前幾大。放大的產業不在 [official]（重讀後消失）
-///   視同沒放大。
-/// - [HeatmapLiveMode.afterClose]：全市場還沒有今天收盤報價、報價中心也還沒
-///   放棄（[closingGivenUp]，收盤那一盤沒撮合）的股票中的前幾大，放大與否都
-///   一樣；拿到的與放棄的移出、下一檔補進，一輪一輪把整個市場收齊。放棄的
-///   不移出會一直占著名額，報價中心不再抓它們，其餘的就永遠排不進來。
-///   收盤報價是定值，[entries] 裡哪個畫面抓的都算。盤中不看 [closingGivenUp]。
+/// - [HeatmapLiveMode.intraday]：圖上的每一檔。
+/// - [HeatmapLiveMode.afterClose]：還沒有今天收盤報價、報價中心也還沒放棄
+///   （[closingGivenUp]，收盤那一盤沒撮合）的；拿到的與放棄的移出。放棄的
+///   不移出會一直占著名額，報價中心不再抓它們。收盤報價是定值，[entries] 裡
+///   哪個畫面抓的都算。盤中不看 [closingGivenUp]。
 ///
-/// 純函式。放大時直接取產業內已排好的順序（[HeatmapIndustry.tiles]）。
+/// 純函式。
 List<String> heatmapLiveSymbols(
   HeatmapMarketData official, {
   required HeatmapLiveMode mode,
-  required String? zoomIndustryKey,
   required Map<String, LiveQuoteEntry> entries,
   required Set<String> closingGivenUp,
   required DateTime today,
 }) {
-  final Iterable<HeatmapTile> candidates;
-  switch (mode) {
-    case HeatmapLiveMode.intraday:
-      final zoomed = zoomIndustryKey == null
-          ? null
-          : official.industries.firstWhereOrNull(
-              (industry) => industry.key == zoomIndustryKey,
-            );
-      candidates = zoomed?.tiles ?? _tilesByMarketCap(official);
-    case HeatmapLiveMode.afterClose:
-      candidates = _tilesByMarketCap(official).where((tile) {
-        final entry = entries[tile.symbol];
-        return (entry == null || !isClosingQuoteOfToday(entry, today)) &&
-            !closingGivenUp.contains(tile.symbol);
-      });
-  }
+  final Iterable<HeatmapTile> candidates = switch (mode) {
+    HeatmapLiveMode.intraday => official.tiles,
+    HeatmapLiveMode.afterClose => official.tiles.where((tile) {
+      final entry = entries[tile.symbol];
+      return (entry == null || !isClosingQuoteOfToday(entry, today)) &&
+          !closingGivenUp.contains(tile.symbol);
+    }),
+  };
   return [
     for (final tile in candidates.take(HeatmapParams.liveTileLimit))
       tile.symbol,
   ];
-}
-
-/// 攤平各產業的格子，重排成市值降冪、同值依代號升冪（產業內已排好，
-/// 跨產業要重排）
-List<HeatmapTile> _tilesByMarketCap(HeatmapMarketData official) {
-  return [for (final industry in official.industries) ...industry.tiles]
-    ..sort((a, b) {
-      final byCap = b.marketCap.compareTo(a.marketCap);
-      return byCap != 0 ? byCap : a.symbol.compareTo(b.symbol);
-    });
 }
 
 /// 今天的收盤報價：收盤後的登記清單、上色與進度共用這個判準，已取得的才會
@@ -83,10 +58,9 @@ List<HeatmapTile> _tilesByMarketCap(HeatmapMarketData official) {
 bool isClosingQuoteOfToday(LiveQuoteEntry entry, DateTime today) =>
     entry.isClosingQuote && DateContext.isSameDay(entry.date, today);
 
-/// 把即時報價疊到正式資料上：逐格換漲跌、顯示價與平盤市值，產業的加權漲跌
-/// 與即時占比重算。
+/// 把即時報價疊到正式資料上：逐格換漲跌與顯示價。
 ///
-/// 純函式，不碰資料庫。面積（[HeatmapTile.marketCap]）、格子與產業的順序、
+/// 純函式，不碰資料庫。面積（[HeatmapTile.marketCap]）、格子的順序、覆蓋率、
 /// 頁尾檔數、資料日都維持正式資料；即時只換顏色。
 ///
 /// 漲跌幅＝(即時價 − y) × 100 ÷ y，y 是證交所即時資料的昨收（除權息日是
@@ -132,14 +106,14 @@ HeatmapMarketData overlayHeatmapLive(
     };
   }
 
-  final industries = [
-    for (final industry in official.industries)
-      _overlayIndustry(industry, official.dataDate, judge),
-  ];
   return HeatmapMarketData(
     market: official.market,
     dataDate: official.dataDate,
-    industries: List.unmodifiable(industries),
+    tiles: List.unmodifiable([
+      for (final tile in official.tiles)
+        _overlayTile(tile, official.dataDate, judge(tile)),
+    ]),
+    capCoverage: official.capCoverage,
     excludedForShares: official.excludedForShares,
     liveMode: mode,
   );
@@ -203,25 +177,6 @@ _Verdict _judgeAfterClose({
   );
 }
 
-HeatmapIndustry _overlayIndustry(
-  HeatmapIndustry industry,
-  DateTime dataDate,
-  _Verdict Function(HeatmapTile) judge,
-) {
-  final tiles = [
-    for (final tile in industry.tiles)
-      _overlayTile(tile, dataDate, judge(tile)),
-  ];
-  return HeatmapIndustry(
-    name: industry.name,
-    marketCap: industry.marketCap,
-    weightedChangePercent: heatmapWeightedChange(tiles),
-    tiles: List.unmodifiable(tiles),
-    liveCoverage: heatmapValueCoverage(tiles),
-    allNoClosingMatch: heatmapAllNoClosingMatch(tiles),
-  );
-}
-
 HeatmapTile _overlayTile(
   HeatmapTile tile,
   DateTime dataDate,
@@ -233,6 +188,7 @@ HeatmapTile _overlayTile(
     case _Colorable(:final entry):
       final y = entry.previousClose;
       final price = entry.price;
+      // 平盤市值（股數 × 昨收）：正式資料的收盤或市值有問題時算不出正的有限值
       final baseCap = tile.marketCap / tile.close * y;
       final percent = (price - y) * 100 / y;
       // 昨收或即時價不是正數、算不出有限的平盤市值或漲跌幅：沒有可信的漲跌
@@ -246,9 +202,9 @@ HeatmapTile _overlayTile(
       return HeatmapTile(
         symbol: tile.symbol,
         name: tile.name,
+        industry: tile.industry,
         close: price,
         marketCap: tile.marketCap,
-        baseCap: baseCap,
         change: TileChangeValue(percent),
         isMine: tile.isMine,
       );
@@ -265,9 +221,9 @@ HeatmapTile _hollowTile(
   return HeatmapTile(
     symbol: tile.symbol,
     name: tile.name,
+    industry: tile.industry,
     close: tile.close,
     marketCap: tile.marketCap,
-    baseCap: 0,
     change: TileChangeHollow(
       reason,
       previous: reason == HollowReason.notLive && official is TileChangeValue

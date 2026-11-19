@@ -3,21 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:daredevil/core/constants/heatmap_params.dart';
 import 'package:daredevil/core/theme/heatmap_colors.dart';
 
-/// 自選或持股的標記：與格子上的自選框同樣的雙線框（外深內淺各 1px），
-/// 圖例與清單共用，看到的是同一個符號
+/// 自選或持股的標記：與格子上的自選框同樣的雙線框（外深內淺各 1px），圖例
+/// 用它，與圖上看到的是同一個符號。純裝飾，語意由旁邊的說明文字負責
 class HeatmapMineMark extends StatelessWidget {
-  const HeatmapMineMark({super.key, this.fill, this.semanticLabel});
+  const HeatmapMineMark({super.key, required this.fill});
 
-  /// 框內的底色；null 時透明
-  final Color? fill;
-
-  /// 單獨出現（例如清單列）時給螢幕閱讀器的說明；旁邊已有說明文字時不給
-  final String? semanticLabel;
+  /// 框內的底色
+  final Color fill;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: semanticLabel,
-    excludeSemantics: true,
+  Widget build(BuildContext context) => ExcludeSemantics(
     child: Container(
       width: HeatmapParams.legendSwatchSize,
       height: HeatmapParams.legendSwatchSize,

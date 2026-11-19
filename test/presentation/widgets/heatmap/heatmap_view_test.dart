@@ -22,152 +22,72 @@ HeatmapTile _tile(
   String name,
   double cap,
   TileChange change, {
+  String? industry = '半導體業',
   double close = 100,
   bool mine = false,
 }) => HeatmapTile(
   symbol: symbol,
   name: name,
+  industry: industry,
   close: close,
   marketCap: cap,
-  baseCap: change is TileChangeValue ? cap * 100 / (100 + change.percent) : 0,
   change: change,
   isMine: mine,
 );
 
-final _data = HeatmapMarketData(
+HeatmapMarketData _market(
+  List<HeatmapTile> tiles, {
+  HeatmapLiveMode? liveMode,
+}) => HeatmapMarketData(
   market: 'TWSE',
   dataDate: DateTime(2026, 10, 7),
+  tiles: tiles,
+  capCoverage: 0.74,
   excludedForShares: 0,
-  industries: [
-    HeatmapIndustry(
-      name: 'A',
-      marketCap: 183450000001,
-      weightedChangePercent: 1.834,
-      tiles: [
-        _tile('9901', '測試甲', 123450000000, const TileChangeValue(1.834)),
-        _tile(
-          '9902',
-          '測試乙',
-          60000000000,
-          const TileChangeHollow(HollowReason.noChangeData),
-        ),
-        _tile('9903', '測試丙', 1, const TileChangeValue(1)),
-      ],
-    ),
-    // 只有一檔太小時不合併：9912 排成有面積、邊長不到 4 的細條，不可互動
-    HeatmapIndustry(
-      name: 'B',
-      marketCap: 80500000000,
-      weightedChangePercent: -0.4,
-      tiles: [
-        _tile('9911', '測試丁', 80000000000, const TileChangeValue(-0.4)),
-        _tile('9912', '測試戊', 500000000, const TileChangeValue(-0.4)),
-      ],
-    ),
-    // 一檔大的加 30 檔太小的：小的合併成一塊「其他」
-    HeatmapIndustry(
-      name: 'D',
-      marketCap: 13000000000,
-      weightedChangePercent: 1,
-      tiles: [
-        _tile('9961', '測試己', 10000000000, const TileChangeValue(1)),
-        for (var i = 0; i < 30; i++)
-          _tile('${9970 + i}', '微$i', 100000000, const TileChangeValue(1)),
-      ],
-    ),
-    // 小產業：20 檔都太小，整個產業合成一塊
-    HeatmapIndustry(
-      name: 'C',
-      marketCap: 400000000,
-      weightedChangePercent: 0.5,
-      tiles: [
-        for (var i = 0; i < 20; i++)
-          _tile('${9921 + i}', '小$i', 20000000, const TileChangeValue(0.5)),
-      ],
-    ),
-  ],
+  liveMode: liveMode,
 );
 
-/// 再加一個小產業 E（含一檔自選）：C 與 E 在全市場圖上合成一塊
-final _dataSmall = HeatmapMarketData(
-  market: 'TWSE',
-  dataDate: DateTime(2026, 10, 7),
-  excludedForShares: 0,
-  industries: [
-    ..._data.industries,
-    HeatmapIndustry(
-      name: 'E',
-      marketCap: 300000000,
-      weightedChangePercent: -1,
-      tiles: [
-        _tile('9951', '測試庚', 200000000, const TileChangeValue(-1), mine: true),
-        _tile('9952', '測試辛', 100000000, const TileChangeValue(-1)),
-      ],
-    ),
-  ],
-);
+/// 市值降冪：9901 最大；9902 空心；9912 沒有產業別；9903 小到沒有面積
+final _data = _market([
+  _tile('9901', '測試甲', 123450000000, const TileChangeValue(1.834)),
+  _tile(
+    '9902',
+    '測試乙',
+    60000000000,
+    const TileChangeHollow(HollowReason.noChangeData),
+  ),
+  _tile(
+    '9911',
+    '測試丁',
+    50000000000,
+    const TileChangeValue(-0.4),
+    industry: '航運業',
+  ),
+  _tile('9912', '測試戊', 30000000000, const TileChangeValue(0), industry: null),
+  _tile('9903', '測試丙', 1, const TileChangeValue(1)),
+]);
 
-String _industryLabel(HeatmapIndustryLayout l, HeatmapLiveMode? mode) =>
-    'industry:${l.industry.key}';
 String _tileLabel(HeatmapTileLayout t) => 'tile:${t.tile.symbol}';
-String _otherLabel(int count) => 'other:$count';
-String _wholeLabel(int count) => 'all:$count';
-String _otherSemantics(
-  HeatmapIndustryLayout l,
-  HeatmapOtherLayout o,
-  HeatmapLiveMode? mode,
-) => 'other:${l.industry.key}';
-String _groupLabel(int count) => '其他 $count 個產業';
-String _groupSemantics(HeatmapIndustryGroupLayout g, HeatmapLiveMode? mode) =>
-    'group:${g.members.length}';
-String _coverageSuffix(double coverage, HeatmapLiveMode mode) => '・$coverage';
-String _noChangeLabel(
-  HeatmapLiveMode mode, {
-  required bool allNoClosingMatch,
-}) => mode.name;
 
 const _labels = HeatmapPaintLabels(
-  uncategorized: '未分類',
-  industrySemantics: _industryLabel,
+  locale: Locale('zh', 'TW'),
   tileSemantics: _tileLabel,
-  otherLabel: _otherLabel,
-  otherShortLabel: 'oth',
-  wholeLabel: _wholeLabel,
-  otherSemantics: _otherSemantics,
-  groupLabel: _groupLabel,
-  groupShortLabel: '其他產業',
-  groupSemantics: _groupSemantics,
-  coverageSuffix: _coverageSuffix,
-  noChangeLabel: _noChangeLabel,
 );
 
-HeatmapView _view({
-  String? zoom,
-  ValueChanged<String>? onTile,
-  ValueChanged<String>? onIndustry,
-  HeatmapOtherTap? onOther,
-  ValueChanged<HeatmapIndustryGroupLayout>? onGroup,
-  HeatmapMarketData? data,
-}) => HeatmapView(
-  data: data ?? _data,
-  zoomIndustryKey: zoom,
-  onIndustryTap: onIndustry ?? (_) {},
-  onTileTap: onTile ?? (_) {},
-  onOtherTap: onOther ?? (_, _) {},
-  onSmallIndustriesTap: onGroup ?? (_) {},
-  labels: _labels,
-);
+HeatmapView _view({ValueChanged<String>? onTile, HeatmapMarketData? data}) =>
+    HeatmapView(
+      data: data ?? _data,
+      onTileTap: onTile ?? (_) {},
+      labels: _labels,
+      uncategorizedLabel: '未分類',
+    );
 
 Widget _host(Widget child, {Brightness brightness = Brightness.light}) =>
     buildProviderTestApp(child, zhTranslations: true, brightness: brightness);
 
 Widget _app({
-  String? zoom,
   Brightness brightness = Brightness.light,
   ValueChanged<String>? onTile,
-  ValueChanged<String>? onIndustry,
-  HeatmapOtherTap? onOther,
-  ValueChanged<HeatmapIndustryGroupLayout>? onGroup,
   HeatmapMarketData? data,
   double width = _width,
   double height = _height,
@@ -177,24 +97,17 @@ Widget _app({
     child: SizedBox(
       width: width,
       height: height,
-      child: _view(
-        zoom: zoom,
-        onTile: onTile,
-        onIndustry: onIndustry,
-        onOther: onOther,
-        onGroup: onGroup,
-        data: data,
-      ),
+      child: _view(onTile: onTile, data: data),
     ),
   ),
   brightness: brightness,
 );
 
 /// 與畫面同一份佈局（同樣的資料與圖區大小）
-final _layout = layoutHeatmap(_data.industries, width: _width, height: _height);
+final _layout = layoutHeatmapTiles(_data.tiles, width: _width, height: _height);
 
 HeatmapTileLayout _tileOf(String symbol) =>
-    _layout.expand((l) => l.tiles).firstWhere((t) => t.tile.symbol == symbol);
+    _layout.firstWhere((t) => t.tile.symbol == symbol);
 
 Offset _center(WidgetTester tester, HeatmapBox b) =>
     tester.getTopLeft(find.byType(HeatmapView)) +
@@ -252,55 +165,53 @@ void main() {
     expect(tapped, '9901');
   });
 
-  testWidgets('點零面積的小格沒有回呼', (tester) async {
+  testWidgets('🚨 點格子之間的間隔沒有回呼', (tester) async {
     bigViewport(tester);
-    final tiny = _tileOf('9903');
-    expect(tiny.interactive, isFalse);
-    String? tapped;
-    String? industry;
-    await tester.pumpWidget(
-      _app(onTile: (s) => tapped = s, onIndustry: (k) => industry = k),
-    );
-    await tester.pumpAndSettle();
-    await tester.tapAt(_center(tester, tiny.bounds));
-    expect(tapped, isNull);
-    expect(industry, isNull);
-  });
-
-  testWidgets('點有面積但邊長不到 4 的格子（不可互動）沒有回呼', (tester) async {
-    bigViewport(tester);
-    final small = _layout
-        .expand((l) => l.tiles)
-        .firstWhere(
-          (t) => !t.interactive && t.paint.width > 0 && t.paint.height > 0,
-        );
+    // 9901 靠圖區內側的那一條邊正好在兩格中間的間隔上
+    final b = _tileOf('9901').bounds;
+    final onRightEdge = b.left + b.width < _width - 1;
+    final gap = onRightEdge
+        ? Offset(b.left + b.width, b.top + b.height / 2)
+        : Offset(b.left + b.width / 2, b.top + b.height);
     expect(
-      small.paint.width < 4 || small.paint.height < 4,
+      onRightEdge || b.top + b.height < _height - 1,
       isTrue,
-      reason: '前提：格子有面積、邊長不到 4',
+      reason: '前提：9901 沒有佔滿整張圖',
     );
     String? tapped;
-    String? industry;
-    await tester.pumpWidget(
-      _app(onTile: (s) => tapped = s, onIndustry: (k) => industry = k),
-    );
+    await tester.pumpWidget(_app(onTile: (s) => tapped = s));
     await tester.pumpAndSettle();
-    await tester.tapAt(_center(tester, small.paint));
+    await tester.tapAt(tester.getTopLeft(find.byType(HeatmapView)) + gap);
     expect(tapped, isNull);
-    expect(industry, isNull);
   });
 
-  testWidgets('點產業標題回呼產業 key', (tester) async {
+  testWidgets('🚨 點畫得出來、但短邊不到 4 的格子（不互動）沒有回呼', (tester) async {
     bigViewport(tester);
-    String? industry;
-    await tester.pumpWidget(_app(onIndustry: (k) => industry = k));
+    // 甲 60%、乙 39.84%、丙 0.16%：丙是一條 320×2 的細條
+    final data = _market([
+      _tile('9901', '測試甲', 6000, const TileChangeValue(1)),
+      _tile('9902', '測試乙', 3984, const TileChangeValue(1)),
+      _tile('9903', '測試丙', 16, const TileChangeValue(1)),
+    ]);
+    final thin = layoutHeatmapTiles(
+      data.tiles,
+      width: _width,
+      height: _height,
+    ).last;
+    expect(thin.interactive, isFalse, reason: '前提');
+    expect(
+      thin.paint.width > 0 && thin.paint.height > 0,
+      isTrue,
+      reason: '前提：畫得出來、點得到它的範圍（${thin.paint}）',
+    );
+    String? tapped;
+    await tester.pumpWidget(_app(data: data, onTile: (s) => tapped = s));
     await tester.pumpAndSettle();
-    final header = _layout.firstWhere((l) => l.industry.key == 'B').header!;
-    await tester.tapAt(_center(tester, header));
-    expect(industry, 'B');
+    await tester.tapAt(_center(tester, thin.paint));
+    expect(tapped, isNull);
   });
 
-  testWidgets('滑鼠移上去顯示提示：名稱、代號、價格、漲跌幅、市值；移出後消失', (tester) async {
+  testWidgets('滑鼠移上去顯示提示：名稱、代號與產業、價格、漲跌幅、市值；移出後消失', (tester) async {
     bigViewport(tester);
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
@@ -309,7 +220,7 @@ void main() {
       _center(tester, _tileOf('9901').paint),
     );
     expect(find.text('測試甲'), findsOneWidget);
-    expect(find.text('9901 · A'), findsOneWidget);
+    expect(find.text('9901 · 半導體業'), findsOneWidget);
     expect(find.text('價格 100.00'), findsOneWidget);
     expect(find.text('漲跌幅 +1.83%'), findsOneWidget);
     expect(find.text('市值 1,234.5 億'), findsOneWidget);
@@ -318,242 +229,18 @@ void main() {
     expect(find.text('測試甲'), findsNothing);
   });
 
-  testWidgets('產業別空白時提示寫「未分類」', (tester) async {
-    bigViewport(tester);
-    final data = HeatmapMarketData(
-      market: 'TWSE',
-      dataDate: DateTime(2026, 10, 7),
-      excludedForShares: 0,
-      industries: [
-        HeatmapIndustry(
-          name: null,
-          marketCap: 100,
-          weightedChangePercent: 1,
-          tiles: [_tile('9981', '測試庚', 100, const TileChangeValue(1))],
-        ),
-      ],
-    );
-    await tester.pumpWidget(
-      _host(
-        Align(
-          alignment: Alignment.topLeft,
-          child: SizedBox(
-            width: _width,
-            height: _height,
-            child: HeatmapView(
-              data: data,
-              zoomIndustryKey: null,
-              onIndustryTap: (_) {},
-              onTileTap: (_) {},
-              onOtherTap: (_, _) {},
-              onSmallIndustriesTap: (_) {},
-              labels: _labels,
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await _hover(tester, const Offset(_width / 2, _height / 2));
-    expect(find.text('9981 · 未分類'), findsOneWidget);
-  });
-
-  testWidgets('滑鼠移到合併塊：提示寫檔數、產業、漲跌家數與加權漲跌', (tester) async {
+  testWidgets('🚨 提示的產業是那一格自己的；產業別空白時寫傳入的「未分類」', (tester) async {
     bigViewport(tester);
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
-    final other = _layout.firstWhere((l) => l.industry.key == 'D').other!;
-    expect(other.members, hasLength(30), reason: '前提：30 檔被合併');
-    await _hover(tester, _center(tester, other.paint));
-    expect(find.text('other:30'), findsOneWidget);
-    expect(find.text('D'), findsOneWidget);
-    expect(find.text('漲 30、跌 0、平 0'), findsOneWidget);
-    expect(find.text('市值加權 +1.00%'), findsOneWidget);
-    expect(find.text('市值 30.0 億'), findsOneWidget);
-  });
-
-  group('合併塊提示', () {
-    HeatmapOtherLayout other({
-      bool whole = false,
-      double? pct = 1,
-      HeatmapBreadth breadth = (up: 2, down: 1, flat: 0, hollow: 1),
-      int mine = 0,
-      double coverage = 1,
-      bool allNoClosingMatch = false,
-    }) => HeatmapOtherLayout(
-      members: [
-        for (var i = 0; i < 4; i++)
-          _tile(
-            '${9990 + i}',
-            '微$i',
-            1e8,
-            const TileChangeValue(1),
-            mine: i < mine,
-          ),
-      ],
-      bounds: (left: 0, top: 0, width: 100, height: 100),
-      paint: (left: 0, top: 0, width: 100, height: 100),
-      interactive: true,
-      wholeIndustry: whole,
-      marketCap: 4e8,
-      weightedChangePercent: pct,
-      breadth: breadth,
-      coverage: coverage,
-      allNoClosingMatch: allNoClosingMatch,
+    final gesture = await _hover(
+      tester,
+      _center(tester, _tileOf('9911').paint),
     );
-
-    Future<void> pumpTooltip(WidgetTester tester, Widget tooltip) async {
-      await tester.pumpWidget(_host(Center(child: tooltip)));
-      await tester.pumpAndSettle();
-    }
-
-    testWidgets('有空心成員：家數多寫無漲跌資料的檔數', (tester) async {
-      await pumpTooltip(
-        tester,
-        HeatmapOtherTooltip(other: other(), title: '其他 4 檔', industryName: 'D'),
-      );
-      expect(find.text('其他 4 檔'), findsOneWidget);
-      expect(find.text('D'), findsOneWidget);
-      expect(find.text('漲 2、跌 1、平 0、空心 1'), findsOneWidget);
-      expect(find.text('市值 4.0 億'), findsOneWidget);
-      expect(find.textContaining('自選'), findsNothing);
-    });
-
-    testWidgets('成員有自選或持股：寫含幾檔', (tester) async {
-      await pumpTooltip(
-        tester,
-        HeatmapOtherTooltip(
-          other: other(mine: 2),
-          title: '其他 4 檔',
-          industryName: 'D',
-        ),
-      );
-      expect(find.text('含自選或持股 2 檔'), findsOneWidget);
-    });
-
-    testWidgets('整個產業都合併：第二行寫檔數', (tester) async {
-      await pumpTooltip(
-        tester,
-        HeatmapOtherTooltip(
-          other: other(whole: true),
-          title: 'D',
-          industryName: 'D',
-        ),
-      );
-      expect(find.text('共 4 檔'), findsOneWidget);
-    });
-
-    testWidgets('成員全是空心：加權漲跌寫無漲跌資料', (tester) async {
-      await pumpTooltip(
-        tester,
-        HeatmapOtherTooltip(
-          other: other(
-            pct: null,
-            breadth: (up: 0, down: 0, flat: 0, hollow: 4),
-          ),
-          title: '其他 4 檔',
-          industryName: 'D',
-        ),
-      );
-      expect(find.text('市值加權 無漲跌資料'), findsOneWidget);
-    });
-
-    testWidgets('即時：加權漲跌後接即時比例、空心計數寫「空心 N」', (tester) async {
-      await pumpTooltip(
-        tester,
-        HeatmapOtherTooltip(
-          other: other(coverage: 0.3),
-          title: '其他 4 檔',
-          industryName: 'D',
-          liveMode: HeatmapLiveMode.intraday,
-        ),
-      );
-      expect(find.text('漲 2、跌 1、平 0、空心 1'), findsOneWidget);
-      expect(find.text('市值加權 +1.00%・即時 30%'), findsOneWidget);
-    });
-
-    testWidgets('即時：成員全是空心寫「未即時」', (tester) async {
-      await pumpTooltip(
-        tester,
-        HeatmapOtherTooltip(
-          other: other(
-            pct: null,
-            coverage: 0,
-            breadth: (up: 0, down: 0, flat: 0, hollow: 4),
-          ),
-          title: '其他 4 檔',
-          industryName: 'D',
-          liveMode: HeatmapLiveMode.intraday,
-        ),
-      );
-      expect(find.text('市值加權 未即時'), findsOneWidget);
-      expect(find.text('漲 0、跌 0、平 0、空心 4'), findsOneWidget);
-    });
-
-    testWidgets('🚨 收盤後成員都是收盤沒撮合：加權漲跌寫「收盤沒撮合」，否則「未收盤」', (tester) async {
-      for (final (flag, text) in [(true, '收盤沒撮合'), (false, '未收盤')]) {
-        await pumpTooltip(
-          tester,
-          HeatmapOtherTooltip(
-            other: other(
-              pct: null,
-              coverage: 0,
-              breadth: (up: 0, down: 0, flat: 0, hollow: 4),
-              allNoClosingMatch: flag,
-            ),
-            title: '其他 4 檔',
-            industryName: 'D',
-            liveMode: HeatmapLiveMode.afterClose,
-          ),
-        );
-        expect(find.text('市值加權 $text'), findsOneWidget, reason: '$flag');
-      }
-    });
-
-    testWidgets('🚨 小產業合併塊（收盤後）成員都是收盤沒撮合：寫「收盤沒撮合」', (tester) async {
-      await pumpTooltip(
-        tester,
-        const HeatmapIndustryGroupTooltip(
-          group: HeatmapIndustryGroupLayout(
-            members: [],
-            bounds: (left: 0, top: 0, width: 100, height: 100),
-            paint: (left: 0, top: 0, width: 100, height: 100),
-            interactive: true,
-            marketCap: 4e8,
-            weightedChangePercent: null,
-            breadth: (up: 0, down: 0, flat: 0, hollow: 3),
-            coverage: 0,
-            allNoClosingMatch: true,
-          ),
-          title: '其他 2 個產業',
-          liveMode: HeatmapLiveMode.afterClose,
-        ),
-      );
-      expect(find.text('市值加權 收盤沒撮合'), findsOneWidget);
-    });
-
-    testWidgets('小產業合併塊（收盤後）：「・收盤」比例與空心計數', (tester) async {
-      await pumpTooltip(
-        tester,
-        const HeatmapIndustryGroupTooltip(
-          group: HeatmapIndustryGroupLayout(
-            members: [],
-            bounds: (left: 0, top: 0, width: 100, height: 100),
-            paint: (left: 0, top: 0, width: 100, height: 100),
-            interactive: true,
-            marketCap: 4e8,
-            weightedChangePercent: 1,
-            breadth: (up: 2, down: 0, flat: 0, hollow: 3),
-            coverage: 0.5,
-            allNoClosingMatch: false,
-          ),
-          title: '其他 2 個產業',
-          liveMode: HeatmapLiveMode.afterClose,
-        ),
-      );
-      expect(find.text('漲 2、跌 0、平 0、空心 3'), findsOneWidget);
-      expect(find.text('市值加權 +1.00%・收盤 50%'), findsOneWidget);
-    });
+    expect(find.text('9911 · 航運業'), findsOneWidget);
+    await gesture.moveTo(_center(tester, _tileOf('9912').paint));
+    await tester.pump();
+    expect(find.text('9912 · 未分類'), findsOneWidget);
   });
 
   group('格子提示的空心原因', () {
@@ -657,193 +344,31 @@ void main() {
     });
   });
 
-  group('小產業合併塊', () {
-    final market = layoutHeatmapMarket(
-      _dataSmall.industries,
-      width: _width,
-      height: _height,
-    );
-
-    testWidgets('全市場：放不下標題列的小產業合成一塊交給 painter；放大後沒有', (tester) async {
-      bigViewport(tester);
-      await tester.pumpWidget(_app(data: _dataSmall));
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).smallIndustries?.members.map((i) => i.key), [
-        'C',
-        'E',
-      ]);
-      expect(_painterOf(tester).layout.map((l) => l.industry.key), [
-        'A',
-        'B',
-        'D',
-      ]);
-      await tester.pumpWidget(_app(data: _dataSmall, zoom: 'A'));
-      await tester.pumpAndSettle();
-      expect(_painterOf(tester).smallIndustries, isNull);
-    });
-
-    testWidgets('點合併塊交給回呼，不放大、不進個股', (tester) async {
-      bigViewport(tester);
-      HeatmapIndustryGroupLayout? group;
-      String? industry;
-      String? tapped;
-      await tester.pumpWidget(
-        _app(
-          data: _dataSmall,
-          onGroup: (g) => group = g,
-          onIndustry: (k) => industry = k,
-          onTile: (s) => tapped = s,
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(market.smallIndustries!.interactive, isTrue, reason: '前提');
-      await tester.tapAt(_center(tester, market.smallIndustries!.paint));
-      expect(group?.members.map((i) => i.key), ['C', 'E']);
-      expect(industry, isNull);
-      expect(tapped, isNull);
-    });
-
-    testWidgets('滑鼠移到合併塊：提示寫「其他 N 個產業」、檔數、含自選、家數', (tester) async {
-      bigViewport(tester);
-      await tester.pumpWidget(_app(data: _dataSmall));
-      await tester.pumpAndSettle();
-      await _hover(tester, _center(tester, market.smallIndustries!.paint));
-      expect(find.text('其他 2 個產業'), findsOneWidget);
-      expect(find.text('共 22 檔'), findsOneWidget);
-      expect(find.text('含自選或持股 1 檔'), findsOneWidget);
-      expect(find.text('漲 20、跌 2、平 0'), findsOneWidget);
-      expect(find.text('市值 7.0 億'), findsOneWidget);
-    });
-  });
-
-  testWidgets('點「其他 N 檔」交給合併塊的回呼（列出成員），不放大', (tester) async {
-    bigViewport(tester);
-    String? industry;
-    String? tapped;
-    (HeatmapIndustryLayout, HeatmapOtherLayout)? other;
-    await tester.pumpWidget(
-      _app(
-        onIndustry: (k) => industry = k,
-        onTile: (s) => tapped = s,
-        onOther: (i, o) => other = (i, o),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final d = _layout.firstWhere((l) => l.industry.key == 'D');
-    await tester.tapAt(_center(tester, d.other!.paint));
-    expect(other?.$1.industry.key, 'D');
-    expect(other?.$2.members, hasLength(30));
-    expect(industry, isNull);
-    expect(tapped, isNull);
-  });
-
-  testWidgets('已放大時點整個產業合成的那塊：列出成員（不再放大同一個產業）', (tester) async {
-    bigViewport(tester);
-    // 500 檔等值：放大後每檔預期面積約 800 px²，仍整個合成一塊
-    final data = HeatmapMarketData(
-      market: 'TWSE',
-      dataDate: DateTime(2026, 10, 7),
-      excludedForShares: 0,
-      industries: [
-        HeatmapIndustry(
-          name: 'E',
-          marketCap: 500,
-          weightedChangePercent: 1,
-          tiles: [
-            for (var i = 0; i < 500; i++)
-              _tile('${1000 + i}', '小$i', 1, const TileChangeValue(1)),
-          ],
-        ),
-      ],
-    );
-    final e = layoutHeatmap(
-      data.industries,
-      width: _width,
-      height: _height,
-    ).single;
-    expect(e.other?.wholeIndustry, isTrue, reason: '前提：放大後仍整個合成一塊');
-    String? industry;
-    var otherCalls = 0;
-    await tester.pumpWidget(
-      _app(
-        data: data,
-        zoom: 'E',
-        onIndustry: (k) => industry = k,
-        onOther: (_, _) => otherCalls++,
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tapAt(_center(tester, e.other!.paint));
-    expect(otherCalls, 1);
-    expect(industry, isNull);
-  });
-
-  testWidgets('點整個產業合成的那塊：放大到該產業', (tester) async {
-    bigViewport(tester);
-    // 一檔大股的產業加上一個十檔都很小的產業：後者整個合成一塊
-    final data = HeatmapMarketData(
-      market: 'TWSE',
-      dataDate: DateTime(2026, 10, 7),
-      excludedForShares: 0,
-      industries: [
-        HeatmapIndustry(
-          name: 'A',
-          marketCap: 1e6,
-          weightedChangePercent: 1,
-          tiles: [_tile('9901', '測試甲', 1e6, const TileChangeValue(1))],
-        ),
-        HeatmapIndustry(
-          name: 'E',
-          marketCap: 3e4,
-          weightedChangePercent: 1,
-          tiles: [
-            for (var i = 0; i < 10; i++)
-              _tile('${9981 + i}', '小$i', 3e3, const TileChangeValue(1)),
-          ],
-        ),
-      ],
-    );
-    final e = layoutHeatmap(
-      data.industries,
-      width: _width,
-      height: _height,
-    ).firstWhere((l) => l.industry.key == 'E');
-    expect(e.other?.wholeIndustry, isTrue, reason: '前提：整個產業合成一塊');
-    expect(e.other!.interactive, isTrue);
-    String? industry;
-    var otherCalls = 0;
-    await tester.pumpWidget(
-      _app(
-        data: data,
-        onIndustry: (k) => industry = k,
-        onOther: (_, _) => otherCalls++,
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tapAt(_center(tester, e.other!.paint));
-    expect(industry, 'E');
-    expect(otherCalls, 0);
-  });
-
   testWidgets('空心格子的提示寫原因', (tester) async {
     bigViewport(tester);
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
     await _hover(tester, _center(tester, _tileOf('9902').paint));
-    expect(find.text('測試乙'), findsOneWidget);
     expect(find.text('漲跌幅 無漲跌資料'), findsOneWidget);
   });
 
   testWidgets('即時套色的資料：空心格子的提示價格標資料日的收盤', (tester) async {
     bigViewport(tester);
-    final live = HeatmapMarketData(
-      market: _data.market,
-      dataDate: _data.dataDate,
-      excludedForShares: 0,
-      industries: _data.industries,
-      liveMode: HeatmapLiveMode.intraday,
+    await tester.pumpWidget(
+      _app(
+        data: _market([
+          for (final t in _data.tiles)
+            t.symbol == '9902'
+                ? _tile(
+                    '9902',
+                    '測試乙',
+                    t.marketCap,
+                    const TileChangeHollow(HollowReason.notLive),
+                  )
+                : t,
+        ], liveMode: HeatmapLiveMode.intraday),
+      ),
     );
-    await tester.pumpWidget(_app(data: live));
     await tester.pumpAndSettle();
     await _hover(tester, _center(tester, _tileOf('9902').paint));
     expect(find.text('價格 100.00（10/7 收盤）'), findsOneWidget);
@@ -957,92 +482,65 @@ void main() {
     expect(find.text('測試甲'), findsOneWidget);
   });
 
-  testWidgets('佈局換了而同一座標在新佈局查不到格子（放大後是標題列或空白）：提示收起、不拋錯', (tester) async {
-    bigViewport(tester);
-    // 放大到 C（20 檔等大、排成格狀）：找全市場圖上某一格內、放大後不在任何
-    // 格子或合併塊上的點（C 的標題列或格子間隙）
-    final zoomed = layoutHeatmap(
-      _data.industries.where((i) => i.key == 'C').toList(),
-      width: _width,
-      height: _height,
-    );
-    ({String name, Offset at})? found;
-    for (final t
-        in _layout.expand((l) => l.tiles).where((t) => t.interactive)) {
-      final p = t.paint;
-      for (var x = p.left + 1; x < p.left + p.width - 1; x += 0.5) {
-        for (var y = p.top + 1; y < p.top + p.height - 1; y += 0.5) {
-          if (tileAt(zoomed, x, y) == null && otherAt(zoomed, x, y) == null) {
-            found = (name: t.tile.name, at: Offset(x, y));
-            break;
-          }
-        }
-        if (found != null) break;
-      }
-      if (found != null) break;
-    }
-    expect(found, isNotNull, reason: '前提：放大後某一格的位置是空白');
-    await tester.pumpWidget(_app());
-    await tester.pumpAndSettle();
-    await _hover(
-      tester,
-      tester.getTopLeft(find.byType(HeatmapView)) + found!.at,
-    );
-    expect(find.text(found.name), findsOneWidget);
-    await tester.pumpWidget(_app(zoom: 'C'));
-    expect(find.byType(HeatmapTooltip), findsNothing);
-    await tester.pump();
-    expect(find.byType(HeatmapTooltip), findsNothing);
-    // 收起就是收起：之後換回原本的佈局（指標沒動）也不自己冒出舊提示
-    await tester.pumpWidget(_app());
-    await tester.pump();
-    expect(find.byType(HeatmapTooltip), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+  group('資料換了而滑鼠沒動', () {
+    testWidgets('🚨 圖上的檔換人：提示在同一幀改指新版面同一個位置的那一格', (tester) async {
+      bigViewport(tester);
+      await tester.pumpWidget(_app());
+      await tester.pumpAndSettle();
+      await _hover(tester, _center(tester, _tileOf('9901').paint));
+      expect(find.text('測試甲'), findsOneWidget);
+      // 9901 掉出圖上，換成市值一樣大的另一檔：版面相同、那個位置是新的一檔
+      final swapped = _market([
+        _tile(
+          '9931',
+          '測試新',
+          123450000000,
+          const TileChangeValue(-2),
+          industry: '光電業',
+        ),
+        ..._data.tiles.skip(1),
+      ]);
+      await tester.pumpWidget(_app(data: swapped));
+      expect(find.text('測試甲'), findsNothing);
+      expect(find.text('測試新'), findsOneWidget);
+      expect(find.text('9931 · 光電業'), findsOneWidget);
+      await tester.pump();
+      expect(find.text('測試新'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
 
-  testWidgets('佈局換了而同一座標在新佈局是別的格子：同一幀改畫新格子', (tester) async {
-    bigViewport(tester);
-    await tester.pumpWidget(_app());
-    await tester.pumpAndSettle();
-    await _hover(tester, _center(tester, _tileOf('9901').paint));
-    expect(find.text('測試甲'), findsOneWidget);
-    // 放大到 B：B 鋪滿整張圖，9901 的位置變成 B 的格子
-    await tester.pumpWidget(_app(zoom: 'B'));
-    expect(find.text('測試甲'), findsNothing);
-    expect(find.byType(HeatmapTooltip), findsOneWidget);
-    expect(find.textContaining('· B'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    testWidgets('🚨 那個位置在新版面沒有格子：提示收起、不拋錯，之後也不自己冒出來', (tester) async {
+      bigViewport(tester);
+      await tester.pumpWidget(_app());
+      await tester.pumpAndSettle();
+      await _hover(tester, _center(tester, _tileOf('9901').paint));
+      expect(find.byType(HeatmapTooltip), findsOneWidget);
+      await tester.pumpWidget(_app(data: _market(const [])));
+      expect(find.byType(HeatmapTooltip), findsNothing);
+      await tester.pump();
+      expect(find.byType(HeatmapTooltip), findsNothing);
+      // 收起就是收起：之後換回原本的資料（指標沒動）也不自己冒出舊提示
+      await tester.pumpWidget(_app());
+      await tester.pump();
+      expect(find.byType(HeatmapTooltip), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('提示跟著新一輪的即時資料', () {
     /// 9901 換成即時漲跌（面積不變）
-    HeatmapMarketData live(double pct) => HeatmapMarketData(
-      market: _data.market,
-      dataDate: _data.dataDate,
-      excludedForShares: 0,
-      liveMode: HeatmapLiveMode.intraday,
-      industries: [
-        for (final industry in _data.industries)
-          HeatmapIndustry(
-            name: industry.name,
-            marketCap: industry.marketCap,
-            weightedChangePercent: industry.weightedChangePercent,
-            liveCoverage: 1,
-            tiles: [
-              for (final t in industry.tiles)
-                t.symbol == '9901'
-                    ? _tile(
-                        '9901',
-                        '測試甲',
-                        t.marketCap,
-                        TileChangeValue(pct),
-                        close: 100 + pct,
-                      )
-                    : t,
-            ],
-          ),
-      ],
-    );
+    HeatmapMarketData live(double pct) => _market([
+      for (final t in _data.tiles)
+        t.symbol == '9901'
+            ? _tile(
+                '9901',
+                '測試甲',
+                t.marketCap,
+                TileChangeValue(pct),
+                close: 100 + pct,
+              )
+            : t,
+    ], liveMode: HeatmapLiveMode.intraday);
 
     testWidgets('滑鼠停在格子上：同一次 pump 就換成新數字，不空白一幀', (tester) async {
       bigViewport(tester);
@@ -1065,35 +563,6 @@ void main() {
       expect(find.byType(HeatmapTooltip), findsNothing);
     });
 
-    testWidgets('合併塊與小產業合併塊的提示照資料的模式寫即時比例', (tester) async {
-      bigViewport(tester);
-      final data = live(3);
-      final small = HeatmapMarketData(
-        market: data.market,
-        dataDate: data.dataDate,
-        excludedForShares: 0,
-        liveMode: HeatmapLiveMode.afterClose,
-        industries: _dataSmall.industries,
-      );
-      await tester.pumpWidget(_app(data: data));
-      await tester.pumpAndSettle();
-      final other = _layout.firstWhere((l) => l.industry.key == 'D').other!;
-      final gesture = await _hover(tester, _center(tester, other.paint));
-      expect(find.text('市值加權 +1.00%・即時 100%'), findsOneWidget);
-
-      await tester.pumpWidget(_app(data: small));
-      await tester.pumpAndSettle();
-      final market = layoutHeatmapMarket(
-        _dataSmall.industries,
-        width: _width,
-        height: _height,
-      );
-      await gesture.moveTo(_center(tester, market.smallIndustries!.paint));
-      await tester.pump();
-      expect(find.text('其他 2 個產業'), findsOneWidget);
-      expect(find.textContaining('・收盤 100%'), findsOneWidget);
-    });
-
     testWidgets('長按中換資料：提示仍在、數字換新，放開就收', (tester) async {
       bigViewport(tester);
       await tester.pumpWidget(_app(data: live(3)));
@@ -1112,11 +581,12 @@ void main() {
     });
   });
 
-  testWidgets('極小圖區不拋錯', (tester) async {
+  testWidgets('🚨 極小圖區（3×2）不拋錯', (tester) async {
     bigViewport(tester);
-    await tester.pumpWidget(_app(width: 10, height: 10));
+    await tester.pumpWidget(_app(width: 3, height: 2));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    expect(_painterOf(tester).layout, hasLength(_data.tiles.length));
   });
 
   testWidgets('高度 0 不拋錯、沒有格子', (tester) async {
@@ -1189,22 +659,16 @@ void main() {
     expect(_painterFinder, findsNothing);
   });
 
-  testWidgets('放大後只畫該產業：無障礙節點變成該產業的格子', (tester) async {
+  testWidgets('🚨 無障礙節點是每一個可互動的格子', (tester) async {
     bigViewport(tester);
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
     expect(_semanticLabels(tester), [
-      'industry:A',
-      'industry:B',
-      'industry:D',
-      'industry:C',
+      for (final t in _layout)
+        if (t.interactive) 'tile:${t.tile.symbol}',
     ]);
-
-    await tester.pumpWidget(_app(zoom: 'A'));
-    await tester.pumpAndSettle();
-    // 9903 太小、不可互動：沒有節點
-    expect(_semanticLabels(tester), ['tile:9901', 'tile:9902']);
+    expect(_semanticLabels(tester), isNot(contains('tile:9903')));
     handle.dispose();
   });
 
@@ -1225,22 +689,11 @@ void main() {
     handle.dispose();
   });
 
-  testWidgets('無障礙啟用產業節點回呼產業 key', (tester) async {
-    bigViewport(tester);
-    final handle = tester.ensureSemantics();
-    String? industry;
-    await tester.pumpWidget(_app(onIndustry: (k) => industry = k));
-    await tester.pumpAndSettle();
-    tester.semantics.tap(find.semantics.byLabel('industry:B'));
-    expect(industry, 'B');
-    handle.dispose();
-  });
-
-  testWidgets('放大時無障礙啟用格子節點回呼代號', (tester) async {
+  testWidgets('無障礙啟用格子節點回呼代號', (tester) async {
     bigViewport(tester);
     final handle = tester.ensureSemantics();
     String? tapped;
-    await tester.pumpWidget(_app(zoom: 'A', onTile: (s) => tapped = s));
+    await tester.pumpWidget(_app(onTile: (s) => tapped = s));
     await tester.pumpAndSettle();
     tester.semantics.tap(find.semantics.byLabel('tile:9902'));
     expect(tapped, '9902');

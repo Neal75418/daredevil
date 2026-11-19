@@ -14,59 +14,27 @@ String heatmapHollowReasonText(HollowReason reason) => switch (reason) {
   HollowReason.noClosingMatch => 'marketHeatmap.hollowNoClosingMatch'.tr(),
 };
 
-/// 即時（收盤後是已收盤）部分占的市值比例，整數 %：四捨五入後夾在 1～99，
-/// 只要有一檔就不寫 0%、還差一檔就不寫 100%；恰為 0 或 1 時照實寫。
-/// 圖上與無障礙描述共用。
+/// 圖上的格子占這個市場市值的比例，整數 %：四捨五入後夾在 1～99，只要有
+/// 一檔就不寫 0%、還差一檔沒畫就不寫 100%；恰為 0 或 1 時照實寫。
 int heatmapCoveragePercent(double coverage) {
   if (!(coverage > 0)) return 0;
   if (coverage >= 1) return 100;
   return (coverage * 100).round().clamp(1, 99);
 }
 
-/// 接在加權漲跌後的即時比例：盤中「・即時 N%」、收盤後「・收盤 N%」
-String heatmapCoverageSuffix(double coverage, HeatmapLiveMode mode) =>
-    switch (mode) {
-      HeatmapLiveMode.intraday => 'marketHeatmap.liveCoverage',
-      HeatmapLiveMode.afterClose => 'marketHeatmap.closingCoverage',
-    }.tr(namedArgs: {'pct': '${heatmapCoveragePercent(coverage)}'});
-
-/// 無障礙描述的即時比例子句（不帶「・」，報讀軟體才不會念出符號）
-String heatmapCoverageSemantics(double coverage, HeatmapLiveMode mode) =>
-    switch (mode) {
-      HeatmapLiveMode.intraday => 'marketHeatmap.semLiveCoverage',
-      HeatmapLiveMode.afterClose => 'marketHeatmap.semClosingCoverage',
-    }.tr(namedArgs: {'pct': '${heatmapCoveragePercent(coverage)}'});
-
-/// 產業或合併塊沒有加權漲跌時的文字：區塊裡每一格都是收盤沒撮合
-/// （[allNoClosingMatch]，只在收盤後套色時成立）寫「收盤沒撮合」；否則盤中
-/// 「未即時」、收盤後「未收盤」、正式資料（[mode] null）「無漲跌資料」
-String heatmapNoChangeText(
-  HeatmapLiveMode? mode, {
-  required bool allNoClosingMatch,
-}) {
-  if (allNoClosingMatch) return 'marketHeatmap.hollowNoClosingMatch'.tr();
-  return switch (mode) {
-    null => 'marketHeatmap.hollowNoChange'.tr(),
-    HeatmapLiveMode.intraday => 'marketHeatmap.notLive'.tr(),
-    HeatmapLiveMode.afterClose => 'marketHeatmap.notClosed'.tr(),
-  };
-}
-
-/// 產業或合併塊的加權漲跌：有值寫漲跌幅，即時套色時（[mode] 不是 null）
-/// 後面接即時比例；沒有值寫 [heatmapNoChangeText]
-String heatmapWeightedText({
-  required double? percent,
-  required double? coverage,
-  required HeatmapLiveMode? mode,
-  required bool allNoClosingMatch,
-}) {
-  if (percent == null) {
-    return heatmapNoChangeText(mode, allNoClosingMatch: allNoClosingMatch);
-  }
-  final text = formatHeatmapPercent(percent);
-  if (mode == null || coverage == null) return text;
-  return '$text${heatmapCoverageSuffix(coverage, mode)}';
-}
+/// 圖例說明這張圖代表多少：「市值前 30 檔・占上市市值 74%」。[tileCount] 是
+/// 實際畫出來的檔數，[marketLabel] 是市場名稱（上市／上櫃）
+String heatmapLegendCoverageText({
+  required int tileCount,
+  required String marketLabel,
+  required double coverage,
+}) => 'marketHeatmap.legendCoverage'.tr(
+  namedArgs: {
+    'count': '$tileCount',
+    'market': marketLabel,
+    'pct': '${heatmapCoveragePercent(coverage)}',
+  },
+);
 
 /// 盤中未即時的格子附的正式資料漲跌：「M/D 收盤 -0.80%」（ASCII 減號，與其他
 /// 漲跌幅同一個格式）
@@ -82,7 +50,7 @@ String heatmapPreviousCloseText(({double percent, DateTime date}) previous) =>
 /// 收盤，接「（M/D 收盤）」
 String heatmapTooltipPriceText(double price, {DateTime? closeDate}) {
   final text =
-      '${'marketHeatmap.tooltipPrice'.tr()} ${price.toStringAsFixed(2)}';
+      '${'marketHeatmap.tooltipPrice'.tr()} ${formatHeatmapPrice(price)}';
   if (closeDate == null) return text;
   return '$text${'marketHeatmap.tooltipPriceClose'.tr(namedArgs: {'date': _monthDay(closeDate)})}';
 }

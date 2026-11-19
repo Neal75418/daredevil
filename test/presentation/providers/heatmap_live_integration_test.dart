@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,13 +26,13 @@ import 'package:daredevil/presentation/widgets/live_quote_status.dart';
 
 import '../../helpers/heatmap_live_fixtures.dart';
 
-/// 熱力圖收盤後滾動登記 × 真的報價中心（spec「驗證」2）。
+/// 熱力圖 × 真的報價中心。
 ///
 /// 真的 `LiveQuoteCenter` 接真的 `IntradayQuoteClient`（假 HTTP adapter）、
-/// 隨 fakeAsync 前進的時鐘；熱力圖讀固定的正式資料（上市 1,078 檔，上一個
-/// 交易日），登記照 `LiveQuoteScope.listen` 的做法：聽
-/// `heatmapRegistrationsProvider`，每次通知就以新清單向中心登記。請求、
-/// 時刻、進度都量在 HTTP 與 `heatmapLiveProvider` 兩端。
+/// 隨 fakeAsync 前進的時鐘；熱力圖讀固定的正式資料（上市 1,078 檔的市場，
+/// 圖上是市值最大的 30 檔，上一個交易日），登記照 `LiveQuoteScope.listen` 的
+/// 做法：聽 `heatmapRegistrationsProvider`，每次通知就以新清單向中心登記。
+/// 請求、時刻、進度都量在 HTTP 與 `heatmapLiveProvider` 兩端。
 void main() {
   late List<Object> captured;
 
@@ -43,44 +44,36 @@ void main() {
   });
   tearDown(() => AppLogger.setSentryDelegates());
 
-  test('前提：虛構代號各不相同；市值前 69 與代號排序的前 69 不同', () {
+  test('前提：圖上是整個市場市值最大的 30 檔，與代號排序的前 30 不同', () {
     expect(_byCap.toSet(), hasLength(_stockCount));
+    expect(_tiles, _byCap.take(HeatmapParams.topTileCount).toList());
+    expect([for (final t in heatmapFixtureTwse().tiles) t.symbol], _tiles);
     final bySymbol = [..._byCap]..sort();
-    expect(
-      bySymbol.take(HeatmapParams.liveTileLimit).toSet(),
-      isNot(_byCap.take(HeatmapParams.liveTileLimit).toSet()),
-    );
+    expect(bySymbol.take(_tiles.length).toSet(), isNot(_tiles.toSet()));
   });
 
-  test('🚨 每檔都回收盤報價 → 4 分 30 秒內整張圖收齊；第一輪是市值前 69、大格子先、每檔只抓一次', () {
+  test('🚨 每檔都回收盤報價 → 第一輪就整張圖收齊；只問圖上的檔與指數、每檔只抓一次，'
+      '之後不再發請求', () {
     fakeAsync((async) {
       final s = _Session(async);
-      s.elapse(const Duration(seconds: 5)); // 第一輪：第 1、4 秒兩批
-      final top = _byCap.take(HeatmapParams.liveTileLimit).toSet();
-      expect(s.requests, hasLength(2));
+      s.elapse(const Duration(seconds: 12));
+      expect(s.requests, hasLength(_perRound));
       expect(
         {for (final r in s.requests) ...r.symbols},
-        {LiveQuoteParams.twseIndexSymbol, ...top},
+        {LiveQuoteParams.twseIndexSymbol, ..._tiles},
       );
       expect(s.view.closing, (
-        done: HeatmapParams.liveTileLimit,
+        done: _tiles.length,
         unmatched: 0,
-        total: _stockCount,
+        total: _tiles.length,
       ));
-      expect(_coloredOf(s.view), top, reason: '第一輪拿到的是市值前 69');
+      expect(_coloredOf(s.view), _tiles.toSet());
+      _expectClosingColor(s.view, _tiles.toSet());
+      expect(s.view.stockRegistrations, isEmpty);
 
       s.elapse(const Duration(minutes: 10));
-      final filled = s.filledAt(_stockCount);
-      expect(filled, isNotNull);
-      expect(
-        filled!.isAfter(s.start.add(const Duration(minutes: 4, seconds: 30))),
-        isFalse,
-        reason: '收齊於 $filled',
-      );
-      expect(s.requestedStocks, _byCap, reason: '依市值由大到小，每檔恰好一次');
-      expect(s.requests.last.at.isAfter(filled), isFalse, reason: '收齊後不再發請求');
-      expect(_coloredOf(s.view), _byCap.toSet());
-      _expectClosingColor(s.view, _byCap.toSet());
+      expect(s.requests, hasLength(_perRound), reason: '收齊後不再發請求');
+      expect(s.requestedStocks, _tiles, reason: '依市值由大到小，每檔恰好一次');
       expect([
         for (final v in s.views) v.view.quoteStatus,
       ], everyElement(isNull));
@@ -90,23 +83,53 @@ void main() {
     });
   });
 
-  test('🚨 20 檔整天沒成交 → 各被請求恰好 10 次後不再請求；其餘 1,058 檔 6 分鐘內收齊，'
+  test('🚨 盤中每一輪剛好把指數與圖上的檔問過一遍、不重複，圖上每一檔都上色', () {
+    fakeAsync((async) {
+      final s = _Session(async, start: _morning);
+      s.respond = (_, symbols, now) async =>
+          s.snapshot(symbols, now, price: 101);
+      s.elapse(const Duration(seconds: 70));
+
+      // 一輪的請求數由檔數決定；照這個數把請求一輪一輪分開
+      final rounds = [
+        for (final round in s.requests.slices(_perRound))
+          if (round.length == _perRound) round,
+      ];
+      expect(rounds.length, greaterThanOrEqualTo(3));
+      for (final round in rounds) {
+        final asked = [for (final r in round) ...r.symbols];
+        expect(
+          asked,
+          hasLength(_tiles.length + 1),
+          reason: '${round.first.at} 那一輪沒有重複問',
+        );
+        expect(asked.toSet(), {LiveQuoteParams.twseIndexSymbol, ..._tiles});
+      }
+      for (var i = 1; i < rounds.length; i++) {
+        expect(
+          rounds[i].first.at.difference(rounds[i - 1].first.at),
+          greaterThanOrEqualTo(LiveQuoteParams.pollInterval),
+          reason: '相鄰兩輪至少隔一個輪詢間隔（${rounds[i].first.at}）',
+        );
+      }
+      expect(_coloredOf(s.view), _tiles.toSet());
+      expect(s.stalledAt, isEmpty);
+      s.dispose();
+    });
+  });
+
+  test('🚨 圖上 2 檔整天沒成交 → 各被請求恰好 10 次後不再請求；其餘第一輪就收齊，'
       '最近一輪只問它們（沒有今天的報價）時不退回正式資料', () {
-    final noTrade = {for (var k = 0; k < 20; k++) _byCap[10 + 54 * k]};
-    expect(
-      noTrade.where(_byCap.take(HeatmapParams.liveTileLimit).contains),
-      isNotEmpty,
-      reason: '前提：有幾檔一開始就在前 69 檔、一直佔著登記名額',
-    );
+    final noTrade = {_tiles[10], _tiles[20]};
     fakeAsync((async) {
       final s = _Session(async, noTrade: noTrade);
       s.elapse(const Duration(minutes: 25));
 
-      final traded = _stockCount - noTrade.length;
+      final traded = _tiles.length - noTrade.length;
       final filled = s.filledAt(traded);
       expect(filled, isNotNull);
       expect(
-        filled!.isAfter(s.start.add(const Duration(minutes: 6))),
+        filled!.isAfter(s.start.add(const Duration(seconds: 5))),
         isFalse,
         reason: '收齊於 $filled',
       );
@@ -134,7 +157,7 @@ void main() {
       expect(view.closing, (
         done: traded,
         unmatched: noTrade.length,
-        total: _stockCount,
+        total: _tiles.length,
       ));
       expect(
         view.quoteStatus,
@@ -146,7 +169,7 @@ void main() {
         expect(v.quoteStatus, isNull, reason: '$at');
       }
       expect(s.stalledAt, isEmpty, reason: '報價中心不判暫停');
-      final tradedSymbols = _byCap.toSet().difference(noTrade);
+      final tradedSymbols = _tiles.toSet().difference(noTrade);
       expect(_coloredOf(view), tradedSymbols);
       _expectClosingColor(view, tradedSymbols);
       for (final symbol in noTrade) {
@@ -164,46 +187,48 @@ void main() {
     });
   });
 
-  test('🚨 100 檔收盤那一盤沒撮合（多於登記上限 69）→ 各被請求恰好 10 次後讓出登記名額；'
-      '其餘 978 檔 25 分鐘內收齊；格子寫收盤沒撮合、進度另計檔數', () {
-    // 市值名次 3、13、…、993：散在市值各處，前 69 檔裡有 7 檔
-    final unmatched = heatmapFixtureUnmatched100();
-    expect(unmatched, hasLength(greaterThan(HeatmapParams.liveTileLimit)));
-    expect(
-      unmatched.where(_byCap.take(HeatmapParams.liveTileLimit).contains),
-      isNotEmpty,
-      reason: '前提：有幾檔一開始就在前 69 檔',
-    );
+  test('🚨 圖上 3 檔收盤那一盤沒撮合 → 每分鐘重試一次、各被請求恰好 10 次後放棄；'
+      '其餘第一輪就收齊；格子寫收盤沒撮合、進度另計檔數', () {
+    final unmatched = heatmapFixtureUnmatched3();
+    expect(unmatched, hasLength(3));
+    expect(unmatched.every(_tiles.contains), isTrue, reason: '前提：都在圖上');
     fakeAsync((async) {
       final s = _Session(async, unmatched: unmatched);
-      s.elapse(const Duration(minutes: 40));
+      s.elapse(const Duration(minutes: 20));
 
-      final matched = _stockCount - unmatched.length;
+      final matched = _tiles.length - unmatched.length;
       final filled = s.filledAt(matched);
+      expect(filled, isNotNull);
       expect(
-        filled,
-        isNotNull,
-        reason: '其餘各檔要全部拿到收盤報價（最後的進度 ${s.view.closing}）',
-      );
-      expect(
-        filled!.isAfter(s.start.add(const Duration(minutes: 25))),
+        filled!.isAfter(s.start.add(const Duration(seconds: 5))),
         isFalse,
         reason: '收齊於 $filled',
       );
       for (final symbol in unmatched) {
+        final asked = [
+          for (final r in s.requests)
+            if (r.symbols.contains(symbol)) r.at,
+        ];
         expect(
-          s.requests.where((r) => r.symbols.contains(symbol)),
+          asked,
           hasLength(LiveQuoteParams.afterCloseMaxAttempts),
           reason: symbol,
         );
+        for (var i = 1; i < asked.length; i++) {
+          expect(
+            asked[i].difference(asked[i - 1]),
+            greaterThanOrEqualTo(LiveQuoteParams.afterCloseRetryInterval),
+            reason: '$symbol 第 ${i + 1} 次在 ${asked[i]}',
+          );
+        }
       }
       expect(
-        s.requestedStocks.where((symbol) => !unmatched.contains(symbol)),
-        [
-          for (final symbol in _byCap)
-            if (!unmatched.contains(symbol)) symbol,
-        ],
-        reason: '其餘依市值由大到小，每檔恰好一次',
+        s.requests.last.at.difference(s.requests.first.at),
+        greaterThanOrEqualTo(
+          LiveQuoteParams.afterCloseRetryInterval *
+              (LiveQuoteParams.afterCloseMaxAttempts - 1),
+        ),
+        reason: '試滿 10 次要 9 分鐘以上',
       );
       expect(
         s.requests.last.at.isBefore(
@@ -218,10 +243,10 @@ void main() {
       expect(view.closing, (
         done: matched,
         unmatched: unmatched.length,
-        total: _stockCount,
+        total: _tiles.length,
       ));
-      expect(view.stockRegistrations, isEmpty, reason: '放棄的代號不再占登記名額');
-      final matchedSymbols = _byCap.toSet().difference(unmatched);
+      expect(view.stockRegistrations, isEmpty, reason: '放棄的代號不再登記');
+      final matchedSymbols = _tiles.toSet().difference(unmatched);
       expect(_coloredOf(view), matchedSymbols);
       _expectClosingColor(view, matchedSymbols);
       for (final symbol in unmatched) {
@@ -246,14 +271,14 @@ void main() {
 
   test('🚨 收盤後只剩每分鐘重抓的幾檔、重抓碰上 CLI 避讓窗口（超過 60 秒沒有回應）'
       '→ 不報「報價暫停」', () {
-    // 市值最小的 20 檔整天沒成交：其餘收齊後只剩它們每分鐘重抓一次
-    final noTrade = _byCap.skip(_stockCount - 20).toSet();
+    // 市值最小的 2 檔整天沒成交：其餘第一輪收齊後只剩它們每分鐘重抓一次
+    final noTrade = {_tiles[28], _tiles[29]};
     fakeAsync((async) {
-      // 13:30:15 開始：其餘 1,058 檔約 13:34:07 收齊，它們下一次重抓落在
-      // 13:35:00 的 CLI 避讓窗口
+      // 13:31:02 開始：第一輪 13:31:03，之後每分鐘的第 3 秒重抓，13:35:03
+      // 那一次落在 13:35:00 的 CLI 避讓窗口
       final s = _Session(
         async,
-        start: DateTime(2026, 11, 9, 13, 30, 15),
+        start: DateTime(2026, 11, 9, 13, 31, 2),
         noTrade: noTrade,
       );
       s.elapse(const Duration(minutes: 20));
@@ -294,85 +319,60 @@ void main() {
         );
       }
       expect(s.view.closing, (
-        done: _stockCount - noTrade.length,
+        done: _tiles.length - noTrade.length,
         unmatched: noTrade.length,
-        total: _stockCount,
+        total: _tiles.length,
       ));
       expect(captured, isEmpty);
       s.dispose();
     });
   });
 
-  test('🚨 一輪回應慢 7 秒（未逾時）、回來時落在 CLI 避讓窗口 → 全程不報「報價暫停」，'
-      '6 分鐘內收齊', () {
+  test('🚨 回應慢 7 秒（未逾時）、回來時落在 CLI 避讓窗口 → 照常套用、整張圖收齊，'
+      '不重抓、不報「報價暫停」', () {
     fakeAsync((async) {
       final window = DateTime(2026, 11, 9, 13, 35);
       final windowEnd = window.add(LiveQuoteParams.cliAvoidWindow);
       const delay = Duration(seconds: 7);
       expect(delay, lessThan(LiveQuoteParams.receiveTimeout), reason: '前提：未逾時');
-      DateTime? delayedAt;
-      // 13:31:05 開始：最後一輪在窗口前幾秒送出
-      final s = _Session(async, start: DateTime(2026, 11, 9, 13, 31, 5));
-      s.respond = (_, symbols, now) {
-        // 窗口前 15 秒內送出的第一個請求慢 7 秒
-        if (delayedAt == null &&
-            now.isBefore(window) &&
-            !now.isBefore(window.subtract(LiveQuoteParams.pollInterval))) {
-          delayedAt = now;
-          return Future.delayed(delay, () => s.normal(symbols, now));
-        }
-        return s.normal(symbols, now);
-      };
+      // 13:34:55 開始：第一批在窗口前幾秒送出，只有它慢
+      final s = _Session(async, start: DateTime(2026, 11, 9, 13, 34, 55));
+      s.respond = (i, symbols, now) => i == 0
+          ? Future.delayed(delay, () => s.normal(symbols, now))
+          : s.normal(symbols, now);
       s.elapse(const Duration(minutes: 10));
 
-      final slow = delayedAt;
-      expect(slow, isNotNull, reason: '前提：窗口前有一輪還在抓');
-      final back = slow!.add(delay);
+      final slow = s.requests.first.at;
+      expect(slow.isBefore(window), isTrue, reason: '前提：窗口前送出（$slow）');
+      final back = slow.add(delay);
       expect(
         !back.isBefore(window) && back.isBefore(windowEnd),
         isTrue,
-        reason: '前提：慢的回應在窗口內回來（$back），同一輪剩下的批次要等窗口過去',
+        reason: '前提：慢的回應在窗口內回來（$back）',
       );
+      expect(s.requests, hasLength(_perRound), reason: '慢的那一批照常套用，沒有重抓');
+      // 收齊的時刻：慢的那一批回來，或這一輪最後一批送出（回應是立即的），
+      // 取晚的
+      final lastSent = s.requests.last.at;
       expect(
-        s.requests.where((r) => r.at.isAfter(slow) && r.at.isBefore(back)),
-        isEmpty,
-        reason: '慢的那一批回來前不發下一批',
+        s.filledAt(_tiles.length),
+        lastSent.isAfter(back) ? lastSent : back,
       );
-      expect(
-        s.requests.where(
-          (r) => !r.at.isBefore(window) && r.at.isBefore(windowEnd),
-        ),
-        isEmpty,
-        reason: 'CLI 避讓窗口內不發請求',
-      );
-      final filled = s.filledAt(_stockCount);
-      expect(filled, isNotNull);
-      expect(
-        filled!.isBefore(windowEnd),
-        isFalse,
-        reason: '前提：收齊前跨過窗口（收齊於 $filled）',
-      );
-      expect(
-        filled.isAfter(s.start.add(const Duration(minutes: 6))),
-        isFalse,
-        reason: '收齊於 $filled',
-      );
+      expect(s.requestedStocks, _tiles);
       expect(s.stalledAt, isEmpty, reason: '報價中心不判暫停');
       expect(
         [for (final v in s.views) v.view.quoteStatus],
         everyElement(isNull),
         reason: '不報「報價暫停」',
       );
-      expect(s.requestedStocks, _byCap, reason: '慢的那一輪照常套用，沒有重抓');
       expect(captured, isEmpty);
       s.dispose();
     });
   });
 
-  test('🚨 一批回應超過 receiveTimeout → 那一批失敗、那幾檔 1 分鐘後恰好重抓一次；'
-      '全程不報「報價暫停」，6 分鐘內收齊', () {
+  test('🚨 回應超過 receiveTimeout → 那一批失敗、1 分鐘後恰好重抓一次就收齊；'
+      '全程不報「報價暫停」', () {
     fakeAsync((async) {
-      const slowRequest = 8; // 第 5 輪的第 1 批
       const delay = Duration(seconds: 10);
       expect(
         delay,
@@ -392,18 +392,14 @@ void main() {
         production.receive,
         reason: '前提：測試 client 的接收逾時與正式 client 相同',
       );
-      s.respond = (i, symbols, now) => i == slowRequest
+      s.respond = (i, symbols, now) => i == 0
           ? Future.delayed(delay, () => s.normal(symbols, now))
           : s.normal(symbols, now);
       s.elapse(const Duration(minutes: 10));
 
-      final timedOut = s.requests[slowRequest];
-      final retries = [
-        for (final (i, r) in s.requests.indexed)
-          if (i > slowRequest && r.symbols.any(timedOut.symbols.contains)) r,
-      ];
-      expect(retries, hasLength(1), reason: '逾時的那一批只重抓一次');
-      final retry = retries.single;
+      expect(s.requests, hasLength(_perRound + 1), reason: '第一輪之外，逾時的那一批只重抓一次');
+      final timedOut = s.requests.first;
+      final retry = s.requests.last;
       expect(retry.symbols, containsAll(timedOut.symbols));
       expect(
         retry.at.difference(timedOut.at),
@@ -413,28 +409,7 @@ void main() {
         ),
         reason: '逾時之後滿 1 分鐘才重抓（${retry.at}）',
       );
-      expect(
-        s.requests.where(
-          (r) => r.at.isAfter(timedOut.at) && r.at.isBefore(retry.at),
-        ),
-        isNotEmpty,
-        reason: '等重抓的期間照常滾動',
-      );
-      final counts = <String, int>{};
-      for (final symbol in s.requestedStocks) {
-        counts[symbol] = (counts[symbol] ?? 0) + 1;
-      }
-      expect(counts, {
-        for (final symbol in _byCap)
-          symbol: timedOut.symbols.contains(symbol) ? 2 : 1,
-      }, reason: '只有逾時的那一批多抓一次');
-      final filled = s.filledAt(_stockCount);
-      expect(filled, isNotNull);
-      expect(
-        filled!.isAfter(s.start.add(const Duration(minutes: 6))),
-        isFalse,
-        reason: '收齊於 $filled',
-      );
+      expect(s.filledAt(_tiles.length), retry.at);
       expect(s.stalledAt, isEmpty, reason: '報價中心不判暫停');
       expect(
         [for (final v in s.views) v.view.quoteStatus],
@@ -446,151 +421,37 @@ void main() {
     });
   });
 
-  test('🚨 一輪送到一半被限流 → 只損失那一輪；rateLimitedUntil 過後從還沒拿到的繼續、'
-      '再 5 分鐘內收齊', () {
-    fakeAsync((async) {
-      const limited = 9; // 第 5 輪的第 2 批
-      final s = _Session(async);
-      s.respond = (i, symbols, now) => i == limited
-          ? Future.value(_rateLimitedPage)
-          : s.normal(symbols, now);
-      s.elapseUntil(() => s.requests.length > limited);
-      final limitedAt = s.requests[limited].at;
-      final until = s.centerState.rateLimitedUntil;
-      expect(until, limitedAt.add(LiveQuoteParams.rateLimitPause));
-      final doneBefore = s.view.closing!.done;
-      expect(doneBefore, 4 * HeatmapParams.liveTileLimit, reason: '前 4 輪都收到');
-      expect(s.view.quoteStatus?.kind, LiveHeaderKind.pausedRateLimit);
-
-      s.elapse(const Duration(minutes: 15));
-      final resumed = s.requests[limited + 1];
-      expect(resumed.at.isBefore(until!), isFalse, reason: '暫停期間不發請求');
-      expect(
-        resumed.at.difference(until),
-        lessThanOrEqualTo(LiveQuoteParams.tick),
-        reason: '時間一到就試探',
-      );
-      expect(
-        resumed.symbols,
-        s.requests[limited - 1].symbols,
-        reason: '試探從作廢那一輪的第 1 批開始',
-      );
-      // 全程只有暫停期間顯示限流（不會出現 pausedNetwork）；暫停期間進度不動
-      for (final (:at, :view) in s.views) {
-        if (at.isBefore(limitedAt) || !at.isBefore(until)) {
-          expect(view.quoteStatus, isNull, reason: '$at：試探成功後不再顯示限流');
+  for (final (label, collect) in [
+    ('在背景收集的平台：App 看不見時第一輪照樣收齊', true),
+    ('不在背景收集的平台：App 看不見時不發請求，回到可見才收', false),
+  ]) {
+    test('🚨 $label', () {
+      fakeAsync((async) {
+        final s = _Session(async, collectAfterCloseWhenHidden: collect);
+        s.center.setAppVisible(false);
+        s.elapse(const Duration(minutes: 2));
+        if (collect) {
+          expect(s.requests, hasLength(_perRound));
+          expect(s.view.closing, (
+            done: _tiles.length,
+            unmatched: 0,
+            total: _tiles.length,
+          ));
+          _expectClosingColor(s.view, _tiles.toSet());
         } else {
-          expect(view.quoteStatus?.kind, LiveHeaderKind.pausedRateLimit);
-          expect(view.closing!.done, doneBefore, reason: '$at：作廢那一輪不套用');
+          expect(s.requests, isEmpty);
+          expect(s.view.closing, (done: 0, unmatched: 0, total: _tiles.length));
+          s.center.setAppVisible(true);
+          s.elapse(const Duration(seconds: 12));
+          expect(s.requests, hasLength(_perRound));
+          expect(s.view.closing?.done, _tiles.length);
         }
-      }
-      expect(s.stalledAt, isEmpty, reason: '限流暫停期間不判網路暫停');
-      final filled = s.filledAt(_stockCount);
-      expect(filled, isNotNull);
-      expect(
-        filled!.isAfter(until.add(const Duration(minutes: 5))),
-        isFalse,
-        reason: '收齊於 $filled',
-      );
-      expect(
-        s.stocksExcept({limited - 1, limited}),
-        _byCap,
-        reason: '只重抓作廢的那一輪，其餘依市值各抓一次',
-      );
-      expect(captured, isEmpty);
-      s.dispose();
+        expect(s.stalledAt, isEmpty, reason: '報價中心不判暫停');
+        expect(captured, isEmpty);
+        s.dispose();
+      });
     });
-  });
-
-  test('🚨 不在背景收集的平台：一輪送到一半 App 不可見一輪 → 只損失那一輪；'
-      '回到可見後繼續，6 分鐘內收齊', () {
-    fakeAsync((async) {
-      const sentBeforeHiding = 9; // 第 5 輪的第 1 批
-      final s = _Session(async, collectAfterCloseWhenHidden: false);
-      s.elapseUntil(() => s.requests.length == sentBeforeHiding);
-      s.elapse(const Duration(seconds: 1)); // 第 1 批已回來，第 2 批還沒送
-      final doneBefore = s.view.closing!.done;
-      expect(doneBefore, 4 * HeatmapParams.liveTileLimit, reason: '前 4 輪都收到');
-
-      s.center.setAppVisible(false);
-      s.elapse(LiveQuoteParams.pollInterval);
-      expect(s.requests, hasLength(sentBeforeHiding), reason: '不可見時不發請求');
-      expect(s.view.closing!.done, doneBefore, reason: '送到一半的那一輪作廢、不套用');
-
-      s.center.setAppVisible(true);
-      final shownAt = s.now();
-      s.elapse(const Duration(minutes: 10));
-      final resumed = s.requests[sentBeforeHiding];
-      expect(
-        resumed.at.difference(shownAt),
-        lessThanOrEqualTo(LiveQuoteParams.tick),
-        reason: '回到可見後下一拍就繼續',
-      );
-      expect(
-        resumed.symbols,
-        s.requests[sentBeforeHiding - 1].symbols,
-        reason: '從作廢那一輪的第 1 批重抓',
-      );
-      final filled = s.filledAt(_stockCount);
-      expect(filled, isNotNull);
-      expect(
-        filled!.isAfter(s.start.add(const Duration(minutes: 6))),
-        isFalse,
-        reason: '收齊於 $filled',
-      );
-      expect(
-        s.stocksExcept({sentBeforeHiding - 1}),
-        _byCap,
-        reason: '只重抓作廢的那一批，其餘依市值各抓一次',
-      );
-      expect(s.stalledAt, isEmpty, reason: '報價中心不判暫停');
-      expect(
-        [for (final v in s.views) v.view.quoteStatus],
-        everyElement(isNull),
-        reason: '不報「報價暫停」',
-      );
-      expect(captured, isEmpty);
-      s.dispose();
-    });
-  });
-
-  test('🚨 在背景收集的平台：一輪送到一半 App 看不見 → 那一輪照常送完、照常套用，'
-      '看不見時一路收完，和可見時一樣 4 分 30 秒內收齊', () {
-    fakeAsync((async) {
-      const sentBeforeHiding = 9; // 第 5 輪的第 1 批
-      final s = _Session(async, collectAfterCloseWhenHidden: true);
-      s.elapseUntil(() => s.requests.length == sentBeforeHiding);
-      s.elapse(const Duration(seconds: 1)); // 第 1 批已回來，第 2 批還沒送
-      expect(
-        s.view.closing!.done,
-        4 * HeatmapParams.liveTileLimit,
-        reason: '前 4 輪都收到',
-      );
-
-      s.center.setAppVisible(false);
-      final hiddenAt = s.now();
-      s.elapse(const Duration(minutes: 10));
-      final filled = s.filledAt(_stockCount);
-      expect(filled, isNotNull, reason: '看不見時收完');
-      expect(
-        filled!.isAfter(s.start.add(const Duration(minutes: 4, seconds: 30))),
-        isFalse,
-        reason: '收齊於 $filled',
-      );
-      expect(filled.isAfter(hiddenAt), isTrue, reason: '前提：收齊時 App 還看不見');
-      expect(s.requestedStocks, _byCap, reason: '沒有作廢的一輪：依市值各抓一次');
-      expect(s.requests.last.at.isAfter(filled), isFalse, reason: '收齊後不再發請求');
-      _expectClosingColor(s.view, _byCap.toSet());
-      expect(s.stalledAt, isEmpty, reason: '報價中心不判暫停');
-      expect(
-        [for (final v in s.views) v.view.quoteStatus],
-        everyElement(isNull),
-        reason: '不報「報價暫停」',
-      );
-      expect(captured, isEmpty);
-      s.dispose();
-    });
-  });
+  }
 
   group('證交所回較舊的快照（盤中）', () {
     test('🚨 交替回新、舊快照 20 輪 → 顯示價一直是至今最新那一份、沒有往下閃、'
@@ -626,7 +487,7 @@ void main() {
         });
 
         s.elapse(const Duration(minutes: 5, seconds: 30));
-        expect(served, hasLength(2), reason: '69 檔＋指數兩批');
+        expect(served, hasLength(_perRound), reason: '圖上的檔＋指數分成的批數');
         expect(served.values, everyElement(greaterThanOrEqualTo(20)));
 
         var upFlashes = 0;
@@ -654,7 +515,7 @@ void main() {
           quoteTimes++;
         }
         expect(quoteTimes, greaterThan(0));
-        expect(s.centerState.entries, hasLength(70));
+        expect(s.centerState.entries, hasLength(_tiles.length + 1));
         expect(upFlashes, greaterThan(0), reason: '新的一份換上時照樣往上閃');
         expect(s.stalledAt, isEmpty);
         sub.close();
@@ -676,9 +537,13 @@ void main() {
               );
         s.elapse(const Duration(seconds: 60)); // 10:01:00
         final stocks = {for (final r in s.view.stockRegistrations) r.symbol};
-        expect(stocks, hasLength(HeatmapParams.liveTileLimit));
-        // 第 1 輪 10:00:13 換上，之後三輪（到 10:00:58）都被擋下
-        expect(s.requests, hasLength(8));
+        expect(stocks, hasLength(_tiles.length));
+        // 第 1 輪換上，之後的每一輪都被擋下
+        expect(
+          s.requests.length,
+          greaterThanOrEqualTo(3 * _perRound),
+          reason: '前提：第 1 輪之後至少又問了兩輪',
+        );
         for (final symbol in stocks) {
           expect(s.centerState.entries[symbol]!.price, 101, reason: symbol);
         }
@@ -695,14 +560,15 @@ void main() {
     test('🚨 別的畫面抓到比較新的報價 → 熱力圖頁首的報價時間仍是自己格子裡最新的那一筆', () {
       fakeAsync((async) {
         final s = _Session(async, start: _morning);
-        // 另一個畫面登記一檔不在熱力圖裡的股票:它每次都拿到當下的快照;
-        // 熱力圖那兩批的快取還沒換新,一直是 09:59:30 那一份
+        // 另一個畫面登記一檔不在熱力圖裡的股票(與熱力圖的 31 檔同一批):它
+        // 每次都是剛成交、列的時間是當下;熱力圖各檔的最後一筆成交停在 09:59:30
         const other = 'OTHER';
-        final cached = DateTime(2026, 11, 9, 9, 59, 30);
+        final quiet = DateTime(2026, 11, 9, 9, 59, 30);
         s.respond = (_, symbols, now) async => s.snapshot(
           symbols,
-          symbols.contains(other) ? now : cached,
+          now,
           price: 101,
+          rowAt: (symbol) => symbol == other ? now : quiet,
         );
         s.center.register('other page', const [
           LiveQuoteRegistration(symbol: other, market: MarketCode.twse),
@@ -790,8 +656,10 @@ void main() {
             if (v.view.quoteStatus != null) v,
         ];
         expect(withStatus, isNotEmpty);
-        // 10:00:00～09 讓給 CLI，第 1 輪兩批在 10:00:10、10:00:13
-        expect(withStatus.first.at, DateTime(2026, 11, 9, 10, 0, 13));
+        // 10:00:00～09 讓給 CLI，第 1 輪從 10:00:10 開始；這一輪的最後一批
+        // 回來（回應是立即的）頁首就有狀態
+        expect(s.requests.first.at, DateTime(2026, 11, 9, 10, 0, 10));
+        expect(withStatus.first.at, s.requests[_perRound - 1].at);
         for (final v in withStatus) {
           expect(
             v.view.quoteStatus,
@@ -806,9 +674,6 @@ void main() {
   });
 }
 
-/// 證交所限流時回的 HTML（client 判為限流）
-const _rateLimitedPage = '<!doctype html><html>Too many requests</html>';
-
 /// 上市規模（spec「驗證」2）
 const _stockCount = heatmapFixtureStockCount;
 
@@ -818,21 +683,24 @@ final _start = DateTime(2026, 11, 9, 13, 31);
 /// 週一盤中（「資料時間」那幾條的起點）
 final _morning = DateTime(2026, 11, 9, 10, 0);
 
-/// 市值由大到小
+/// 整個市場，市值由大到小
 final _byCap = heatmapFixtureByCap;
 
+/// 圖上的檔（市值最大的那幾檔），由大到小
+final _tiles = heatmapFixtureTiles;
+
+/// 圖上的檔加一個指數，一輪分成幾個請求（分批無條件進位，同報價中心）
+const _perRound =
+    (HeatmapParams.topTileCount + 1 + ApiEndpoints.misBatchSize - 1) ~/
+    ApiEndpoints.misBatchSize;
+
 Set<String> _coloredOf(HeatmapLiveView view) => {
-  for (final industry in view.data!.industries)
-    for (final tile in industry.tiles)
-      if (tile.change is TileChangeValue) tile.symbol,
+  for (final tile in view.data!.tiles)
+    if (tile.change is TileChangeValue) tile.symbol,
 };
 
-TileChange _changeOf(HeatmapLiveView view, String symbol) => view
-    .data!
-    .industries
-    .expand((i) => i.tiles)
-    .firstWhere((t) => t.symbol == symbol)
-    .change;
+TileChange _changeOf(HeatmapLiveView view, String symbol) =>
+    view.data!.tiles.firstWhere((t) => t.symbol == symbol).change;
 
 /// [symbols] 都以收盤報價上色：(101 − 100) ÷ 100 = +1%
 void _expectClosingColor(HeatmapLiveView view, Set<String> symbols) {
@@ -1018,25 +886,30 @@ class _Session {
         unmatched: unmatched,
       );
 
-  /// 一份快照的回應:每檔都是 [price] 的成交,快照時刻與各列的時間都是 [at]
-  String snapshot(List<String> symbols, DateTime at, {required double price}) =>
-      jsonEncode({
-        'rtcode': '0000',
-        'queryTime': {'sysDate': _ymd(at), 'sysTime': _hms(at)},
-        'msgArray': [
-          for (final s in symbols)
-            {
-              'c': s,
-              'z': price.toStringAsFixed(4),
-              'pz': '-',
-              'y': '100.0000',
-              'd': _ymd(at),
-              't': _hms(at),
-              'b': '-',
-              'a': '-',
-            },
-        ],
-      });
+  /// 一份快照的回應:每檔都是 [price] 的成交,快照時刻是 [at];各列的時間預設
+  /// 也是 [at],[rowAt] 可以逐檔指定
+  String snapshot(
+    List<String> symbols,
+    DateTime at, {
+    required double price,
+    DateTime Function(String symbol)? rowAt,
+  }) => jsonEncode({
+    'rtcode': '0000',
+    'queryTime': {'sysDate': _ymd(at), 'sysTime': _hms(at)},
+    'msgArray': [
+      for (final s in symbols)
+        {
+          'c': s,
+          'z': price.toStringAsFixed(4),
+          'pz': '-',
+          'y': '100.0000',
+          'd': _ymd(at),
+          't': _hms(rowAt?.call(s) ?? at),
+          'b': '-',
+          'a': '-',
+        },
+    ],
+  });
 
   void elapse(Duration d) => async.elapse(d);
 

@@ -2,32 +2,29 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daredevil/domain/models/heatmap.dart';
 
-HeatmapTile _tile({double baseCap = 100, TileChange? change}) => HeatmapTile(
-  symbol: '9901',
+HeatmapTile _tile({
+  String symbol = '9901',
+  String? industry = '測試業',
+  TileChange? change,
+}) => HeatmapTile(
+  symbol: symbol,
   name: '測試甲',
+  industry: industry,
   close: 100,
   marketCap: 1000,
-  baseCap: baseCap,
   change: change ?? const TileChangeValue(1),
   isMine: false,
 );
 
-HeatmapIndustry _industry({
-  double? liveCoverage,
-  bool allNoClosingMatch = false,
-}) => HeatmapIndustry(
-  name: '測試業',
-  marketCap: 1000,
-  weightedChangePercent: 1,
-  tiles: [_tile()],
-  liveCoverage: liveCoverage,
-  allNoClosingMatch: allNoClosingMatch,
-);
-
-HeatmapMarketData _data({HeatmapLiveMode? liveMode}) => HeatmapMarketData(
+HeatmapMarketData _data({
+  HeatmapLiveMode? liveMode,
+  List<HeatmapTile>? tiles,
+  double capCoverage = 1,
+}) => HeatmapMarketData(
   market: 'twse',
   dataDate: DateTime(2026, 11, 6),
-  industries: [_industry()],
+  tiles: tiles ?? [_tile()],
+  capCoverage: capCoverage,
   excludedForShares: 0,
   liveMode: liveMode,
 );
@@ -43,9 +40,10 @@ void _expectSame(Object a, Object b) {
 }
 
 void main() {
-  test('HeatmapTile：baseCap 納入 ==／hashCode', () {
+  test('HeatmapTile：industry 納入 ==／hashCode', () {
     _expectSame(_tile(), _tile());
-    _expectDistinct(_tile(), _tile(baseCap: 200));
+    _expectDistinct(_tile(), _tile(industry: '半導體業'));
+    _expectDistinct(_tile(), _tile(industry: null));
   });
 
   group('TileChangeHollow', () {
@@ -87,20 +85,19 @@ void main() {
     });
   });
 
-  test('HeatmapIndustry：liveCoverage 預設 null、納入 ==／hashCode', () {
-    expect(_industry().liveCoverage, isNull);
-    _expectSame(_industry(liveCoverage: 0.5), _industry(liveCoverage: 0.5));
-    _expectDistinct(_industry(liveCoverage: 0.5), _industry(liveCoverage: 1));
-    _expectDistinct(_industry(), _industry(liveCoverage: 0));
-  });
-
-  test('HeatmapIndustry：allNoClosingMatch 預設 false、納入 ==／hashCode', () {
-    expect(_industry().allNoClosingMatch, isFalse);
-    _expectSame(
-      _industry(allNoClosingMatch: true),
-      _industry(allNoClosingMatch: true),
+  test('HeatmapMarketData：tiles、capCoverage 納入 ==／hashCode', () {
+    _expectSame(_data(), _data());
+    _expectDistinct(_data(), _data(capCoverage: 0.5));
+    _expectDistinct(_data(), _data(tiles: [_tile(symbol: '9902')]));
+    _expectDistinct(
+      _data(),
+      _data(
+        tiles: [
+          _tile(),
+          _tile(symbol: '9902'),
+        ],
+      ),
     );
-    _expectDistinct(_industry(allNoClosingMatch: true), _industry());
   });
 
   test('HeatmapMarketData：liveMode 預設 null、納入 ==／hashCode', () {

@@ -83,4 +83,13 @@ void main() {
     expect(HeatmapParams.isExcludedIndustry('半導體業'), isFalse);
     expect(HeatmapParams.isExcludedIndustry(null), isFalse);
   });
+
+  test('圖上的檔數不超過一輪能登記的檔數', () {
+    // 超過的話，排在後面的格子永遠不會被登記，盤中永遠不會上色
+    expect(HeatmapParams.topTileCount, greaterThan(0));
+    expect(
+      HeatmapParams.topTileCount,
+      lessThanOrEqualTo(HeatmapParams.liveTileLimit),
+    );
+  });
 }
