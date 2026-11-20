@@ -46,6 +46,11 @@ import 'package:daredevil/presentation/widgets/empty_state.dart';
 import 'package:daredevil/presentation/widgets/update_progress_banner.dart';
 import 'package:daredevil/presentation/widgets/themed_refresh_indicator.dart';
 
+import 'package:daredevil/domain/models/close_summary.dart';
+import 'package:daredevil/presentation/providers/close_summary_provider.dart';
+import 'package:daredevil/presentation/screens/today/widgets/close_summary_entry_card.dart';
+import 'package:daredevil/presentation/widgets/pinned_thesis_section.dart';
+
 import '../../../helpers/phone_layout_helpers.dart';
 import '../../../helpers/provider_test_helpers.dart';
 import '../../../helpers/widget_test_helpers.dart';
@@ -205,6 +210,7 @@ void main() {
     List<Override> extraOverrides = const [],
     Widget Function(Widget screen)? wrap,
     _LiveCenter? liveCenter,
+    CloseSummary? closeSummary,
   }) {
     final today = todayState ?? const TodayState();
     final watchlist = watchlistState ?? WatchlistState();
@@ -248,6 +254,11 @@ void main() {
         // CircularProgressIndicator 的 ticker 留下 pending timer 的 test infra bug。
         modeRecommendationsProvider.overrideWith(
           modeRecommendations ?? (ref, mode) => SynchronousFuture(const []),
+        ),
+        // 收盤摘要預設沒有資料（入口卡不顯示），不讓今日頁測試去讀共用的
+        // in-memory DB
+        closeSummaryProvider.overrideWith(
+          (ref) => SynchronousFuture(closeSummary),
         ),
       ],
       brightness: brightness,
@@ -686,6 +697,56 @@ void main() {
       expect(headerY, lessThan(industryY));
       expect(find.byType(MarketDashboard), findsNothing);
       // 族群卡片與訊號卡片的進場動畫計時器推完
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('收盤摘要入口卡在大盤摘要條之後、釘選論點之前', (tester) async {
+      tester.view.physicalSize = const Size(1200, 8000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(dataDate: DateTime(2026, 9, 24)),
+          marketState: marketWithData(),
+          closeSummary: CloseSummary(
+            dataDate: DateTime(2026, 9, 24),
+            pricePendingMarkets: const {},
+            institutionalPendingMarkets: const {},
+            indexReady: false,
+            throttle: null,
+            strongListGroupMissing: false,
+            sections: const [
+              CloseSummarySection(
+                isHoldings: false,
+                groupId: null,
+                groupName: null,
+                rows: [
+                  CloseSummaryRow(
+                    symbol: '2330',
+                    name: '台積電',
+                    market: 'TWSE',
+                    groupId: null,
+                    groupName: null,
+                    role: GroupRole.other,
+                    status: RowDataStatus.ok,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      final stripY = tester.getTopLeft(find.byType(MarketSummaryStrip)).dy;
+      final cardY = tester.getTopLeft(find.byType(CloseSummaryEntryCard)).dy;
+      // 沒有釘選論點時那一區高度為 0，算 offstage，要明講不略過
+      final pinnedY = tester
+          .getTopLeft(find.byType(PinnedThesisSection, skipOffstage: false))
+          .dy;
+      expect(stripY, lessThan(cardY));
+      expect(cardY, lessThan(pinnedY));
+      expect(find.byType(Card), findsWidgets);
       await tester.pump(const Duration(seconds: 2));
     });
 

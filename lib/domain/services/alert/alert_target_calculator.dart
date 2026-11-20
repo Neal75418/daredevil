@@ -1,4 +1,5 @@
 import 'package:daredevil/core/constants/rule_params_alert.dart';
+import 'package:daredevil/data/database/app_database.dart';
 
 /// 計算用的最小日線單位(只取提醒需要的三個欄位)
 class Ohlc {
@@ -98,7 +99,7 @@ abstract final class AlertTargetCalculator {
             .reduce((a, b) => a > b ? a : b),
         isUpward: true,
       );
-      final atr = _atr(bars, AlertParams.stopGateAtrPeriod);
+      final atr = simpleAtr(bars, AlertParams.stopGateAtrPeriod);
       if (atr != null && atr > 0) {
         result[AlertKind.stopGate] = AlertTarget(
           price: closes.last - atr * AlertParams.stopGateAtrMultiple,
@@ -109,6 +110,18 @@ abstract final class AlertTargetCalculator {
     return result;
   }
 
+  /// DB 價格列 → 計算用單位。**明確依日期升冪排序**,不假設 DAO 的回傳
+  /// 方向:方向錯了,均線與 20 日高會用最舊的幾根算,價位會遠離現價。
+  /// OHLC 任一缺值或收盤 ≤0 的列略過(停牌)。
+  static List<Ohlc> ohlcFrom(List<DailyPriceEntry> history) {
+    final sorted = [...history]..sort((a, b) => a.date.compareTo(b.date));
+    return [
+      for (final p in sorted)
+        if (p.high != null && p.low != null && p.close != null && p.close! > 0)
+          Ohlc(high: p.high!, low: p.low!, close: p.close!),
+    ];
+  }
+
   /// ATR(period):True Range 的**簡單平均**(非 Wilder 平滑)。
   ///
   /// ⚠️ 與 `TechnicalIndicatorService.calculateATR` **不同口徑**(那支用
@@ -117,7 +130,7 @@ abstract final class AlertTargetCalculator {
   /// 回測就是用簡單平均跑的**(k=2.0 對應 ATR(20) 簡單平均,見 v3.3
   /// 〔註 I〕);換成 Wilder 會讓實際停損寬度與回測結論脫鉤。
   /// 若日後要統一口徑,必須連 k 一起重新回測。
-  static double? _atr(List<Ohlc> bars, int period) {
+  static double? simpleAtr(List<Ohlc> bars, int period) {
     if (bars.length < period + 1) return null;
     var sum = 0.0;
     for (var i = bars.length - period; i < bars.length; i++) {

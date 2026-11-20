@@ -19,6 +19,8 @@ import 'package:daredevil/presentation/providers/settings_provider.dart';
 import 'package:daredevil/presentation/providers/today_provider.dart';
 import 'package:daredevil/presentation/providers/watchlist_provider.dart';
 import 'package:flutter/foundation.dart';
+import 'package:daredevil/domain/models/close_summary.dart';
+import 'package:daredevil/presentation/providers/close_summary_provider.dart';
 import 'package:daredevil/presentation/screens/today/today_screen.dart';
 
 import '../../../helpers/provider_test_helpers.dart';
@@ -248,6 +250,10 @@ Widget buildTestWidget({
       }),
       modeRecommendationsProvider.overrideWith(
         (ref, mode) => SynchronousFuture(_testModeRecommendations),
+      ),
+      // 收盤摘要沒有資料：入口卡不顯示，golden 圖不變
+      closeSummaryProvider.overrideWith(
+        (ref) => SynchronousFuture<CloseSummary?>(null),
       ),
       appClockProvider.overrideWithValue(const _FixedClock()),
       // 建置進度固定為已補齊：否則會讀到共用測試 DB（其他測試寫入的股票、

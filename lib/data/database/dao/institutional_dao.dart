@@ -196,6 +196,33 @@ mixin InstitutionalDaoMixin on $AppDatabase {
     return result.read<int>('cnt');
   }
 
+  /// 某日某市場（以 stock_master.market 區分）的法人筆數，**整日範圍**
+  ///
+  /// 收盤摘要判斷「哪個市場的法人到了沒」用：上市法人約 16:00 才公布，
+  /// 15:30 那輪更新常只寫入上櫃。日期比對用整日範圍，涵蓋帶時間分量的列
+  /// （與 [PriceDaoMixin.countPricesInDayAndMarket] 同一做法）。
+  Future<int> countInstitutionalInDayAndMarket(
+    DateTime date,
+    String market,
+  ) async {
+    final start = DateTime(date.year, date.month, date.day);
+    final end = start
+        .add(const Duration(days: 1))
+        .subtract(const Duration(milliseconds: 1));
+    final result = await customSelect(
+      'SELECT COUNT(*) as cnt FROM daily_institutional di '
+      'INNER JOIN stock_master sm ON di.symbol = sm.symbol '
+      'WHERE di.date >= ? AND di.date <= ? AND sm.market = ?',
+      variables: [
+        Variable.withDateTime(start),
+        Variable.withDateTime(end),
+        Variable.withString(market),
+      ],
+      readsFrom: {dailyInstitutional, stockMaster},
+    ).getSingle();
+    return result.read<int>('cnt');
+  }
+
   /// 法人買賣超排行(2026-08-05,盤後籌碼排行頁)。
   ///
   /// 口徑:

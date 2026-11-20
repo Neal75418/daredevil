@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:daredevil/presentation/screens/today/widgets/revenue_filing_entry.dart';
 import 'package:daredevil/presentation/screens/today/widgets/quarterly_filing_entry.dart';
+import 'package:daredevil/presentation/screens/today/widgets/close_summary_entry_card.dart';
 import 'package:daredevil/presentation/screens/today/widgets/market_summary_strip.dart';
 import 'package:daredevil/presentation/screens/today/widgets/signal_card_guide_sheet.dart';
 import 'package:daredevil/core/constants/animations.dart';
@@ -874,6 +875,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             },
           ),
         ),
+
+        // 收盤摘要入口：持股與自選股照交易決策表標出的事件，一頁看完
+        const SliverToBoxAdapter(child: CloseSummaryEntryCard()),
 
         // 部分錯誤橫幅（有推薦資料但重新整理失敗時顯示）
         Consumer(

@@ -106,4 +106,29 @@ void main() {
       reason: '守門價應在最新價下方合理範圍,不是舊價區',
     );
   });
+
+  test('simpleAtr:最後 period 根 True Range(含跳空)的簡單平均', () {
+    // 22 根:第 1 根高低差 80、在窗外(第 0 根只提供它的前收);
+    // 第 2..21 根(窗內 20 根)預設高低 101/99、收 100 → TR 2,
+    // 第 10 根跳空上漲(前收 100、高 112、低 108、收 110)→ TR=最高−前收=12,
+    // 第 11 根跳空下跌(前收 110、高 96、低 94、收 95)→ TR=前收−最低=16。
+    final input = <Ohlc>[
+      const Ohlc(high: 101, low: 99, close: 100),
+      const Ohlc(high: 140, low: 60, close: 100),
+      for (var i = 2; i <= 21; i++)
+        switch (i) {
+          10 => const Ohlc(high: 112, low: 108, close: 110),
+          11 => const Ohlc(high: 96, low: 94, close: 95),
+          12 => const Ohlc(high: 101, low: 99, close: 100), // 前收 95:TR=6
+          _ => const Ohlc(high: 101, low: 99, close: 100),
+        },
+    ];
+    // 窗內 20 根:17 根 TR 2、加 12、16、6 → (34+12+16+6)/20 = 3.4
+    expect(AlertTargetCalculator.simpleAtr(input, 20), closeTo(3.4, 1e-4));
+    expect(
+      AlertTargetCalculator.simpleAtr(input.sublist(0, 20), 20),
+      isNull,
+      reason: '要 period + 1 根才有前一根收盤',
+    );
+  });
 }
