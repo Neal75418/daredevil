@@ -1024,6 +1024,74 @@ void main() {
       expect(liveModeOf(tester), HeatmapLiveMode.intraday);
     });
 
+    for (final scale in [1.0, 1.3]) {
+      testWidgets('🚨 盤中狀態行還沒有內容時先佔一行：第一輪報價回來、狀態行出現時，'
+          '圖區的位置與大小不變（格子不重排；系統字級 $scale）', (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final page = await pumpLive(
+          tester,
+          at: monday(10, 30),
+          live: indexLive,
+        );
+        expect(
+          find.byKey(MarketHeatmapScreen.statusLineKey),
+          findsNothing,
+          reason: '前提：還沒有狀態',
+        );
+        final waiting = tester.getRect(find.byType(HeatmapView));
+
+        page.center.publish(
+          LiveQuoteState(
+            entries: {'9901': quote('9901', 101.83)},
+            fetchedAt: {'9901': monday(10, 30)},
+            latestResponseHadToday: true,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          statusLine(tester).data,
+          '報價時間 10:30:05',
+          reason: '前提：狀態行出現（一行）',
+        );
+        expect(tester.getRect(find.byType(HeatmapView)), waiting);
+
+        // 切到上櫃：上櫃的檔還沒有報價，狀態行又沒有內容；圖區不動
+        await tester.tap(find.text('上櫃'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(MarketHeatmapScreen.statusLineKey),
+          findsNothing,
+          reason: '前提：上櫃還沒有狀態',
+        );
+        expect(tester.getRect(find.byType(HeatmapView)), waiting);
+      });
+    }
+
+    testWidgets('不在即時時段、沒有狀態：不留空行（圖區比即時時段還沒有狀態時高）', (tester) async {
+      await pumpLive(
+        tester,
+        at: monday(8, 30),
+        live: const MarketLiveIndices(),
+      );
+      expect(
+        find.byKey(MarketHeatmapScreen.statusLineKey),
+        findsNothing,
+        reason: '前提：開盤前沒有狀態',
+      );
+      final idle = tester.getRect(find.byType(HeatmapView));
+
+      await pumpLive(tester, at: monday(10, 30), live: indexLive);
+      expect(
+        find.byKey(MarketHeatmapScreen.statusLineKey),
+        findsNothing,
+        reason: '前提：盤中還沒有狀態',
+      );
+      final waiting = tester.getRect(find.byType(HeatmapView));
+      expect(idle.bottom, waiting.bottom, reason: '前提：圖區的底部相同');
+      expect(idle.top, lessThan(waiting.top));
+    });
+
     testWidgets('盤中中心還沒有任何狀態：不顯示狀態行（指數的狀態也不顯示）', (tester) async {
       await pumpLive(tester, at: monday(9, 0, 5), live: indexLive);
       expect(find.byKey(MarketHeatmapScreen.statusLineKey), findsNothing);

@@ -283,10 +283,10 @@ class _IndexHeader extends StatelessWidget {
   final MarketLiveIndices live;
   final DateTime? dataDate;
 
-  /// 即時時段的狀態行（見 [heatmapLiveStatusText]，空字串是不顯示）；這時
-  /// 指數列下方不寫指數自己的狀態與「指數為 M/D 收盤」（同一件事不寫兩次，
-  /// 收盤後總覽已有今天的指數時也不會寫出「指數為今天收盤」）。不在即時時段
-  /// 為 null
+  /// 即時時段的狀態行（見 [heatmapLiveStatusText]；空字串是還沒有狀態：不寫
+  /// 字，但先留一行）；這時指數列下方不寫指數自己的狀態與「指數為 M/D 收盤」
+  /// （同一件事不寫兩次，收盤後總覽已有今天的指數時也不會寫出「指數為今天
+  /// 收盤」）。不在即時時段為 null，沒有狀態時不留行
   final String? liveStatus;
 
   /// 右側寫格子的日期「M/D 收盤」
@@ -302,6 +302,14 @@ class _IndexHeader extends StatelessWidget {
       fontWeight: FontWeight.w700,
       fontFeatures: const [FontFeature.tabularFigures()],
     );
+    final statusStyle = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    // 狀態行與佔位共用固定行高：空字串的行高只看主字型，有字的行還看備用
+    // 字型（中文），系統字級不是 1 時兩者會差 1px
+    final statusStrut = statusStyle == null
+        ? null
+        : StrutStyle.fromTextStyle(statusStyle, forceStrutHeight: true);
     final shown = live.byMarket[market];
     final index = shown?.index ?? heroIndexOf(overview, market);
     final label =
@@ -405,10 +413,13 @@ class _IndexHeader extends StatelessWidget {
               // 窄螢幕最多兩行：暫停、限流放在句首，截掉的是後面的進度
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+              style: statusStyle,
+              strutStyle: statusStrut,
+            )
+          else if (liveStatus != null)
+            // 即時時段先佔一行：第一輪報價回來、狀態行出現時圖區不變矮，
+            // 格子不重排
+            Text('', style: statusStyle, strutStyle: statusStrut),
         ],
       ),
     );
