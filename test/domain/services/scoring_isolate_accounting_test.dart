@@ -21,6 +21,7 @@ void main() {
         skippedNoAnalysis: 4,
         skippedNoReasons: 5,
         skippedLowScore: 6,
+        marketRegime: null,
       );
 
       expect(result.skippedTotal, 21);
@@ -37,6 +38,7 @@ void main() {
         skippedNoAnalysis: 0,
         skippedNoReasons: 0,
         skippedLowScore: 0,
+        marketRegime: null,
       );
 
       expect(result.accountingBalances, isFalse);

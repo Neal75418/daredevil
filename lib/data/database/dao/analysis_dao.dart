@@ -206,4 +206,25 @@ mixin AnalysisDaoMixin on $AppDatabase {
   Future<int> clearReasonsForDate(DateTime date) {
     return (delete(dailyReason)..where((t) => t.date.equals(date))).go();
   }
+
+  // ==================================================
+  // 大盤判定
+  // ==================================================
+
+  /// 評分日的大盤判定讀數；沒有存為 null
+  Future<MarketRegimeEntry?> getMarketRegimeForDate(DateTime date) {
+    return (select(
+      marketRegime,
+    )..where((t) => t.date.equals(date))).getSingleOrNull();
+  }
+
+  /// 刪掉評分日的大盤判定讀數
+  Future<int> clearMarketRegimeForDate(DateTime date) {
+    return (delete(marketRegime)..where((t) => t.date.equals(date))).go();
+  }
+
+  /// 寫入一筆大盤判定讀數（同一天已有的要先 [clearMarketRegimeForDate]）
+  Future<void> insertMarketRegime(MarketRegimeCompanion row) {
+    return into(marketRegime).insert(row);
+  }
 }

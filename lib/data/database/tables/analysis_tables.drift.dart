@@ -851,6 +851,241 @@ typedef $$DailyReasonTableProcessedTableManager =
       i1.DailyReasonEntry,
       i0.PrefetchHooks Function({bool symbol})
     >;
+typedef $$MarketRegimeTableCreateCompanionBuilder =
+    i1.MarketRegimeCompanion Function({
+      required DateTime date,
+      required int eligibleCount,
+      required int upCount,
+      required double medianReturn,
+      required bool isUptrend,
+      required int lookbackDays,
+      i0.Value<int> rowid,
+    });
+typedef $$MarketRegimeTableUpdateCompanionBuilder =
+    i1.MarketRegimeCompanion Function({
+      i0.Value<DateTime> date,
+      i0.Value<int> eligibleCount,
+      i0.Value<int> upCount,
+      i0.Value<double> medianReturn,
+      i0.Value<bool> isUptrend,
+      i0.Value<int> lookbackDays,
+      i0.Value<int> rowid,
+    });
+
+class $$MarketRegimeTableFilterComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$MarketRegimeTable> {
+  $$MarketRegimeTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnFilters<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get eligibleCount => $composableBuilder(
+    column: $table.eligibleCount,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get upCount => $composableBuilder(
+    column: $table.upCount,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<double> get medianReturn => $composableBuilder(
+    column: $table.medianReturn,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<bool> get isUptrend => $composableBuilder(
+    column: $table.isUptrend,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+
+  i0.ColumnFilters<int> get lookbackDays => $composableBuilder(
+    column: $table.lookbackDays,
+    builder: (column) => i0.ColumnFilters(column),
+  );
+}
+
+class $$MarketRegimeTableOrderingComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$MarketRegimeTable> {
+  $$MarketRegimeTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.ColumnOrderings<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get eligibleCount => $composableBuilder(
+    column: $table.eligibleCount,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get upCount => $composableBuilder(
+    column: $table.upCount,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<double> get medianReturn => $composableBuilder(
+    column: $table.medianReturn,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<bool> get isUptrend => $composableBuilder(
+    column: $table.isUptrend,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+
+  i0.ColumnOrderings<int> get lookbackDays => $composableBuilder(
+    column: $table.lookbackDays,
+    builder: (column) => i0.ColumnOrderings(column),
+  );
+}
+
+class $$MarketRegimeTableAnnotationComposer
+    extends i0.Composer<i0.GeneratedDatabase, i1.$MarketRegimeTable> {
+  $$MarketRegimeTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  i0.GeneratedColumn<DateTime> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  i0.GeneratedColumn<int> get eligibleCount => $composableBuilder(
+    column: $table.eligibleCount,
+    builder: (column) => column,
+  );
+
+  i0.GeneratedColumn<int> get upCount =>
+      $composableBuilder(column: $table.upCount, builder: (column) => column);
+
+  i0.GeneratedColumn<double> get medianReturn => $composableBuilder(
+    column: $table.medianReturn,
+    builder: (column) => column,
+  );
+
+  i0.GeneratedColumn<bool> get isUptrend =>
+      $composableBuilder(column: $table.isUptrend, builder: (column) => column);
+
+  i0.GeneratedColumn<int> get lookbackDays => $composableBuilder(
+    column: $table.lookbackDays,
+    builder: (column) => column,
+  );
+}
+
+class $$MarketRegimeTableTableManager
+    extends
+        i0.RootTableManager<
+          i0.GeneratedDatabase,
+          i1.$MarketRegimeTable,
+          i1.MarketRegimeEntry,
+          i1.$$MarketRegimeTableFilterComposer,
+          i1.$$MarketRegimeTableOrderingComposer,
+          i1.$$MarketRegimeTableAnnotationComposer,
+          $$MarketRegimeTableCreateCompanionBuilder,
+          $$MarketRegimeTableUpdateCompanionBuilder,
+          (
+            i1.MarketRegimeEntry,
+            i0.BaseReferences<
+              i0.GeneratedDatabase,
+              i1.$MarketRegimeTable,
+              i1.MarketRegimeEntry
+            >,
+          ),
+          i1.MarketRegimeEntry,
+          i0.PrefetchHooks Function()
+        > {
+  $$MarketRegimeTableTableManager(
+    i0.GeneratedDatabase db,
+    i1.$MarketRegimeTable table,
+  ) : super(
+        i0.TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              i1.$$MarketRegimeTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              i1.$$MarketRegimeTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              i1.$$MarketRegimeTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                i0.Value<DateTime> date = const i0.Value.absent(),
+                i0.Value<int> eligibleCount = const i0.Value.absent(),
+                i0.Value<int> upCount = const i0.Value.absent(),
+                i0.Value<double> medianReturn = const i0.Value.absent(),
+                i0.Value<bool> isUptrend = const i0.Value.absent(),
+                i0.Value<int> lookbackDays = const i0.Value.absent(),
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.MarketRegimeCompanion(
+                date: date,
+                eligibleCount: eligibleCount,
+                upCount: upCount,
+                medianReturn: medianReturn,
+                isUptrend: isUptrend,
+                lookbackDays: lookbackDays,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required DateTime date,
+                required int eligibleCount,
+                required int upCount,
+                required double medianReturn,
+                required bool isUptrend,
+                required int lookbackDays,
+                i0.Value<int> rowid = const i0.Value.absent(),
+              }) => i1.MarketRegimeCompanion.insert(
+                date: date,
+                eligibleCount: eligibleCount,
+                upCount: upCount,
+                medianReturn: medianReturn,
+                isUptrend: isUptrend,
+                lookbackDays: lookbackDays,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), i0.BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MarketRegimeTableProcessedTableManager =
+    i0.ProcessedTableManager<
+      i0.GeneratedDatabase,
+      i1.$MarketRegimeTable,
+      i1.MarketRegimeEntry,
+      i1.$$MarketRegimeTableFilterComposer,
+      i1.$$MarketRegimeTableOrderingComposer,
+      i1.$$MarketRegimeTableAnnotationComposer,
+      $$MarketRegimeTableCreateCompanionBuilder,
+      $$MarketRegimeTableUpdateCompanionBuilder,
+      (
+        i1.MarketRegimeEntry,
+        i0.BaseReferences<
+          i0.GeneratedDatabase,
+          i1.$MarketRegimeTable,
+          i1.MarketRegimeEntry
+        >,
+      ),
+      i1.MarketRegimeEntry,
+      i0.PrefetchHooks Function()
+    >;
 typedef $$RuleAccuracyTableCreateCompanionBuilder =
     i1.RuleAccuracyCompanion Function({
       required String ruleId,
@@ -2228,6 +2463,455 @@ class DailyReasonCompanion extends i0.UpdateCompanion<i1.DailyReasonEntry> {
           ..write('evidenceJson: $evidenceJson, ')
           ..write('ruleScoreShort: $ruleScoreShort, ')
           ..write('ruleScoreLong: $ruleScoreLong, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MarketRegimeTable extends i2.MarketRegime
+    with i0.TableInfo<$MarketRegimeTable, i1.MarketRegimeEntry> {
+  @override
+  final i0.GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MarketRegimeTable(this.attachedDatabase, [this._alias]);
+  static const i0.VerificationMeta _dateMeta = const i0.VerificationMeta(
+    'date',
+  );
+  @override
+  late final i0.GeneratedColumn<DateTime> date = i0.GeneratedColumn<DateTime>(
+    'date',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _eligibleCountMeta =
+      const i0.VerificationMeta('eligibleCount');
+  @override
+  late final i0.GeneratedColumn<int> eligibleCount = i0.GeneratedColumn<int>(
+    'eligible_count',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _upCountMeta = const i0.VerificationMeta(
+    'upCount',
+  );
+  @override
+  late final i0.GeneratedColumn<int> upCount = i0.GeneratedColumn<int>(
+    'up_count',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const i0.VerificationMeta _medianReturnMeta =
+      const i0.VerificationMeta('medianReturn');
+  @override
+  late final i0.GeneratedColumn<double> medianReturn =
+      i0.GeneratedColumn<double>(
+        'median_return',
+        aliasedName,
+        false,
+        type: i0.DriftSqlType.double,
+        requiredDuringInsert: true,
+      );
+  static const i0.VerificationMeta _isUptrendMeta = const i0.VerificationMeta(
+    'isUptrend',
+  );
+  @override
+  late final i0.GeneratedColumn<bool> isUptrend = i0.GeneratedColumn<bool>(
+    'is_uptrend',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: i0.GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_uptrend" IN (0, 1))',
+    ),
+  );
+  static const i0.VerificationMeta _lookbackDaysMeta =
+      const i0.VerificationMeta('lookbackDays');
+  @override
+  late final i0.GeneratedColumn<int> lookbackDays = i0.GeneratedColumn<int>(
+    'lookback_days',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<i0.GeneratedColumn> get $columns => [
+    date,
+    eligibleCount,
+    upCount,
+    medianReturn,
+    isUptrend,
+    lookbackDays,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'market_regime';
+  @override
+  i0.VerificationContext validateIntegrity(
+    i0.Insertable<i1.MarketRegimeEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = i0.VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('date')) {
+      context.handle(
+        _dateMeta,
+        date.isAcceptableOrUnknown(data['date']!, _dateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('eligible_count')) {
+      context.handle(
+        _eligibleCountMeta,
+        eligibleCount.isAcceptableOrUnknown(
+          data['eligible_count']!,
+          _eligibleCountMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_eligibleCountMeta);
+    }
+    if (data.containsKey('up_count')) {
+      context.handle(
+        _upCountMeta,
+        upCount.isAcceptableOrUnknown(data['up_count']!, _upCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_upCountMeta);
+    }
+    if (data.containsKey('median_return')) {
+      context.handle(
+        _medianReturnMeta,
+        medianReturn.isAcceptableOrUnknown(
+          data['median_return']!,
+          _medianReturnMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_medianReturnMeta);
+    }
+    if (data.containsKey('is_uptrend')) {
+      context.handle(
+        _isUptrendMeta,
+        isUptrend.isAcceptableOrUnknown(data['is_uptrend']!, _isUptrendMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_isUptrendMeta);
+    }
+    if (data.containsKey('lookback_days')) {
+      context.handle(
+        _lookbackDaysMeta,
+        lookbackDays.isAcceptableOrUnknown(
+          data['lookback_days']!,
+          _lookbackDaysMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lookbackDaysMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<i0.GeneratedColumn> get $primaryKey => {date};
+  @override
+  i1.MarketRegimeEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return i1.MarketRegimeEntry(
+      date: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.dateTime,
+        data['${effectivePrefix}date'],
+      )!,
+      eligibleCount: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}eligible_count'],
+      )!,
+      upCount: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}up_count'],
+      )!,
+      medianReturn: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.double,
+        data['${effectivePrefix}median_return'],
+      )!,
+      isUptrend: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.bool,
+        data['${effectivePrefix}is_uptrend'],
+      )!,
+      lookbackDays: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.int,
+        data['${effectivePrefix}lookback_days'],
+      )!,
+    );
+  }
+
+  @override
+  $MarketRegimeTable createAlias(String alias) {
+    return $MarketRegimeTable(attachedDatabase, alias);
+  }
+}
+
+class MarketRegimeEntry extends i0.DataClass
+    implements i0.Insertable<i1.MarketRegimeEntry> {
+  /// 評分日（與 `daily_analysis.date` 同一個值）
+  final DateTime date;
+
+  /// 有效股數
+  final int eligibleCount;
+
+  /// 比 [lookbackDays] 日前高的檔數
+  final int upCount;
+
+  /// 報酬中位數（比例，0.05＝5%）
+  final double medianReturn;
+
+  /// 判定結果（中位數大於 0 為多頭）
+  final bool isUptrend;
+
+  /// 計算時用的回看交易日數
+  final int lookbackDays;
+  const MarketRegimeEntry({
+    required this.date,
+    required this.eligibleCount,
+    required this.upCount,
+    required this.medianReturn,
+    required this.isUptrend,
+    required this.lookbackDays,
+  });
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    map['date'] = i0.Variable<DateTime>(date);
+    map['eligible_count'] = i0.Variable<int>(eligibleCount);
+    map['up_count'] = i0.Variable<int>(upCount);
+    map['median_return'] = i0.Variable<double>(medianReturn);
+    map['is_uptrend'] = i0.Variable<bool>(isUptrend);
+    map['lookback_days'] = i0.Variable<int>(lookbackDays);
+    return map;
+  }
+
+  i1.MarketRegimeCompanion toCompanion(bool nullToAbsent) {
+    return i1.MarketRegimeCompanion(
+      date: i0.Value(date),
+      eligibleCount: i0.Value(eligibleCount),
+      upCount: i0.Value(upCount),
+      medianReturn: i0.Value(medianReturn),
+      isUptrend: i0.Value(isUptrend),
+      lookbackDays: i0.Value(lookbackDays),
+    );
+  }
+
+  factory MarketRegimeEntry.fromJson(
+    Map<String, dynamic> json, {
+    i0.ValueSerializer? serializer,
+  }) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return MarketRegimeEntry(
+      date: serializer.fromJson<DateTime>(json['date']),
+      eligibleCount: serializer.fromJson<int>(json['eligibleCount']),
+      upCount: serializer.fromJson<int>(json['upCount']),
+      medianReturn: serializer.fromJson<double>(json['medianReturn']),
+      isUptrend: serializer.fromJson<bool>(json['isUptrend']),
+      lookbackDays: serializer.fromJson<int>(json['lookbackDays']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({i0.ValueSerializer? serializer}) {
+    serializer ??= i0.driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'date': serializer.toJson<DateTime>(date),
+      'eligibleCount': serializer.toJson<int>(eligibleCount),
+      'upCount': serializer.toJson<int>(upCount),
+      'medianReturn': serializer.toJson<double>(medianReturn),
+      'isUptrend': serializer.toJson<bool>(isUptrend),
+      'lookbackDays': serializer.toJson<int>(lookbackDays),
+    };
+  }
+
+  i1.MarketRegimeEntry copyWith({
+    DateTime? date,
+    int? eligibleCount,
+    int? upCount,
+    double? medianReturn,
+    bool? isUptrend,
+    int? lookbackDays,
+  }) => i1.MarketRegimeEntry(
+    date: date ?? this.date,
+    eligibleCount: eligibleCount ?? this.eligibleCount,
+    upCount: upCount ?? this.upCount,
+    medianReturn: medianReturn ?? this.medianReturn,
+    isUptrend: isUptrend ?? this.isUptrend,
+    lookbackDays: lookbackDays ?? this.lookbackDays,
+  );
+  MarketRegimeEntry copyWithCompanion(i1.MarketRegimeCompanion data) {
+    return MarketRegimeEntry(
+      date: data.date.present ? data.date.value : this.date,
+      eligibleCount: data.eligibleCount.present
+          ? data.eligibleCount.value
+          : this.eligibleCount,
+      upCount: data.upCount.present ? data.upCount.value : this.upCount,
+      medianReturn: data.medianReturn.present
+          ? data.medianReturn.value
+          : this.medianReturn,
+      isUptrend: data.isUptrend.present ? data.isUptrend.value : this.isUptrend,
+      lookbackDays: data.lookbackDays.present
+          ? data.lookbackDays.value
+          : this.lookbackDays,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MarketRegimeEntry(')
+          ..write('date: $date, ')
+          ..write('eligibleCount: $eligibleCount, ')
+          ..write('upCount: $upCount, ')
+          ..write('medianReturn: $medianReturn, ')
+          ..write('isUptrend: $isUptrend, ')
+          ..write('lookbackDays: $lookbackDays')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    date,
+    eligibleCount,
+    upCount,
+    medianReturn,
+    isUptrend,
+    lookbackDays,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is i1.MarketRegimeEntry &&
+          other.date == this.date &&
+          other.eligibleCount == this.eligibleCount &&
+          other.upCount == this.upCount &&
+          other.medianReturn == this.medianReturn &&
+          other.isUptrend == this.isUptrend &&
+          other.lookbackDays == this.lookbackDays);
+}
+
+class MarketRegimeCompanion extends i0.UpdateCompanion<i1.MarketRegimeEntry> {
+  final i0.Value<DateTime> date;
+  final i0.Value<int> eligibleCount;
+  final i0.Value<int> upCount;
+  final i0.Value<double> medianReturn;
+  final i0.Value<bool> isUptrend;
+  final i0.Value<int> lookbackDays;
+  final i0.Value<int> rowid;
+  const MarketRegimeCompanion({
+    this.date = const i0.Value.absent(),
+    this.eligibleCount = const i0.Value.absent(),
+    this.upCount = const i0.Value.absent(),
+    this.medianReturn = const i0.Value.absent(),
+    this.isUptrend = const i0.Value.absent(),
+    this.lookbackDays = const i0.Value.absent(),
+    this.rowid = const i0.Value.absent(),
+  });
+  MarketRegimeCompanion.insert({
+    required DateTime date,
+    required int eligibleCount,
+    required int upCount,
+    required double medianReturn,
+    required bool isUptrend,
+    required int lookbackDays,
+    this.rowid = const i0.Value.absent(),
+  }) : date = i0.Value(date),
+       eligibleCount = i0.Value(eligibleCount),
+       upCount = i0.Value(upCount),
+       medianReturn = i0.Value(medianReturn),
+       isUptrend = i0.Value(isUptrend),
+       lookbackDays = i0.Value(lookbackDays);
+  static i0.Insertable<i1.MarketRegimeEntry> custom({
+    i0.Expression<DateTime>? date,
+    i0.Expression<int>? eligibleCount,
+    i0.Expression<int>? upCount,
+    i0.Expression<double>? medianReturn,
+    i0.Expression<bool>? isUptrend,
+    i0.Expression<int>? lookbackDays,
+    i0.Expression<int>? rowid,
+  }) {
+    return i0.RawValuesInsertable({
+      if (date != null) 'date': date,
+      if (eligibleCount != null) 'eligible_count': eligibleCount,
+      if (upCount != null) 'up_count': upCount,
+      if (medianReturn != null) 'median_return': medianReturn,
+      if (isUptrend != null) 'is_uptrend': isUptrend,
+      if (lookbackDays != null) 'lookback_days': lookbackDays,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  i1.MarketRegimeCompanion copyWith({
+    i0.Value<DateTime>? date,
+    i0.Value<int>? eligibleCount,
+    i0.Value<int>? upCount,
+    i0.Value<double>? medianReturn,
+    i0.Value<bool>? isUptrend,
+    i0.Value<int>? lookbackDays,
+    i0.Value<int>? rowid,
+  }) {
+    return i1.MarketRegimeCompanion(
+      date: date ?? this.date,
+      eligibleCount: eligibleCount ?? this.eligibleCount,
+      upCount: upCount ?? this.upCount,
+      medianReturn: medianReturn ?? this.medianReturn,
+      isUptrend: isUptrend ?? this.isUptrend,
+      lookbackDays: lookbackDays ?? this.lookbackDays,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, i0.Expression> toColumns(bool nullToAbsent) {
+    final map = <String, i0.Expression>{};
+    if (date.present) {
+      map['date'] = i0.Variable<DateTime>(date.value);
+    }
+    if (eligibleCount.present) {
+      map['eligible_count'] = i0.Variable<int>(eligibleCount.value);
+    }
+    if (upCount.present) {
+      map['up_count'] = i0.Variable<int>(upCount.value);
+    }
+    if (medianReturn.present) {
+      map['median_return'] = i0.Variable<double>(medianReturn.value);
+    }
+    if (isUptrend.present) {
+      map['is_uptrend'] = i0.Variable<bool>(isUptrend.value);
+    }
+    if (lookbackDays.present) {
+      map['lookback_days'] = i0.Variable<int>(lookbackDays.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = i0.Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MarketRegimeCompanion(')
+          ..write('date: $date, ')
+          ..write('eligibleCount: $eligibleCount, ')
+          ..write('upCount: $upCount, ')
+          ..write('medianReturn: $medianReturn, ')
+          ..write('isUptrend: $isUptrend, ')
+          ..write('lookbackDays: $lookbackDays, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();

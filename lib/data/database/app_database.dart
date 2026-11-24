@@ -85,6 +85,7 @@ import 'package:daredevil/data/database/dao/valuation_dao.dart';
     // 分析結果
     DailyAnalysis,
     DailyReason,
+    MarketRegime,
     // 規則準確度追蹤
     RuleAccuracy,
     // 使用者資料
@@ -231,6 +232,7 @@ class AppDatabase extends $AppDatabase
       await _ensureDividendBackfillSchema();
       await _ensureDividendPriceColumns();
       await _ensureDividendFactsSchema();
+      await _ensureMarketRegimeSchema();
       await _ensureDailyPriceBasePriceColumn();
       await ensurePriceAlertManagedByColumn();
       await _ensureRetiredSchemaDropped();
@@ -406,6 +408,16 @@ class AppDatabase extends $AppDatabase
   Future<void> _ensureDividendFactsSchema() async {
     await Migrator(this).createTable(dividendListing);
     await Migrator(this).createTable(dividendUnresolved);
+  }
+
+  /// 每個評分日的大盤判定讀數（2026-11-24，additive）。
+  ///
+  /// 沿 [_ensureDividendFactsSchema] 先例：**不 bump fingerprint**、不加進
+  /// [_userInputTableNames]（衍生資料，重設時與 daily_analysis 一起清）。
+  /// createTable＝CREATE TABLE IF NOT EXISTS：既有 DB 冪等補建，新裝機由
+  /// createAll 先建好
+  Future<void> _ensureMarketRegimeSchema() async {
+    await Migrator(this).createTable(marketRegime);
   }
 
   /// 股利配發表補前收盤與除權息參考價、完成紀錄補「已存價格」

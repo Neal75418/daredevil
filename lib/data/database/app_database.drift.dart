@@ -32,6 +32,7 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
     this,
   );
   late final i5.$DailyReasonTable dailyReason = i5.$DailyReasonTable(this);
+  late final i5.$MarketRegimeTable marketRegime = i5.$MarketRegimeTable(this);
   late final i5.$RuleAccuracyTable ruleAccuracy = i5.$RuleAccuracyTable(this);
   late final i6.$WatchlistGroupsTable watchlistGroups = i6
       .$WatchlistGroupsTable(this);
@@ -98,6 +99,7 @@ abstract class $AppDatabase extends i0.GeneratedDatabase {
     newsMentionDaily,
     dailyAnalysis,
     dailyReason,
+    marketRegime,
     ruleAccuracy,
     watchlistGroups,
     watchlist,
@@ -357,6 +359,8 @@ class $AppDatabaseManager {
       i5.$$DailyAnalysisTableTableManager(_db, _db.dailyAnalysis);
   i5.$$DailyReasonTableTableManager get dailyReason =>
       i5.$$DailyReasonTableTableManager(_db, _db.dailyReason);
+  i5.$$MarketRegimeTableTableManager get marketRegime =>
+      i5.$$MarketRegimeTableTableManager(_db, _db.marketRegime);
   i5.$$RuleAccuracyTableTableManager get ruleAccuracy =>
       i5.$$RuleAccuracyTableTableManager(_db, _db.ruleAccuracy);
   i6.$$WatchlistGroupsTableTableManager get watchlistGroups =>

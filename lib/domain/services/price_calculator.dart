@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:daredevil/core/constants/rule_params_sector.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/models/market_regime.dart';
 
 /// 股價相關計算工具
 class PriceCalculator {
@@ -51,6 +52,17 @@ class PriceCalculator {
     Map<String, List<DailyPriceEntry>> priceHistories,
     int lookbackDays, {
     DateTime? asOf,
+  }) =>
+      marketRegimeReading(priceHistories, lookbackDays, asOf: asOf)?.isUptrend;
+
+  /// [marketUptrendOrNull] 的讀數版：除了判定，另給有效股數、比
+  /// [lookbackDays] 日前高的檔數與中位數報酬，供評分存檔與畫面說明。
+  /// 有效股的認定與 [asOf] 過濾同 [marketUptrendOrNull]；有效股 <
+  /// [SectorParams.regimeMinEligibleStocks] 回 null
+  static MarketRegimeReading? marketRegimeReading(
+    Map<String, List<DailyPriceEntry>> priceHistories,
+    int lookbackDays, {
+    DateTime? asOf,
   }) {
     final returns = <double>[];
     for (final history in priceHistories.values) {
@@ -69,7 +81,15 @@ class PriceCalculator {
       returns.add((latest - old) / old);
     }
     if (returns.length < SectorParams.regimeMinEligibleStocks) return null;
-    return median(returns) > 0;
+    final upCount = returns.where((r) => r > 0).length;
+    final medianReturn = median(returns);
+    return MarketRegimeReading(
+      eligibleCount: returns.length,
+      upCount: upCount,
+      medianReturn: medianReturn,
+      isUptrend: medianReturn > 0,
+      lookbackDays: lookbackDays,
+    );
   }
 
   /// 中位數（偶數取中間兩值平均）。**就地排序傳入的 list**。

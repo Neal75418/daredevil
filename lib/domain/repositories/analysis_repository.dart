@@ -1,6 +1,7 @@
 import 'package:daredevil/core/constants/calibrated_scores/horizon.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/database/dao/analysis_dao.dart';
+import 'package:daredevil/domain/models/market_regime.dart';
 
 /// 分析結果與推薦的資料儲存庫介面
 ///
@@ -75,6 +76,20 @@ abstract class IAnalysisRepository {
   ///
   /// 在每日評分前呼叫，確保不會有舊的分析記錄殘留。
   Future<int> clearAnalysisForDate(DateTime date);
+
+  // ==================================================
+  // 大盤判定
+  // ==================================================
+
+  /// 換掉 [date] 的大盤判定讀數：先刪，[reading] 不是 null 才寫入。評分在
+  /// 寫入當天分析的同一個 transaction 裡呼叫
+  Future<void> replaceMarketRegimeForDate(
+    DateTime date,
+    MarketRegimeReading? reading,
+  );
+
+  /// [date] 的大盤判定讀數；沒有存為 null
+  Future<MarketRegimeReading?> getMarketRegime(DateTime date);
 
   // ==================================================
   // UI 用組合查詢

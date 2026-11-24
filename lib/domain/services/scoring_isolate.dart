@@ -164,6 +164,7 @@ class ScoringBatchResult {
     required this.skippedLowScore,
     this.week52Incomplete = 0,
     this.week52Discontinuity = 0,
+    required this.marketRegime,
   });
 
   final List<ScoringIsolateOutput> outputs;
@@ -196,6 +197,10 @@ class ScoringBatchResult {
 
   /// 52 週規則因還原後仍有水位斷點（減資、分割等）而不評估的檔數（觀測用）
   final int week52Discontinuity;
+
+  /// 這次評分用的大盤判定讀數（回檔類規則依它開關）；有效股不足為 null。
+  /// 由主 isolate 與當天分析寫在同一個 transaction 裡
+  final MarketRegimeReading? marketRegime;
 
   int get skippedTotal =>
       skippedNoData +
@@ -255,12 +260,14 @@ ScoringBatchResult evaluateStocksIsolated(ScoringIsolateInput input) {
 
   // 大盤 regime（供回檔類規則 gate）：與主執行緒路徑同一計算，
   // 對已跨界的 pricesMap 在 isolate 內算一次。有效股 < 50 → null 不擋。
-  final marketUptrend = PriceCalculator.marketUptrendOrNull(
+  // 讀數隨批次結果帶回主 isolate 存檔（畫面說明回檔訊號為何暫停）
+  final marketRegime = PriceCalculator.marketRegimeReading(
     input.pricesMap,
     SectorParams.regimeLookbackDays,
     // 只用當日 bar：半市場日不得把昨日的另一半混進 regime 母體
     asOf: input.date,
   );
+  final marketUptrend = marketRegime?.isUptrend;
 
   final outputs = <ScoringIsolateOutput>[];
   var skippedNoData = 0;
@@ -458,6 +465,7 @@ ScoringBatchResult evaluateStocksIsolated(ScoringIsolateInput input) {
     skippedLowScore: skippedLowScore,
     week52Incomplete: week52Incomplete,
     week52Discontinuity: week52Discontinuity,
+    marketRegime: marketRegime,
   );
 }
 

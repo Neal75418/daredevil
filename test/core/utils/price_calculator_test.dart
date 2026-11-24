@@ -622,5 +622,145 @@ void main() {
         );
       });
     });
+
+    group('marketRegimeReading（畫面說明用的讀數）', () {
+      final today = DateTime(2026, 11, 24);
+
+      /// 一檔 121 根、最後一根停在 [end]，對 120 根前漲 [retPct]%
+      List<DailyPriceEntry> stock(String symbol, double retPct, DateTime end) =>
+          [
+            ...List.generate(
+              120,
+              (d) => createTestPrice(
+                symbol: symbol,
+                close: 100,
+                date: end.subtract(Duration(days: 120 - d)),
+              ),
+            ),
+            createTestPrice(
+              symbol: symbol,
+              close: 100 * (1 + retPct / 100),
+              date: end,
+            ),
+          ];
+
+      /// [groups] 每組（檔數, 報酬%），代號依序編號
+      Map<String, List<DailyPriceEntry>> market(
+        List<(int, double)> groups, {
+        DateTime? end,
+        String prefix = 's',
+      }) {
+        final rets = [
+          for (final (count, ret) in groups)
+            for (var k = 0; k < count; k++) ret,
+        ];
+        return {
+          for (var i = 0; i < rets.length; i++)
+            '$prefix$i': stock('$prefix$i', rets[i], end ?? today),
+        };
+      }
+
+      test('計數、比例、中位數：平盤不算比半年前高', () {
+        final r = PriceCalculator.marketRegimeReading(
+          market([(30, 20), (11, -10), (10, 0)]),
+          120,
+          asOf: today,
+        )!;
+        expect(r.eligibleCount, 51);
+        expect(r.upCount, 30);
+        expect(r.medianReturn, closeTo(0.2, 1e-12));
+        expect(r.isUptrend, isTrue);
+        expect(r.upPercentFloor, 58);
+        expect(r.lookbackDays, 120);
+      });
+
+      test('偶數檔剛好一半、漲幅大過跌幅：中位數 > 0，判多頭', () {
+        final r = PriceCalculator.marketRegimeReading(
+          market([(25, 20), (25, -5)]),
+          120,
+          asOf: today,
+        )!;
+        expect(r.medianReturn, closeTo(0.075, 1e-12));
+        expect(r.isUptrend, isTrue);
+        expect(r.upPercentFloor, 50);
+      });
+
+      test('偶數檔剛好一半、跌幅大過漲幅：中位數 < 0，非多頭', () {
+        final r = PriceCalculator.marketRegimeReading(
+          market([(25, 5), (25, -20)]),
+          120,
+          asOf: today,
+        )!;
+        expect(r.medianReturn, closeTo(-0.075, 1e-12));
+        expect(r.isUptrend, isFalse);
+        expect(r.upPercentFloor, 50);
+      });
+
+      test('中位數剛好 0：不算多頭（要大於 0）', () {
+        // ±25% 在浮點數裡剛好抵消（±10% 不會，平均會略大於 0）
+        final r = PriceCalculator.marketRegimeReading(
+          market([(25, 25), (25, -25)]),
+          120,
+          asOf: today,
+        )!;
+        expect(r.medianReturn, 0);
+        expect(r.isUptrend, isFalse);
+      });
+
+      test('比例無條件捨去：124／250 是 49.6%，顯示 49', () {
+        final r = PriceCalculator.marketRegimeReading(
+          market([(124, 10), (126, -10)]),
+          120,
+          asOf: today,
+        )!;
+        expect(r.upCount, 124);
+        expect(r.eligibleCount, 250);
+        expect(r.upPercentFloor, 49);
+        expect(r.isUptrend, isFalse);
+      });
+
+      test('有效股不足 50：null', () {
+        expect(
+          PriceCalculator.marketRegimeReading(
+            market([(49, 10)]),
+            120,
+            asOf: today,
+          ),
+          isNull,
+        );
+      });
+
+      test('asOf：最後一根不是評分日的股票不算進有效股', () {
+        final r = PriceCalculator.marketRegimeReading(
+          {
+            ...market([(60, -10)], prefix: 'fresh'),
+            ...market(
+              [(60, 30)],
+              end: today.subtract(const Duration(days: 1)),
+              prefix: 'stale',
+            ),
+          },
+          120,
+          asOf: today,
+        )!;
+        expect(r.eligibleCount, 60);
+        expect(r.upCount, 0);
+        expect(r.isUptrend, isFalse);
+      });
+
+      test('marketUptrendOrNull 就是讀數的判定', () {
+        for (final groups in [
+          [(25, 20.0), (25, -5.0)],
+          [(25, 5.0), (25, -20.0)],
+          [(49, 10.0)],
+        ]) {
+          final u = market(groups);
+          expect(
+            PriceCalculator.marketUptrendOrNull(u, 120, asOf: today),
+            PriceCalculator.marketRegimeReading(u, 120, asOf: today)?.isUptrend,
+          );
+        }
+      });
+    });
   });
 }

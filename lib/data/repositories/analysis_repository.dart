@@ -8,6 +8,7 @@ import 'package:daredevil/core/utils/request_deduplicator.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/database/dao/analysis_dao.dart';
 import 'package:daredevil/domain/repositories/analysis_repository.dart';
+import 'package:daredevil/domain/models/market_regime.dart';
 
 import 'package:daredevil/core/utils/taiwan_calendar.dart';
 
@@ -193,6 +194,39 @@ class AnalysisRepository implements IAnalysisRepository {
   @override
   Future<int> clearAnalysisForDate(DateTime date) {
     return _db.clearAnalysisForDate(DateContext.normalize(date));
+  }
+
+  @override
+  Future<void> replaceMarketRegimeForDate(
+    DateTime date,
+    MarketRegimeReading? reading,
+  ) async {
+    final day = DateContext.normalize(date);
+    await _db.clearMarketRegimeForDate(day);
+    if (reading == null) return;
+    await _db.insertMarketRegime(
+      MarketRegimeCompanion.insert(
+        date: day,
+        eligibleCount: reading.eligibleCount,
+        upCount: reading.upCount,
+        medianReturn: reading.medianReturn,
+        isUptrend: reading.isUptrend,
+        lookbackDays: reading.lookbackDays,
+      ),
+    );
+  }
+
+  @override
+  Future<MarketRegimeReading?> getMarketRegime(DateTime date) async {
+    final row = await _db.getMarketRegimeForDate(DateContext.normalize(date));
+    if (row == null) return null;
+    return MarketRegimeReading(
+      eligibleCount: row.eligibleCount,
+      upCount: row.upCount,
+      medianReturn: row.medianReturn,
+      isUptrend: row.isUptrend,
+      lookbackDays: row.lookbackDays,
+    );
   }
 
   @override

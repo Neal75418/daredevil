@@ -14,6 +14,7 @@ import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/models/dividend_context.dart';
 import 'package:daredevil/domain/models/scoring_batch_data.dart';
 import 'package:daredevil/domain/repositories/analysis_repository.dart';
+import 'package:daredevil/domain/models/market_regime.dart';
 import 'package:daredevil/domain/services/analysis_service.dart';
 import 'package:daredevil/domain/services/rule_engine.dart';
 import 'package:daredevil/domain/services/scoring_isolate.dart';
@@ -33,6 +34,12 @@ class _RecordingRepo extends Mock implements IAnalysisRepository {
 
   @override
   Future<int> clearAnalysisForDate(DateTime date) async => 0;
+
+  @override
+  Future<void> replaceMarketRegimeForDate(
+    DateTime date,
+    MarketRegimeReading? reading,
+  ) async {}
 
   @override
   Future<void> saveReasons(

@@ -40,6 +40,12 @@ class MockAnalysisRepository extends Mock implements AnalysisRepository {
       inTransaction = false;
     }
   }
+
+  @override
+  Future<void> replaceMarketRegimeForDate(
+    DateTime date,
+    MarketRegimeReading? reading,
+  ) async {}
 }
 
 /// 本檔所有 scoreStocks 呼叫共用的評分日。

@@ -22,6 +22,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/repositories/analysis_repository.dart';
+import 'package:daredevil/domain/models/market_regime.dart';
 import 'package:daredevil/domain/models/analysis_context.dart';
 import 'package:daredevil/domain/models/dividend_context.dart';
 import 'package:daredevil/domain/models/scoring_batch_data.dart';
@@ -47,6 +48,12 @@ class FakeAnalysisRepository extends Mock implements IAnalysisRepository {
 
   @override
   Future<int> clearAnalysisForDate(DateTime date) async => 0;
+
+  @override
+  Future<void> replaceMarketRegimeForDate(
+    DateTime date,
+    MarketRegimeReading? reading,
+  ) async {}
 
   @override
   Future<void> saveReasons(

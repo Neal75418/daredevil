@@ -86,6 +86,33 @@ class DailyReason extends Table {
   Set<Column> get primaryKey => {symbol, date, rank};
 }
 
+/// 每個評分日的大盤判定讀數（見 `PriceCalculator.marketRegimeReading`）：
+/// 回檔類規則依它開關，畫面依它說明回檔訊號為何暫停。由評分在寫入當天
+/// 分析的同一個 transaction 裡寫入；衍生資料，重設時一起清
+@DataClassName('MarketRegimeEntry')
+class MarketRegime extends Table {
+  /// 評分日（與 `daily_analysis.date` 同一個值）
+  DateTimeColumn get date => dateTime()();
+
+  /// 有效股數
+  IntColumn get eligibleCount => integer()();
+
+  /// 比 [lookbackDays] 日前高的檔數
+  IntColumn get upCount => integer()();
+
+  /// 報酬中位數（比例，0.05＝5%）
+  RealColumn get medianReturn => real()();
+
+  /// 判定結果（中位數大於 0 為多頭）
+  BoolColumn get isUptrend => boolean()();
+
+  /// 計算時用的回看交易日數
+  IntColumn get lookbackDays => integer()();
+
+  @override
+  Set<Column> get primaryKey => {date};
+}
+
 /// 規則準確度追蹤表
 ///
 /// 記錄每條規則的歷史表現，用於計算命中率和平均報酬率。

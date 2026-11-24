@@ -62,12 +62,14 @@ class ScoringService {
 
     // 大盤 regime（供回檔類規則 gate）：候選池 120 交易日**中位數**報酬。
     // 有效股 < 50（fresh DB / 歷史不足）視為未知 → null、規則不擋。
-    final marketUptrend = PriceCalculator.marketUptrendOrNull(
+    // 讀數與當天分析一起存檔（畫面說明回檔訊號為何暫停）
+    final marketRegime = PriceCalculator.marketRegimeReading(
       batchData.pricesMap,
       SectorParams.regimeLookbackDays,
       // 只用當日 bar：半市場日不得把昨日的另一半混進 regime 母體
       asOf: date,
     );
+    final marketUptrend = marketRegime?.isUptrend;
 
     // 暫存待寫入的分析結果，於迴圈後以單一 transaction 批次寫入
     final pendingPersists =
@@ -284,6 +286,7 @@ class ScoringService {
     await _analysisRepo.runInTransaction(() async {
       await _analysisRepo.clearReasonsForDate(date);
       await _analysisRepo.clearAnalysisForDate(date);
+      await _analysisRepo.replaceMarketRegimeForDate(date, marketRegime);
       for (final p in pendingPersists) {
         await _persistAnalysisResult(
           symbol: p.symbol,
@@ -419,6 +422,7 @@ class ScoringService {
     await _analysisRepo.runInTransaction(() async {
       await _analysisRepo.clearReasonsForDate(date);
       await _analysisRepo.clearAnalysisForDate(date);
+      await _analysisRepo.replaceMarketRegimeForDate(date, result.marketRegime);
       for (final output in result.outputs) {
         final reasonDataList = output.reasons
             .map(
