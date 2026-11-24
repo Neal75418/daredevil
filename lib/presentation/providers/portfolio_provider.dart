@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:daredevil/core/constants/data_freshness.dart';
+import 'package:daredevil/core/constants/portfolio_params.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/core/utils/sentinel.dart';
@@ -175,15 +176,7 @@ class PortfolioState {
   }
 
   /// 在倉持股價格日期的最大值(績效、配置、股利的資料日期);沒有為 null
-  DateTime? get priceDate {
-    DateTime? latest;
-    for (final p in positions) {
-      final d = p.priceDate;
-      if (p.quantity <= 0 || d == null) continue;
-      if (latest == null || d.isAfter(latest)) latest = d;
-    }
-    return latest;
-  }
+  DateTime? get priceDate => _latestPriceDate(positions);
 
   PortfolioSummary get summary {
     if (positions.isEmpty) return PortfolioSummary.empty;
@@ -236,6 +229,17 @@ class PortfolioState {
       error: error == sentinel ? this.error : error as String?,
     );
   }
+}
+
+/// 在倉持股價格日期的最大值;沒有為 null
+DateTime? _latestPriceDate(Iterable<PortfolioPositionData> positions) {
+  DateTime? latest;
+  for (final p in positions) {
+    final d = p.priceDate;
+    if (p.quantity <= 0 || d == null) continue;
+    if (latest == null || d.isAfter(latest)) latest = d;
+  }
+  return latest;
 }
 
 // ==================================================
@@ -331,6 +335,40 @@ class PortfolioNotifier extends Notifier<PortfolioState> {
 
       // 取得所有交易紀錄以計算績效
       final transactions = await _db.getAllPortfolioTransactions();
+      if (!_active) return;
+
+      // 股利分析與期間報酬共用：先讀完整度事實、再讀配發列（理由同個股頁的
+      // `StockFundamentalsLoader`）。期間報酬要期初的持股市值與窗口內的除權
+      // 息，交易過的每一檔（含已賣光的）都讀
+      final tradedSymbols = {
+        ...symbols,
+        for (final tx in transactions) tx.symbol,
+      }.toList();
+      final now = ref.read(appClockProvider).now();
+      final completeness = await loadDividendCompleteness(_db, now: now);
+      final distributions = await _db.getDividendDistributionsBatch(
+        tradedSymbols,
+      );
+      if (!_active) return;
+
+      // 收盤讀資料日之前一段；結束日放寬到隔天，同一天的列不受日期寫法影響
+      final asOf = _latestPriceDate(positionData);
+      final Map<String, List<DailyPriceEntry>> closeHistory;
+      if (asOf == null || transactions.isEmpty) {
+        closeHistory = const {};
+      } else {
+        final day = DateContext.normalize(asOf);
+        closeHistory = await _db.getPriceHistoryBatch(
+          tradedSymbols,
+          startDate: DateTime(
+            day.year,
+            day.month,
+            day.day - PortfolioParams.periodHistoryCalendarDays,
+          ),
+          endDate: DateTime(day.year, day.month, day.day + 1),
+        );
+        if (!_active) return;
+      }
 
       // 計算績效
       final performance = _analyticsService.calculatePerformance(
@@ -338,6 +376,23 @@ class PortfolioNotifier extends Notifier<PortfolioState> {
         positions: positions,
         currentPrices: currentPrices,
         stocksMap: stocksMap,
+        periodInputs: asOf == null
+            ? null
+            : PeriodReturnInputs(
+                asOf: asOf,
+                closeHistory: closeHistory,
+                // 配發列只含有配息或配股的列：單純現金增資不入帳。沒認購的人
+                // 如實反映被稀釋；有認購的人另記買進，除權日與那筆買進在同一個
+                // 窗口時淨額為 0，不在同一個窗口時一格跌、一格漲。52 週規則用的
+                // 含增資列的事件表在這裡刻意不用
+                dividendContext: (symbol, from, to) =>
+                    completeness.priceContext(
+                      symbol,
+                      from: from,
+                      asOf: to,
+                      rows: distributions[symbol] ?? const [],
+                    ),
+              ),
       );
 
       final dividendAnalysis = await _analyzeDividends(
@@ -345,6 +400,9 @@ class PortfolioNotifier extends Notifier<PortfolioState> {
         symbols,
         stocksMap,
         currentPrices,
+        now: now,
+        completeness: completeness,
+        distributions: distributions,
       );
 
       state = state.copyWith(
@@ -381,17 +439,17 @@ class PortfolioNotifier extends Notifier<PortfolioState> {
     };
   }
 
-  /// 股利分析：配發表與完整度事實建每檔的股利摘要，官方估值配上估值日的收盤。
-  /// 先讀事實、再讀配發列（理由同個股頁的 `StockFundamentalsLoader`）
+  /// 股利分析：配發表與完整度事實（呼叫端讀好傳入）建每檔的股利摘要，官方
+  /// 估值配上估值日的收盤
   Future<DividendAnalysis> _analyzeDividends(
     List<PortfolioPositionEntry> positions,
     List<String> symbols,
     Map<String, StockMasterEntry> stocksMap,
-    Map<String, double> currentPrices,
-  ) async {
-    final now = ref.read(appClockProvider).now();
-    final completeness = await loadDividendCompleteness(_db, now: now);
-    final distributions = await _db.getDividendDistributionsBatch(symbols);
+    Map<String, double> currentPrices, {
+    required DateTime now,
+    required DividendCompleteness completeness,
+    required Map<String, List<DividendDistributionEntry>> distributions,
+  }) async {
     final valuations = await _db.getLatestValuationsBatch(symbols);
     // 與個股頁同一個新鮮度下限：上櫃估值只同步自選與候選股，持股可能停在很久
     // 以前的一筆（中間若分割，舊的每股股利 × 現在的股數會放大好幾倍）。過時或

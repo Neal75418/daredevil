@@ -133,6 +133,13 @@ void main() {
     when(
       () => mockDb.getRecentPrices(any(), count: any(named: 'count')),
     ).thenAnswer((_) async => const []);
+    when(
+      () => mockDb.getPriceHistoryBatch(
+        any(),
+        startDate: any(named: 'startDate'),
+        endDate: any(named: 'endDate'),
+      ),
+    ).thenAnswer((_) async => const {});
   });
 
   tearDown(() {
@@ -659,6 +666,162 @@ void main() {
       verifyNever(
         () => mockDb.getRecentPrices(any(), count: any(named: 'count')),
       );
+    });
+
+    PortfolioTransactionEntry tx(
+      int id,
+      String symbol,
+      String type,
+      DateTime date,
+      double quantity,
+      double price,
+    ) => PortfolioTransactionEntry(
+      id: id,
+      symbol: symbol,
+      txType: type,
+      date: date,
+      quantity: quantity,
+      price: price,
+      fee: 0,
+      tax: 0,
+      createdAt: date,
+    );
+
+    /// [from]～[to] 的平日，各一根收盤
+    List<DailyPriceEntry> dailyBars(
+      String symbol,
+      DateTime from,
+      DateTime to,
+      double Function(DateTime day) close,
+    ) => [
+      for (
+        var d = from;
+        !d.isAfter(to);
+        d = DateTime(d.year, d.month, d.day + 1)
+      )
+        if (d.weekday <= DateTime.friday)
+          DailyPriceEntry(symbol: symbol, date: d, close: close(d)),
+    ];
+
+    void stubHoldings({
+      required double quantity,
+      required double avgCost,
+      required double latestClose,
+      required List<PortfolioTransactionEntry> transactions,
+      required Map<String, List<DailyPriceEntry>> history,
+    }) {
+      when(() => mockDb.getPortfolioPositions()).thenAnswer(
+        (_) async => [
+          createPosition(
+            id: 1,
+            symbol: '2330',
+            quantity: quantity,
+            avgCost: avgCost,
+          ),
+        ],
+      );
+      when(
+        () => mockDb.getStocksBatch(any()),
+      ).thenAnswer((_) async => {'2330': createStock(symbol: '2330')});
+      when(() => mockDb.getLatestPricesBatch(any())).thenAnswer(
+        (_) async => {
+          '2330': DailyPriceEntry(
+            symbol: '2330',
+            date: DateTime(2026, 10, 2),
+            close: latestClose,
+            priceChange: 0,
+          ),
+        },
+      );
+      when(
+        () => mockDb.getAllPortfolioTransactions(),
+      ).thenAnswer((_) async => transactions);
+      when(
+        () => mockDb.getPriceHistoryBatch(
+          any(),
+          startDate: any(named: 'startDate'),
+          endDate: any(named: 'endDate'),
+        ),
+      ).thenAnswer((_) async => history);
+    }
+
+    test('🚨 期間報酬：交易過的每一檔（含已賣光）讀資料日前 45 天到資料日的收盤與配發', () async {
+      stubHoldings(
+        quantity: 20,
+        avgCost: 2040,
+        latestClose: 2030,
+        transactions: [
+          tx(1, '2603', 'BUY', DateTime(2026, 8, 3), 1000, 200),
+          tx(2, '2603', 'SELL', DateTime(2026, 9, 1), 1000, 210),
+          tx(3, '2330', 'BUY', DateTime(2026, 10, 2), 20, 2040),
+        ],
+        history: {
+          '2330': [
+            DailyPriceEntry(
+              symbol: '2330',
+              date: DateTime(2026, 10, 1),
+              close: 2000,
+            ),
+            DailyPriceEntry(
+              symbol: '2330',
+              date: DateTime(2026, 10, 2),
+              close: 2030,
+            ),
+          ],
+        },
+      );
+      stubDividendReads(listings: fullListings(), ledger: fullLedger());
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      final captured = verify(
+        () => mockDb.getPriceHistoryBatch(
+          captureAny(),
+          startDate: captureAny(named: 'startDate'),
+          endDate: captureAny(named: 'endDate'),
+        ),
+      ).captured;
+      expect((captured[0] as List<String>).toSet(), {'2330', '2603'});
+      expect(captured[1], DateTime(2026, 8, 18));
+      expect(captured[2], DateTime(2026, 10, 3));
+      final distributionSymbols = verify(
+        () => mockDb.getDividendDistributionsBatch(captureAny()),
+      ).captured.single;
+      expect((distributionSymbols as List<String>).toSet(), {'2330', '2603'});
+      final returns = container.read(portfolioProvider).performance!;
+      expect(
+        returns.periodReturns.daily,
+        closeTo((2030 - 2040) / 2040 * 100, 1e-9),
+      );
+    });
+
+    test('🚨 期間報酬：除息日以配發表的前收盤與參考價入帳', () async {
+      // 2330 2026-09-16 除息：前收 2385、參考價 2378（distributions2330）
+      stubHoldings(
+        quantity: 1000,
+        avgCost: 2300,
+        latestClose: 2378,
+        transactions: [tx(1, '2330', 'BUY', DateTime(2026, 9, 1), 1000, 2300)],
+        history: {
+          '2330': dailyBars(
+            '2330',
+            DateTime(2026, 9, 1),
+            DateTime(2026, 10, 2),
+            (d) => d.isBefore(DateTime(2026, 9, 16)) ? 2385 : 2378,
+          ),
+        },
+      );
+      stubDividendReads(
+        listings: fullListings(),
+        ledger: fullLedger(),
+        distributions: distributions2330,
+      );
+
+      await container.read(portfolioProvider.notifier).loadPositions();
+
+      final returns = container.read(portfolioProvider).performance!;
+      // 月窗口含 9/16：股價少 7 元、流入 7 元 → 0%
+      expect(returns.periodReturns.monthly, closeTo(0, 1e-9));
     });
 
     test('前一筆的日期不早於最新那一筆 → 不推回價差', () async {

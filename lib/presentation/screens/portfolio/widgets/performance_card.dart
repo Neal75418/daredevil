@@ -99,7 +99,6 @@ class PerformanceCard extends StatelessWidget {
                   label: 'portfolio.maxDrawdown'.tr(),
                   value: -performance.maxDrawdown,
                   isPercentage: true,
-                  isInverted: true,
                   theme: theme,
                 ),
               ),
@@ -130,17 +129,25 @@ class _ReturnItem extends StatelessWidget {
   });
 
   final String label;
-  final double value;
+
+  /// 報酬（%）；null 表示算不出來，顯示「—」
+  final double? value;
   final ThemeData theme;
   final bool isAnnualized;
 
   @override
   Widget build(BuildContext context) {
+    final value = this.value;
     // 依顯示精度（2 位）捨入後判方向：平盤/微負值→中性色、不帶 +，與數字一致。
-    final rounded = AppNumberFormat.roundForDisplay(value, 2);
-    final color = rounded == 0
-        ? theme.colorScheme.onSurface
-        : (rounded > 0 ? AppTheme.upColor : AppTheme.downColor);
+    final rounded = value == null
+        ? null
+        : AppNumberFormat.roundForDisplay(value, 2);
+    final color = switch (rounded) {
+      null => theme.colorScheme.onSurfaceVariant,
+      0 => theme.colorScheme.onSurface,
+      > 0 => AppTheme.upColor,
+      _ => AppTheme.downColor,
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,17 +163,22 @@ class _ReturnItem extends StatelessWidget {
             ),
             if (isAnnualized) ...[
               const SizedBox(width: DesignTokens.spacing2),
-              Icon(
-                Icons.info_outline,
-                size: 12,
-                color: theme.colorScheme.outline,
+              Tooltip(
+                message: 'portfolio.yearlyHint'.tr(),
+                child: Icon(
+                  Icons.info_outline,
+                  size: 12,
+                  color: theme.colorScheme.outline,
+                ),
               ),
             ],
           ],
         ),
         const SizedBox(height: DesignTokens.spacing2),
         Text(
-          AppNumberFormat.signedPercent(value, decimals: 2),
+          value == null
+              ? '—'
+              : AppNumberFormat.signedPercent(value, decimals: 2),
           style: theme.textTheme.bodySmall?.copyWith(
             color: color,
             fontWeight: FontWeight.w600,
@@ -183,24 +195,20 @@ class _MetricItem extends StatelessWidget {
     required this.value,
     required this.theme,
     this.isPercentage = false,
-    this.isInverted = false,
   });
 
   final String label;
   final double value;
   final ThemeData theme;
   final bool isPercentage;
-  final bool isInverted;
 
   @override
   Widget build(BuildContext context) {
-    // 配色沿用 displayValue 的方向（isInverted 如最大回撤），依顯示精度捨入
-    // 後判方向：平盤→中性色。文字一律 round-then-sign（signedPercent/
-    // signedInteger）：平盤不帶 +、微負值不出現 -0.00；isInverted 值恆 <= 0，
-    // signedPercent 本就不會補 + 號，語意不變。
-    final displayValue = isInverted ? -value : value;
+    // 紅漲綠跌（回撤傳負值，虧損是下跌色），依顯示精度捨入後判方向：平盤→
+    // 中性色。文字一律 round-then-sign（signedPercent/signedInteger）：平盤
+    // 不帶 +、微負值不出現 -0.00
     final rounded = AppNumberFormat.roundForDisplay(
-      displayValue,
+      value,
       isPercentage ? 2 : 0,
     );
     final color = rounded == 0

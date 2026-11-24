@@ -1,8 +1,13 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
+import 'package:daredevil/core/constants/portfolio_params.dart';
+import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/constants/transaction_types.dart';
-import 'package:daredevil/core/utils/clock.dart';
+import 'package:daredevil/core/utils/date_context.dart';
+import 'package:daredevil/core/utils/taiwan_calendar.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/models/dividend_context.dart';
 
 /// 投資組合績效分析服務
 ///
@@ -12,22 +17,22 @@ import 'package:daredevil/data/database/app_database.dart';
 /// - Max Drawdown（最大回撤）
 /// - Industry Allocation（產業配置）
 class PortfolioAnalyticsService {
-  const PortfolioAnalyticsService({AppClock clock = const SystemClock()})
-    : _clock = clock;
-
-  final AppClock _clock;
+  const PortfolioAnalyticsService();
 
   /// 計算投資組合績效
   ///
-  /// [transactions] 所有交易紀錄（按日期升序排列）
+  /// [transactions] 所有交易紀錄（含已平倉的股票）
   /// [positions] 目前持倉
   /// [currentPrices] symbol -> 目前價格
   /// [stocksMap] symbol -> 股票資訊
+  /// [periodInputs] 期間報酬用的資料日、日線與除權息；null（沒有任何收盤）
+  /// 時期間報酬全部為 null
   PortfolioPerformance calculatePerformance({
     required List<PortfolioTransactionEntry> transactions,
     required List<PortfolioPositionEntry> positions,
     required Map<String, double> currentPrices,
     required Map<String, StockMasterEntry> stocksMap,
+    required PeriodReturnInputs? periodInputs,
   }) {
     if (transactions.isEmpty && positions.isEmpty) {
       return PortfolioPerformance.empty;
@@ -70,11 +75,19 @@ class PortfolioAnalyticsService {
         : 0.0;
 
     // 期間報酬
-    final periodReturns = _calculatePeriodReturns(
-      transactions: transactions,
-      positions: positions,
-      currentPrices: currentPrices,
-    );
+    final periodReturns = periodInputs == null
+        ? PeriodReturns.empty
+        : _PeriodReturnCalculator(
+            transactions: transactions,
+            inputs: periodInputs,
+            fallbackPrices: {
+              for (final pos in positions)
+                pos.symbol: currentPrices[pos.symbol] ?? pos.avgCost,
+            },
+          ).calculate(
+            totalReturn: totalReturn,
+            hasBuyCost: totalHistoricalBuyCost > 0,
+          );
 
     // 當前回撤（從成本基準計算，非歷史最大回撤）
     final maxDrawdown = _calculateCurrentDrawdown(
@@ -99,92 +112,6 @@ class PortfolioAnalyticsService {
       periodReturns: periodReturns,
       maxDrawdown: maxDrawdown,
       industryAllocation: industryAllocation,
-    );
-  }
-
-  /// 計算期間報酬
-  PeriodReturns _calculatePeriodReturns({
-    required List<PortfolioTransactionEntry> transactions,
-    required List<PortfolioPositionEntry> positions,
-    required Map<String, double> currentPrices,
-  }) {
-    if (transactions.isEmpty) {
-      return PeriodReturns.empty;
-    }
-
-    // 找出最早和最近的交易
-    final sortedTx = List.of(transactions)
-      ..sort((a, b) => a.date.compareTo(b.date));
-    final firstTxDate = sortedTx.first.date;
-
-    // 計算目前總市值與已收股利
-    double currentValue = 0;
-    double totalDividends = 0;
-    for (final pos in positions) {
-      final price = currentPrices[pos.symbol] ?? pos.avgCost;
-      currentValue += price * pos.quantity;
-      totalDividends += pos.totalDividendReceived;
-    }
-
-    // 計算總買入成本（所有 BUY 的現金流出）作為報酬率分母
-    // 不扣除 SELL proceeds，避免獲利 portfolio 分母變 ≤ 0
-    double totalBuyCost = 0;
-    double totalSellProceeds = 0;
-    for (final tx in sortedTx) {
-      if (tx.txType == TransactionTypes.buy) {
-        totalBuyCost += tx.quantity * tx.price + tx.fee;
-      } else if (tx.txType == TransactionTypes.sell) {
-        totalSellProceeds += tx.quantity * tx.price - tx.fee - tx.tax;
-      }
-    }
-
-    if (totalBuyCost <= 0) {
-      return PeriodReturns.empty;
-    }
-
-    // 計算持有天數
-    final daysSinceStart = _clock.now().difference(firstTxDate).inDays;
-    if (daysSinceStart == 0) {
-      return PeriodReturns.empty;
-    }
-
-    // 總報酬率 = (當前市值 + 已收股利 + 已賣出收入 - 總買入成本) / 總買入成本
-    final totalReturn =
-        ((currentValue + totalDividends + totalSellProceeds - totalBuyCost) /
-            totalBuyCost) *
-        100;
-
-    // 日報酬（簡化計算）
-    final dailyReturn = totalReturn / daysSinceStart;
-
-    // 週報酬
-    final weekReturn = daysSinceStart >= 7 ? dailyReturn * 7 : totalReturn;
-
-    // 月報酬
-    final monthReturn = daysSinceStart >= 30 ? dailyReturn * 30 : totalReturn;
-
-    // 年報酬（年化）
-    // < 30 天：用線性外推（日報酬 × 365），避免短期複利公式產生極端數字
-    final double yearReturn;
-    if (daysSinceStart < 30) {
-      yearReturn = dailyReturn * 365;
-    } else {
-      yearReturn =
-          (math.pow(1 + totalReturn / 100, 365 / daysSinceStart) - 1)
-              .toDouble() *
-          100;
-    }
-
-    // NaN/Infinity 防護（totalReturn < -100% 時 math.pow 可能產生 NaN）
-    final safeYearReturn = yearReturn.isNaN || yearReturn.isInfinite
-        ? totalReturn.clamp(-100.0, 1000.0)
-        : yearReturn;
-
-    return PeriodReturns(
-      daily: dailyReturn,
-      weekly: weekReturn,
-      monthly: monthReturn,
-      yearly: safeYearReturn.clamp(-100.0, 1000.0), // 限制極端值
     );
   }
 
@@ -265,6 +192,244 @@ class PortfolioAnalyticsService {
   }
 }
 
+/// 期間報酬：日／週／月是近 1／5／20 個交易日的實際報酬，年化只在持有滿一年
+/// 後換算。
+///
+/// 交易日取日線裡所有收盤列的日期（依日期去重，同一天可能有不同時區寫法的
+/// 多筆列）。一個窗口是「期初那天收盤」到「資料日收盤」：
+/// - 期初持股以期初當天或之前最近的收盤計值；期間內的買進成本、賣出收入是
+///   現金流，期間內才買進的部位以買進成本當起點
+/// - 除權息日以參考價入帳：除息前一天收盤的持股 × (除息前收盤 − 參考價) 算
+///   流入（與今日損益以參考價當昨收同一個口徑），現金股利的入帳紀錄因此不再算
+/// - 期初有持股、但收盤列從期初之後才開始的股票（掛牌前就記了買進），期初
+///   以前的交易改當期間內的現金流；那些交易早於讀到的日線時（長期停牌後
+///   恢復）算不出來
+/// - 日線裡沒有任何收盤列的在倉持股（很久沒有行情）以最新收盤（沒有就用
+///   均價）計值，與總報酬同一套
+///
+/// 算不出來（回 null）：期初市值加買進成本不為正；期初持有、又沒有任何價格
+/// 可用；有持股的股票除權息資料不完整、窗口內有股票股利入帳、或持有期間的
+/// 收盤序列有水位斷點（停牌後恢復，且跳動超過門檻：分割、減資）
+class _PeriodReturnCalculator {
+  _PeriodReturnCalculator({
+    required this.transactions,
+    required PeriodReturnInputs inputs,
+    required this.fallbackPrices,
+  }) : _end = DateContext.normalize(inputs.asOf),
+       _dividendContext = inputs.dividendContext {
+    for (final MapEntry(key: symbol, value: rows)
+        in inputs.closeHistory.entries) {
+      for (final row in rows) {
+        final close = row.close;
+        final day = DateContext.normalize(row.date);
+        if (close == null || day.isAfter(_end)) continue;
+        (_closes[symbol] ??= SplayTreeMap())[day] = close;
+        _tradingDays.add(day);
+      }
+    }
+  }
+
+  /// 持股數小於等於這個值當成沒有持股（買賣股數加總留下的浮點殘量）
+  static const _quantityEpsilon = 1e-9;
+
+  final List<PortfolioTransactionEntry> transactions;
+
+  /// 沒有任何收盤列的股票用來計值的價格
+  final Map<String, double> fallbackPrices;
+
+  final DateTime _end;
+  final DividendContextLookup _dividendContext;
+  final _closes = <String, SplayTreeMap<DateTime, double>>{};
+  final _tradingDays = SplayTreeSet<DateTime>();
+
+  PeriodReturns calculate({
+    required double totalReturn,
+    required bool hasBuyCost,
+  }) {
+    final descending = _tradingDays.toList().reversed.toList();
+    double? window(int tradingDaysBack) => descending.length > tradingDaysBack
+        ? _windowReturn(descending[tradingDaysBack])
+        : null;
+    return PeriodReturns(
+      daily: window(PortfolioParams.dailyWindowTradingDays),
+      weekly: window(PortfolioParams.weeklyWindowTradingDays),
+      monthly: window(PortfolioParams.monthlyWindowTradingDays),
+      yearly: hasBuyCost ? _annualized(totalReturn) : null,
+    );
+  }
+
+  /// [start] 收盤到資料日收盤的報酬（%）
+  double? _windowReturn(DateTime start) {
+    final heldAtStart = {
+      for (final MapEntry(key: symbol, value: quantity) in _holdings(
+        start,
+      ).entries)
+        if (quantity > _quantityEpsilon) symbol,
+    };
+    final shifted = {
+      for (final symbol in heldAtStart)
+        if (_closes[symbol] case final series?
+            when _closeOnOrBefore(series, start) == null)
+          symbol,
+    };
+
+    // 收盤列從期初之後才開始、但交易早於讀到的日線：之前可能有行情只是沒讀到
+    // （長期停牌後恢復），期初價值未知
+    final firstDay = _tradingDays.first;
+    if (transactions.any(
+      (tx) =>
+          shifted.contains(tx.symbol) &&
+          DateContext.normalize(tx.date).isBefore(firstDay),
+    )) {
+      return null;
+    }
+
+    final startValue = _valueAt(start, exclude: shifted);
+    final endValue = _valueAt(_end);
+    if (startValue == null || endValue == null) return null;
+
+    double buys = 0;
+    double inflows = 0;
+    final active = {...heldAtStart};
+    for (final tx in transactions) {
+      final day = DateContext.normalize(tx.date);
+      if (day.isAfter(_end)) continue;
+      if (!day.isAfter(start) && !shifted.contains(tx.symbol)) continue;
+      switch (tx.txType) {
+        case TransactionTypes.buy:
+          buys += tx.quantity * tx.price + tx.fee;
+          active.add(tx.symbol);
+        case TransactionTypes.sell:
+          inflows += tx.quantity * tx.price - tx.fee - tx.tax;
+        case TransactionTypes.dividendStock:
+          // 入帳那天股數跳一截，價格沒有對應的調整（除權在更早之前）
+          return null;
+      }
+    }
+
+    for (final symbol in active) {
+      final context = _dividendContext(symbol, start, _end);
+      if (context is! DividendComplete) return null;
+      for (final event in context.events) {
+        final heldBefore = _holdings(event.exDate, inclusive: false)[symbol];
+        inflows +=
+            (heldBefore ?? 0) * (event.closeBefore - event.referencePrice);
+      }
+      if (_hasPriceBreak(symbol, start, context.events)) return null;
+    }
+
+    final base = startValue + buys;
+    if (base <= 0) return null;
+    return (endValue + inflows - buys - startValue) / base * 100;
+  }
+
+  /// [day] 收盤時（[inclusive] 為 false 時是 [day] 之前）各股的持股數
+  Map<String, double> _holdings(DateTime day, {bool inclusive = true}) {
+    final held = <String, double>{};
+    for (final tx in transactions) {
+      final txDay = DateContext.normalize(tx.date);
+      if (inclusive ? txDay.isAfter(day) : !txDay.isBefore(day)) continue;
+      final delta = switch (tx.txType) {
+        TransactionTypes.buy || TransactionTypes.dividendStock => tx.quantity,
+        TransactionTypes.sell => -tx.quantity,
+        _ => 0.0,
+      };
+      held[tx.symbol] = (held[tx.symbol] ?? 0) + delta;
+    }
+    return held;
+  }
+
+  /// [day] 收盤時的持股市值（略過 [exclude]）；有持股卻沒有價格可用時回 null
+  double? _valueAt(DateTime day, {Set<String> exclude = const {}}) {
+    double value = 0;
+    for (final MapEntry(key: symbol, value: quantity) in _holdings(
+      day,
+    ).entries) {
+      if (quantity <= _quantityEpsilon || exclude.contains(symbol)) continue;
+      final series = _closes[symbol];
+      final price = series == null
+          ? fallbackPrices[symbol]
+          : _closeOnOrBefore(series, day);
+      if (price == null) return null;
+      value += quantity * price;
+    }
+    return value;
+  }
+
+  static double? _closeOnOrBefore(
+    SplayTreeMap<DateTime, double> series,
+    DateTime day,
+  ) {
+    final key = series.containsKey(day) ? day : series.lastKeyBefore(day);
+    return key == null ? null : series[key];
+  }
+
+  /// [symbol] 從期初（當天或之前最近的收盤，沒有就從第一筆）到資料日的收盤
+  /// 序列，在持有期間有沒有水位斷點（分割、減資）：相鄰兩個收盤之間有這檔
+  /// 沒有收盤的交易日（停止買賣），且跳動超過
+  /// `RuleParams.priceDiscontinuityRatio`。沒有停牌的大漲跌（新股掛牌頭幾天、
+  /// 無漲跌幅限制的 ETF）不算；中間有除權息日時，前收盤先乘上還原因子再比
+  bool _hasPriceBreak(
+    String symbol,
+    DateTime start,
+    List<DividendPriceEvent> events,
+  ) {
+    final series = _closes[symbol];
+    if (series == null) return false;
+    final from = series.containsKey(start)
+        ? start
+        : (series.lastKeyBefore(start) ?? series.firstKey()!);
+    DateTime? previousDay;
+    double? previousClose;
+    for (final MapEntry(key: day, value: close) in series.entries) {
+      if (day.isBefore(from)) continue;
+      // 先看停牌：多數相鄰收盤是連續交易日，一判就排除，不必每對都重算持股
+      if (previousDay != null &&
+          previousClose != null &&
+          _suspendedBetween(previousDay, day) &&
+          (_holdings(previousDay)[symbol] ?? 0) > _quantityEpsilon) {
+        var expected = previousClose;
+        for (final event in events) {
+          if (event.exDate.isAfter(previousDay) && !event.exDate.isAfter(day)) {
+            expected *= event.factor;
+          }
+        }
+        if ((close / expected - 1).abs() > RuleParams.priceDiscontinuityRatio) {
+          return true;
+        }
+      }
+      previousDay = day;
+      previousClose = close;
+    }
+    return false;
+  }
+
+  /// [after] 與 [before] 之間（不含頭尾）有沒有交易日：兩個相鄰收盤之間有
+  /// 交易日，表示這檔那幾天沒有收盤（停止買賣）
+  static bool _suspendedBetween(DateTime after, DateTime before) {
+    for (
+      var day = DateTime(after.year, after.month, after.day + 1);
+      day.isBefore(before);
+      day = DateTime(day.year, day.month, day.day + 1)
+    ) {
+      if (TaiwanCalendar.isTradingDay(day)) return true;
+    }
+    return false;
+  }
+
+  /// 年化報酬（%）：首筆交易到資料日未滿 `PortfolioParams.minAnnualizeDays`
+  /// 天回 null；滿了用複利換算。總報酬低於 -100% 時年化為 -100%
+  double? _annualized(double totalReturn) {
+    final first = transactions
+        .map((tx) => DateContext.normalize(tx.date))
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    final days = _end.difference(first).inDays;
+    if (days < PortfolioParams.minAnnualizeDays) return null;
+    final growth = math.max(1 + totalReturn / 100, 0.0);
+    return (math.pow(growth, PortfolioParams.daysPerYear / days) - 1) * 100;
+  }
+}
+
 /// 投資組合績效資料
 class PortfolioPerformance {
   const PortfolioPerformance({
@@ -321,33 +486,45 @@ class PortfolioPerformance {
   );
 }
 
-/// 期間報酬
-class PeriodReturns {
-  const PeriodReturns({
-    required this.daily,
-    required this.weekly,
-    required this.monthly,
-    required this.yearly,
+/// [symbol] 在 (from, to] 之間的除權息事件；資料不完整時回
+/// [DividendContext.incomplete]
+typedef DividendContextLookup =
+    DividendContext Function(String symbol, DateTime from, DateTime to);
+
+/// 期間報酬的輸入
+class PeriodReturnInputs {
+  const PeriodReturnInputs({
+    required this.asOf,
+    required this.closeHistory,
+    required this.dividendContext,
   });
 
-  /// 日報酬（%）
-  final double daily;
+  /// 資料日（在倉持股最新收盤的日期）
+  final DateTime asOf;
 
-  /// 週報酬（%）
-  final double weekly;
+  /// 交易過的每一檔在 [asOf] 之前一段期間的日線（任意順序；[asOf] 之後的列不算）
+  final Map<String, List<DailyPriceEntry>> closeHistory;
 
-  /// 月報酬（%）
-  final double monthly;
+  final DividendContextLookup dividendContext;
+}
 
-  /// 年報酬 / 年化報酬（%）
-  final double yearly;
+/// 期間報酬；算不出來的欄位為 null（畫面顯示「—」）
+class PeriodReturns {
+  const PeriodReturns({this.daily, this.weekly, this.monthly, this.yearly});
 
-  static const empty = PeriodReturns(
-    daily: 0,
-    weekly: 0,
-    monthly: 0,
-    yearly: 0,
-  );
+  /// 近 1 個交易日的報酬（%）；算不出來為 null
+  final double? daily;
+
+  /// 近 5 個交易日的報酬（%）；算不出來為 null
+  final double? weekly;
+
+  /// 近 20 個交易日的報酬（%）；算不出來為 null
+  final double? monthly;
+
+  /// 年化報酬（%）；持有未滿一年為 null
+  final double? yearly;
+
+  static const empty = PeriodReturns();
 }
 
 /// 產業配置

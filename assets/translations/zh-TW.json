@@ -1451,6 +1451,7 @@
     "weekly": "週",
     "monthly": "月",
     "yearly": "年化",
+    "yearlyHint": "持有滿一年才換算成年化報酬",
     "totalReturn": "總報酬率",
     "maxDrawdown": "當前回撤",
     "industryAllocation": "產業配置",

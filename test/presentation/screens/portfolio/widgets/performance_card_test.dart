@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -177,6 +178,45 @@ void main() {
       );
 
       expect(find.byIcon(Icons.info_outline), findsOneWidget);
+    });
+
+    testWidgets('算不出來的期間報酬顯示「—」，不顯示 0.00%', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          PerformanceCard(
+            performance: createPerformance(
+              periodReturns: const PeriodReturns(),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('—'), findsNWidgets(4));
+      expect(find.text('0.00%'), findsNothing);
+    });
+
+    testWidgets('年化的說明圖示提示「持有滿一年才換算」', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(PerformanceCard(performance: createPerformance())),
+      );
+
+      expect(find.byTooltip('portfolio.yearlyHint'.tr()), findsOneWidget);
+    });
+
+    testWidgets('🚨 當前回撤是虧損：用下跌色，與總報酬率同一套紅漲綠跌', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          PerformanceCard(
+            performance: createPerformance(totalReturn: 5, maxDrawdown: 3.2),
+          ),
+        ),
+      );
+
+      final drawdown = tester.widget<Text>(find.text('-3.20%'));
+      expect(drawdown.style?.color, AppTheme.downColor);
     });
 
     testWidgets('renders with empty performance', (tester) async {
