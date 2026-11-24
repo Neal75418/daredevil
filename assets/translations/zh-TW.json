@@ -113,6 +113,7 @@
     "focusStocks": "焦點股",
     "surgeBadge": "爆量",
     "pullbackOnly": "只看回檔中",
+    "noPullbackStocks": "焦點個股中目前沒有回檔中的股票",
     "sortByMentions": "篇數",
     "riskNews": "風險新聞",
     "newEntrant": "新進榜",
@@ -783,6 +784,8 @@
   "empty": {
     "noRecommendations": "今日無訊號",
     "noRecommendationsHint": "目前沒有符合條件的股票\n請稍後再試或手動更新",
+    "pullbackPausedTitle": "回檔訊號暫停",
+    "pullbackPausedHint": "最近一次評分的股票只有 {pct}% 比半年前高，過半就會恢復。多數股票走弱時，回檔之後的表現明顯較差。",
     "noFilterResults": "無符合條件的股票",
     "noFilterResultsHint": "試著調整篩選條件",
     "clearFilter": "清除篩選",

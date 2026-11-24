@@ -4,6 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:daredevil/core/constants/scoring_mode.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/domain/services/news/heat_calculator.dart';
+import 'package:daredevil/core/l10n/app_strings.dart';
+import 'package:daredevil/domain/models/market_regime.dart';
+import 'package:daredevil/presentation/providers/mode_recommendation_provider.dart';
 import 'package:daredevil/presentation/providers/news_heat_provider.dart';
 import 'package:daredevil/presentation/screens/news/heat_analysis_tab.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
@@ -69,10 +72,14 @@ void main() {
     addTearDown(() => tester.view.resetPhysicalSize());
   }
 
-  Widget build(NewsHeatAnalysis data) => buildProviderTestApp(
-    const HeatAnalysisTab(),
-    overrides: [newsHeatProvider.overrideWith((ref) async => data)],
-  );
+  Widget build(NewsHeatAnalysis data, {MarketRegimeReading? pause}) =>
+      buildProviderTestApp(
+        const HeatAnalysisTab(),
+        overrides: [
+          newsHeatProvider.overrideWith((ref) async => data),
+          pullbackPauseProvider.overrideWithValue(pause),
+        ],
+      );
 
   testWidgets('顯示主流族群卡片與成分股', (tester) async {
     widenViewport(tester);
@@ -105,6 +112,84 @@ void main() {
 
     expect(find.text('南亞科'), findsWidgets);
     expect(find.text('台積電'), findsNothing);
+    // 篩出來有股票：不寫任何「沒有回檔中」的說明
+    expect(find.text('news.noPullbackStocks'), findsNothing);
+    expect(find.text(S.emptyPullbackPausedTitle), findsNothing);
+  });
+
+  group('只看回檔中、篩完是空的', () {
+    const bear = MarketRegimeReading(
+      eligibleCount: 455,
+      upCount: 132,
+      medianReturn: -0.1609,
+      isUptrend: false,
+      lookbackDays: 120,
+    );
+    final noPullback = NewsHeatAnalysis(
+      themes: analysis().themes,
+      stocks: analysis().stocks,
+      stockNames: analysis().stockNames,
+      modeBySymbol: const {'2408': ScoringMode.strengthObserve},
+      priceChangeBySymbol: const {},
+      warningBySymbol: const {},
+      surgeReliable: true,
+    );
+
+    Future<void> filter(
+      WidgetTester tester, {
+      MarketRegimeReading? pause,
+    }) async {
+      widenViewport(tester);
+      await tester.pumpWidget(build(noPullback, pause: pause));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('news.pullbackOnly'));
+      // 空白狀態元件有重複播放的動畫，pumpAndSettle 等不到靜止
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    testWidgets('大盤偏空：寫明回檔訊號暫停與比例', (tester) async {
+      await filter(tester, pause: bear);
+      expect(find.text(S.emptyPullbackPausedTitle), findsOneWidget);
+      expect(find.text(S.emptyPullbackPausedHint(29)), findsOneWidget);
+      expect(find.text('news.noPullbackStocks'), findsNothing);
+    });
+
+    testWidgets('沒有暫停：寫「焦點個股中目前沒有回檔中的股票」', (tester) async {
+      await filter(tester);
+      expect(find.text('news.noPullbackStocks'), findsOneWidget);
+      expect(find.text(S.emptyPullbackPausedTitle), findsNothing);
+    });
+
+    testWidgets('沒勾「只看回檔中」、焦點股剛好是空的：也不顯示說明', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        build(
+          NewsHeatAnalysis(
+            themes: analysis().themes,
+            stocks: const [],
+            stockNames: analysis().stockNames,
+            modeBySymbol: const {},
+            priceChangeBySymbol: const {},
+            warningBySymbol: const {},
+            surgeReliable: true,
+          ),
+          pause: bear,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text(S.emptyPullbackPausedTitle), findsNothing);
+      expect(find.text('news.noPullbackStocks'), findsNothing);
+    });
+
+    testWidgets('沒勾「只看回檔中」：不顯示任何說明', (tester) async {
+      widenViewport(tester);
+      await tester.pumpWidget(build(noPullback, pause: bear));
+      await tester.pumpAndSettle();
+      expect(find.text(S.emptyPullbackPausedTitle), findsNothing);
+      expect(find.text('news.noPullbackStocks'), findsNothing);
+    });
   });
 
   testWidgets('族群卡片成分股為空時不渲染 chips 區塊', (tester) async {

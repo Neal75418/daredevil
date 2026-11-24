@@ -6,6 +6,7 @@ import 'package:daredevil/core/constants/animations.dart';
 import 'package:daredevil/core/l10n/app_strings.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/theme/design_tokens.dart';
+import 'package:daredevil/domain/models/market_regime.dart';
 
 /// 可重用的空狀態 Widget，附有動畫插圖
 class EmptyState extends StatelessWidget {
@@ -178,6 +179,20 @@ class EmptyStates {
       subtitle: S.emptyNoRecommendationsHint,
       actionLabel: onRefresh != null ? S.refresh : null,
       onAction: onRefresh,
+      compact: compact,
+    );
+  }
+
+  /// 回檔訊號因大盤偏空而暫停（見 `pullbackPauseProvider`）：寫明比例與恢復
+  /// 條件。不給「更新」按鈕——更新也不會改變大盤判定
+  static Widget pullbackPaused({
+    required MarketRegimeReading reading,
+    bool compact = false,
+  }) {
+    return EmptyState(
+      icon: Icons.pause_circle_outline,
+      title: S.emptyPullbackPausedTitle,
+      subtitle: S.emptyPullbackPausedHint(reading.upPercentFloor),
       compact: compact,
     );
   }

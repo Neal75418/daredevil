@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:daredevil/core/constants/risk_warnings.dart';
 import 'package:daredevil/core/constants/rule_params.dart';
 import 'package:daredevil/core/constants/scoring_mode.dart';
+import 'package:daredevil/domain/models/market_regime.dart';
 import 'package:daredevil/core/utils/date_context.dart';
 import 'package:daredevil/core/utils/logger.dart';
 import 'package:daredevil/domain/services/price_calculator.dart';
 import 'package:daredevil/data/database/app_database.dart';
 import 'package:daredevil/data/database/dao/analysis_dao.dart';
+import 'package:daredevil/data/repositories/analysis_repository.dart';
 import 'package:daredevil/domain/services/analysis/sector_strength_service.dart';
 import 'package:daredevil/presentation/providers/data_update_epoch_provider.dart';
 import 'package:daredevil/presentation/providers/providers.dart';
@@ -362,360 +364,381 @@ bool isEligibleForMode({
 /// ## 結構
 ///
 /// 內部 [_modeAssignmentsProvider] 一次拉完整
-/// `Map<ScoringMode, List<ModeRecommendation>>`、外部 [modeRecommendationsProvider]
-/// 是薄 slice — 既有 test override 模式不動。
-final _modeAssignmentsProvider =
-    FutureProvider<Map<ScoringMode, List<ModeRecommendation>>>((ref) async {
-      // Auto-reload trigger
-      ref.watch(dataUpdateEpochProvider);
+/// `Map<ScoringMode, List<ModeRecommendation>>`（連同同一個分析日的大盤判定
+/// 讀數）、外部 [modeRecommendationsProvider] 與 [pullbackPauseProvider] 是薄
+/// slice — 既有 test override 模式不動。
+final _modeAssignmentsProvider = FutureProvider<_ModeAssignments>((ref) async {
+  // Auto-reload trigger
+  ref.watch(dataUpdateEpochProvider);
 
-      final repo = ref.read(analysisRepositoryProvider);
-      final cachedDb = ref.read(cachedDbProvider);
+  final repo = ref.read(analysisRepositoryProvider);
+  final cachedDb = ref.read(cachedDbProvider);
 
-      final emptyResult = <ScoringMode, List<ModeRecommendation>>{
-        for (final m in ScoringMode.userFacingModes) m: const [],
-      };
+  final emptyResult = <ScoringMode, List<ModeRecommendation>>{
+    for (final m in ScoringMode.userFacingModes) m: const [],
+  };
 
-      // STEP 1 — 錨在「最新有分析的日期」，而非最新價格日
-      //
-      // 價格與分析可能停在不同日：價格寫入（price_repository 的
-      // insertPrices）發生在任何評分決策之前，且 HistoricalPriceSyncer
-      // 也會補當日 bar，所以 MAX(daily_price.date) 可能已跳到今日、而
-      // 當日分析因資料不完整被 staleBar 攔下（見 scoring_pipeline）。
-      // 以價格日為錨時查無分析 → 下方直接 emptyResult → 今日頁三個 tab
-      // 硬空，把「今天沒算」呈現成「今天沒有好股票」。
-      //
-      // findLatestAnalysisDate 內含 3 天窗 + 前一交易日 fallback，
-      // 讓這種降級乾淨地退回最後一份完整的榜。
-      final analysisDate = await repo.findLatestAnalysisDate();
-      if (analysisDate == null) return emptyResult;
+  // STEP 1 — 錨在「最新有分析的日期」，而非最新價格日
+  //
+  // 價格與分析可能停在不同日：價格寫入（price_repository 的
+  // insertPrices）發生在任何評分決策之前，且 HistoricalPriceSyncer
+  // 也會補當日 bar，所以 MAX(daily_price.date) 可能已跳到今日、而
+  // 當日分析因資料不完整被 staleBar 攔下（見 scoring_pipeline）。
+  // 以價格日為錨時查無分析 → 下方直接 emptyResult → 今日頁三個 tab
+  // 硬空，把「今天沒算」呈現成「今天沒有好股票」。
+  //
+  // findLatestAnalysisDate 內含 3 天窗 + 前一交易日 fallback，
+  // 讓這種降級乾淨地退回最後一份完整的榜。
+  final analysisDate = await repo.findLatestAnalysisDate();
+  if (analysisDate == null) return (byMode: emptyResult, regime: null);
 
-      // STEP 2 — 平行查 3 個 mode 的 SUM aggregate
-      final modeScoresEntries = await Future.wait(
-        ScoringMode.userFacingModes.map((m) async {
-          final codes = reasonCodesForMode(m);
-          if (codes.isEmpty) {
-            AppLogger.warning('ModeRecommendations', 'mode ${m.name} 沒任何 rule');
-            return MapEntry(m, const <ModeStockScore>[]);
-          }
-          final scores = await repo.getModeStockScores(analysisDate, codes);
-          return MapEntry(m, scores);
-        }),
-      );
+  // 大盤判定與推薦清單讀同一天：回檔分頁空白時，畫面據此說明原因
+  final regime = await _readMarketRegime(repo, analysisDate);
 
-      // STEP 3 — Build symbol → {mode → ModeStockScore} 矩陣
-      final stockModeScores = <String, Map<ScoringMode, ModeStockScore>>{};
-      for (final entry in modeScoresEntries) {
-        for (final s in entry.value) {
-          stockModeScores.putIfAbsent(s.symbol, () => {})[entry.key] = s;
-        }
+  // STEP 2 — 平行查 3 個 mode 的 SUM aggregate
+  final modeScoresEntries = await Future.wait(
+    ScoringMode.userFacingModes.map((m) async {
+      final codes = reasonCodesForMode(m);
+      if (codes.isEmpty) {
+        AppLogger.warning('ModeRecommendations', 'mode ${m.name} 沒任何 rule');
+        return MapEntry(m, const <ModeStockScore>[]);
       }
-      if (stockModeScores.isEmpty) return emptyResult;
+      final scores = await repo.getModeStockScores(analysisDate, codes);
+      return MapEntry(m, scores);
+    }),
+  );
 
-      // STEP 4 — 一次撈所有 candidate 的 stock data（priceHistory 給 MA20 乖離 /
-      //          sparkline 重用；reasons / stocks / analyses 給後續 build）
-      //
-      // **窗口長度需求**：Mode B 60D 報酬排序（Wave 2b）需 ≥ 61 筆收盤、Mode A
-      // MA20 乖離需 ≥ 20 筆。95 日曆天 ≈ 65 交易日：足夠算 60D + MA20 + 30 日
-      // sparkline + 連假 margin（CNY 等假日叢集）。
-      //
-      // **歷史備註**：原預設 historyDays=5 → 每檔 ~4 筆 → Mode A 漲幅 filter 從
-      // commit 253f732 起一直是死的；2026-06-20 修為 50（乖離 gate）、再到 95（60D 排序）。
-      final allCandidateSymbols = stockModeScores.keys.toList();
-      final historyCtx = DateContext.forDate(analysisDate, historyDays: 95);
-      final data = await cachedDb.loadStockListData(
-        symbols: allCandidateSymbols,
-        analysisDate: analysisDate,
-        historyStart: historyCtx.historyStart,
-      );
-      final priceChanges = PriceCalculator.calculatePriceChangesBatch(
-        data.priceHistories,
-        data.latestPrices,
-      );
+  // STEP 3 — Build symbol → {mode → ModeStockScore} 矩陣
+  final stockModeScores = <String, Map<ScoringMode, ModeStockScore>>{};
+  for (final entry in modeScoresEntries) {
+    for (final s in entry.value) {
+      stockModeScores.putIfAbsent(s.symbol, () => {})[entry.key] = s;
+    }
+  }
+  if (stockModeScores.isEmpty) {
+    return (byMode: emptyResult, regime: regime);
+  }
 
-      // STEP 4b — 批次載入警示資料（供處置股排除用）。disposalEndDate + grace
-      // 已在寫入時套用過（syncAllMarketWarnings → _createWarningEntry，見
-      // warning_repository.dart / FundamentalParams.disposalEndDateGraceDays），
-      // getActiveWarningsMapBatch（trading_warning_dao.dart）只需信任
-      // isActive=true 即代表目前仍生效，此處不需重算過期邏輯。ATTENTION 一併
-      // 撈回但不影響 routing，只有 DISPOSAL 需要排除（見下方 STEP 5 迴圈）。
-      final activeWarnings = await ref
-          .read(databaseProvider)
-          .getActiveWarningsMapBatch(allCandidateSymbols);
+  // STEP 4 — 一次撈所有 candidate 的 stock data（priceHistory 給 MA20 乖離 /
+  //          sparkline 重用；reasons / stocks / analyses 給後續 build）
+  //
+  // **窗口長度需求**：Mode B 60D 報酬排序（Wave 2b）需 ≥ 61 筆收盤、Mode A
+  // MA20 乖離需 ≥ 20 筆。95 日曆天 ≈ 65 交易日：足夠算 60D + MA20 + 30 日
+  // sparkline + 連假 margin（CNY 等假日叢集）。
+  //
+  // **歷史備註**：原預設 historyDays=5 → 每檔 ~4 筆 → Mode A 漲幅 filter 從
+  // commit 253f732 起一直是死的；2026-06-20 修為 50（乖離 gate）、再到 95（60D 排序）。
+  final allCandidateSymbols = stockModeScores.keys.toList();
+  final historyCtx = DateContext.forDate(analysisDate, historyDays: 95);
+  final data = await cachedDb.loadStockListData(
+    symbols: allCandidateSymbols,
+    analysisDate: analysisDate,
+    historyStart: historyCtx.historyStart,
+  );
+  final priceChanges = PriceCalculator.calculatePriceChangesBatch(
+    data.priceHistories,
+    data.latestPrices,
+  );
 
-      // STEP 5 — 先篩（eligibility＋qualifiesForRouting）再依 routing priority 挑
-      //
-      // **2026-06-19 v2 audit**：多個模式都合格時，ScoringMode.routingPriority
-      // 高者勝（pullbackEntry 3 > momentumEntry 2 > strengthObserve 1）。
-      // Mode C 是「進場時機」最 actionable、應優先 surface。
-      final assignmentMap = <ScoringMode, List<ModeStockScore>>{
-        for (final m in ScoringMode.userFacingModes) m: <ModeStockScore>[],
-      };
-      var droppedNoEligible = 0;
-      var droppedBelowQualification = 0;
-      var droppedEtf = 0;
-      var droppedDisposal = 0;
-      var droppedObservation = 0;
-      for (final entry in stockModeScores.entries) {
-        final symbol = entry.key;
-        final modes = entry.value;
+  // STEP 4b — 批次載入警示資料（供處置股排除用）。disposalEndDate + grace
+  // 已在寫入時套用過（syncAllMarketWarnings → _createWarningEntry，見
+  // warning_repository.dart / FundamentalParams.disposalEndDateGraceDays），
+  // getActiveWarningsMapBatch（trading_warning_dao.dart）只需信任
+  // isActive=true 即代表目前仍生效，此處不需重算過期邏輯。ATTENTION 一併
+  // 撈回但不影響 routing，只有 DISPOSAL 需要排除（見下方 STEP 5 迴圈）。
+  final activeWarnings = await ref
+      .read(databaseProvider)
+      .getActiveWarningsMapBatch(allCandidateSymbols);
 
-        // **2026-06-20 ETF 過濾**：台股掃描 app、rule 全為個股行為設計。ETF（尤其
-        // 美股指數）走勢平滑、「淺回檔 + 量縮」幾乎天天成立 → 灌進 Mode C 純雜訊。
-        // user 決定 3 個 tab 全濾。
-        //
-        // **2026-07-21 補漏**：原本 `== 'ETF'` 精確比對會漏掉 industry 為
-        // `上櫃ETF` 的 14 檔（stock_master 實測兩種標記並存：ETF 158 檔＋
-        // 上櫃ETF 14 檔），改 contains 涵蓋兩者。台股產業分類無任何個股
-        // 產業名含「ETF」字樣，不會誤傷。
-        if (isEtfIndustry(data.stocks[symbol]?.industry)) {
-          droppedEtf++;
-          continue;
-        }
+  // STEP 5 — 先篩（eligibility＋qualifiesForRouting）再依 routing priority 挑
+  //
+  // **2026-06-19 v2 audit**：多個模式都合格時，ScoringMode.routingPriority
+  // 高者勝（pullbackEntry 3 > momentumEntry 2 > strengthObserve 1）。
+  // Mode C 是「進場時機」最 actionable、應優先 surface。
+  final assignmentMap = <ScoringMode, List<ModeStockScore>>{
+    for (final m in ScoringMode.userFacingModes) m: <ModeStockScore>[],
+  };
+  var droppedNoEligible = 0;
+  var droppedBelowQualification = 0;
+  var droppedEtf = 0;
+  var droppedDisposal = 0;
+  var droppedObservation = 0;
+  for (final entry in stockModeScores.entries) {
+    final symbol = entry.key;
+    final modes = entry.value;
 
-        // **2026-07-16 處置股全模式排除**：處置＝分盤交易＋預收款券，機制上非
-        // 正常可交易（撮合方式、單量都被限制）→ 不佔任何模式的「可行動候選」
-        // 榜位——跟 ETF 過濾同屬宇宙定義過濾（不是分數判斷），故放在 ETF 過濾
-        // 旁邊、eligibility 判斷之前。注意股（ATTENTION）風險較低、仍保留候選
-        // 資格，靠卡片風險徽章（RiskBadgeCluster／[RiskWarnings]）提示即可，
-        // 不在此排除。
-        if (activeWarnings[symbol]?.warningType == 'DISPOSAL') {
-          droppedDisposal++;
-          continue;
-        }
+    // **2026-06-20 ETF 過濾**：台股掃描 app、rule 全為個股行為設計。ETF（尤其
+    // 美股指數）走勢平滑、「淺回檔 + 量縮」幾乎天天成立 → 灌進 Mode C 純雜訊。
+    // user 決定 3 個 tab 全濾。
+    //
+    // **2026-07-21 補漏**：原本 `== 'ETF'` 精確比對會漏掉 industry 為
+    // `上櫃ETF` 的 14 檔（stock_master 實測兩種標記並存：ETF 158 檔＋
+    // 上櫃ETF 14 檔），改 contains 涵蓋兩者。台股產業分類無任何個股
+    // 產業名含「ETF」字樣，不會誤傷。
+    if (isEtfIndustry(data.stocks[symbol]?.industry)) {
+      droppedEtf++;
+      continue;
+    }
 
-        // 觀察層（8–11 分）不路由進「訊號」mode tab。daily_analysis 持久化門檻已
-        // 降到 observationScoreThreshold（8）供掃描頁「觀察區」使用，此處還原 mode
-        // tab 的「只收成立訊號」語意：任一 mode 的任一 horizon ≥ minScoreThreshold
-        // 才路由。用 `modes`（= modeScoreShort/modeScoreLong，跟下面 eligibility /
-        // 排名同一組分數）判斷，不能用 data.analyses[symbol] 的 blended 總分——
-        // 該總分含 neutral 警訊分數，會讓合格 mode 訊號被拖出 tier（見上方
-        // isSignalTier docstring 的 2026-07-17 fix 說明）。
-        if (!isSignalTier(modes)) {
-          droppedObservation++;
-          continue;
-        }
+    // **2026-07-16 處置股全模式排除**：處置＝分盤交易＋預收款券，機制上非
+    // 正常可交易（撮合方式、單量都被限制）→ 不佔任何模式的「可行動候選」
+    // 榜位——跟 ETF 過濾同屬宇宙定義過濾（不是分數判斷），故放在 ETF 過濾
+    // 旁邊、eligibility 判斷之前。注意股（ATTENTION）風險較低、仍保留候選
+    // 資格，靠卡片風險徽章（RiskBadgeCluster／[RiskWarnings]）提示即可，
+    // 不在此排除。
+    if (activeWarnings[symbol]?.warningType == 'DISPOSAL') {
+      droppedDisposal++;
+      continue;
+    }
 
-        final todayPct = priceChanges[symbol];
-        final biasMa20 = computeBiasMa20ForHistory(data.priceHistories[symbol]);
-        final ret60Pct = computeRet60dForHistory(data.priceHistories[symbol]);
+    // 觀察層（8–11 分）不路由進「訊號」mode tab。daily_analysis 持久化門檻已
+    // 降到 observationScoreThreshold（8）供掃描頁「觀察區」使用，此處還原 mode
+    // tab 的「只收成立訊號」語意：任一 mode 的任一 horizon ≥ minScoreThreshold
+    // 才路由。用 `modes`（= modeScoreShort/modeScoreLong，跟下面 eligibility /
+    // 排名同一組分數）判斷，不能用 data.analyses[symbol] 的 blended 總分——
+    // 該總分含 neutral 警訊分數，會讓合格 mode 訊號被拖出 tier（見上方
+    // isSignalTier docstring 的 2026-07-17 fix 說明）。
+    if (!isSignalTier(modes)) {
+      droppedObservation++;
+      continue;
+    }
 
-        // 取得該股 daily_reason 內所有 triggered reason codes（給 Mode C gate 用）
-        final triggeredCodes = <String>{
-          for (final r in data.reasons[symbol] ?? const <DailyReasonEntry>[])
-            r.reasonType,
-        };
+    final todayPct = priceChanges[symbol];
+    final biasMa20 = computeBiasMa20ForHistory(data.priceHistories[symbol]);
+    final ret60Pct = computeRet60dForHistory(data.priceHistories[symbol]);
 
-        ScoringMode? bestMode;
-        var bestPriority = -1;
-        var hadEligible = false;
-        for (final mEntry in modes.entries) {
-          if (!isEligibleForMode(
-            mode: mEntry.key,
-            score: mEntry.value,
-            todayPct: todayPct,
-            biasMa20: biasMa20,
-            ret60Pct: ret60Pct,
-            triggeredReasonCodes: triggeredCodes,
-          )) {
-            continue;
-          }
-          hadEligible = true;
-          // 先篩再挑：分數不合格的模式不參與優先順序比較
-          if (!qualifiesForRouting(mEntry.value)) continue;
-          // priority 高者勝（三個模式的值各不相同，不會平手）
-          final priority = mEntry.key.routingPriority;
-          if (priority > bestPriority) {
-            bestPriority = priority;
-            bestMode = mEntry.key;
-          }
-        }
+    // 取得該股 daily_reason 內所有 triggered reason codes（給 Mode C gate 用）
+    final triggeredCodes = <String>{
+      for (final r in data.reasons[symbol] ?? const <DailyReasonEntry>[])
+        r.reasonType,
+    };
 
-        if (bestMode == null) {
-          if (hadEligible) {
-            droppedBelowQualification++;
-          } else {
-            droppedNoEligible++;
-          }
-          continue;
-        }
-        assignmentMap[bestMode]!.add(modes[bestMode]!);
+    ScoringMode? bestMode;
+    var bestPriority = -1;
+    var hadEligible = false;
+    for (final mEntry in modes.entries) {
+      if (!isEligibleForMode(
+        mode: mEntry.key,
+        score: mEntry.value,
+        todayPct: todayPct,
+        biasMa20: biasMa20,
+        ret60Pct: ret60Pct,
+        triggeredReasonCodes: triggeredCodes,
+      )) {
+        continue;
       }
-      AppLogger.debug(
-        'ModeRecommendations',
-        'candidates=${stockModeScores.length} '
-            'A=${assignmentMap[ScoringMode.momentumEntry]!.length} '
-            'B=${assignmentMap[ScoringMode.strengthObserve]!.length} '
-            'C=${assignmentMap[ScoringMode.weaknessObserve]!.length} '
-            'droppedNoEligible=$droppedNoEligible '
-            'droppedBelowQualification=$droppedBelowQualification '
-            'droppedEtf=$droppedEtf '
-            'droppedDisposal=$droppedDisposal '
-            'droppedObservation=$droppedObservation',
-      );
-
-      // STEP 6 — Sort each mode
-      //
-      // **2026-06-20 Wave 2b — Mode B 改 60D 報酬排序**：score 排序實測 corr+0.17
-      // 無鑑別力（同分平台、cut 點隨機）。改用 60D 報酬（相對強度 proxy）DESC →
-      // top N 真的是最強 N 檔、cap 才有意義。null（history < 61）排最後、tiebreak
-      // 用 score DESC 再 symbol ASC。
-      // Mode A（起漲訊號強度）/ Mode C（回檔主訊號強度、2026-06-19 改 DESC 最正優先）
-      // 維持 score DESC。
-      final ret60ForB = <String, double>{};
-      for (final s in assignmentMap[ScoringMode.strengthObserve]!) {
-        final r = computeRet60dForHistory(data.priceHistories[s.symbol]);
-        if (r != null) ret60ForB[s.symbol] = r;
+      hadEligible = true;
+      // 先篩再挑：分數不合格的模式不參與優先順序比較
+      if (!qualifiesForRouting(mEntry.value)) continue;
+      // priority 高者勝（三個模式的值各不相同，不會平手）
+      final priority = mEntry.key.routingPriority;
+      if (priority > bestPriority) {
+        bestPriority = priority;
+        bestMode = mEntry.key;
       }
+    }
 
-      // **產業領導 tilt（rank-blend）**：強族群股加分上移、弱族群股壓低。只套 A + B。
-      //
-      // **市場 regime gate**：tilt 僅在大盤上升趨勢套用。backtest 顯示族群動能因子
-      // regime-dependent — 持續多頭 IC +0.054、空頭/轉折反向（IC −0.078，momentum
-      // crash）。用全市場 [regimeLookbackDays]D **中位數**報酬 > 0 判上升 regime
-      // （2026-08-29 由等權平均改；等價於「過半股票在漲」）；下降趨勢
-      // effectiveW=0（不套、不算 sectorStrength），避開空頭反向。tiltWeight=0
-      // （rollback）同樣使 effectiveW=0。
-      final effectiveW =
-          SectorParams.tiltWeight > 0 &&
-              isMarketUptrend(
-                data.priceHistories,
-                SectorParams.regimeLookbackDays,
-              )
-          ? SectorParams.tiltWeight
-          : 0.0;
-      final sectorService = SectorStrengthService();
-      final sectorStrength = effectiveW > 0
-          ? sectorService.rankByPercentile(
-              computeIndustryMomentum(
-                priceHistories: data.priceHistories,
-                industries: {
-                  for (final symbol in data.priceHistories.keys)
-                    symbol: data.stocks[symbol]?.industry,
-                },
-              ),
-            )
-          : const <String, double>{};
+    if (bestMode == null) {
+      if (hadEligible) {
+        droppedBelowQualification++;
+      } else {
+        droppedNoEligible++;
+      }
+      continue;
+    }
+    assignmentMap[bestMode]!.add(modes[bestMode]!);
+  }
+  AppLogger.debug(
+    'ModeRecommendations',
+    'candidates=${stockModeScores.length} '
+        'A=${assignmentMap[ScoringMode.momentumEntry]!.length} '
+        'B=${assignmentMap[ScoringMode.strengthObserve]!.length} '
+        'C=${assignmentMap[ScoringMode.weaknessObserve]!.length} '
+        'droppedNoEligible=$droppedNoEligible '
+        'droppedBelowQualification=$droppedBelowQualification '
+        'droppedEtf=$droppedEtf '
+        'droppedDisposal=$droppedDisposal '
+        'droppedObservation=$droppedObservation',
+  );
 
-      for (final mode in assignmentMap.keys) {
-        final applyTilt = effectiveW > 0 && mode != ScoringMode.weaknessObserve;
-        if (applyTilt) {
-          final stocks = assignmentMap[mode]!;
-          // base 排序鍵：B = 60D 報酬（null 視為最弱）、A = mode 分數
-          final baseKey = <String, double>{
-            for (final s in stocks)
-              s.symbol: mode == ScoringMode.strengthObserve
-                  ? (ret60ForB[s.symbol] ?? double.negativeInfinity)
-                  : s.modeScoreShort,
-          };
-          final tilted = sectorService.sectorTiltedScores(
-            baseKeyBySymbol: baseKey,
-            industryBySymbol: {
-              for (final s in stocks) s.symbol: data.stocks[s.symbol]?.industry,
+  // STEP 6 — Sort each mode
+  //
+  // **2026-06-20 Wave 2b — Mode B 改 60D 報酬排序**：score 排序實測 corr+0.17
+  // 無鑑別力（同分平台、cut 點隨機）。改用 60D 報酬（相對強度 proxy）DESC →
+  // top N 真的是最強 N 檔、cap 才有意義。null（history < 61）排最後、tiebreak
+  // 用 score DESC 再 symbol ASC。
+  // Mode A（起漲訊號強度）/ Mode C（回檔主訊號強度、2026-06-19 改 DESC 最正優先）
+  // 維持 score DESC。
+  final ret60ForB = <String, double>{};
+  for (final s in assignmentMap[ScoringMode.strengthObserve]!) {
+    final r = computeRet60dForHistory(data.priceHistories[s.symbol]);
+    if (r != null) ret60ForB[s.symbol] = r;
+  }
+
+  // **產業領導 tilt（rank-blend）**：強族群股加分上移、弱族群股壓低。只套 A + B。
+  //
+  // **市場 regime gate**：tilt 僅在大盤上升趨勢套用。backtest 顯示族群動能因子
+  // regime-dependent — 持續多頭 IC +0.054、空頭/轉折反向（IC −0.078，momentum
+  // crash）。用全市場 [regimeLookbackDays]D **中位數**報酬 > 0 判上升 regime
+  // （2026-08-29 由等權平均改；等價於「過半股票在漲」）；下降趨勢
+  // effectiveW=0（不套、不算 sectorStrength），避開空頭反向。tiltWeight=0
+  // （rollback）同樣使 effectiveW=0。
+  final effectiveW =
+      SectorParams.tiltWeight > 0 &&
+          isMarketUptrend(data.priceHistories, SectorParams.regimeLookbackDays)
+      ? SectorParams.tiltWeight
+      : 0.0;
+  final sectorService = SectorStrengthService();
+  final sectorStrength = effectiveW > 0
+      ? sectorService.rankByPercentile(
+          computeIndustryMomentum(
+            priceHistories: data.priceHistories,
+            industries: {
+              for (final symbol in data.priceHistories.keys)
+                symbol: data.stocks[symbol]?.industry,
             },
-            industryStrength: sectorStrength,
-            weight: effectiveW,
-          );
-          stocks.sort((a, b) {
-            final byFinal = (tilted[b.symbol] ?? 0).compareTo(
-              tilted[a.symbol] ?? 0,
-            );
-            if (byFinal != 0) return byFinal;
-            return a.symbol.compareTo(b.symbol);
-          });
-        } else if (mode == ScoringMode.strengthObserve) {
-          assignmentMap[mode]!.sort((a, b) {
-            final ra = ret60ForB[a.symbol];
-            final rb = ret60ForB[b.symbol];
-            // 有資料優先於無資料；都有則 60D DESC
-            if (ra != null && rb == null) return -1;
-            if (ra == null && rb != null) return 1;
-            if (ra != null && rb != null) {
-              final byRet = rb.compareTo(ra);
-              if (byRet != 0) return byRet;
-            }
-            final byScore = b.modeScoreShort.compareTo(a.modeScoreShort);
-            if (byScore != 0) return byScore;
-            return a.symbol.compareTo(b.symbol);
-          });
-        } else {
-          assignmentMap[mode]!.sort((a, b) {
-            final primary = b.modeScoreShort.compareTo(
-              a.modeScoreShort,
-            ); // DESC
-            if (primary != 0) return primary;
-            return a.symbol.compareTo(b.symbol); // 二級 key：symbol ASC
-          });
+          ),
+        )
+      : const <String, double>{};
+
+  for (final mode in assignmentMap.keys) {
+    final applyTilt = effectiveW > 0 && mode != ScoringMode.weaknessObserve;
+    if (applyTilt) {
+      final stocks = assignmentMap[mode]!;
+      // base 排序鍵：B = 60D 報酬（null 視為最弱）、A = mode 分數
+      final baseKey = <String, double>{
+        for (final s in stocks)
+          s.symbol: mode == ScoringMode.strengthObserve
+              ? (ret60ForB[s.symbol] ?? double.negativeInfinity)
+              : s.modeScoreShort,
+      };
+      final tilted = sectorService.sectorTiltedScores(
+        baseKeyBySymbol: baseKey,
+        industryBySymbol: {
+          for (final s in stocks) s.symbol: data.stocks[s.symbol]?.industry,
+        },
+        industryStrength: sectorStrength,
+        weight: effectiveW,
+      );
+      stocks.sort((a, b) {
+        final byFinal = (tilted[b.symbol] ?? 0).compareTo(
+          tilted[a.symbol] ?? 0,
+        );
+        if (byFinal != 0) return byFinal;
+        return a.symbol.compareTo(b.symbol);
+      });
+    } else if (mode == ScoringMode.strengthObserve) {
+      assignmentMap[mode]!.sort((a, b) {
+        final ra = ret60ForB[a.symbol];
+        final rb = ret60ForB[b.symbol];
+        // 有資料優先於無資料；都有則 60D DESC
+        if (ra != null && rb == null) return -1;
+        if (ra == null && rb != null) return 1;
+        if (ra != null && rb != null) {
+          final byRet = rb.compareTo(ra);
+          if (byRet != 0) return byRet;
+        }
+        final byScore = b.modeScoreShort.compareTo(a.modeScoreShort);
+        if (byScore != 0) return byScore;
+        return a.symbol.compareTo(b.symbol);
+      });
+    } else {
+      assignmentMap[mode]!.sort((a, b) {
+        final primary = b.modeScoreShort.compareTo(a.modeScoreShort); // DESC
+        if (primary != 0) return primary;
+        return a.symbol.compareTo(b.symbol); // 二級 key：symbol ASC
+      });
+    }
+  }
+
+  // STEP 7 — 組 ModeRecommendation per mode、cap modeRecommendationCap
+  final result = <ScoringMode, List<ModeRecommendation>>{};
+  for (final mode in ScoringMode.userFacingModes) {
+    final codeSet = reasonCodesForMode(mode).toSet();
+    final list = <ModeRecommendation>[];
+
+    for (final s in assignmentMap[mode]!) {
+      final symbol = s.symbol;
+      final priceHistory = data.priceHistories[symbol];
+
+      // mode-filtered reasons（其他 mode + neutral 的 chip 不顯示）
+      final allReasons = data.reasons[symbol] ?? const [];
+      final modeReasons = allReasons
+          .where((r) => codeSet.contains(r.reasonType))
+          .toList();
+
+      // 風險警訊：從全部 reasons 抽 warning-class（neutral 子集）、不分 mode。
+      // 與 modeReasons 正交 — 不 route、不污染 evidence chip / mode score，只供
+      // 卡片風險徽章。補回階段重設計把警訊丟 neutral 後消失的主畫面可見性。
+      // 用 Set 去重（對齊相鄰 triggeredCodes idiom）防徽章 count 灌水。
+      final warningSet = <ReasonType>{};
+      for (final r in allReasons) {
+        final type = reasonTypeFromCode(r.reasonType);
+        if (type != null && RiskWarnings.all.contains(type)) {
+          warningSet.add(type);
         }
       }
+      final warningReasons = warningSet.toList();
 
-      // STEP 7 — 組 ModeRecommendation per mode、cap modeRecommendationCap
-      final result = <ScoringMode, List<ModeRecommendation>>{};
-      for (final mode in ScoringMode.userFacingModes) {
-        final codeSet = reasonCodesForMode(mode).toSet();
-        final list = <ModeRecommendation>[];
-
-        for (final s in assignmentMap[mode]!) {
-          final symbol = s.symbol;
-          final priceHistory = data.priceHistories[symbol];
-
-          // mode-filtered reasons（其他 mode + neutral 的 chip 不顯示）
-          final allReasons = data.reasons[symbol] ?? const [];
-          final modeReasons = allReasons
-              .where((r) => codeSet.contains(r.reasonType))
-              .toList();
-
-          // 風險警訊：從全部 reasons 抽 warning-class（neutral 子集）、不分 mode。
-          // 與 modeReasons 正交 — 不 route、不污染 evidence chip / mode score，只供
-          // 卡片風險徽章。補回階段重設計把警訊丟 neutral 後消失的主畫面可見性。
-          // 用 Set 去重（對齊相鄰 triggeredCodes idiom）防徽章 count 灌水。
-          final warningSet = <ReasonType>{};
-          for (final r in allReasons) {
-            final type = reasonTypeFromCode(r.reasonType);
-            if (type != null && RiskWarnings.all.contains(type)) {
-              warningSet.add(type);
-            }
-          }
-          final warningReasons = warningSet.toList();
-
-          // 最近 30 日收盤價（迷你走勢圖）
-          List<double>? recentPrices;
-          if (priceHistory != null && priceHistory.isNotEmpty) {
-            final startIdx = priceHistory.length > 30
-                ? priceHistory.length - 30
-                : 0;
-            recentPrices = priceHistory
-                .sublist(startIdx)
-                .map((p) => p.close)
-                .whereType<double>()
-                .toList();
-          }
-
-          list.add(
-            ModeRecommendation(
-              symbol: symbol,
-              rank: list.length + 1,
-              modeScoreShort: s.modeScoreShort,
-              modeScoreLong: s.modeScoreLong,
-              reasons: modeReasons,
-              warningReasons: warningReasons,
-              stockName: data.stocks[symbol]?.name,
-              market: data.stocks[symbol]?.market,
-              latestClose: data.latestPrices[symbol]?.close,
-              priceChange: priceChanges[symbol],
-              trendState: data.analyses[symbol]?.trendState,
-              recentPrices: recentPrices,
-            ),
-          );
-
-          if (list.length >= ModeFilters.modeRecommendationCap) break;
-        }
-
-        result[mode] = list;
+      // 最近 30 日收盤價（迷你走勢圖）
+      List<double>? recentPrices;
+      if (priceHistory != null && priceHistory.isNotEmpty) {
+        final startIdx = priceHistory.length > 30
+            ? priceHistory.length - 30
+            : 0;
+        recentPrices = priceHistory
+            .sublist(startIdx)
+            .map((p) => p.close)
+            .whereType<double>()
+            .toList();
       }
 
-      return result;
-    });
+      list.add(
+        ModeRecommendation(
+          symbol: symbol,
+          rank: list.length + 1,
+          modeScoreShort: s.modeScoreShort,
+          modeScoreLong: s.modeScoreLong,
+          reasons: modeReasons,
+          warningReasons: warningReasons,
+          stockName: data.stocks[symbol]?.name,
+          market: data.stocks[symbol]?.market,
+          latestClose: data.latestPrices[symbol]?.close,
+          priceChange: priceChanges[symbol],
+          trendState: data.analyses[symbol]?.trendState,
+          recentPrices: recentPrices,
+        ),
+      );
+
+      if (list.length >= ModeFilters.modeRecommendationCap) break;
+    }
+
+    result[mode] = list;
+  }
+
+  return (byMode: result, regime: regime);
+});
+
+/// [_modeAssignmentsProvider] 的結果：各模式的推薦，以及同一個分析日的大盤
+/// 判定讀數（沒有分析日、沒有讀數、讀取失敗時為 null）
+typedef _ModeAssignments = ({
+  Map<ScoringMode, List<ModeRecommendation>> byMode,
+  MarketRegimeReading? regime,
+});
+
+/// 讀 [date] 的大盤判定讀數。只用來說明回檔分頁為何空白：讀取失敗時記警告、
+/// 回 null（畫面照舊顯示一般空白訊息），不讓推薦清單跟著失敗
+Future<MarketRegimeReading?> _readMarketRegime(
+  AnalysisRepository repo,
+  DateTime date,
+) async {
+  try {
+    return await repo.getMarketRegime(date);
+  } on Exception catch (e, st) {
+    AppLogger.warning('ModeRecommendations', '讀大盤判定失敗，回檔分頁改用一般空白訊息', e, st);
+    return null;
+  }
+}
 
 /// 該 mode 的 Top N 推薦（real-time aggregate from daily_reason）
 ///
@@ -731,5 +754,17 @@ final modeRecommendationsProvider =
       mode,
     ) async {
       final all = await ref.watch(_modeAssignmentsProvider.future);
-      return all[mode] ?? const [];
+      return all.byMode[mode] ?? const [];
     });
+
+/// 回檔訊號因大盤偏空而暫停時，那一天（推薦清單的分析日）的大盤判定讀數；
+/// 多頭、沒有讀數、沒有分析日都是 null。非多頭時回檔四條主訊號全被大盤閘門
+/// 擋下（`pullbackPrologue`），回檔觀察分頁必定空白，畫面據此說明原因
+///
+/// 同步推導（不是 FutureProvider）：推薦清單算完的同一刻就有值。畫面只在
+/// 分頁空白時才讀它，非同步的話第一次讀會先經過 loading，閃一幀原本的
+/// 「今日無訊號」
+final pullbackPauseProvider = Provider<MarketRegimeReading?>((ref) {
+  final regime = ref.watch(_modeAssignmentsProvider).value?.regime;
+  return regime != null && !regime.isUptrend ? regime : null;
+});

@@ -162,6 +162,10 @@ class S {
   static String get emptyNoRecommendations => 'empty.noRecommendations'.tr();
   static String get emptyNoRecommendationsHint =>
       'empty.noRecommendationsHint'.tr();
+  static String get emptyPullbackPausedTitle =>
+      'empty.pullbackPausedTitle'.tr();
+  static String emptyPullbackPausedHint(int upPercent) =>
+      'empty.pullbackPausedHint'.tr(namedArgs: {'pct': '$upPercent'});
   static String get emptyNoFilterResults => 'empty.noFilterResults'.tr();
   static String get emptyNoFilterResultsHint =>
       'empty.noFilterResultsHint'.tr();

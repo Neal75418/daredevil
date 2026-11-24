@@ -83,6 +83,10 @@ void main() {
     when(
       () => mockAnalysisRepo.findLatestAnalysisDate(),
     ).thenAnswer((_) async => testDate);
+    // 大盤判定讀數只影響回檔分頁的空白說明，這裡不關心
+    when(
+      () => mockAnalysisRepo.getMarketRegime(any()),
+    ).thenAnswer((_) async => null);
     when(() => mockAnalysisRepo.getModeStockScores(any(), any())).thenAnswer((
       invocation,
     ) async {

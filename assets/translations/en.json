@@ -113,6 +113,7 @@
     "focusStocks": "Focus Stocks",
     "surgeBadge": "Surging",
     "pullbackOnly": "Pullback Only",
+    "noPullbackStocks": "None of the focus stocks are pulling back right now",
     "sortByMentions": "Mentions",
     "riskNews": "Risk news",
     "newEntrant": "New Entrant",
@@ -783,6 +784,8 @@
   "empty": {
     "noRecommendations": "No Signals Today",
     "noRecommendationsHint": "No stocks match the criteria\nTry again later or manually refresh",
+    "pullbackPausedTitle": "Pullback signals paused",
+    "pullbackPausedHint": "Only {pct}% of the most recently scored stocks are above where they were six months ago; signals resume once more than half are. When most stocks are weak, pullbacks have tended to perform clearly worse.",
     "noFilterResults": "No Matching Stocks",
     "noFilterResultsHint": "Try adjusting your filters",
     "clearFilter": "Clear Filters",

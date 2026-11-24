@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:daredevil/domain/models/market_regime.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:daredevil/core/constants/scoring_mode.dart';
@@ -211,6 +212,7 @@ void main() {
     Widget Function(Widget screen)? wrap,
     _LiveCenter? liveCenter,
     CloseSummary? closeSummary,
+    MarketRegimeReading? pullbackPause,
   }) {
     final today = todayState ?? const TodayState();
     final watchlist = watchlistState ?? WatchlistState();
@@ -255,6 +257,8 @@ void main() {
         modeRecommendationsProvider.overrideWith(
           modeRecommendations ?? (ref, mode) => SynchronousFuture(const []),
         ),
+        // 預設沒有回檔暫停，不讓今日頁測試去讀共用的 in-memory DB
+        pullbackPauseProvider.overrideWithValue(pullbackPause),
         // 收盤摘要預設沒有資料（入口卡不顯示），不讓今日頁測試去讀共用的
         // in-memory DB
         closeSummaryProvider.overrideWith(
@@ -1202,6 +1206,56 @@ void main() {
         coverage: const HistoryCoverage(covered: 540, total: 540),
       );
       expect(find.text('empty.noRecommendations'), findsOneWidget);
+    });
+  });
+
+  group('回檔觀察空白時說明大盤暫停', () {
+    const bear = MarketRegimeReading(
+      eligibleCount: 455,
+      upCount: 132,
+      medianReturn: -0.1609,
+      isUptrend: false,
+      lookbackDays: 120,
+    );
+
+    Future<void> pump(
+      WidgetTester tester, {
+      required bool pullbackTab,
+      MarketRegimeReading? pause,
+    }) async {
+      widenViewport(tester);
+      await tester.pumpWidget(
+        buildTestWidget(
+          todayState: TodayState(dataDate: DateTime(2026, 11, 24)),
+          pullbackPause: pause,
+          extraOverrides: [
+            if (pullbackTab)
+              selectedModeProvider.overrideWith(_PullbackModeNotifier.new),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    testWidgets('🚨 大盤偏空：寫明暫停、比例與恢復條件，不放「更新」按鈕', (tester) async {
+      await pump(tester, pullbackTab: true, pause: bear);
+      expect(find.text(S.emptyPullbackPausedTitle), findsOneWidget);
+      expect(find.text(S.emptyPullbackPausedHint(29)), findsOneWidget);
+      expect(find.text(S.emptyNoRecommendations), findsNothing);
+      expect(find.text(S.refresh), findsNothing);
+    });
+
+    testWidgets('沒有暫停（多頭或沒有讀數）：維持原本的「今日無訊號」與更新按鈕', (tester) async {
+      await pump(tester, pullbackTab: true);
+      expect(find.text(S.emptyNoRecommendations), findsOneWidget);
+      expect(find.text(S.refresh), findsOneWidget);
+      expect(find.text(S.emptyPullbackPausedTitle), findsNothing);
+    });
+
+    testWidgets('其他分頁空白：就算回檔暫停也照舊顯示「今日無訊號」', (tester) async {
+      await pump(tester, pullbackTab: false, pause: bear);
+      expect(find.text(S.emptyNoRecommendations), findsOneWidget);
+      expect(find.text(S.emptyPullbackPausedTitle), findsNothing);
     });
   });
 

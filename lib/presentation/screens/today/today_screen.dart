@@ -1030,11 +1030,21 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   // 會自動收起，所以那個狀態維持完整版（改為貼齊頂端，
                   // 不再於剩餘空間垂直置中）。
                   final today = ref.watch(todayProvider);
+                  // 回檔分頁空白、而大盤閘門關著（多數股票比半年前低）：回檔
+                  // 訊號被整批擋下，寫明原因，不讓人以為重新整理就會有
+                  final pause = mode == ScoringMode.weaknessObserve
+                      ? ref.watch(pullbackPauseProvider)
+                      : null;
                   return SliverToBoxAdapter(
                     child: today.dataDate == null
                         ? EmptyStates.firstBuild(
                             isUpdating: today.isUpdating,
                             onStart: _runUpdate,
+                          )
+                        : pause != null
+                        ? EmptyStates.pullbackPaused(
+                            reading: pause,
+                            compact: true,
                           )
                         : EmptyStates.noRecommendations(
                             onRefresh: _runUpdate,

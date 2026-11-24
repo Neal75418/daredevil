@@ -9,7 +9,9 @@ import 'package:daredevil/core/theme/app_theme.dart';
 import 'package:daredevil/core/utils/number_formatter.dart';
 import 'package:daredevil/core/utils/error_display.dart';
 import 'package:daredevil/data/database/app_database.dart';
+import 'package:daredevil/domain/models/market_regime.dart';
 import 'package:daredevil/domain/services/news/heat_calculator.dart';
+import 'package:daredevil/presentation/providers/mode_recommendation_provider.dart';
 import 'package:daredevil/presentation/providers/news_heat_provider.dart';
 import 'package:daredevil/presentation/providers/news_provider.dart';
 import 'package:daredevil/presentation/widgets/empty_state.dart';
@@ -127,6 +129,8 @@ class _HeatAnalysisTabState extends ConsumerState<HeatAnalysisTab> {
                 ),
               ],
               const SizedBox(height: 8),
+              if (_pullbackOnly && stocks.isEmpty)
+                _PullbackEmptyNotice(pause: ref.watch(pullbackPauseProvider)),
               for (final s in stocks)
                 _FocusStockTile(
                   heat: s,
@@ -140,6 +144,33 @@ class _HeatAnalysisTabState extends ConsumerState<HeatAnalysisTab> {
           ),
         );
       },
+    );
+  }
+}
+
+/// 「只看回檔中」篩完是空的：回檔訊號被大盤閘門暫停時說明原因（與今日頁回檔
+/// 分頁同一段文字），否則一句沒有回檔中的焦點股
+class _PullbackEmptyNotice extends StatelessWidget {
+  const _PullbackEmptyNotice({required this.pause});
+
+  final MarketRegimeReading? pause;
+
+  @override
+  Widget build(BuildContext context) {
+    final pause = this.pause;
+    if (pause != null) {
+      return EmptyStates.pullbackPaused(reading: pause, compact: true);
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: Text(
+          'news.noPullbackStocks'.tr(),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
     );
   }
 }
